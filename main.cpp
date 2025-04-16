@@ -5,8 +5,16 @@
 #include <filesystem>
 #include <fstream>// ファイルを書いたり読み込んだりするライブラリ
 #include <chrono> // 時間を扱うライブラリ 
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <cassert>
+#pragma comment(lib,"d3d12.lib")
+#pragma comment(lib,"dxgi.lib")
+
+#pragma region log関数
 
 
+// log系
 std::wstring ConvertString(const std::string& str) {
 	if (str.empty()) {
 		return std::wstring();
@@ -44,6 +52,7 @@ void Log(std::ostream& os,const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
+#pragma endregion
 
 // ウィンドウプロシーシャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -68,8 +77,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 
 
+
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+
+#pragma region log
+
+
 
 	// ログのディレクトリを用意
 	std::filesystem::create_directory("logs");
@@ -87,7 +102,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// ファイルを作って書き込み準備
 	std::ofstream logStream(logFilePath);
 
-
+#pragma endregion
 
 	WNDCLASS wc{};
 	// ウィンドウプロシーシャ
@@ -127,6 +142,41 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	);
 	// ウィンドウを表示
 	ShowWindow(hwnd, SW_SHOW);
+
+
+	// DXGIファクトリー
+	IDXGIFactory7* dxgiFactory = nullptr;
+	// HRESULTはWindows系のエラーコードであり、
+	// 関数が成功したかどうかをSUCCEDEDマクロで判定できる
+	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
+	// 初期化の根本的な部分でエラーが出た場合はプログラムが間違っているか、
+	// どうにもできない場合が多いのでassertにしとく
+	assert(SUCCEEDED(hr));
+
+	// 使用するアダプタ用の変数。最初にnullptrを入れておく
+	IDXGIAdapter4* useAdapter = nullptr;
+	// いい順にアダプタを頼む
+	for (UINT i = 0; dxgiFactory->EnumAdapterByGpuPreference(i,
+		DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&useAdapter)) !=
+		DXGI_ERROR_NOT_FOUND;++i) {
+		// アダプタ―の情報を習得する
+		DXGI_ADAPTER_DESC3 adapterDesc{};
+		hr = useAdapter->GetDesc3(&adapterDesc);
+		assert(SUCCEEDED(hr));// 取得できないのは一大事
+		// ソフトウェアアダプタでなければ採用！
+		if (!(adapterDesc.Flags&DXGI_ADAPTER_FLAG3_SOFTWARE)) {
+			// 採用したアダプタの情報をログに出力。wstringの方なので注意
+			Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
+			break;
+		}
+		useAdapter = nullptr; // ソフトウェアアダプタの場合は見なかったことにする
+
+	}
+	// 適切なアダプタが見つからなかったので起動できない
+	assert(useAdapter != nullptr);
+
+
+
 
 	MSG msg{};
 
