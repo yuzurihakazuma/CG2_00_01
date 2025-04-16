@@ -2,6 +2,10 @@
 #include <cstdint>
 #include <string>
 #include <format>
+#include <filesystem>
+#include <fstream>// ファイルを書いたり読み込んだりするライブラリ
+#include <chrono> // 時間を扱うライブラリ 
+
 
 std::wstring ConvertString(const std::string& str) {
 	if (str.empty()) {
@@ -34,8 +38,9 @@ std::string ConvertString(const std::wstring& str) {
 
 
 
-
-void Log(const std::string& message) {
+// ログファイルを書き出す
+void Log(std::ostream& os,const std::string& message) {
+	os << message << std::endl;
 	OutputDebugStringA(message.c_str());
 }
 
@@ -65,6 +70,24 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+
+	// ログのディレクトリを用意
+	std::filesystem::create_directory("logs");
+	// 現在時刻を取得（UTC時刻）
+	std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+	// ログファイルの名前にコンマ何秒はいらないので、削って秒にする
+	std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>
+		nowSeconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+	// 日本時間（PCの設定時間）に変換
+	std::chrono::zoned_time localTime(std::chrono::current_zone(), nowSeconds);
+	// formatを使って年月日_時分秒の文字列に変換
+	std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
+	//時刻を使ってファイル名を決定
+	std::string logFilePath = std::string("logs/") + dateString + ".log";
+	// ファイルを作って書き込み準備
+	std::ofstream logStream(logFilePath);
+
+
 
 	WNDCLASS wc{};
 	// ウィンドウプロシーシャ
@@ -122,9 +145,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//出力ウィンドウへの文字出力
-	Log("HelloWored\n");
-	Log(ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
-	
+	Log(logStream,"HelloWored\n");
+	Log(logStream,ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
+
 
 	return 0;
 
