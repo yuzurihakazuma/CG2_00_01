@@ -47,7 +47,7 @@ std::string ConvertString(const std::wstring& str) {
 
 
 // ログファイルを書き出す
-void Log(std::ostream& os,const std::string& message) {
+void Log(std::ostream& os, const std::string& message) {
 	os << message << std::endl;
 	OutputDebugStringA(message.c_str());
 }
@@ -158,13 +158,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// いい順にアダプタを頼む
 	for (UINT i = 0; dxgiFactory->EnumAdapterByGpuPreference(i,
 		DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&useAdapter)) !=
-		DXGI_ERROR_NOT_FOUND;++i) {
+		DXGI_ERROR_NOT_FOUND; ++i) {
 		// アダプタ―の情報を習得する
 		DXGI_ADAPTER_DESC3 adapterDesc{};
 		hr = useAdapter->GetDesc3(&adapterDesc);
 		assert(SUCCEEDED(hr));// 取得できないのは一大事
 		// ソフトウェアアダプタでなければ採用！
-		if (!(adapterDesc.Flags&DXGI_ADAPTER_FLAG3_SOFTWARE)) {
+		if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)) {
 			// 採用したアダプタの情報をログに出力。wstringの方なので注意
 			Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
 			break;
@@ -175,6 +175,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 適切なアダプタが見つからなかったので起動できない
 	assert(useAdapter != nullptr);
 
+	ID3D12Device* device = nullptr;
+	// 昨日レベルとログ出力用の文字列
+	D3D_FEATURE_LEVEL featureLevels[] = {
+		D3D_FEATURE_LEVEL_12_2,D3D_FEATURE_LEVEL_12_1,D3D_FEATURE_LEVEL_12_0
+	};
+	const char* featureLevelStrings[] = { "12.2","12.1","12.0" };
+	// 高い順に生成できるか試していく
+	for (size_t i = 0; i < _countof(featureLevels); ++i) {
+		// 採用したアダプターでデバイスを生成
+		hr = D3D12CreateDevice(useAdapter, featureLevels[i], IID_PPV_ARGS(&device));
+		// 指定した機能レベルでデバイスが生成できたかを確認
+		if (SUCCEEDED(hr)) {
+		// 生成できたのでログ出力を行ってループを抜ける
+			Log(logStream,std::format("FeatrueLevel : {}\n", featureLevelStrings[i]));
+			break;
+		}
+
+	}
+	// デバイスの生成がうまくいかなかったので起動できない
+	assert(device != nullptr);
+	Log(logStream, ConvertString(L"Complete create D3D12Device!!!\n"));// 初期化完了のログを出す
 
 
 
@@ -195,8 +216,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//出力ウィンドウへの文字出力
-	Log(logStream,"HelloWored\n");
-	Log(logStream,ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
+	Log(logStream, "HelloWored\n");
+	Log(logStream, ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
 
 
 	return 0;
