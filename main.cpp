@@ -82,6 +82,7 @@ void Log(std::ostream& os, const std::string& message) {
 
 #pragma endregion
 
+#pragma region ウィンドウ関数
 // ウィンドウプロシーシャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
@@ -98,11 +99,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 
 }
-
-
-
-
-
+#pragma endregion
 
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -111,10 +108,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 誰も補掟しなかった場合に(Unhandled),補掟する関数を登録
 	// main関数は始まってすぐに登録するといい
 	SetUnhandledExceptionFilter(ExportDump);
-
-	
-
-
 
 #pragma region log
 
@@ -137,6 +130,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::ofstream logStream(logFilePath);
 
 #pragma endregion
+
+#pragma region ウィンドウ
 
 	WNDCLASS wc{};
 	// ウィンドウプロシーシャ
@@ -176,6 +171,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	);
 	// ウィンドウを表示
 	ShowWindow(hwnd, SW_SHOW);
+
+#pragma endregion
+
+#pragma region DirectX12を初期化しよう
+
 
 
 	// DXGIファクトリー
@@ -231,6 +231,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(device != nullptr);
 	Log(logStream, ConvertString(L"Complete create D3D12Device!!!\n"));// 初期化完了のログを出す
 
+#pragma endregion
 
 
 	MSG msg{};
