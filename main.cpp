@@ -8,12 +8,13 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cassert>
-#pragma comment(lib,"d3d12.lib")
-#pragma comment(lib,"dxgi.lib")
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
-#pragma comment(lib,"Dbghelp.lib")
 #include <strsafe.h>
+#pragma comment(lib,"d3d12.lib")
+#pragma comment(lib,"dxgi.lib")
+#pragma comment(lib,"Dbghelp.lib")
+
 #pragma region Creash関数
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
 	// 時刻を取得して、時刻を名前に手に入れたファイルを作成。Dumpsディレクトリを以下に出力
