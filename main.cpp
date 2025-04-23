@@ -237,6 +237,30 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma endregion
 
 
+
+#pragma region CommandList
+
+	// コマンドキューを生成する
+	ID3D12CommandQueue* commandQueue = nullptr;
+	D3D12_COMMAND_QUEUE_DESC commandQuesDesc{};
+	hr = device->CreateCommandQueue(&commandQuesDesc, IID_PPV_ARGS(&commandQueue));
+	// コマンドキューの生成が上手くいかなかったので起動できない
+
+	assert(SUCCEEDED(hr));
+	// コマンドアフロケータを生成
+	ID3D12CommandAllocator* commandAllocator = nullptr;
+	hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
+	// コマンドアロケータの生成が上手くいかなかったので起動出来ない
+	assert(SUCCEEDED(hr));
+
+	// コマンドリストを生成する
+	ID3D12GraphicsCommandList* commandList = nullptr;
+	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr, IID_PPV_ARGS(&commandList));
+	// コマンドリストの生成が上手くいかなかったので起動できない
+	assert(SUCCEEDED(hr));
+
+#pragma endregion
+
 	MSG msg{};
 
 	while (msg.message != WM_QUIT) {
