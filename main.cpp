@@ -177,7 +177,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#ifdef _DEBUG
+
+
+	ID3D12Debug1* debugController = nullptr;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+		// デバックレイヤーを有効にする
+		debugController->EnableDebugLayer();
+		// 更にGPU側でもチェックを行うようにする
+		debugController->SetEnableGPUBasedValidation(TRUE);
+
+	}
+
+
+#endif // _DEBUG
+
+
+
+
 #pragma region DirectX12を初期化しよう
+
+
 
 	// DXGIファクトリー
 	IDXGIFactory7* dxgiFactory = nullptr;
@@ -234,18 +254,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
-#pragma region DebugLayer
 
-#ifdef _DEBUG
 
-	ID3D12Debug1* debugController = nullptr;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
-		// デバックレイヤーを有効化する
-		debugController->EnableDebugLayer();
-		// さらにGPU側でもチェックを行うようにする
-		debugController->SetEnableGPUBasedValidation(TRUE);
-	}
-#endif // _DEBUG
 
 #ifdef _DEBUG
 
@@ -275,15 +285,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		infoQueue->Release();
 	}
 
+
 #endif // _DEBUG
 
 
 
 
-
-#pragma endregion
-
-		
 
 #pragma region CommandList
 
