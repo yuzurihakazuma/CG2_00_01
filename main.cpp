@@ -378,6 +378,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
+	IDxcBlob* CompileShader(
+		// CompilerするShaderファイルへのパス
+		const std::wstring& filePath,
+		// Compilerに仕様するProfile
+		const wchar_t* profile,
+		// 初期化で生成したものを3つ
+		IDxcUtils* dxcUtils,
+		IDxcCompiler3* dxcCompiler,
+		IDxcIncludeHandler* includeHandler);
+
+		// これからシェーダーをコンパイルする旨をログに出す
+		Log(logStream, ConvertString(std::format(L"Bagin Compileshader,path{},profile:{}\n", filePath, profile)));
+
+
+
 #pragma endregion
 
 
