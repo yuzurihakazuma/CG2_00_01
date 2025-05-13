@@ -106,6 +106,57 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 #pragma endregion
 
+IDxcBlob* CompileShader(
+	// CompilerするShaderファイルへのパス
+	const std::wstring& filePath,
+	// Compilerに仕様するProfile
+	const wchar_t* profile,
+	// 初期化で生成したものを3つ
+	IDxcUtils* dxcUtils,
+	IDxcCompiler3* dxcCompiler,
+	IDxcIncludeHandler* includeHandler,
+	std::ostream& os) {
+
+	// 1.hlslファイルを読み込む
+	
+	// これからシェーダーをコンパイルする旨をログに出す
+	Log(os, ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
+	// hislファイルを読む
+	IDxcBlobEncoding* shaderSource = nullptr;
+	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
+	// 読めなかったら止める
+	assert(SUCCEEDED(hr));
+	// 読み込んだファイルの内容を設定する
+	DxcBuffer shaderSourceBuffer;
+	shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
+	shaderSourceBuffer.Size = shaderSource->GetBufferSize();
+	shaderSourceBuffer.Encoding = DXC_CP_UTF8; // UTF8の文字コードであることを通知
+	
+	// 2.Compileする
+	LPCUWSTR arguments[] = {
+		filePath.c_str(), // コンバイル対象のhlslファイル名
+		L"-E",L"main",    // エントリーポイントの指定。　基本的にmain以外にはしない
+		L"-T",profile,    // ShaderProfileの設定
+		L"-Zi",L"-Qembed_debug", // デバック用の情報を埋め込む
+		L"-Od",           // 最適化を外しとく
+		L"-Zpr",          // メモリレイアウトは行優先
+	};
+	// 実際にshaderをコンバイルする
+	IDxcResult* shaderResult = nullptr;
+	hr = dxcCompiler->Compile(
+		&shaderSourceBuffer, // 読み込んだファイル
+		arguments,           // コンバイルオプション
+		_countof(arguments), // コンバイルオプションの数
+		includeHandler,      // includeが含んだ諸々
+		IID_PPV_ARGS(&shaderResult) //コンバイル結果
+	);
+	// コンバイルエラーではなくdxcが起動できないなど致命的な状況
+	assert(SUCCEEDED(hr));
+
+	// 3. 警告
+}
+
+
 
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -354,6 +405,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#pragma region Fence
+
 	// 初期化0でFenceを作る
 	ID3D12Fence* fence = nullptr;
 	uint64_t fenceValue = 0;
@@ -363,6 +416,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// FenceのSignalを待つためのイベントを作成する
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
+#pragma endregion
 
 #pragma region DXCの初期化
 
@@ -378,23 +432,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
-	IDxcBlob* CompileShader(
-		// CompilerするShaderファイルへのパス
-		const std::wstring& filePath,
-		// Compilerに仕様するProfile
-		const wchar_t* profile,
-		// 初期化で生成したものを3つ
-		IDxcUtils* dxcUtils,
-		IDxcCompiler3* dxcCompiler,
-		IDxcIncludeHandler* includeHandler);
 
-		// これからシェーダーをコンパイルする旨をログに出す
-		Log(logStream, ConvertString(std::format(L"Bagin Compileshader,path{},profile:{}\n", filePath, profile)));
 
 
 
 #pragma endregion
-
 
 
 	MSG msg{};
