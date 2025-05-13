@@ -106,6 +106,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 #pragma endregion
 
+#pragma region CompileShader関数
+
 IDxcBlob* CompileShader(
 	// CompilerするShaderファイルへのパス
 	const std::wstring& filePath,
@@ -133,13 +135,13 @@ IDxcBlob* CompileShader(
 	shaderSourceBuffer.Encoding = DXC_CP_UTF8; // UTF8の文字コードであることを通知
 	
 	// 2.Compileする
-	LPCUWSTR arguments[] = {
+	LPCWSTR arguments[] = {
 		filePath.c_str(), // コンバイル対象のhlslファイル名
 		L"-E",L"main",    // エントリーポイントの指定。　基本的にmain以外にはしない
 		L"-T",profile,    // ShaderProfileの設定
 		L"-Zi",L"-Qembed_debug", // デバック用の情報を埋め込む
 		L"-Od",           // 最適化を外しとく
-		L"-Zpr",          // メモリレイアウトは行優先
+		L"-Zpr"           // メモリレイアウトは行優先
 	};
 	// 実際にshaderをコンバイルする
 	IDxcResult* shaderResult = nullptr;
@@ -153,9 +155,33 @@ IDxcBlob* CompileShader(
 	// コンバイルエラーではなくdxcが起動できないなど致命的な状況
 	assert(SUCCEEDED(hr));
 
-	// 3. 警告
+	// 3. 警告・エラーが出てないか確認する
+
+	// 警告・エラーがでていたらログに出して止める
+	IDxcBlobUtf8* shaderError = nullptr;
+	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
+	if (shaderError!=nullptr&&shaderError->GetStringLength()!=0) {
+		Log(os, shaderError->GetStringPointer());
+		// 警告・エラーダメゼッタイ
+		assert(false);
+	}
+
+	// 4.Compile結果を受け取って返す
+
+	// コンバイル結果から実行用のパイナリ部分を取得
+	IDxcBlob* shaderBlob = nullptr;
+	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
+	assert(SUCCEEDED(hr));
+	// 成功したログを出す
+	Log(os, ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}\n", filePath, profile)));
+	// もう使わないリソースを解放
+	shaderSource->Release();
+	shaderResult->Release();
+	// 実行用のパイナリを返却
+	return shaderBlob;
 }
 
+#pragma endregion
 
 
 
