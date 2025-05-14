@@ -19,7 +19,12 @@
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dxcompiler.lib")
 
-
+struct Vector4 {
+	float x;
+	float y;
+	float z;
+	float w;
+};
 
 
 
@@ -517,7 +522,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler,logStream);
 	assert(vertexShaderBlob != nullptr);
 
-	IDxcBlob* pixelShaderBlob = CompileShader(L"OBject3D.PS.hlsl",
+	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3D.PS.hlsl",
 		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler,logStream);
 	assert(pixelShaderBlob != nullptr);
 
@@ -550,6 +555,44 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 #pragma endregion
+
+#pragma region 頂点データの作成とビュー
+
+	// 頂点リソース用のヒープの設定
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;// UploadHeapを使う
+	// 頂点リソースの設定
+	D3D12_RESOURCE_DESC vertexResourcceDesc{};
+	// バッファリソース。テクスチャの場合はまた別の設定をする
+	vertexResourcceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	vertexResourcceDesc.Width = sizeof(Vector4) * 3;// リソースのサイズ。今回はVector4を3頂点分
+	// バッファの場合はこれらは1にする決まり
+	vertexResourcceDesc.Height = 1;
+	vertexResourcceDesc.DepthOrArraySize = 1;
+	vertexResourcceDesc.MipLevels = 1;
+	vertexResourcceDesc.SampleDesc.Count = 1;
+	// バッファの場合はこれにする決まり
+	vertexResourcceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	// 実際に頂点リソースを作る
+	ID3D12Resource* vertexResource = nullptr;
+	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+		&vertexResourcceDesc, D3D12_RESOURCE_STATE_DEPTH_READ, nullptr,
+		IID_PPV_ARGS(&vertexResource));
+
+	// 頂点バッファビューを作成する
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+	// リソースの先頭のアドレスから使う
+	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+	// 使用するリソースのサイズは頂点3つ分
+	vertexBufferView.SizeInBytes = sizeof(Vector4) * 3;
+	// 1頂点あたりのサイズ
+	vertexBufferView.StrideInBytes = sizeof(Vector4);
+
+
+
+
+#pragma endregion
+
 
 
 
