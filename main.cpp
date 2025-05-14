@@ -476,6 +476,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignatrue{};
 	descriptionRootSignatrue.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	
+	
+	
+	
 	// シリアライズしてバイナリにする
 	ID3D10Blob* signatrueBlob = nullptr;
 	ID3D10Blob* errorBlob = nullptr;
