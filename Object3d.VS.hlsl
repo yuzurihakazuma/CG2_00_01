@@ -8,7 +8,7 @@ struct VertexShaderOutput{
 struct VertexShaderInput
 {
     // 変換済みの座標(スクリーン空間)
-    float32_t4 position : POSITIONT;
+    float32_t4 position : POSITION0;
     
 };
 // 頂点シェーダー本体

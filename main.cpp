@@ -486,14 +486,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		assert(false);
 
 	}
-	
+
 	// バイナリを元に生成
 	ID3D12RootSignature* rootSignatrue = nullptr;
 	hr = device->CreateRootSignature(0,
 		signatrueBlob->GetBufferPointer(), signatrueBlob->GetBufferSize(),
 		IID_PPV_ARGS(&rootSignatrue));
 	assert(SUCCEEDED(hr));
-	
+
 	// InputLayout
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[1] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
@@ -519,11 +519,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	// Shaderをコンパイルする
 	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3D.VS.hlsl",
-		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler,logStream);
+		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler, logStream);
 	assert(vertexShaderBlob != nullptr);
 
 	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3D.PS.hlsl",
-		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler,logStream);
+		L"ps_6_0", dxcUtils, dxcCompiler, includeHandler, logStream);
 	assert(pixelShaderBlob != nullptr);
 
 	// PSOを生成する
@@ -576,7 +576,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 実際に頂点リソースを作る
 	ID3D12Resource* vertexResource = nullptr;
 	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-		&vertexResourcceDesc, D3D12_RESOURCE_STATE_DEPTH_READ, nullptr,
+		&vertexResourcceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
 		IID_PPV_ARGS(&vertexResource));
 
 	// 頂点バッファビューを作成する
@@ -588,11 +588,43 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 1頂点あたりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(Vector4);
 
-
+	// 頂点リソースにデータを書き込む
+	Vector4* vertexData = nullptr;
+	// 書き込むためのアドレス取得
+	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
+	// 左下
+	vertexData[0] = { -0.5f,-0.5f,0.0f,1.0f };
+	// 上
+	vertexData[1] = { 0.0f,0.5f,0.0f,1.0f };
+	// 右下
+	vertexData[2] = { 0.5f,-0.5f,0.0f,1.0f };
 
 
 #pragma endregion
 
+#pragma region ViewportとScissor
+
+	// ビューボート
+	D3D12_VIEWPORT viewport{};
+	// クライアント領域のサイズと一緒にして画面全体に表示
+	viewport.Width = kClientWidth;
+	viewport.Height = kClientHeight;
+	viewport.TopLeftX = 0;
+	viewport.TopLeftY = 0;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+
+	// シザー矩形
+	D3D12_RECT scissorRect{};
+	// 基本的にビューボートと同じ矩形が構成されるようにする
+	scissorRect.left = 0;
+	scissorRect.right = kClientWidth;
+	scissorRect.top = 0;
+	scissorRect.bottom = kClientHeight;
+
+
+
+#pragma endregion
 
 
 
@@ -645,6 +677,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			float clearColor[] = { 0.1f,0.25f,0.5f,1.0f }; // 青っぽい色。RGBAの順
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 
+#pragma region 三角形描画
+
+			commandList->RSSetViewports(1, &viewport);// Viewportを設定
+			commandList->RSSetScissorRects(1, &scissorRect);// Scirssorを設定
+			// rootSignatrueを設定。PSOに設定してるけど別途設定が必要
+			commandList->SetGraphicsRootSignature(rootSignatrue);
+			commandList->SetPipelineState(graphicsPinelineState); //PSOを設定
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferView); // VBVを設定
+			// 形状を設定。PSOに設定しているものとは別。同じものを設定すると考えておけば良い
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			// 描画！(DraoCall/ドローコール)。3頂点で1つのインスタンス。インスタンスについては今後
+			commandList->DrawInstanced(3, 1, 0, 0);
+
+
+
+#pragma endregion
+
 
 			// 画面に描く処理はすべて終わり、画面に移すので、状態を遷移
 			// 今回はRenderTargetからPresentにする
@@ -690,6 +739,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
+
+
+
 		}
 
 
@@ -709,6 +761,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	device->Release();
 	useAdapter->Release();
 	dxgiFactory->Release();
+	vertexResource->Release();
+	graphicsPinelineState->Release();
+	signatrueBlob->Release();
+	if (errorBlob) {
+		errorBlob->Release();
+	}
+	rootSignatrue->Release();
+	pixelShaderBlob->Release();
+	vertexShaderBlob->Release();
+
 
 #ifdef _DEBUG
 
