@@ -25,8 +25,20 @@ struct Vector4 {
 	float z;
 	float w;
 };
+struct Matrix4x4 {
+	float m[4][4];
 
+};
 
+// 単位行列の作成
+Matrix4x4 MakeIdentity4x4() {
+	Matrix4x4 result = {};
+
+	for (int i = 0; i < 4; ++i) {
+		result.m[i][i] = 1.0f;
+	}
+	return result;
+}
 
 #pragma region Creash関数
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
@@ -220,7 +232,7 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes) {
 	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
 		&vertexResourcceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
 		IID_PPV_ARGS(&vertexResource));
-	
+
 	return vertexResource;
 
 }
@@ -512,12 +524,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignatrue{};
 	descriptionRootSignatrue.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-	
+
 	// PootParameter作成。複数設定できるので配列。今回は結果1つだけなので長さ1の配列
-	D3D12_ROOT_PARAMETER rootParameters[1] = {};
+	D3D12_ROOT_PARAMETER rootParameters[2] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; //PixelShaderで使う 
 	rootParameters[0].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // CBVを使う
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; //VertexShaderで使う 
+	rootParameters[1].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
 	descriptionRootSignatrue.pParameters = rootParameters; //ルートバラメータ配列へのポインタ
 	descriptionRootSignatrue.NumParameters = _countof(rootParameters); //配列の長さ
 
@@ -626,26 +641,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 右下
 	vertexData[2] = { 0.5f,-0.5f,0.0f,1.0f };
 
-
-
-
 #pragma endregion
-
-#pragma region Material用
-
-	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
-	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
-	// マテリアルにデータを書き込む
-	Vector4* materialDara = nullptr;
-	// 書き込むためのアドレスを取得
-	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialDara));
-	// 今回は赤を書き込んでいる
-	*materialDara = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
-	
-
-#pragma endregion
-
-
 
 #pragma region ViewportとScissor
 
@@ -671,10 +667,30 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#pragma region Material用
+
+	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
+	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
+	// マテリアルにデータを書き込む
+	Vector4* materialDara = nullptr;
+	// 書き込むためのアドレスを取得
+	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialDara));
+	// 今回は赤を書き込んでいる
+	*materialDara = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
 
+#pragma endregion
 
-	MSG msg{};
+	// WVB用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
+	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	// データを書き込む
+	Matrix4x4* wvpData = nullptr;
+	// 書き込むためのアドレスを取得
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
+	// 単位行列を書き込んでおく
+	*wvpData = MakeIdentity4x4();
+
+		MSG msg{};
 
 	while (msg.message != WM_QUIT) {
 
@@ -742,7 +758,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
-			
+
 
 			// 画面に描く処理はすべて終わり、画面に移すので、状態を遷移
 			// 今回はRenderTargetからPresentにする

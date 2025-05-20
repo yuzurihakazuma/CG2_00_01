@@ -1,3 +1,8 @@
+struct TransformationMatirx{
+    float32_t4x4 WVP;
+};
+ConstantBuffer<TransformationMatirx> gTransformationMatrix : register(b0);
+
 // 頂点シェーダーの出力
 struct VertexShaderOutput{
     // (クリッピング空間での座標)
@@ -14,8 +19,7 @@ struct VertexShaderInput
 // 頂点シェーダー本体
 VertexShaderOutput main(VertexShaderInput input){
     VertexShaderOutput output;
-    output.position = input.position;
-    
+    output.position = mul(input.position, gTransformationMatrix.WVP);
     return output;
 }
 
