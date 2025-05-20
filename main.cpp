@@ -1,3 +1,4 @@
+#include"Matrix4x4.h"
 #include <Windows.h>
 #include <cstdint>
 #include <string>
@@ -19,26 +20,21 @@
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dxcompiler.lib")
 
+using namespace MatrixMath;
+
 struct Vector4 {
 	float x;
 	float y;
 	float z;
 	float w;
 };
-struct Matrix4x4 {
-	float m[4][4];
 
+struct Transform {
+	Vector3 scale;
+	Vector3 rotate;
+	Vector3 translate;
 };
 
-// 単位行列の作成
-Matrix4x4 MakeIdentity4x4() {
-	Matrix4x4 result = {};
-
-	for (int i = 0; i < 4; ++i) {
-		result.m[i][i] = 1.0f;
-	}
-	return result;
-}
 
 #pragma region Creash関数
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
@@ -220,7 +216,7 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes) {
 	D3D12_RESOURCE_DESC vertexResourcceDesc{};
 	// バッファリソース。テクスチャの場合はまた別の設定をする
 	vertexResourcceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	vertexResourcceDesc.Width = sizeof(Vector4) * 3;// リソースのサイズ。今回はVector4を3頂点分
+	vertexResourcceDesc.Width = sizeInBytes;// リソースのサイズ。今回はVector4を3頂点分
 	// バッファの場合はこれらは1にする決まり
 	vertexResourcceDesc.Height = 1;
 	vertexResourcceDesc.DepthOrArraySize = 1;
@@ -690,6 +686,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 単位行列を書き込んでおく
 	*wvpData = MakeIdentity4x4();
 
+	//Matrix4x4 worldMatrix = MakeAffine()
+
+
+
 		MSG msg{};
 
 	while (msg.message != WM_QUIT) {
@@ -740,6 +740,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region 三角形描画
 
+
 			commandList->RSSetViewports(1, &viewport);// Viewportを設定
 			commandList->RSSetScissorRects(1, &scissorRect);// Scirssorを設定
 			// rootSignatrueを設定。PSOに設定してるけど別途設定が必要
@@ -751,7 +752,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// マテリアルCBuffer
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 			// wvp用のCBufferの場所を設定
-			commandList->SetGraphicsRootShaderResourceView(1, wvpResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 			// 描画！(DraoCall/ドローコール)。3頂点で1つのインスタンス。インスタンスについては今後
 			commandList->DrawInstanced(3, 1, 0, 0);
 
