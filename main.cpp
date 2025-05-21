@@ -237,6 +237,9 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes) {
 
 // Transform変数を作る
 Transform transfrom { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+Transform cameraTransfrom{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-5.0f} };
+
+
 
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -678,6 +681,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#pragma region WVP
+
 	// WVB用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
 	// データを書き込む
@@ -687,7 +692,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 単位行列を書き込んでおく
 	*wvpData = MakeIdentity4x4();
 
-	//Matrix4x4 worldMatrix = MakeAffine()
+#pragma endregion
+
+	
+	
 
 
 
@@ -727,9 +735,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->ResourceBarrier(1, &barrier);
 
 			transfrom.rotate.y += 0.03f;
-			// ワールド変数
 			Matrix4x4 worldMatrix = MakeAffine(transfrom.scale, transfrom.rotate, transfrom.translate);
 			*wvpData = worldMatrix;
+			Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 projectionMatrix = PerspectiveFov(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
+				* wvpData = worldViewProjectionMatrix;
 
 #pragma endregion
 
