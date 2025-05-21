@@ -91,6 +91,13 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="externals\imgui.cpp" />
+    <ClCompile Include="externals\imgui_demo.cpp" />
+    <ClCompile Include="externals\imgui_draw.cpp" />
+    <ClCompile Include="externals\imgui_impl_dx12.cpp" />
+    <ClCompile Include="externals\imgui_impl_win32.cpp" />
+    <ClCompile Include="externals\imgui_tables.cpp" />
+    <ClCompile Include="externals\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Matrix4x4.cpp" />
   </ItemGroup>
@@ -109,7 +116,18 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="externals\imconfig.h" />
+    <ClInclude Include="externals\imgui.h" />
+    <ClInclude Include="externals\imgui_impl_dx12.h" />
+    <ClInclude Include="externals\imgui_impl_win32.h" />
+    <ClInclude Include="externals\imgui_internal.h" />
+    <ClInclude Include="externals\imstb_rectpack.h" />
+    <ClInclude Include="externals\imstb_textedit.h" />
+    <ClInclude Include="externals\imstb_truetype.h" />
     <ClInclude Include="Matrix4x4.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="externals\LICENSE.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
