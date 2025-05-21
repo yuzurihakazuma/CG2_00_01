@@ -235,7 +235,8 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes) {
 
 #pragma endregion
 
-
+// Transform変数を作る
+Transform transfrom { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -725,7 +726,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// TransitionBarrierを張る
 			commandList->ResourceBarrier(1, &barrier);
 
-
+			transfrom.rotate.y += 0.03f;
+			// ワールド変数
+			Matrix4x4 worldMatrix = MakeAffine(transfrom.scale, transfrom.rotate, transfrom.translate);
+			*wvpData = worldMatrix;
 
 #pragma endregion
 
