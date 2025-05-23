@@ -800,6 +800,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
 			*wvpData = worldViewProjectionMatrix;
 
+			ImGui::Begin("MaterialColor");
+			ImGui::ColorEdit4("Color", &(*materialDara).x);
+			ImGui::End();
 #pragma endregion
 
 			// ImGuiの内部コマンドを生成する
