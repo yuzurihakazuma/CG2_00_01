@@ -749,12 +749,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma endregion
 
 
-	// Textrueを読んで転送する
-	DirectX::ScratchImage mipImages = LoadTextrue("resources/uvChecke.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	ID3D12Resource* textrueResource = CreateTextureResource(device, metadata);
-	UploadTextrueData(textrueResource, mipImages);
-
+	
 
 	MSG msg{};
 
