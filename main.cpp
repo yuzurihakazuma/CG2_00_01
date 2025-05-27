@@ -931,8 +931,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	wvpResource->Release();
 	srvDescriptorHeap->Release();
 
-	mipImages.Release();
-	textrueResource->Release();
 
 #ifdef _DEBUG
 
