@@ -129,6 +129,9 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
   <ItemGroup>
     <Text Include="externals\LICENSE.txt" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
