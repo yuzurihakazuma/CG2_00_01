@@ -279,48 +279,7 @@ ID3D12DescriptorHeap* CreateDescriptorHeap(
 
 #pragma endregion
 
-#pragma region Textureの作成データ関数
 
-DirectX::ScratchImage LoadTextrue(const std::string& filePath) 	{
-
-	// テクスチャファイルを読み込んでプログラムで扱えるようにする
-	DirectX::ScratchImage image{};
-	std::wstring filePathw = ConvertString(filePath);
-	HRESULT hr = DirectX::LoadFromWICFile(filePathw.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
-	assert(SUCCEEDED(hr));
-
-	// ミップマップの作成
-	DirectX::ScratchImage mipImages{};
-	hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
-
-	// ミップマップ付きのデータを返す
-	return mipImages;
-
-}
-#pragma endregion
-
-#pragma region TextrueResource関数
-
-ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMetadata& metadata) {
-
-	// metadataを基にResourceの設定
-	D3D12_RESOURCE_DESC resourceDesc{};
-	resourceDesc.Width = UINT(metadata.width); // Textrueの幅
-	resourceDesc.Height = UINT(metadata.height); // Textrueの高さ
-	resourceDesc.MipLevels = UINT16(metadata.mipLevels); // mipmapの数
-	resourceDesc.DepthOrArraySize = UINT16(metadata.arraySize); // 奥行きor配列Textrueの配列数
-	resourceDesc.Format = metadata.format; //TextrueのFormat 
-	resourceDesc.SampleDesc.Count = 1; // サンプリングカウント。1固定
-	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension); // Textrueの次元数。普段使っているのは2次元
-
-
-
-
-}
-
-
-
-#pragma endregion
 
 
 
@@ -790,8 +749,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma endregion
 
 
-
-
+	// Textrueを読んで転送する
+	DirectX::ScratchImage mipImages = LoadTextrue("resources/uvChecke.png");
+	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+	ID3D12Resource* textrueResource = CreateTextureResource(device, metadata);
+	UploadTextrueData(textrueResource, mipImages);
 
 
 	MSG msg{};
@@ -973,6 +935,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialResource->Release();
 	wvpResource->Release();
 	srvDescriptorHeap->Release();
+
+	mipImages.Release();
+	textrueResource->Release();
 
 #ifdef _DEBUG
 
