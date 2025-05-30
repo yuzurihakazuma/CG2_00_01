@@ -131,6 +131,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
   </ItemGroup>
   <ItemGroup>
     <None Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj" />
+    <None Include="Object3d.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj">
