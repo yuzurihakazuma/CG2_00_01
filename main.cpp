@@ -14,6 +14,7 @@
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
 #include <strsafe.h>
+#include "externals/DirectXTex/d3dx12.h"
 #include "externals/DirectXTex/DirectXTex.h"
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
@@ -339,27 +340,32 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 
 }
 
-void UploadTextrueData(ID3D12Resource* textrue, const DirectX::ScratchImage& mipImages) {
+[[nodiscard]] // 03_00EX
+ID3D12Resource* UploadTextureData(ID3D12Resource* texture,
+	const DirectX::ScratchImage& mipImages, ID3D12Device* device,
+	ID3D12Graphics* CommandList commandList) {
+	std::vector<D3D12_SUBRESOURCE_DATA> subresources;
+	DirectX::PrepareUpload(device, mipImages.GetImages(),
+		mipImages.GetImageCount(), mipImages.GetMetadata(),
+		subresources);
 
-	// Meta情報を取得
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	// 全MipMapについて
-	for (size_t mipLevel = 0; mipLevel < metadata.mipLevels; mipLevel++) {
-		// MipMapLevelを指定して書くImageを取得
-		const DirectX::Image* img = mipImages.GetImage(mipLevel, 0, 0);
-		// Textrueに転送
-		HRESULT hr = textrue->WriteToSubresource(
-			UINT(mipLevel),
-			nullptr,
-			img->pixels,
-			UINT(img->rowPitch),
-			UINT(img->slicePitch));
-		assert(SUCCEEDED(hr));
+	uint64_t intermediateSize = GetRequiredIntermediateSize(
+		texture, 0, static_cast<UINT>(subresources.size()));
+	ID3D12Resourceintermediate = CreateBufferResource(device, intermediateSize);
 
-	}
+	UpdateSubresources(commandList, texture, intermediate, 0, 0,
+		static_cast<UINT>(subresources.size()),
+		subresources.data());
 
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = texture;
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	commandList->ResourceBarrier(1, &barrier);
 
-
+	return intermediate;
 }
 #pragma endregion
 
