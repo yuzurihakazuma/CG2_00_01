@@ -362,6 +362,7 @@ ID3D12Resource* UploadTextureData(ID3D12Resource* texture,const DirectX::Scratch
 
 	return intermediateResource;
 }
+
 ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, int32_t width, int32_t height) {
 
 	// 生成するResourceの設定
@@ -709,6 +710,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+
+
 #pragma region PSO
 
 	// RootSignature作成
@@ -835,7 +838,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		IID_PPV_ARGS(&graphicsPinelineState));
 	assert(SUCCEEDED(hr));
 
-
+	// DSV用のヒープでディスクリプタの数は1。DSVは
 
 
 #pragma endregion
