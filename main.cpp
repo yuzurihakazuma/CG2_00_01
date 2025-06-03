@@ -623,6 +623,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 	// SPV用のヒープでディスクリプタの数は128。SRVはShader内で触るものなので、ShaderVisibleはtrue
 	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
+	// DSV用のヒープでディスクリプタの数は1。DSVはShader内で触るものではないので,ShaderVisibleはfalse
+	ID3D12DescriptorHeap* dsvDescriptorHaap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+
 
 	// SwapChainからResourceを引っ張ってくる
 	ID3D12Resource* swapChainResources[2] = { nullptr };
@@ -647,7 +650,45 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// ２つ目を作る
 	device->CreateRenderTargetView(swapChainResources[1], &rtvDesc, rtvHandles[1]);
 
+	// Textrueを読んで転送する
+	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
+	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+	ID3D12Resource* textrueResource = CreateTextureResource(device, metadata);
+	ID3D12Resource* intermediateResource = UploadTextureData(textrueResource, mipImages, device, commandList);
+	// DepthStencilTextureをウィンドウのサイズで作成
+	ID3D12Resource* deptStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
 
+	// metaDataを基にSRVの設定
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	srvDesc.Format = metadata.format;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ	
+	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+
+	// SRVを作成するDescriptorHeapの場所を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	// 先頭はImguiが使っているのでその次を使う
+	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	// SRVの生成
+	device->CreateShaderResourceView(textrueResource, &srvDesc, textureSrvHandleCPU);
+
+	// DSVの設定
+	D3D12_DEPTH_STENCIL_VIEW_DESC devDesc{};
+	devDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // Format。基本的にはResourceに合わせる
+	devDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D; //2dTexture
+	// DSVHeapの設定にDSVをつくる
+	device->CreateDepthStencilView(deptStencilResource, &devDesc, dsvDescriptorHaap->GetCPUDescriptorHandleForHeapStart());
+
+	// DepthStenciLstateの設定
+	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
+	// Depthの機能を有効化する
+	depthStencilDesc.DepthEnable = true;
+	// 書き込みします
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	// 比較関数はLessEqual。つまり、近ければ描画される
+	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_EQUAL;
 
 
 #pragma endregion
@@ -681,34 +722,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
-#pragma region SRV
 
-	// Textrueを読んで転送する
-	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	ID3D12Resource* textrueResource = CreateTextureResource(device, metadata);
-	ID3D12Resource* intermediateResource= UploadTextureData(textrueResource, mipImages,device,commandList);
-	// DepthStencilTextureをウィンドウのサイズで作成
-	ID3D12Resource* deptStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
-
-	// metaDataを基にSRVの設定
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = metadata.format;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ	
-	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
-
-	// SRVを作成するDescriptorHeapの場所を決める
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-	// 先頭はImguiが使っているのでその次を使う
-	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	// SRVの生成
-	device->CreateShaderResourceView(textrueResource, &srvDesc, textureSrvHandleCPU);
-
-
-#pragma endregion
 
 
 
@@ -838,8 +852,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		IID_PPV_ARGS(&graphicsPinelineState));
 	assert(SUCCEEDED(hr));
 
-	// DSV用のヒープでディスクリプタの数は1。DSVは
-
+	// DepthStencilの設定
+	graphicsPipelineStateDesc.DepthStencilState = depthStencilDesc;
+	graphicsPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
 #pragma endregion
 
