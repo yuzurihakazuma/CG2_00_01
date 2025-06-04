@@ -7,6 +7,11 @@ struct Vector3 {
 	float x, y, z;
 };
 
+struct Sphere {
+	Vector3 center; //中心点
+	float radius; // 半径
+};
+
 namespace MatrixMath {
 	// 行列の加法
 	Matrix4x4 Add(const Matrix4x4& m1, const Matrix4x4& m2);
@@ -35,6 +40,8 @@ namespace MatrixMath {
 	// 3次元アフィン変換行列
 	Matrix4x4 MakeAffine(const Vector3& scale, const Vector3& rotate, const Vector3& translate);
 
+
+
 	// 正射影行列
 	Matrix4x4 Orthographic(float left, float top, float right, float bottom, float nearClip, float farClip);
 	// 透視投影行列
@@ -43,6 +50,10 @@ namespace MatrixMath {
 	Matrix4x4 Viewport(float left, float top, float width, float height, float minDepth, float maxDepth);
 	// クロス積
 	Vector3 Cross(const Vector3& v1, const Vector3& v2);
+
+	// 球
+	void DrawSphere(const Sphere & sphere, Matrix4x4 & viewProjection, const Matrix4x4 & viewport, uint32_t coler);
+
 
 }
 
