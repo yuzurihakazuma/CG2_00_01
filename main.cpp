@@ -1084,18 +1084,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(worldMatrixSprite, Multipty(viewMatrixSprite, projectionMatrixSprite));
 			*transformationMatirxDataSprite = worldViewProjectionMatrixSprite;
 
+			ImGui::Begin("Settings");
 
+			ImGui::ColorEdit4("Color", &materialDara->x);
+			ImGui::SliderAngle("RotateX", &transformSprite.rotate.x, -500, 500);
+			ImGui::SliderAngle("RotateY", &transformSprite.rotate.y, -500, 500);
+			ImGui::SliderAngle("RotateZ", &transformSprite.rotate.z, -500, 500);
+			ImGui::DragFloat3("transform", &transformSprite.translate.x, -180, 180);
+			
+			ImGui::End();
 
 			// ImGuiの内部コマンドを生成する
 			ImGui::Render();
-			/*
-			ImGui::Begin("Settings");
 			
-			ImGui::ColorEdit4("Color", &materialDara->x);
-			ImGui::SliderAngle("RotateY", &transformSprite.rotate.x, 0, 0);
-			ImGui::DragFloat3("transform", &transformSprite.translate.x, 0, 0);
-
-			ImGui::End();*/
+			
 
 			// 描画先のRTVとDSVを設定する
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHaap->GetCPUDescriptorHandleForHeapStart();
