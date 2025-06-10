@@ -220,23 +220,23 @@ Matrix4x4 MatrixMath::MakeAffine(const Vector3& scale, const Vector3& rotate, co
 
     return result;
 }
-// 座標変換
-Vector3 MatrixMath::Transform(const Vector3& vector, const Matrix4x4& matrix) {
-
-	Vector3 result = {};
-	// 座標の変換(行ベクトルx行列の列)
-	result.x = vector.x * matrix.m[0][0] + vector.y * matrix.m[1][0] + vector.z * matrix.m[2][0] + 1.0f * matrix.m[3][0];
-	result.y = vector.x * matrix.m[0][1] + vector.y * matrix.m[1][1] + vector.z * matrix.m[2][1] + 1.0f * matrix.m[3][1];
-	result.z = vector.x * matrix.m[0][2] + vector.y * matrix.m[1][2] + vector.z * matrix.m[2][2] + 1.0f * matrix.m[3][2];
-	float w = vector.x * matrix.m[0][3] + vector.y * matrix.m[1][3] + vector.z * matrix.m[2][3] + 1.0f * matrix.m[3][3];
-	assert(w != 0.0f); //wが0にならないようにする
-
-	// wで割って通常の3次元空間に戻す
-	result.x /= w;
-	result.y /= w;
-	result.z /= w;
-	return result;// 変換後のベクトルを返す
-}
+//// 座標変換
+//Vector3 MatrixMath::Transform(const Vector3& vector, const Matrix4x4& matrix) {
+//
+//	Vector3 result = {};
+//	// 座標の変換(行ベクトルx行列の列)
+//	result.x = vector.x * matrix.m[0][0] + vector.y * matrix.m[1][0] + vector.z * matrix.m[2][0] + 1.0f * matrix.m[3][0];
+//	result.y = vector.x * matrix.m[0][1] + vector.y * matrix.m[1][1] + vector.z * matrix.m[2][1] + 1.0f * matrix.m[3][1];
+//	result.z = vector.x * matrix.m[0][2] + vector.y * matrix.m[1][2] + vector.z * matrix.m[2][2] + 1.0f * matrix.m[3][2];
+//	float w = vector.x * matrix.m[0][3] + vector.y * matrix.m[1][3] + vector.z * matrix.m[2][3] + 1.0f * matrix.m[3][3];
+//	assert(w != 0.0f); //wが0にならないようにする
+//
+//	// wで割って通常の3次元空間に戻す
+//	result.x /= w;
+//	result.y /= w;
+//	result.z /= w;
+//	return result;// 変換後のベクトルを返す
+//}
 // 正射影行列
 Matrix4x4 MatrixMath::Orthographic(float left, float top, float right, float bottom, float nearClip, float farClip) {
 
@@ -294,56 +294,49 @@ Vector3 MatrixMath::Cross(const Vector3& v1, const Vector3& v2) {
     );
 }
 
-void DrawSphere(const Sphere& sphere, Matrix4x4& viewProjection, const Matrix4x4& viewport) {
-
-    const uint32_t kSubdivsion = 16; // 分割数
-    const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivsion); // 経度分割一つ分の角度
-    const float kLatEvery = float(M_PI) / float(kSubdivsion); // 緯度分割一つ分の角度
-    // 緯度の方向に分割 -π/2-π/2
-    for (uint32_t latIndex = 0; latIndex < kSubdivsion; ++latIndex) {
-        float lat = -float(M_PI) / 2.0f + latIndex * kLatEvery; // 現在の緯度
-        // 経度の方向に分割 0-2π
-        for (uint32_t lonIndex = 0; lonIndex < kSubdivsion; ++lonIndex) {
-            float lon = lonIndex * kLonEvery;// 現在の経度
-            // world座標系でのa,b,cを求める
-            Vector3 a = {
-                sphere.center.x + sphere.radius * std::cos(lat) * std::cos(lon),
-                sphere.center.y + sphere.radius * std::sin(lat),
-                sphere.center.z + sphere.radius * std::cos(lat) * std::sin(lon),
-            };
-
-            float nextLat = lat + kLatEvery;
-            float nextLon = lon + kLonEvery;
-
-            Vector3 b = {
-                sphere.center.x + sphere.radius * std::cos(nextLat) * std::cos(lon),
-                sphere.center.y + sphere.radius * std::sin(nextLat),
-                sphere.center.z + sphere.radius * std::cos(nextLat) * std::sin(lon)
-            };
-
-            Vector3 c = {
-               sphere.center.x + sphere.radius * std::cos(lat) * std::cos(nextLon),
-               sphere.center.y + sphere.radius * std::sin(lat),
-               sphere.center.z + sphere.radius * std::cos(lat) * std::sin(nextLon)
-            };
-
-
-            // a,b,cをScreen座標系まで変換
-
-            Vector3 screenA = Transform(Transform(a, viewProjection), viewport);
-            Vector3 screenB = Transform(Transform(b, viewProjection), viewport);
-            Vector3 screenC = Transform(Transform(c, viewProjection), viewport);
-
-
-
-
-            // ab,bcで線を引く
-            Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenB.x), int(screenB.y), color);
-            Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenC.x), int(screenC.y), color);
-
-        }
-
-    }
-
-
-}
+//Vector3  MatrixMath::DrawSphere(const Sphere& sphere, Matrix4x4& viewProjection, const Matrix4x4& viewport) {
+//
+//    const uint32_t kSubdivsion = 16; // 分割数
+//    const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivsion); // 経度分割一つ分の角度
+//    const float kLatEvery = float(M_PI) / float(kSubdivsion); // 緯度分割一つ分の角度
+//    // 緯度の方向に分割 -π/2-π/2
+//    for (uint32_t latIndex = 0; latIndex < kSubdivsion; ++latIndex) {
+//        float lat = -float(M_PI) / 2.0f + latIndex * kLatEvery; // 現在の緯度
+//        // 経度の方向に分割 0-2π
+//        for (uint32_t lonIndex = 0; lonIndex < kSubdivsion; ++lonIndex) {
+//            float lon = lonIndex * kLonEvery;// 現在の経度
+//            // world座標系でのa,b,cを求める
+//            Vector3 a = {
+//                sphere.center.x + sphere.radius * std::cos(lat) * std::cos(lon),
+//                sphere.center.y + sphere.radius * std::sin(lat),
+//                sphere.center.z + sphere.radius * std::cos(lat) * std::sin(lon),
+//            };
+//
+//            float nextLat = lat + kLatEvery;
+//            float nextLon = lon + kLonEvery;
+//
+//            Vector3 b = {
+//                sphere.center.x + sphere.radius * std::cos(nextLat) * std::cos(lon),
+//                sphere.center.y + sphere.radius * std::sin(nextLat),
+//                sphere.center.z + sphere.radius * std::cos(nextLat) * std::sin(lon)
+//            };
+//
+//            Vector3 c = {
+//               sphere.center.x + sphere.radius * std::cos(lat) * std::cos(nextLon),
+//               sphere.center.y + sphere.radius * std::sin(lat),
+//               sphere.center.z + sphere.radius * std::cos(lat) * std::sin(nextLon)
+//            };
+//
+//
+//            // a,b,cをScreen座標系まで変換
+//
+//            Vector3 screenA = Transform(Transform(a, viewProjection), viewport);
+//            Vector3 screenB = Transform(Transform(b, viewProjection), viewport);
+//            Vector3 screenC = Transform(Transform(c, viewProjection), viewport);
+//
+//        }
+//
+//    }
+//
+//
+//}

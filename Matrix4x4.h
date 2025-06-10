@@ -40,8 +40,8 @@ namespace MatrixMath {
 	// 3次元アフィン変換行列
 	Matrix4x4 MakeAffine(const Vector3& scale, const Vector3& rotate, const Vector3& translate);
 
-	// 座標変換
-	Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix);
+	//// 座標変換
+	//Vector3 Transform(const Vector3& vector, const Matrix4x4& matrix);
 
 	// 正射影行列
 	Matrix4x4 Orthographic(float left, float top, float right, float bottom, float nearClip, float farClip);
@@ -52,8 +52,8 @@ namespace MatrixMath {
 	// クロス積
 	Vector3 Cross(const Vector3& v1, const Vector3& v2);
 
-	// 球
-	Vector3 DrawSphere(const Sphere & sphere, Matrix4x4 & viewProjection, const Matrix4x4 & viewport);
+	//// 球
+	//Vector3 DrawSphere(const Sphere & sphere, Matrix4x4 & viewProjection, const Matrix4x4 & viewport);
 
 
 }

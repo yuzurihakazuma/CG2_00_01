@@ -47,11 +47,11 @@ struct VertexData {
 	Vector2 texcoord;
 };
 
-//struct Transform {
-//	Vector3 scale;
-//	Vector3 rotate;
-//	Vector3 translate;
-//};
+struct Transform {
+	Vector3 scale;
+	Vector3 rotate;
+	Vector3 translate;
+};
 // Transform変数を作る
 Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform cameraTransfrom{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-5.0f} };
@@ -947,6 +947,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#pragma region Sphereの実装
+
+	ID3D12Resource* vertexResourceSphere = CreateBufferResource(device, sizeof(VertexData) * 1536);
+
+	// 頂点バッファビューを作成する
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSphere{};
+	// リソースの先頭のアドレスから作成する
+	vertexBufferViewSphere.BufferLocation = vertexResourceSphere->GetGPUVirtualAddress();
+	// 使用するリソースのサイズは頂点6つ分のサイズ
+	vertexBufferViewSphere.SizeInBytes = sizeof(VertexData) * 6;
+	// 1頂点あたりのサイズ
+	vertexBufferViewSphere.StrideInBytes = sizeof(VertexData);
+
+	VertexData* vertexDataSphere = nullptr;
+	// 書き込むためのアドレス取得
+	vertexResourceSphere->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
+
+
+#pragma endregion
+
+
 
 
 #pragma region ViewportとScissor
@@ -1238,6 +1259,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	dsvDescriptorHaap->Release();
 	vertexResourceSprite->Release();
 	transformationMatrixResourceSprite->Release();
+	vertexResourceSphere->Release();
+
 
 #ifdef _DEBUG
 
