@@ -294,7 +294,7 @@ Vector3 MatrixMath::Cross(const Vector3& v1, const Vector3& v2) {
     );
 }
 
-void DrawSphere(const Sphere& sphere, Matrix4x4& viewProjection, const Matrix4x4& viewport, uint32_t color) {
+void DrawSphere(const Sphere& sphere, Matrix4x4& viewProjection, const Matrix4x4& viewport) {
 
     const uint32_t kSubdivsion = 16; // 分割数
     const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivsion); // 経度分割一つ分の角度
@@ -316,15 +316,15 @@ void DrawSphere(const Sphere& sphere, Matrix4x4& viewProjection, const Matrix4x4
             float nextLon = lon + kLonEvery;
 
             Vector3 b = {
-                sphere.center.x + sphere.radius * cosf(nextLat) * cosf(lon),
-                sphere.center.y + sphere.radius * sinf(nextLat),
-                sphere.center.z + sphere.radius * cosf(nextLat) * sinf(lon)
+                sphere.center.x + sphere.radius * std::cos(nextLat) * std::cos(lon),
+                sphere.center.y + sphere.radius * std::sin(nextLat),
+                sphere.center.z + sphere.radius * std::cos(nextLat) * std::sin(lon)
             };
 
             Vector3 c = {
-               sphere.center.x + sphere.radius * cosf(lat) * cosf(nextLon),
-               sphere.center.y + sphere.radius * sinf(lat),
-               sphere.center.z + sphere.radius * cosf(lat) * sinf(nextLon)
+               sphere.center.x + sphere.radius * std::cos(lat) * std::cos(nextLon),
+               sphere.center.y + sphere.radius * std::sin(lat),
+               sphere.center.z + sphere.radius * std::cos(lat) * std::sin(nextLon)
             };
 
 
