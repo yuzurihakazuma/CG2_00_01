@@ -950,7 +950,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region Sphereの実装
 
-	const int sphereVertexNum = 512;
+	const int sphereVertexNum = 6;
 	const int kSubdivision = 16;
 
 	uint32_t latIndex;
