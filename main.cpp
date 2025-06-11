@@ -1029,7 +1029,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 					  1.0f - float(latIndex + 1.0f) / float(kSubdivision) }
 			};
 
-			uint32_t start = (latIndex * (kSubdivision) + lonIndex) * 6;
+			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
 
 			vertexDataSphere[start + 0] = vertA;
 			vertexDataSphere[start + 1] = vertB;
@@ -1105,7 +1105,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// データを書き込む
 	Matrix4x4* wvpData = nullptr;
 	Matrix4x4* transformationMatirxDataSprite = nullptr;
-	Matrix4x4* transformationMatirxDataSphere = nullptr;
+	
 	// 書き込むためのアドレスを取得
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
 	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatirxDataSprite));
@@ -1188,6 +1188,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 projectionMatrix = PerspectiveFov(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
 			*wvpData = worldViewProjectionMatrix;
+			
 			// Sprite
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
@@ -1242,13 +1243,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			// マテリアルCBuffer
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
-			//
+			
 			// wvp用のCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 			// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]である
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 			// 描画！(DraoCall/ドローコール)。3頂点で1つのインスタンス。インスタンスについては今後
-			commandList->DrawInstanced(1536, 1, 0, 0);
+			commandList->DrawInstanced(sphereVertexNum, 1, 0, 0);
 
 			// Spriteの描画
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite); // VBVを設定
