@@ -57,7 +57,7 @@ struct Transform {
 
 struct Material {
 	Vector4 color;
-	uint32_t enableLighting;
+	int32_t enableLighting;
 };
 
 struct TransformationMatrix {
