@@ -57,12 +57,19 @@ struct Transform {
 
 struct Material {
 	Vector4 color;
-	int32_t enableLighting;
+	uint32_t enableLighting;
 };
 
 struct TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
+};
+
+struct DirectionalLight {
+	Vector4 color; // ライトの色
+	Vector3 direction; // ライトの向き
+	float intensity; // 輝度
+
 };
 
 
@@ -705,6 +712,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	ID3D12Resource* textrueResource2 = CreateTextureResource(device, metadata2);
 	ID3D12Resource* intermediateResource2 = UploadTextureData(textrueResource2, mipImages2, device, commandList);
+	// モンスターボールか否かをするために宣言
 	bool useMonsterBall = true;
 
 	// DepthStencilTextureをウィンドウのサイズで作成
@@ -1167,6 +1175,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma endregion
 
 
+	
+
 
 
 #pragma region ViewportとScissor
@@ -1196,13 +1206,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma region Material用
 
 	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
-	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
+	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Material));
 	// マテリアルにデータを書き込む
-	Vector4* materialDara = nullptr;
+	Material* materialData = nullptr;
 	// 書き込むためのアドレスを取得
-	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialDara));
+	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
 	// 今回は赤を書き込んでいる
-	*materialDara = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+	materialData->enableLighting = true;
 
 	// Sprite用のマテリアルリソースを作る
 	ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(Material));
@@ -1218,24 +1229,50 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#pragma region 平行光源
+
+	ID3D12Resource* directionalResourceLight = CreateBufferResource(device, sizeof(DirectionalLight));
+
+	DirectionalLight* directionalLightData = nullptr;
+
+	directionalResourceLight->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
+
+	// デフォルト値はとりあえず以下のようにしておく
+	directionalLightData->color = { 1.0f,1.0f,1.0f,1.0f };
+	directionalLightData->direction = { 0.0f, -1.0f,0.0f };
+	directionalLightData->intensity = 1.0f;
+
+
+
+#pragma endregion
+
+
+
+
 #pragma region WVP
 
+	
 	// WVB用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
-	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
-	// Sprite用のTransformationMatirx用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
-	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
 
 	// データを書き込む
-	Matrix4x4* wvpData = nullptr;
-	Matrix4x4* transformationMatirxDataSprite = nullptr;
-
+	TransformationMatrix* transformationMatrixData = nullptr;
+	
 	// 書き込むためのアドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
-	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatirxDataSprite));
-
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixData));
+	
 	// 単位行列を書き込んでおく
-	*wvpData = MakeIdentity4x4();
-	*transformationMatirxDataSprite = MakeIdentity4x4();
+	transformationMatrixData->WVP = MakeIdentity4x4();
+
+	// Sprite用のTransformationMatirx用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
+	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
+	
+	// データを書き込む
+	TransformationMatrix* transformationMatirxDataSprite = nullptr;
+	// 書き込むためのアドレスを取得
+	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatirxDataSprite));
+	// 単位行列を書き込んでおく
+	transformationMatirxDataSprite->WVP = MakeIdentity4x4();
 
 #pragma endregion
 
@@ -1302,35 +1339,43 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			// TransitionBarrierを張る
 			commandList->ResourceBarrier(1, &barrier);
+			
+			
+
+
 			// 球描画
 			transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
-			*wvpData = worldMatrix;
 			Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = PerspectiveFov(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
-			*wvpData = worldViewProjectionMatrix;
+			transformationMatrixData->World = worldMatrix;
+			transformationMatrixData->WVP = worldViewProjectionMatrix;
 
 			// Sprite
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
 			Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(worldMatrixSprite, Multipty(viewMatrixSprite, projectionMatrixSprite));
-			*transformationMatirxDataSprite = worldViewProjectionMatrixSprite;
+			transformationMatirxDataSprite->World = worldMatrixSprite;
+			transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
 
 
 
 			ImGui::Begin("Settings");
 
-			ImGui::ColorEdit4("Color", &materialDara->x);
+			ImGui::ColorEdit4("Color", &materialData->color.x);
 			ImGui::SliderAngle("RotateX", &transformSprite.rotate.x, -500, 500);
 			ImGui::SliderAngle("RotateY", &transformSprite.rotate.y, -500, 500);
 			ImGui::SliderAngle("RotateZ", &transformSprite.rotate.z, -500, 500);
 			ImGui::DragFloat3("transform", &transformSprite.translate.x, -180, 180);
 			ImGui::DragFloat3("transformsphere", &transform.translate.x);
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-
+			ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
+			ImGui::SliderFloat("LightX", &directionalLightData->direction.x,-10.0f,10.0f);
+			ImGui::SliderFloat("LightY", &directionalLightData->direction.y,-10.0f,10.0f);
+			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z,-10.0f,10.0f);
 
 
 			ImGui::End();
@@ -1367,6 +1412,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// マテリアルCBuffer
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
+			
+
 			// wvp用のCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 			// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]である
@@ -1375,12 +1422,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// チェックが入ってるときuvCheckerを使い、使ってないときMonsterBallに変える
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2);
 
+			// ライトの定数バッファ
+			commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
+
+
 			// 描画！(DraoCall/ドローコール)。3頂点で1つのインスタンス。インスタンスについては今後
 			commandList->DrawInstanced(sphereVertexNum, 1, 0, 0);
 
+
 			// Spriteの描画
+			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
+
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite); // VBVを設定
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			
+			// ここで更新してSpriteの画像を変えないようにする
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
 			// 描画！(DraoCall/ドローコール)
 			commandList->DrawInstanced(6, 1, 0, 0);
 
@@ -1485,7 +1543,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexResourceSphere->Release();
 	//transformationMatrixResourceSphere->Release();
 	materialResourceSprite->Release();
-
+	directionalResourceLight->Release();
 
 #ifdef _DEBUG
 
