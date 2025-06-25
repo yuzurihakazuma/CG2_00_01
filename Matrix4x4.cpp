@@ -152,6 +152,24 @@ Matrix4x4 MatrixMath::MakeScale(const Vector3& scale) {
     return result;// 拡大(スケ―リンク)行列を返す
 }
 
+float MatrixMath::Length(const Vector3& v) {
+
+    float result = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+
+    return result;
+}
+
+Vector3 MatrixMath::Normalize(const Vector3& v) {
+
+    Vector3 result = {};
+
+    result.x = v.x / Length(v);
+    result.y = v.y / Length(v);
+    result.z = v.z / Length(v);
+
+    return result;
+}
+
 //X軸の回転行列
 Matrix4x4 MatrixMath::MakeRotateX(float radian) {
 
