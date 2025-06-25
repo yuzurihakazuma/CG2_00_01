@@ -1002,32 +1002,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
 
 	// 1枚目の三角形
-	// 左下
-	vertexDataSprite[0].position = { 0.0f,360.0f,0.0f,1.0f };
-	vertexDataSprite[0].texcoord = { 0.0f,1.0f };
-	vertexDataSprite[0].normal = { 0.0f,0.0f,-1.0f };
 	// 左上
-	vertexDataSprite[1].position = { 0.0f,0.0f,0.0f,1.0f };
-	vertexDataSprite[1].texcoord = { 0.0f,0.0f };
-	vertexDataSprite[1].normal = { 0.0f,0.0f,0.0f };
-	// 右下
-	vertexDataSprite[2].position = { 640.0f,360.0f,0.0f,1.0f };
-	vertexDataSprite[2].texcoord = { 1.0f,1.0f };
-	vertexDataSprite[2].normal = { 0.0f,0.0f,0.0f };
+	vertexDataSprite[0].position = { 0.0f, 0.0f, 0.0f, 1.0f };
+	vertexDataSprite[0].texcoord = { 0.0f, 0.0f };
+	vertexDataSprite[0].normal = { 0.0f, 0.0f, -1.0f };
 
-	// ２枚目の三角形
 	// 左下
-	vertexDataSprite[3].position = { 0.0f,0.0f,0.0f,1.0f };
-	vertexDataSprite[3].texcoord = { 0.0f,0.0f };
-	vertexDataSprite[3].normal = { 0.0f,0.0f,0.0f };
-	// 左上
-	vertexDataSprite[4].position = { 640.0f,0.0f,0.0f,1.0f };
-	vertexDataSprite[4].texcoord = { 1.0f,0.0f };
-	vertexDataSprite[4].normal = { 0.0f,0.0f,0.0f };
+	vertexDataSprite[1].position = { 0.0f, 360.0f, 0.0f, 1.0f };
+	vertexDataSprite[1].texcoord = { 0.0f, 1.0f };
+	vertexDataSprite[1].normal = { 0.0f, 0.0f, -1.0f };
+
+	// 右上
+	vertexDataSprite[2].position = { 640.0f, 0.0f, 0.0f, 1.0f };
+	vertexDataSprite[2].texcoord = { 1.0f, 0.0f };
+	vertexDataSprite[2].normal = { 0.0f, 0.0f, -1.0f };
+
 	// 右下
-	vertexDataSprite[5].position = { 640.0f,360.0f,0.0f,1.0f };
-	vertexDataSprite[5].texcoord = { 1.0f,1.0f };
-	vertexDataSprite[5].normal = { 0.0f,0.0f,0.0f };
+	vertexDataSprite[3].position = { 640.0f, 360.0f, 0.0f, 1.0f };
+	vertexDataSprite[3].texcoord = { 1.0f, 1.0f };
+	vertexDataSprite[3].normal = { 0.0f, 0.0f, -1.0f };
+	//// 左上
+	//vertexDataSprite[4].position = { 640.0f,0.0f,0.0f,1.0f };
+	//vertexDataSprite[4].texcoord = { 1.0f,0.0f };
+	//vertexDataSprite[4].normal = { 0.0f,0.0f,0.0f };
+	//// 右下
+	//vertexDataSprite[5].position = { 640.0f,360.0f,0.0f,1.0f };
+	//vertexDataSprite[5].texcoord = { 1.0f,1.0f };
+	//vertexDataSprite[5].normal = { 0.0f,0.0f,0.0f };
 
 	
 
@@ -1385,8 +1386,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// Sprite
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
-			Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(worldMatrixSprite, Multipty(viewMatrixSprite, projectionMatrixSprite));
+			Matrix4x4 projectionMatrixSprite = Orthographic(0.0f,  0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+			Matrix4x4 viewProjection = Multipty(viewMatrixSprite, projectionMatrixSprite);
+			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(viewProjection, worldMatrixSprite);
 			transformationMatirxDataSprite->World = worldMatrixSprite;
 			transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
 
@@ -1406,6 +1408,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::SliderFloat("LightY", &directionalLightData->direction.y,-10.0f,10.0f);
 			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z,-10.0f,10.0f);
 
+			directionalLightData->direction = Normalize(directionalLightData->direction);
 
 			ImGui::End();
 
@@ -1434,7 +1437,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootSignature(rootSignatrue);
 			commandList->SetPipelineState(graphicsPinelineState); //PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere); // VBVを設定
-			commandList->IASetIndexBuffer(&indexBufferViewSprite); // IBVを設定
+			
 
 
 
@@ -1462,16 +1465,26 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 			// Spriteの描画
+			
+			
+			// トポロジの設定
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			// VBVを設定 : IBVを設定
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			commandList->IASetIndexBuffer(&indexBufferViewSprite);  
+
+			// マテリアル定数バッファ
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite); // VBVを設定
+			// 行列定数バッファ
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-			
+
 			// ここで更新してSpriteの画像を変えないようにする
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
+			
 			// 描画！(DraoCall/ドローコール)
-			commandList->DrawIndexedInstanced(6, 1, 0, 0,0);
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 
 
