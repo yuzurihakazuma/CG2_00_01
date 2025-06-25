@@ -1378,7 +1378,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::SliderFloat("LightY", &directionalLightData->direction.y,-10.0f,10.0f);
 			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z,-10.0f,10.0f);
 
-
+			directionalLightData->direction = Normalize(directionalLightData->direction);
 			ImGui::End();
 
 			// ImGuiの内部コマンドを生成する
