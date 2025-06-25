@@ -30,6 +30,12 @@ namespace MatrixMath {
 	// 拡大縮小行列
 	Matrix4x4 MakeScale(const Vector3& scale);
 
+
+	// 長さ
+	float Length(const Vector3& v);
+	// 正規化
+	Vector3 Normalize(const Vector3& v);
+
 	// X軸の回転行列
 	Matrix4x4 MakeRotateX(float radian);
 	// Y軸の回転行列
