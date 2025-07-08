@@ -29,8 +29,8 @@ PixelShaderOutput main(VertexShaderOutput input)
         output.color = gMaterial.color * textrueColor;
         
     }
-    
-    
+    float3 transformedUV = mul(float32_t3(input.texcoord, 1.0f), gMaterial.uvTransform);
+    float32_t4 textureColor = gTextrue.Sample(gSampler, transformedUV.xy);
     
     
     return output;
