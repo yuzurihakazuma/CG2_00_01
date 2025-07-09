@@ -1208,13 +1208,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma region indexを使った実装sphere
 
 	//indexSphere用の頂点indexを作る1つ辺りのindexのサイズは32bit
-	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * sphereVertexNum);
+	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * indexNum);
 
 	D3D12_INDEX_BUFFER_VIEW indexBufferViewSphere{}; // IBV
 	// リソースの先頭のアドレスから使う
 	indexBufferViewSphere.BufferLocation = indexResourceSphere->GetGPUVirtualAddress();
 	//使用するリソースのサイズ
-	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * sphereVertexNum;
+	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * indexNum;
 
 	indexBufferViewSphere.Format = DXGI_FORMAT_R32_UINT; // indexはuint32_tとする
 
@@ -1533,7 +1533,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			// 描画コマンドの発行（Draw Call）
 			// 1インスタンスあたりのインデックス数：sphereVertexNum
-			commandList->DrawIndexedInstanced(sphereVertexNum, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(indexNum, 1, 0, 0, 0);
 
 			// Spriteの描画
 
