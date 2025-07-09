@@ -58,6 +58,8 @@ struct Transform {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
+	float padding[3];
+	Matrix4x4 uvTransfrom; // UV変換行列
 };
 
 struct TransformationMatrix {
@@ -77,7 +79,7 @@ struct DirectionalLight {
 Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform cameraTransfrom{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
 Transform transformSprite{ {1.0f,1.0f,1.0f,},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-
+Transform uvTransformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 
 #pragma region Creash関数
@@ -1246,6 +1248,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 今回は赤を書き込んでいる
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialData->enableLighting = true;
+	materialData->uvTransfrom = MakeIdentity4x4();
 
 	// Sprite用のマテリアルリソースを作る
 	ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(Material));
@@ -1257,7 +1260,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialDataSprite->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	// SpriteはLightingしないのでfalseを設定する
 	materialDataSprite->enableLighting = false;
+	// UVTransformはSpriteでは使うので設定しておく。今回は単位行列を設定しておく
+	materialDataSprite->uvTransfrom = MakeIdentity4x4();
 	
+
 
 #pragma endregion
 
@@ -1277,9 +1283,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 #pragma endregion
-
-
-
 
 #pragma region WVP
 
@@ -1308,6 +1311,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+	
+
+
+
 #pragma region ImGuiの初期化
 
 	IMGUI_CHECKVERSION();
@@ -1326,8 +1333,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
-
-
+	
 
 
 
@@ -1384,6 +1390,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
 			transformationMatrixData->World = worldMatrix;
 			transformationMatrixData->WVP = worldViewProjectionMatrix;
+			
+
 
 			// Sprite
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1393,7 +1401,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(viewProjection, worldMatrixSprite);
 			transformationMatirxDataSprite->World = worldMatrixSprite;
 			transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
-
+			
 
 
 			ImGui::Begin("Settings");
@@ -1409,8 +1417,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::SliderFloat("LightX", &directionalLightData->direction.x,-10.0f,10.0f);
 			ImGui::SliderFloat("LightY", &directionalLightData->direction.y,-10.0f,10.0f);
 			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z,-10.0f,10.0f);
+			ImGui::DragFloat2("UVTransform", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+
 
 			directionalLightData->direction = Normalize(directionalLightData->direction);
+
+			Matrix4x4 uvTransformMatrix = MakeScale(uvTransformSprite.scale);
+			uvTransformMatrix = Multipty(uvTransformMatrix, MakeRotateZ(uvTransformSprite.rotate.z));
+			uvTransformMatrix = Multipty(uvTransformMatrix, MakeTranslate(uvTransformSprite.translate));
+			materialDataSprite->uvTransfrom = uvTransformMatrix;
+
 
 			ImGui::End();
 

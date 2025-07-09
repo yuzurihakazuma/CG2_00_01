@@ -14,24 +14,25 @@ struct PixelShaderOutput
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
-    float32_t4 textrueColor = gTextrue.Sample(gSampler, input.texcoord);
+    float4 transformedUV = mul(float32_t4(input.texcoord, 1.0f, 1.0f), gMaterial.uvTransform);
+    float32_t4 textureColor = gTextrue.Sample(gSampler, transformedUV.xy);
+    
+    //float32_t4 textrueColor = gTextrue.Sample(gSampler, input.texcoord);
     if (gMaterial.enableLighting != 0) // Lightingする場合
     {
         float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
         
         float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
-        output.color = gMaterial.color * textrueColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
+        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
         
     }
     else
     {
         // Lightingしない場合。前回までと同じ演算
-        output.color = gMaterial.color * textrueColor;
+        output.color = gMaterial.color * textureColor;
         
     }
-    float3 transformedUV = mul(float32_t3(input.texcoord, 1.0f), gMaterial.uvTransform);
-    float32_t4 textureColor = gTextrue.Sample(gSampler, transformedUV.xy);
-    
+   
     
     return output;
     
