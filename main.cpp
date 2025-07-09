@@ -1039,25 +1039,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region Sphereの実装
 
-	const int kSubdivision =16;
-	const int vertexCountX = kSubdivision + 1; // 緯度方向の分割数
-	const int vertexCountY = kSubdivision + 1; // 緯度方向の分割数
-	
-	const int sphereVertexNum = kSubdivision * kSubdivision * 6;
+	const int kSubdivision = 16;
+	const int vertexCountX = kSubdivision + 1;
+	const int vertexCountY = kSubdivision + 1;
 
+	const int vertexNum = vertexCountX * vertexCountY;   // ✅ 無駄をなくした頂点数：289
+	const int indexNum = kSubdivision * kSubdivision * 6; // ✅ 必要なインデックス数：1536
 
 	uint32_t latIndex;
 	uint32_t lonIndex;
 
 
-	ID3D12Resource* vertexResourceSphere = CreateBufferResource(device, sizeof(VertexData) * sphereVertexNum);
+	ID3D12Resource* vertexResourceSphere = CreateBufferResource(device, sizeof(VertexData) * vertexNum);
 
 	// 頂点バッファビューを作成する
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSphere{};
 	// リソースの先頭のアドレスから作成する
 	vertexBufferViewSphere.BufferLocation = vertexResourceSphere->GetGPUVirtualAddress();
 	// 使用するリソースのサイズは頂点6つ分のサイズ
-	vertexBufferViewSphere.SizeInBytes = sizeof(VertexData) * sphereVertexNum;
+	vertexBufferViewSphere.SizeInBytes = sizeof(VertexData) * vertexNum;
 	// 1頂点あたりのサイズ
 	vertexBufferViewSphere.StrideInBytes = sizeof(VertexData);
 
@@ -1139,13 +1139,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma region indexを作った実装Sphere
 
 	//indexSphere用の頂点indexを作る1つ辺りのindexのサイズは32bit
-	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * sphereVertexNum);
+	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * indexNum);
 
 	D3D12_INDEX_BUFFER_VIEW indexBufferViewSphere{}; // IBV
 	// リソースの先頭のアドレスから使う
 	indexBufferViewSphere.BufferLocation = indexResourceSphere->GetGPUVirtualAddress();
 	//使用するリソースのサイズ
-	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * sphereVertexNum;
+	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * indexNum;
 	
 	indexBufferViewSphere.Format = DXGI_FORMAT_R32_UINT; // indexはuint32_tとする
 
@@ -1456,7 +1456,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			// 描画コマンドの発行（Draw Call）
 			// 1インスタンスあたりのインデックス数：sphereVertexNum
-			commandList->DrawIndexedInstanced(sphereVertexNum, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(indexNum, 1, 0, 0, 0);
 
 			// Spriteの描画
 			
