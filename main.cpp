@@ -1108,24 +1108,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma region Sphereの実装
 
 	const int kSubdivision = 16;
-	const int vertexCountX = kSubdivision + 1; // 緯度方向の分割数
-	const int vertexCountY = kSubdivision + 1; // 緯度方向の分割数
+	const int vertexCountX = kSubdivision + 1;
+	const int vertexCountY = kSubdivision + 1;
 
-	const int sphereVertexNum = kSubdivision * kSubdivision * 6;
-
+	const int vertexNum = vertexCountX * vertexCountY;   // ✅ 無駄をなくした頂点数：289
+	const int indexNum = kSubdivision * kSubdivision * 6; // ✅ 必要なインデックス数：1536
 
 	uint32_t latIndex;
 	uint32_t lonIndex;
 
 
-	ID3D12Resource* vertexResourceSphere = CreateBufferResource(device, sizeof(VertexData) * sphereVertexNum);
+	ID3D12Resource* vertexResourceSphere = CreateBufferResource(device, sizeof(VertexData) * vertexNum);
 
 	// 頂点バッファビューを作成する
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSphere{};
 	// リソースの先頭のアドレスから作成する
 	vertexBufferViewSphere.BufferLocation = vertexResourceSphere->GetGPUVirtualAddress();
 	// 使用するリソースのサイズは頂点6つ分のサイズ
-	vertexBufferViewSphere.SizeInBytes = sizeof(VertexData) * sphereVertexNum;
+	vertexBufferViewSphere.SizeInBytes = sizeof(VertexData) * vertexNum;
 	// 1頂点あたりのサイズ
 	vertexBufferViewSphere.StrideInBytes = sizeof(VertexData);
 
