@@ -490,9 +490,13 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		} else if(identifier=="f") {
 
 			// 面は三角形限定。　その他は未対応
-			for (int32_t faceVertex = 0; faceVertex < length; faceVertex++) {
-
+			for (int32_t faceVertex = 0; faceVertex < 3; faceVertex++) {
+				std::string vertexDefinition; // 頂点の定義を格納する変数
+				s >> vertexDefinition; // 頂点の定義を読み込む
+			
+				// 頂点の要素へのindex
 			}
+
 
 
 		}
