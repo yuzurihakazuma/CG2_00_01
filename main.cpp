@@ -12,6 +12,8 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <numbers>
+#include <fstream> // ファイルを書いたり読み込んだりするライブラリ
+#include<sstream>
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
 #include <strsafe.h>
@@ -73,6 +75,11 @@ struct DirectionalLight {
 	float intensity; // 輝度
 
 };
+
+struct ModelData {
+	std::vector<VertexData> vertices; // 頂点データ
+};
+
 
 
 // Transform変数を作る
@@ -445,6 +452,63 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 
 
 #pragma endregion
+
+#pragma region OBJファイルを読み込む関数
+
+ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
+
+
+	ModelData modelData; // 構造するModelData
+	std::vector<Vector4> positions; // 位置
+	std::vector<Vector3> normals; // 法線
+	std::vector<Vector2> texcoords; // テクスチャ座標
+	std::string line; // ファイルから読んだ1行を格納するもの
+
+	std::ifstream file(directoryPath + "/" + filename); // ファイルを開く
+	
+	assert(file.is_open()); // 開けなかったら止める
+
+	while (std::getline(file,line)) {
+
+		std::string identifier; // 行の先頭の識別子を格納する
+		std::istringstream s(line); // 先頭の認別子を読む
+		s >> identifier; // 先頭の識別子を読み込む
+		if (identifier=="v") {
+			Vector4 positeion; // 位置を格納する変数
+			s >> positeion.x >> positeion.y >> positeion.z; // 位置を読み込む
+			positeion.w = 1.0f;
+			positions.push_back(positeion); // 位置を格納する
+		} else if (identifier == "Vt") {
+			Vector2 texcoord; // テクスチャ座標を格納する変数
+			s >> texcoord.x >> texcoord.y; // テクスチャ座標を読み込む
+			texcoords.push_back(texcoord); // テクスチャ座標を格納する
+
+		} else if (identifier=="vn") {
+			Vector3 normal; // 法線を格納する変数
+			s >> normal.x >> normal.y >> normal.z; // 法線を読み込む
+			normals.push_back(normal); // 法線を格納する
+		} else if(identifier=="f") {
+
+			// 面は三角形限定。　その他は未対応
+			for (int32_t faceVertex = 0; faceVertex < length; faceVertex++) {
+
+			}
+
+
+		}
+
+
+
+
+	}
+
+
+
+}
+
+
+#pragma endregion
+
 
 
 
@@ -1032,7 +1096,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//vertexDataSprite[5].texcoord = { 1.0f,1.0f };
 	//vertexDataSprite[5].normal = { 0.0f,0.0f,0.0f };
 
-	
+
 
 
 #pragma endregion
@@ -1042,7 +1106,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const int kSubdivision = 16;
 	const int vertexCountX = kSubdivision + 1; // 緯度方向の分割数
 	const int vertexCountY = kSubdivision + 1; // 緯度方向の分割数
-	
+
 	const int sphereVertexNum = kSubdivision * kSubdivision * 6;
 
 
@@ -1070,11 +1134,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 緯度分割1つ分の角度
 	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
 	// 緯度の方向に分割
-	for (latIndex = 0; latIndex < (kSubdivision+1); ++latIndex) {
+	for (latIndex = 0; latIndex < (kSubdivision + 1); ++latIndex) {
 
 		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
 		// 経度の方向に分割しながら線を描く
-		for (lonIndex = 0; lonIndex < (kSubdivision+1); ++lonIndex) {
+		for (lonIndex = 0; lonIndex < (kSubdivision + 1); ++lonIndex) {
 
 			float lon = lonIndex * kLonEvery;
 			// 頂点データを描く
@@ -1091,14 +1155,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 					1.0f - float(latIndex) / float(kSubdivision)
 				},
 				{
-					std::cosf(lat)* std::cosf(lon),
+					std::cosf(lat) * std::cosf(lon),
 					std::sinf(lat),
-					std::cosf(lat)* std::sinf(lon),
+					std::cosf(lat) * std::sinf(lon),
 				}
 			};
 			uint32_t start = (latIndex * (kSubdivision + 1) + lonIndex);
 			vertexDataSphere[start] = vertA;
-			
+
 		}
 
 	}
@@ -1135,8 +1199,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	indexResourceSprite->Unmap(0, nullptr);
 
 #pragma endregion
-	
-#pragma region indexを作った実装Sphere
+
+
+#pragma region indexを使った実装sphere
 
 	//indexSphere用の頂点indexを作る1つ辺りのindexのサイズは32bit
 	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * sphereVertexNum);
@@ -1146,7 +1211,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	indexBufferViewSphere.BufferLocation = indexResourceSphere->GetGPUVirtualAddress();
 	//使用するリソースのサイズ
 	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * sphereVertexNum;
-	
+
 	indexBufferViewSphere.Format = DXGI_FORMAT_R32_UINT; // indexはuint32_tとする
 
 	// indexリソースにデータを書き込む
@@ -1178,7 +1243,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	indexResourceSphere->Unmap(0, nullptr);
 
 
+
 #pragma endregion
+
+
+
+
+
+
+
 
 
 
@@ -1233,7 +1306,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialDataSprite->enableLighting = false;
 	// UVTransformはSpriteでは使うので設定しておく。今回は単位行列を設定しておく
 	materialDataSprite->uvTransfrom = MakeIdentity4x4();
-	
+
 
 
 #pragma endregion
@@ -1257,22 +1330,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region WVP
 
-	
+
 	// WVB用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
 
 	// データを書き込む
 	TransformationMatrix* transformationMatrixData = nullptr;
-	
+
 	// 書き込むためのアドレスを取得
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixData));
-	
+
 	// 単位行列を書き込んでおく
 	transformationMatrixData->WVP = MakeIdentity4x4();
 
 	// Sprite用のTransformationMatirx用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
-	
+
 	// データを書き込む
 	TransformationMatrix* transformationMatirxDataSprite = nullptr;
 	// 書き込むためのアドレスを取得
@@ -1282,7 +1355,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
-	
+
 
 
 
@@ -1304,7 +1377,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
-	
+
 
 
 
@@ -1348,8 +1421,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			// TransitionBarrierを張る
 			commandList->ResourceBarrier(1, &barrier);
-			
-			
+
+
 
 
 			// 球描画
@@ -1361,18 +1434,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
 			transformationMatrixData->World = worldMatrix;
 			transformationMatrixData->WVP = worldViewProjectionMatrix;
-			
+
 
 
 			// Sprite
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
-			Matrix4x4 projectionMatrixSprite = Orthographic(0.0f,  0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+			Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
 			Matrix4x4 viewProjection = Multipty(viewMatrixSprite, projectionMatrixSprite);
 			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(viewProjection, worldMatrixSprite);
 			transformationMatirxDataSprite->World = worldMatrixSprite;
 			transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
-			
+
 
 
 			ImGui::Begin("Settings");
@@ -1385,9 +1458,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat3("transformsphere", &transform.translate.x);
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
-			ImGui::SliderFloat("LightX", &directionalLightData->direction.x,-10.0f,10.0f);
-			ImGui::SliderFloat("LightY", &directionalLightData->direction.y,-10.0f,10.0f);
-			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z,-10.0f,10.0f);
+			ImGui::SliderFloat("LightX", &directionalLightData->direction.x, -10.0f, 10.0f);
+			ImGui::SliderFloat("LightY", &directionalLightData->direction.y, -10.0f, 10.0f);
+			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVTransform", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
@@ -1428,7 +1501,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPinelineState); //PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere); // VBVを設定
-			
+
 
 
 
@@ -1459,13 +1532,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->DrawIndexedInstanced(sphereVertexNum, 1, 0, 0, 0);
 
 			// Spriteの描画
-			
-			
+
+
 			// トポロジの設定
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			// VBVを設定 : IBVを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->IASetIndexBuffer(&indexBufferViewSprite);  
+			commandList->IASetIndexBuffer(&indexBufferViewSprite);
 
 			// マテリアル定数バッファ
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
@@ -1476,7 +1549,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			// ここで更新してSpriteの画像を変えないようにする
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
-			
+
 			// 描画！(DraoCall/ドローコール)
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
