@@ -1040,6 +1040,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #pragma region Sphereの実装
 
 	const int kSubdivision = 16;
+	const int vertexCountX = kSubdivision + 1; // 緯度方向の分割数
+	const int vertexCountY = kSubdivision + 1; // 緯度方向の分割数
+	
 	const int sphereVertexNum = kSubdivision * kSubdivision * 6;
 
 
@@ -1067,11 +1070,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 緯度分割1つ分の角度
 	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
 	// 緯度の方向に分割
-	for (latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+	for (latIndex = 0; latIndex < (kSubdivision+1); ++latIndex) {
 
 		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
 		// 経度の方向に分割しながら線を描く
-		for (lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+		for (lonIndex = 0; lonIndex < (kSubdivision+1); ++lonIndex) {
 
 			float lon = lonIndex * kLonEvery;
 			// 頂点データを描く
@@ -1088,93 +1091,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 					1.0f - float(latIndex) / float(kSubdivision)
 				},
 				{
-
-					 vertA.position.x,
-					 vertA.position.y,
-					 vertA.position.z,
-
-				}
-			};
-			//頂点B
-			VertexData vertB = {
-				{
-					std::cosf(lat + kLatEvery) * std::cosf(lon),
-					std::sinf(lat + kLatEvery),
-					std::cosf(lat + kLatEvery) * std::sinf(lon),
-					1.0f},
-				{
-					float(lonIndex) / float(kSubdivision),
-					1.0f - float(latIndex + 1.0f) / float(kSubdivision)
-				},
-				{
-					 vertB.position.x,
-					 vertB.position.y,
-					 vertB.position.z,
-
-				}
-
-
-			};
-			//頂点C
-			VertexData vertC = {
-				{
-					std::cosf(lat) * std::cosf(lon + kLonEvery),
+					std::cosf(lat)* std::cosf(lon),
 					std::sinf(lat),
-					std::cosf(lat) * std::sinf(lon + kLonEvery),
-					1.0f,
-				},
-				{
-					float(lonIndex + 1) / float(kSubdivision),
-					1.0f - float(latIndex) / float(kSubdivision)
-				},
-				{
-					 vertC.position.x,
-					 vertC.position.y,
-					 vertC.position.z,
-
+					std::cosf(lat)* std::sinf(lon),
 				}
 			};
-			//頂点D
-			VertexData vertD = {
-				{
-					std::cosf(lat + kLatEvery) * std::cosf(lon + kLonEvery),
-					std::sinf(lat + kLatEvery),
-					std::cosf(lat + kLatEvery) * std::sinf(lon + kLonEvery),
-					1.0f,
-				},
-				{
-					float(lonIndex + 1.0f) / float(kSubdivision),
-					1.0f - float(latIndex + 1.0f) / float(kSubdivision)
-				},
-				{
-					 vertD.position.x,
-					 vertD.position.y,
-					 vertD.position.z,
-
-				}
-			};
-
-			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
-
-			vertexDataSphere[start + 0] = vertA;
-			vertexDataSphere[start + 1] = vertB;
-			vertexDataSphere[start + 2] = vertC;
-			vertexDataSphere[start + 3] = vertC;
-			vertexDataSphere[start + 4] = vertB;
-			vertexDataSphere[start + 5] = vertD;
+			uint32_t start = (latIndex * (kSubdivision + 1) + lonIndex);
+			vertexDataSphere[start] = vertA;
+			
 		}
 
-
-
-
-
 	}
-
-
-
-
-
-
 #pragma endregion
 
 #pragma region indexを使った実装
@@ -1209,6 +1136,50 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 	
+#pragma region indexを作った実装Sphere
+
+	//indexSphere用の頂点indexを作る1つ辺りのindexのサイズは32bit
+	ID3D12Resource* indexResourceSphere = CreateBufferResource(device, sizeof(uint32_t) * sphereVertexNum);
+
+	D3D12_INDEX_BUFFER_VIEW indexBufferViewSphere{}; // IBV
+	// リソースの先頭のアドレスから使う
+	indexBufferViewSphere.BufferLocation = indexResourceSphere->GetGPUVirtualAddress();
+	//使用するリソースのサイズ
+	indexBufferViewSphere.SizeInBytes = sizeof(uint32_t) * sphereVertexNum;
+	
+	indexBufferViewSphere.Format = DXGI_FORMAT_R32_UINT; // indexはuint32_tとする
+
+	// indexリソースにデータを書き込む
+	uint32_t* indexDataSphere = nullptr;
+
+	indexResourceSphere->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSphere));
+
+	uint32_t idx = 0;
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			// 緯度と経度のインデックスから頂点のインデックスを計算する
+			uint32_t topLeft = latIndex * vertexCountX + lonIndex;
+			uint32_t bottomLeft = (latIndex + 1) * vertexCountX + lonIndex;
+			uint32_t topRight = latIndex * vertexCountX + (lonIndex + 1);
+			uint32_t bottomRight = (latIndex + 1) * vertexCountX + (lonIndex + 1);
+
+			// 1つめの三角形
+			indexDataSphere[idx++] = topLeft;
+			indexDataSphere[idx++] = bottomLeft;
+			indexDataSphere[idx++] = topRight;
+
+			// 2つめの三角形
+			indexDataSphere[idx++] = topRight;
+			indexDataSphere[idx++] = bottomLeft;
+			indexDataSphere[idx++] = bottomRight;
+		}
+	}
+
+	indexResourceSphere->Unmap(0, nullptr);
+
+
+#pragma endregion
+
 
 
 
@@ -1461,28 +1432,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
-			// 形状を設定。PSOに設定しているものとは別。同じものを設定すると考えておけば良い
+			// 形状の種類を設定（ここでは三角形リスト）
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			// マテリアルCBuffer
+
+			// インデックスバッファのビューを設定
+			commandList->IASetIndexBuffer(&indexBufferViewSphere);
+
+			// ルートパラメータ 0：マテリアル（定数バッファ）
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
-			
-
-			// wvp用のCBufferの場所を設定
+			// ルートパラメータ 1：WVP行列（定数バッファ）
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
-			// SRVのDescriptorTableの先頭を設定。2はrootParameter[2]である
-			//commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
-			// チェックが入ってるときuvCheckerを使い、使ってないときMonsterBallに変える
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2);
+			// ルートパラメータ 2：テクスチャ（SRV）
+			// チェックボックスの状態によって使うテクスチャを切り替える
+			commandList->SetGraphicsRootDescriptorTable(
+				2,
+				useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2
+			);
 
-			// ライトの定数バッファ
+			// ルートパラメータ 3：ディレクショナルライト（定数バッファ）
 			commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
 
-
-			// 描画！(DraoCall/ドローコール)。3頂点で1つのインスタンス。インスタンスについては今後
-			commandList->DrawInstanced(sphereVertexNum, 1, 0, 0);
-
+			// 描画コマンドの発行（Draw Call）
+			// 1インスタンスあたりのインデックス数：sphereVertexNum
+			commandList->DrawIndexedInstanced(sphereVertexNum, 1, 0, 0, 0);
 
 			// Spriteの描画
 			
@@ -1609,7 +1583,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialResourceSprite->Release();
 	directionalResourceLight->Release();
 	indexResourceSprite->Release();
-
+	indexResourceSphere->Release();
 #ifdef _DEBUG
 
 	debugController->Release();
