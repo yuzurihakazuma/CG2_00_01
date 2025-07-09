@@ -1039,7 +1039,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma region Sphereの実装
 
-	const int kSubdivision = 16;
+	const int kSubdivision =16;
 	const int vertexCountX = kSubdivision + 1; // 緯度方向の分割数
 	const int vertexCountY = kSubdivision + 1; // 緯度方向の分割数
 	
