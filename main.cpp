@@ -449,8 +449,6 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 }
 
 
-
-
 #pragma endregion
 
 #pragma region OBJファイルを読み込む関数
@@ -478,7 +476,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 			s >> positeion.x >> positeion.y >> positeion.z; // 位置を読み込む
 			positeion.w = 1.0f;
 			positions.push_back(positeion); // 位置を格納する
-		} else if (identifier == "Vt") {
+		} else if (identifier == "vt") {
 			Vector2 texcoord; // テクスチャ座標を格納する変数
 			s >> texcoord.x >> texcoord.y; // テクスチャ座標を読み込む
 			texcoords.push_back(texcoord); // テクスチャ座標を格納する
@@ -494,20 +492,25 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 				std::string vertexDefinition; // 頂点の定義を格納する変数
 				s >> vertexDefinition; // 頂点の定義を読み込む
 			
-				// 頂点の要素へのindex
+				// 頂点の要素へのindexは「位置/UV/法線」で格納されているので、分解してIndexを取得する
+				std::istringstream v(vertexDefinition);
+				uint32_t elementIndices[3];
+				for (int32_t element = 0; element < 3; ++element) {
+					std::string index;
+					std::getline(v, index, '/'); // '/'で区切って読み込む
+					elementIndices[element] = std::stoi(index); // 文字列を整数に変換して格納
+				}
+				// 要素へのIndexから、実際の要素の値を取得して頂点を構築する
+				Vector4 position = positions[elementIndices[0] - 1]; // OBJファイルは1始まりなので-1する
+				Vector2 texcord = texcoords[elementIndices[1] - 1]; // OBJファイルは1始まりなので-1する
+				Vector3 normal = normals[elementIndices[2] - 1]; // OBJファイルは1始まりなので-1する
+				VertexData vertex = { position, texcord, normal }; // 頂点データを構築
+				modelData.vertices.push_back(vertex); // 頂点データをモデルデータに追加
+
 			}
-
-
-
 		}
-
-
-
-
 	}
-
-
-
+	return modelData;
 }
 
 
@@ -1204,7 +1207,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
-
 #pragma region indexを使った実装sphere
 
 	//indexSphere用の頂点indexを作る1つ辺りのindexのサイズは32bit
@@ -1250,13 +1252,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion
 
+#pragma region ModelDataを使った実装
+	// モデルを読み込む
+	ModelData modelData = LoadObjFile("resources","plane.obj");
+	// 頂点リソースを作る
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
+
+	// 頂点バッファビューを作成する
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();  // リソースの先頭のアドレスから使う
+	vertexBufferView.SizeInBytes = UINT(sizeof(VertexData)) * modelData.vertices.size(); //使用するリソースのサイズは頂点のサイズ
+	vertexBufferView.StrideInBytes = sizeof(VertexData); // 1頂点あたりのサイズ
+	// 頂点リソースにデータを書き込む
+	VertexData* vertexData = nullptr;
+	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData)); // 書き込むためのアドレス取得
+	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData)* modelData.vertices.size()); // 頂点データをリソースにコピー
 
 
 
-
-
-
-
+#pragma endregion
 
 
 
@@ -1358,10 +1372,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	transformationMatirxDataSprite->WVP = MakeIdentity4x4();
 
 #pragma endregion
-
-
-
-
 
 #pragma region ImGuiの初期化
 
@@ -1555,7 +1565,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 			// 描画！(DraoCall/ドローコール)
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 
 
@@ -1661,6 +1671,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	directionalResourceLight->Release();
 	indexResourceSprite->Release();
 	indexResourceSphere->Release();
+	vertexResource->Release();
 #ifdef _DEBUG
 
 	debugController->Release();
