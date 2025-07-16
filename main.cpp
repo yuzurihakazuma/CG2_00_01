@@ -1434,7 +1434,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 			// 球描画
-			//transform.rotate.y += 0.03f;
+			transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
