@@ -15,6 +15,8 @@
 #include <fstream> // ファイルを書いたり読み込んだりするライブラリ
 #include<sstream>
 #include <wrl.h>
+#include <xaudio2.h>
+#include <fstream>
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
 #include <strsafe.h>
@@ -29,6 +31,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib,"Dbghelp.lib")
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dxcompiler.lib")
+#pragma comment(lib,"xaudio2.lib")
+
 
 using namespace MatrixMath;
 
@@ -87,8 +91,34 @@ struct ModelData{
 	std::vector<uint32_t> indices;
 	MaterialData material;
 };
+// チャンクヘッダ
+struct ChunkHeader{
+	char id[4]; // チャンクID
+	int32_t size; // チャンクのサイズ
+};
+// RIFFヘッダチャンク
+struct RiffHeader{
+	ChunkHeader chunk; // RIFF
+	char type[4]; // WAVE
+};
+// FMTチャンク
+struct ForamatChunk{
+	ChunkHeader chunk; // FMT
+	WAVEFORMATEX fmt;  // 波形フォーマット
 
-// リソースリークチェック
+};
+// 音声データ
+struct SoundData{
+	// 波型フォーマット
+	WAVEFORMATEX wfex;
+	// バッファの先頭アドレス
+	BYTE* pBuffer;
+	// バッファのサイズ
+	unsigned int bufferSize;
+
+};
+
+#pragma region リソースリークチェック
 
 struct D3DResourceLeakChecker{
 	~D3DResourceLeakChecker(){
@@ -104,6 +134,7 @@ struct D3DResourceLeakChecker{
 
 };
 
+#pragma endregion
 
 
 
@@ -309,7 +340,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(const Microsoft::WRL
 	// バッファの場合はこれにする決まり
 	vertexResourcceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-	
+
 
 	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
 		&vertexResourcceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
@@ -592,7 +623,20 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 #pragma endregion
 
+SoundData SoundLoadWave(const char* filename){
 
+	HRESULT result;
+
+	// ファイル入力ストリームのインスタンス
+	std::ifstream file;
+	// wavファイルをバイナリモードで開く
+	file.open(filename, std::ios_base::binary);
+	// ファイルオープン失敗を検出
+	assert(file.is_open());
+
+
+
+}
 
 
 
@@ -609,8 +653,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// リソースチェック
 	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
 
-	
-	
+
+
 	// COMの初期化
 	CoInitializeEx(0, COINIT_MULTITHREADED);
 
@@ -698,7 +742,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma region DirectX12を初期化しよう
 
-	
+
 	// HRESULTはWindows系のエラーコードであり、
 	// 関数が成功したかどうかをSUCCEDEDマクロで判定できる
 	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
@@ -728,7 +772,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// 適切なアダプタが見つからなかったので起動できない
 	assert(useAdapter != nullptr);
 
-	
+
 	// 昨日レベルとログ出力用の文字列
 	D3D_FEATURE_LEVEL featureLevels[] = {
 		D3D_FEATURE_LEVEL_12_2,D3D_FEATURE_LEVEL_12_1,D3D_FEATURE_LEVEL_12_0
@@ -868,7 +912,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	Microsoft::WRL::ComPtr<ID3D12Resource> textrueResource = CreateTextureResource(device, metadata);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = UploadTextureData(textrueResource, mipImages, device, commandList);
 
-	
+
 	// 2枚目のTextureを読んで転送する
 	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
@@ -1342,7 +1386,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma endregion
 
 #pragma region ModelDataを使った実装
-	
+
 	// モデルを読み込む
 	ModelData modelData = LoadObjFile("resources", "axis.obj");
 	// 1. すべての頂点の合計を求める
@@ -1509,8 +1553,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
+#pragma region サウンド
+
+	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
+	IXAudio2MasteringVoice* masterVoice;
+	// XAudioエンジンのinstanceを生成
+	HRESULT result = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+	// マスターボイスをを生成
+	result = xAudio2->CreateMasteringVoice(&masterVoice);
 
 
+
+
+#pragma endregion
 
 
 
@@ -1629,7 +1684,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 			// 描画用のDescriptorHeapの設定
-			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeaps[] = { srvDescriptorHeap};
+			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeaps[] = { srvDescriptorHeap };
 			commandList->SetDescriptorHeaps(1, descriptorHeaps->GetAddressOf());
 
 			commandList->RSSetViewports(1, &viewport);// Viewportを設定
@@ -1774,7 +1829,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region オブジェクトを解放
 
 	CloseHandle(fenceEvent);
-	
+
 
 #ifdef _DEBUG
 
@@ -1783,7 +1838,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #endif // _DEBUG
 	CloseWindow(hwnd);
 
-	
+
 #pragma endregion
 
 
