@@ -459,6 +459,37 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 
 #pragma endregion
 
+
+#pragma region MatrialData構造体と読み込み関数
+
+MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename){
+	MaterialData materialData; // MaterialDataを構築
+	std::string line; // ファイルから読んだ1行を格納するもの
+	std::ifstream file(directoryPath + "/" + filename); // ファイルを開く
+	assert(file.is_open()); // 開けなかったら止める
+	while ( std::getline(file, line) ){
+		std::string identifier; // 行の先頭の識別子を格納する
+		std::istringstream s(line); // 先頭の認別子を読む
+		s >> identifier; // 先頭の識別子を読み込む
+
+		// identifierに応じた処理
+		if ( identifier == "map_Kd" ){
+			std::string textureFilename; // テクスチャファイル名を格納する変数
+			s >> textureFilename; // テクスチャファイル名を読み込む
+			// 連結してファイルパスにする
+			materialData.textrueFilePath = directoryPath + "/" + textureFilename;
+		}
+
+	}
+	return materialData; // 読み込んだMaterialDataを返す
+
+}
+
+
+
+#pragma endregion
+
+
 #pragma region OBJファイルを読み込む関数
 
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename){
@@ -496,48 +527,42 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 			normals.push_back(normal); // 法線を格納する
 		} else if ( identifier == "f" ) {
 
-			// 面は三角形限定。　その他は未対応
-			for ( int32_t faceVertex = 0; faceVertex < 3; faceVertex++ ) {
-				std::string vertexDefinition; // 頂点の定義を格納する変数
-				s >> vertexDefinition; // 頂点の定義を読み込む
+			for ( int32_t faceVertex = 0; faceVertex < 3; ++faceVertex ) {
+				std::string vertexDefinition;
+				s >> vertexDefinition;
 
-				// 頂点の要素へのindexは「位置/UV/法線」で格納されているので、分解してIndexを取得する
 				std::istringstream v(vertexDefinition);
-				uint32_t elementIndices[3];
+				uint32_t elementIndices[3] = {};
 				for ( int32_t element = 0; element < 3; ++element ) {
 					std::string index;
-					std::getline(v, index, '/'); // '/'で区切って読み込む
-					elementIndices[element] = std::stoi(index); // 文字列を整数に変換して格納
+					std::getline(v, index, '/');
+					elementIndices[element] = std::stoi(index) - 1;
 				}
 
+				Vector4 position = positions[elementIndices[0]];
+				Vector2 texcoord = texcoords[elementIndices[1]];
+				Vector3 normal = normals[elementIndices[2]];
 
-
-				// 要素へのIndexから、実際の要素の値を取得して頂点を構築する
-				Vector4 position = positions[elementIndices[0] - 1]; // OBJファイルは1始まりなので-1する
-				Vector2 texcord = texcoords[elementIndices[1] - 1]; // OBJファイルは1始まりなので-1する
-				Vector3 normal = normals[elementIndices[2] - 1]; // OBJファイルは1始まりなので-1する
-
-
-
-				VertexData triangle[3]; // 三角形の頂点データを格納する配列
-
+				// DirectX座標系に合わせて反転
 				position.x *= -1.0f;
-				normal.x += -1.0f;
-				for ( int32_t faceVertex = 0; faceVertex < 3; ++faceVertex ){
+				position.z *= -1.0f;
+				normal.x *= -1.0f;
+				normal.z *= -1.0f;
 
-					// 頂点データを構築
-					triangle[faceVertex].position = position; // 位置を設定
-					triangle[faceVertex].texcoord = texcord; // テクスチャ座標を設定
-					triangle[faceVertex].normal = normal; // 法線を設定
+				VertexData vertex = {};
+				vertex.position = position;
+				vertex.texcoord = texcoord;
+				vertex.normal = normal;
 
-				}
-				modelData.vertices.push_back(triangle[2]); // 頂点データを追加
-				modelData.vertices.push_back(triangle[1]); // 頂点データを追加
-				modelData.vertices.push_back(triangle[0]); // 頂点データを追加
-
-				// インデックスを追加
+				modelData.vertices.push_back(vertex);
 				modelData.indices.push_back(static_cast< uint32_t >( modelData.vertices.size() - 1 ));
 			}
+		} else if ( identifier == "mtllib" ) {
+			// マテリアルの指定
+			std::string materialFilename; // マテリアル名を格納する変数
+			s >> materialFilename; // マテリアル名を読み込む
+			// マテリアルデータを読み込む
+			modelData.material = LoadMaterialTemplateFile(directoryPath, materialFilename);
 		}
 	}
 	return modelData;
@@ -546,34 +571,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 #pragma endregion
 
-#pragma region MatrialData構造体と読み込み関数
 
-MaterialData LoadMaterialData(const std::string& directoryPath, const std::string& filename){
-	MaterialData materialData; // MaterialDataを構築
-	std::string line; // ファイルから読んだ1行を格納するもの
-	std::ifstream file(directoryPath + "/" + filename); // ファイルを開く
-	assert(file.is_open()); // 開けなかったら止める
-	while ( std::getline(file, line) ){
-		std::string identifier; // 行の先頭の識別子を格納する
-		std::istringstream s(line); // 先頭の認別子を読む
-		s >> identifier; // 先頭の識別子を読み込む
-
-		// identifierに応じた処理
-		if ( identifier=="map_kd"){
-			std::string textureFilename; // テクスチャファイル名を格納する変数
-			s >> textureFilename; // テクスチャファイル名を読み込む
-			// 連結してファイルパスにする
-			materialData.textrueFilePath = directoryPath + "/" + textureFilename;
-		}
-
-	}
-	return materialData; // 読み込んだMaterialDataを返す
-
-}
-
-
-
-#pragma endregion
 
 
 
@@ -838,6 +836,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	ID3D12Resource* textrueResource = CreateTextureResource(device, metadata);
 	ID3D12Resource* intermediateResource = UploadTextureData(textrueResource, mipImages, device, commandList);
 
+	
 	// 2枚目のTextureを読んで転送する
 	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
@@ -1311,8 +1310,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma endregion
 
 #pragma region ModelDataを使った実装
+	
 	// モデルを読み込む
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "axis.obj");
 	// 1. すべての頂点の合計を求める
 	Vector3 center = { 0.0f, 0.0f, 0.0f };
 	for ( const auto& v : modelData.vertices ) {
@@ -1538,7 +1538,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			transformationMatrixData->WVP = worldViewProjectionMatrix;
 
 
-
 			// Sprite
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
@@ -1620,7 +1619,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			// ルート定数バッファなどはそのまま
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2);
 			commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
 
 			// インデックス数分描画
