@@ -2017,13 +2017,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	keyboard.Reset();
 	// 音声データ解放
 	SoundUnload(&soundData1);
-	delete debugCamera;
+	if ( debugCamera ) {
+		delete debugCamera;
+		debugCamera = nullptr;
+	}
 
-#ifdef _DEBUG
-
-	debugController->Release();
-
-#endif // _DEBUG
 	CloseWindow(hwnd);
 
 

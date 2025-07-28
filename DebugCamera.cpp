@@ -6,6 +6,19 @@
 
 
 
+DebugCamera::~DebugCamera(){
+
+	if ( isDebugCamera_ ) {
+		isDebugCamera_ = false; // デバッグカメラを無効化
+	}
+	// ここで必要なクリーンアップ処理を行う
+	// 例えば、リソースの解放など
+	// 現在は特に何もしていないが、必要に応じて追加すること
+
+
+
+}
+
 void DebugCamera::Initialize(){
 
 

@@ -12,7 +12,7 @@ class DebugCamera{
 public:
 
 
-	void deleteCamera();
+	~DebugCamera();
 
 	// 初期化
 	void Initialize();
