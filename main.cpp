@@ -16,6 +16,8 @@
 #include<sstream>
 #include <wrl.h>
 #include <xaudio2.h>
+#define DIRECTINPUT_VERSION 0x0800 // DirectInputのバージョンを指定
+#include <dinput.h>
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
 #include <strsafe.h>
@@ -31,6 +33,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"dxcompiler.lib")
 #pragma comment(lib,"xaudio2.lib")
+#pragma comment(lib,"dinput8.lib")
+#pragma comment(lib,"dxguid.lib")
 
 
 using namespace MatrixMath;
@@ -730,7 +734,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	SetUnhandledExceptionFilter(ExportDump);
 
 
-	
+
+
+
 
 
 #pragma region log
@@ -797,6 +803,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	ShowWindow(hwnd, SW_SHOW);
 
 #pragma endregion
+
+#pragma region 入力デバイス
+
+	//DirectInputの初期化
+	Microsoft::WRL::ComPtr<IDirectInput8> directInput;
+	HRESULT inputKey = DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, reinterpret_cast< void** >( directInput.GetAddressOf() ), nullptr);
+	assert(SUCCEEDED(inputKey));
+	// キーボードデバイスの生成
+	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard = nullptr;
+	inputKey = directInput->CreateDevice(GUID_SysKeyboard, keyboard.GetAddressOf(), NULL);
+	assert(SUCCEEDED(inputKey));
+	// 入力データ形式のセット
+	inputKey = keyboard->SetDataFormat(&c_dfDIKeyboard);
+	assert(SUCCEEDED(inputKey));
+	// 排他制御レベルのセット
+	inputKey = keyboard->SetCooperativeLevel(GetActiveWindow(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(inputKey));
+
+
+#pragma endregion
+
 
 #ifdef _DEBUG
 
@@ -1634,11 +1661,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// 音声読み込み
 	SoundData soundData1 = SoundLoadWave("resources/BGM.wav");
 
-	// 音声再生
-	SoundPlayWave(xAudio2.Get(), soundData1);
 
 #pragma endregion
-
 
 	
 
@@ -1660,6 +1684,30 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 			// 開発用UIの処理。実際に開発用のUIを出す場合はここをゲーム固有の処理に置き換える
 			ImGui::ShowDemoWindow();
+
+
+			// キーボート情報の取得開始
+			keyboard->Acquire();
+			// 全キーの入力状態を取得する
+			BYTE key[256] = {};
+			BYTE preKey[256] = {};
+
+			// 前の状態を保存
+			memcpy(preKey, key, sizeof(key));
+
+			keyboard->GetDeviceState(sizeof(key), key);
+			// 離した瞬間だけ反応（前が押してて、今が離れてる）
+			if ( ( preKey[DIK_SPACE] & 0x80 ) && !( key[DIK_SPACE] & 0x80 ) ) {
+				SoundPlayWave(xAudio2.Get(), soundData1);
+			}
+
+
+
+
+
+
+
+
 
 			// ゲームの処理
 
