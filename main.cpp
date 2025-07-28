@@ -672,38 +672,44 @@ SoundData SoundLoadWave(const char* filename){
 	return soundData;
 }
 
-// 音声データを解放する関数
 void SoundUnload(SoundData* soundData){
-	// 音声データのバッファを解放
-	delete[] soundData->pBuffer;
-
-	soundData->pBuffer = 0;
+	if ( soundData->pBuffer ) {
+		delete[] soundData->pBuffer;
+		soundData->pBuffer = nullptr;
+	}
 	soundData->bufferSize = 0;
-	soundData->wfex = {}; // Waveフォーマット情報を初期化
-
+	soundData->wfex = {};
 }
-// 音声再生
+// 音声再生関数
 void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData){
+	// XAudio2 が無効（初期化失敗など）なら再生せずリターン
+	if ( !xAudio2 ) {
+		OutputDebugStringA("[エラー] SoundPlayWave: xAudio2 が null です。\n");
+		return;
+	}
 
 	HRESULT result;
 
-	// 波形フォーマットを元にSourceVoiceの生成
-	IXAudio2SourceVoice* pSourceVouce = nullptr;
-	result = xAudio2->CreateSourceVoice(&pSourceVouce, &soundData.wfex);
-	assert(SUCCEEDED(result));
+	// SourceVoice（個別の音声再生チャンネル）を生成
+	// soundData.wfex は再生する音声のフォーマット情報
+	IXAudio2SourceVoice* pSourceVoice = nullptr;
+	result = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
+	if ( FAILED(result) ) {
+		OutputDebugStringA("[エラー] CreateSourceVoice に失敗\n");
+		return;
+	}
 
-	// 再生する波形データの設定
+	// 再生用のバッファ構造体を用意
 	XAUDIO2_BUFFER buf = {};
-	buf.pAudioData = soundData.pBuffer; // 波形データのポインタ
-	buf.AudioBytes = soundData.bufferSize; // 波形データのサイズ
-	buf.Flags = XAUDIO2_END_OF_STREAM; // 波形データの終端を通知
+	buf.pAudioData = soundData.pBuffer;     // 音声データの先頭ポインタ
+	buf.AudioBytes = soundData.bufferSize;  // 音声データのサイズ（バイト単位）
+	buf.Flags = XAUDIO2_END_OF_STREAM;      // 再生終了を通知するフラグ
 
-	// 波形データの再生
-	result = pSourceVouce->SubmitSourceBuffer(&buf);
-	result = pSourceVouce->Start();
+	// SourceVoice にバッファを登録（実際の音声データを送る）
+	result = pSourceVoice->SubmitSourceBuffer(&buf);
 
-	
-
+	// 音声再生開始
+	result = pSourceVoice->Start();
 }
 
 
@@ -814,19 +820,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard = nullptr;
 	inputKey = directInput->CreateDevice(GUID_SysKeyboard, keyboard.GetAddressOf(), NULL);
 	assert(SUCCEEDED(inputKey));
+	
 	// 入力データ形式のセット
 	inputKey = keyboard->SetDataFormat(&c_dfDIKeyboard);
 	assert(SUCCEEDED(inputKey));
 	// 排他制御レベルのセット
 	inputKey = keyboard->SetCooperativeLevel(GetActiveWindow(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
 	assert(SUCCEEDED(inputKey));
-
-	// 全キーの入力状態を取得する
-	// ループ外で宣言
+	// 押されたかどうかを格納する配列
 	bool isSpacePressed = false;
-	BYTE key[256] = {};
-	BYTE preKey[256] = {};
-
+	
 #pragma endregion
 
 
@@ -1657,7 +1660,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region サウンド
 
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
-	IXAudio2MasteringVoice* masterVoice;
+	IXAudio2MasteringVoice* masterVoice = nullptr;
 	// XAudioエンジンのinstanceを生成
 	HRESULT result = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
 	// マスターボイスをを生成
@@ -1665,7 +1668,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	// 音声読み込み
 	SoundData soundData1 = SoundLoadWave("resources/BGM.wav");
-
+	if ( FAILED(result) ) {
+		OutputDebugStringA("[エラー] XAudio2 の初期化に失敗\n");
+		xAudio2 = nullptr;
+		// ここで return またはフラグ立てしてもOK
+	}
 
 #pragma endregion
 
@@ -1678,6 +1685,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	while ( msg.message != WM_QUIT ) {
 
 		if ( PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) ) {
+			if ( msg.message == WM_QUIT ) break; // ここで即ループを抜ける
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 
@@ -1692,17 +1700,35 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 			// メインループ内
-// キーボード情報の取得開始
-			keyboard->Acquire();
+			// キーボード情報の取得開始
+			
+
+
+
+			
+			
+
+			// // 全キーの入力状態を取得する
 			BYTE key[256] = {};
-			keyboard->GetDeviceState(sizeof(key), key);
-
-			// 押した瞬間だけ反応（前が離れてて、今が押されている）
-			if ( !isSpacePressed && ( key[DIK_SPACE] & 0x80 ) ) {
-				SoundPlayWave(xAudio2.Get(), soundData1);
-				isSpacePressed = true; // 1回だけ反応
+			BYTE preKey[256] = {};
+			
+			if ( keyboard ) {
+				HRESULT hr = keyboard->Acquire();
+				if ( SUCCEEDED(hr) ) {
+					keyboard->GetDeviceState(sizeof(key), key);
+				}
 			}
+			
+			/*
+			keyboard->Acquire();
+			keyboard->GetDeviceState(sizeof(key), key);*/
 
+			// 押した瞬間だけ反応
+			if ( !isSpacePressed && ( key[DIK_SPACE] & 0x80 ) ) {
+				isSpacePressed = true;
+				SoundPlayWave(xAudio2.Get(), soundData1);
+				Log(logStream, "Space key pressed");
+			}
 			// 離した瞬間にフラグを戻す
 			if ( isSpacePressed && !( key[DIK_SPACE] & 0x80 ) ) {
 				isSpacePressed = false;
@@ -1966,9 +1992,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	CloseHandle(fenceEvent);
 	//XAudio2解放
 	xAudio2.Reset();
+	// キーボード解放
+	keyboard.Reset();
 	// 音声データ解放
 	SoundUnload(&soundData1);
-
+	
 
 #ifdef _DEBUG
 
