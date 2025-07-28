@@ -821,6 +821,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	inputKey = keyboard->SetCooperativeLevel(GetActiveWindow(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
 	assert(SUCCEEDED(inputKey));
 
+	// 全キーの入力状態を取得する
+	// ループ外で宣言
+	bool isSpacePressed = false;
+	BYTE key[256] = {};
+	BYTE preKey[256] = {};
 
 #pragma endregion
 
@@ -1686,21 +1691,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			ImGui::ShowDemoWindow();
 
 
-			// キーボート情報の取得開始
+			// メインループ内
+// キーボード情報の取得開始
 			keyboard->Acquire();
-			// 全キーの入力状態を取得する
 			BYTE key[256] = {};
-			BYTE preKey[256] = {};
-
-			// 前の状態を保存
-			memcpy(preKey, key, sizeof(key));
-
 			keyboard->GetDeviceState(sizeof(key), key);
-			// 離した瞬間だけ反応（前が押してて、今が離れてる）
-			if ( ( preKey[DIK_SPACE] & 0x80 ) && !( key[DIK_SPACE] & 0x80 ) ) {
+
+			// 押した瞬間だけ反応（前が離れてて、今が押されている）
+			if ( !isSpacePressed && ( key[DIK_SPACE] & 0x80 ) ) {
 				SoundPlayWave(xAudio2.Get(), soundData1);
+				isSpacePressed = true; // 1回だけ反応
 			}
 
+			// 離した瞬間にフラグを戻す
+			if ( isSpacePressed && !( key[DIK_SPACE] & 0x80 ) ) {
+				isSpacePressed = false;
+			}
 
 
 
