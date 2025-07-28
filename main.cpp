@@ -37,21 +37,20 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib,"dxguid.lib")
 
 
+#include "DebugCamera.h"
+#include "struct.h"
+
 using namespace MatrixMath;
 
 
 
-struct Vector2{
-	float x;
-	float y;
-};
 
-struct Vector4{
-	float x;
-	float y;
-	float z;
-	float w;
-};
+//インスタンスの定義
+DebugCamera* debugCamera = new DebugCamera();
+
+
+
+
 
 struct VertexData{
 	Vector4 position;
@@ -59,11 +58,7 @@ struct VertexData{
 	Vector3 normal;
 };
 
-struct Transform{
-	Vector3 scale;
-	Vector3 rotate;
-	Vector3 translate;
-};
+
 
 struct Material{
 	Vector4 color;
@@ -820,7 +815,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard = nullptr;
 	inputKey = directInput->CreateDevice(GUID_SysKeyboard, keyboard.GetAddressOf(), NULL);
 	assert(SUCCEEDED(inputKey));
-	
+
 	// 入力データ形式のセット
 	inputKey = keyboard->SetDataFormat(&c_dfDIKeyboard);
 	assert(SUCCEEDED(inputKey));
@@ -829,8 +824,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	assert(SUCCEEDED(inputKey));
 	// 押されたかどうかを格納する配列
 	bool isSpacePressed = false;
-	
+
 #pragma endregion
+
+
+#pragma region 初期化呼び出し
+
+	// メイン関数内の初期化部分
+
+	// デバックカメラ
+	debugCamera->Initialize();
+
+
+
+#pragma endregion
+
+
+
+
 
 
 #ifdef _DEBUG
@@ -1351,7 +1362,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	const int vertexCountX = kSubdivision + 1;
 	const int vertexCountY = kSubdivision + 1;
 
-	const int vertexNum = vertexCountX * vertexCountY;   
+	const int vertexNum = vertexCountX * vertexCountY;
 	const int indexNum = kSubdivision * kSubdivision * 6;
 
 	uint32_t latIndex;
@@ -1676,7 +1687,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
-	
+
 
 
 
@@ -1700,25 +1711,34 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 			// メインループ内
+
+
+#pragma region 入力・更新
+
+
+			// デバッグカメラの更新
+			debugCamera->Update();
+
+
+
+#pragma endregion
+
+
+
+
+
 			// キーボード情報の取得開始
-			
-
-
-
-			
-			
-
 			// // 全キーの入力状態を取得する
 			BYTE key[256] = {};
 			BYTE preKey[256] = {};
-			
+
 			if ( keyboard ) {
 				HRESULT hr = keyboard->Acquire();
 				if ( SUCCEEDED(hr) ) {
 					keyboard->GetDeviceState(sizeof(key), key);
 				}
 			}
-			
+
 			/*
 			keyboard->Acquire();
 			keyboard->GetDeviceState(sizeof(key), key);*/
@@ -1772,9 +1792,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			//transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
-			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 viewMatrix = debugCamera->IsActive() ? debugCamera->GetViewMatrix() : Inverse(cameraMatrix); // ← 通常カメラの行列
+
 			Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrix = Multipty(worldMatrix, Multipty(viewMatrix, projectionMatrix));
+			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			transformationMatrixData->World = worldMatrix;
 			transformationMatrixData->WVP = worldViewProjectionMatrix;
 
@@ -1783,8 +1804,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
 			Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-			Matrix4x4 viewProjection = Multipty(viewMatrixSprite, projectionMatrixSprite);
-			Matrix4x4 worldViewProjectionMatrixSprite = Multipty(viewProjection, worldMatrixSprite);
+			Matrix4x4 viewProjection = Multiply(viewMatrixSprite, projectionMatrixSprite);
+			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(viewProjection, worldMatrixSprite);
 			transformationMatirxDataSprite->World = worldMatrixSprite;
 			transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
 
@@ -1815,8 +1836,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			directionalLightData->direction = Normalize(directionalLightData->direction);
 
 			Matrix4x4 uvTransformMatrix = MakeScale(uvTransformSprite.scale);
-			uvTransformMatrix = Multipty(uvTransformMatrix, MakeRotateZ(uvTransformSprite.rotate.z));
-			uvTransformMatrix = Multipty(uvTransformMatrix, MakeTranslate(uvTransformSprite.translate));
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZ(uvTransformSprite.rotate.z));
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslate(uvTransformSprite.translate));
 			materialDataSprite->uvTransfrom = uvTransformMatrix;
 
 
@@ -1826,8 +1847,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			ImGui::Render();
 
 
-			
-			
+
+
 
 
 
@@ -1996,7 +2017,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	keyboard.Reset();
 	// 音声データ解放
 	SoundUnload(&soundData1);
-	
+	delete debugCamera;
 
 #ifdef _DEBUG
 

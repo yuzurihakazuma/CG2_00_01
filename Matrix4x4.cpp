@@ -5,7 +5,46 @@
 #include <cmath>
 
 using namespace MatrixMath;
+// 加算
+Vector3 MatrixMath::Add(const Vector3& v1, const Vector3& v2){
 
+    Vector3 result = {};
+
+    result.x = v1.x + v2.x;
+    result.y = v1.y + v2.y;
+    result.z = v1.z + v2.z;
+
+    return result;
+
+}
+// 減算
+Vector3 MatrixMath::Subtract(const Vector3& v1, const Vector3& v2){
+
+    Vector3 result = {};
+
+    result.x = v1.x - v2.x;
+    result.y = v1.y - v2.y;
+    result.z = v1.z - v2.z;
+
+    return result;
+}
+// 内積
+float MatrixMath::Dot(const Vector3& v1, const Vector3& v2){
+
+    float result = ( v1.x * v2.x + v1.y * v2.y + v1.z * v2.z );
+
+
+    return result;
+
+}
+// 外積
+Vector3 MatrixMath::Cross(const Vector3& a, const Vector3& b){
+    return Vector3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    );
+}
 // 行列の加法
 Matrix4x4 MatrixMath::Add(const Matrix4x4& m1, const Matrix4x4& m2) {
     Matrix4x4 result = {};
@@ -18,6 +57,18 @@ Matrix4x4 MatrixMath::Add(const Matrix4x4& m1, const Matrix4x4& m2) {
 
     return result;
 }
+//スカラー倍
+Vector3 MatrixMath::Multiply(float scalar, const Vector3& v){
+
+    Vector3 result = {};
+
+    result.x = scalar * v.x;
+    result.y = scalar * v.y;
+    result.z = scalar * v.z;
+
+    return result;
+}
+
 // 行列の減法
 Matrix4x4 MatrixMath::Subtract(const Matrix4x4& m1, const Matrix4x4& m2) {
     Matrix4x4 result = {};
@@ -30,7 +81,7 @@ Matrix4x4 MatrixMath::Subtract(const Matrix4x4& m1, const Matrix4x4& m2) {
     return result;
 }
 // 4x4行列の積
-Matrix4x4 MatrixMath::Multipty(const Matrix4x4& m1, const Matrix4x4& m2) {
+Matrix4x4 MatrixMath::Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
     Matrix4x4 result;
 
     for (int row = 0; row < 4; ++row) {
@@ -226,35 +277,35 @@ Matrix4x4 MatrixMath::MakeAffine(const Vector3& scale, const Vector3& rotate, co
     // Z軸の回転行列を生成
     Matrix4x4 rotateZMatrix = MakeRotateZ(rotate.z);
     // X軸、Y軸、Z軸の順に回転を合成
-    Matrix4x4 rotateXYZMatrix = Multipty(Multipty(rotateXMatrix, rotateYMatrix), rotateZMatrix);
+    Matrix4x4 rotateXYZMatrix = Multiply(Multiply(rotateXMatrix, rotateYMatrix), rotateZMatrix);
 
     // 平行移動を生成
     Matrix4x4 translateMatrix = MakeTranslate(translate);
 
     // 最終的なアフィン変換行列： T * R * S
-    result = Multipty(Multipty(scaleMatrix, rotateXYZMatrix), translateMatrix);
+    result = Multiply(Multiply(scaleMatrix, rotateXYZMatrix), translateMatrix);
 
 
 
     return result;
 }
-//// 座標変換
-//Vector3 MatrixMath::Transform(const Vector3& vector, const Matrix4x4& matrix) {
-//
-//	Vector3 result = {};
-//	// 座標の変換(行ベクトルx行列の列)
-//	result.x = vector.x * matrix.m[0][0] + vector.y * matrix.m[1][0] + vector.z * matrix.m[2][0] + 1.0f * matrix.m[3][0];
-//	result.y = vector.x * matrix.m[0][1] + vector.y * matrix.m[1][1] + vector.z * matrix.m[2][1] + 1.0f * matrix.m[3][1];
-//	result.z = vector.x * matrix.m[0][2] + vector.y * matrix.m[1][2] + vector.z * matrix.m[2][2] + 1.0f * matrix.m[3][2];
-//	float w = vector.x * matrix.m[0][3] + vector.y * matrix.m[1][3] + vector.z * matrix.m[2][3] + 1.0f * matrix.m[3][3];
-//	assert(w != 0.0f); //wが0にならないようにする
-//
-//	// wで割って通常の3次元空間に戻す
-//	result.x /= w;
-//	result.y /= w;
-//	result.z /= w;
-//	return result;// 変換後のベクトルを返す
-//}
+// 座標変換
+Vector3 MatrixMath::Transforms(const Vector3& vector, const Matrix4x4& matrix) {
+
+	Vector3 result = {};
+	// 座標の変換(行ベクトルx行列の列)
+	result.x = vector.x * matrix.m[0][0] + vector.y * matrix.m[1][0] + vector.z * matrix.m[2][0] + 1.0f * matrix.m[3][0];
+	result.y = vector.x * matrix.m[0][1] + vector.y * matrix.m[1][1] + vector.z * matrix.m[2][1] + 1.0f * matrix.m[3][1];
+	result.z = vector.x * matrix.m[0][2] + vector.y * matrix.m[1][2] + vector.z * matrix.m[2][2] + 1.0f * matrix.m[3][2];
+	float w = vector.x * matrix.m[0][3] + vector.y * matrix.m[1][3] + vector.z * matrix.m[2][3] + 1.0f * matrix.m[3][3];
+	assert(w != 0.0f); //wが0にならないようにする
+
+	// wで割って通常の3次元空間に戻す
+	result.x /= w;
+	result.y /= w;
+	result.z /= w;
+	return result;// 変換後のベクトルを返す
+}
 // 正射影行列
 Matrix4x4 MatrixMath::Orthographic(float left, float top, float right, float bottom, float nearClip, float farClip) {
 
@@ -303,58 +354,4 @@ Matrix4x4 MatrixMath::Viewport(float left, float top, float width, float height,
 
     return result;
 }
-// クロス積
-Vector3 MatrixMath::Cross(const Vector3& v1, const Vector3& v2) {
-    return Vector3(
-        v1.y * v2.z - v1.z * v2.y,
-        v1.z * v2.x - v1.x * v2.z,
-        v1.x * v2.y - v1.y * v2.x
-    );
-}
 
-//Vector3  MatrixMath::DrawSphere(const Sphere& sphere, Matrix4x4& viewProjection, const Matrix4x4& viewport) {
-//
-//    const uint32_t kSubdivsion = 16; // 分割数
-//    const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivsion); // 経度分割一つ分の角度
-//    const float kLatEvery = float(M_PI) / float(kSubdivsion); // 緯度分割一つ分の角度
-//    // 緯度の方向に分割 -π/2-π/2
-//    for (uint32_t latIndex = 0; latIndex < kSubdivsion; ++latIndex) {
-//        float lat = -float(M_PI) / 2.0f + latIndex * kLatEvery; // 現在の緯度
-//        // 経度の方向に分割 0-2π
-//        for (uint32_t lonIndex = 0; lonIndex < kSubdivsion; ++lonIndex) {
-//            float lon = lonIndex * kLonEvery;// 現在の経度
-//            // world座標系でのa,b,cを求める
-//            Vector3 a = {
-//                sphere.center.x + sphere.radius * std::cos(lat) * std::cos(lon),
-//                sphere.center.y + sphere.radius * std::sin(lat),
-//                sphere.center.z + sphere.radius * std::cos(lat) * std::sin(lon),
-//            };
-//
-//            float nextLat = lat + kLatEvery;
-//            float nextLon = lon + kLonEvery;
-//
-//            Vector3 b = {
-//                sphere.center.x + sphere.radius * std::cos(nextLat) * std::cos(lon),
-//                sphere.center.y + sphere.radius * std::sin(nextLat),
-//                sphere.center.z + sphere.radius * std::cos(nextLat) * std::sin(lon)
-//            };
-//
-//            Vector3 c = {
-//               sphere.center.x + sphere.radius * std::cos(lat) * std::cos(nextLon),
-//               sphere.center.y + sphere.radius * std::sin(lat),
-//               sphere.center.z + sphere.radius * std::cos(lat) * std::sin(nextLon)
-//            };
-//
-//
-//            // a,b,cをScreen座標系まで変換
-//
-//            Vector3 screenA = Transform(Transform(a, viewProjection), viewport);
-//            Vector3 screenB = Transform(Transform(b, viewProjection), viewport);
-//            Vector3 screenC = Transform(Transform(c, viewProjection), viewport);
-//
-//        }
-//
-//    }
-//
-//
-//}
