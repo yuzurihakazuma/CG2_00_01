@@ -624,62 +624,50 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 #pragma region 音声データ関数
 
-
-
 SoundData SoundLoadWave(const char* filename){
-
-	// ファイル入力ストリームのインスタンス
-	std::ifstream file;
-	// wavファイルをバイナリモードで開く
-	file.open(filename, std::ios_base::binary);
-	// ファイルオープン失敗を検出
+	std::ifstream file(filename, std::ios::binary);
 	assert(file.is_open());
-	// RIFFヘッダーの読み込み
+
+	// RIFFヘッダー確認
 	RiffHeader riff;
 	file.read(( char* ) &riff, sizeof(riff));
-	// ファイルがRIFFかチェック
-	if ( strncmp(riff.chunk.id,"RIFF",4)!=0 ){
-		assert(0);
+	assert(strncmp(riff.chunk.id, "RIFF", 4) == 0);
+	assert(strncmp(riff.type, "WAVE", 4) == 0);
+
+	WAVEFORMATEX wfex = {};
+	BYTE* pBuffer = nullptr;
+	uint32_t bufferSize = 0;
+
+	// チャンク走査
+	ChunkHeader chunk;
+	while ( file.read(( char* ) &chunk, sizeof(chunk)) ) {
+		if ( strncmp(chunk.id, "fmt ", 4) == 0 ) {
+			assert(chunk.size <= sizeof(WAVEFORMATEX));
+			file.read(( char* ) &wfex, chunk.size);
+		} else if ( strncmp(chunk.id, "data", 4) == 0 ) {
+			pBuffer = new BYTE[chunk.size];
+			file.read(( char* ) pBuffer, chunk.size);
+			bufferSize = chunk.size;
+		} else {
+			// JUNK、LISTなどはスキップ
+			file.seekg(chunk.size, std::ios_base::cur);
+		}
+
+		// 目的の両方を読み込んだら抜ける
+		if ( wfex.cbSize != 0 && pBuffer != nullptr ) {
+			break;
+		}
 	}
-	// タイプがWAVEかチェック
-	if ( strncmp(riff.type,"WAVE",4)!=0 ){
-		assert(0);
-	}
-	// Formatチャンクの読み込み
-	ForamatChunk format = {};
-	file.read(( char* ) &format, sizeof(ChunkHeader));
-	if ( strncmp(format.chunk.id,"fmt",4)!=0 ){
-		assert(0);
-	}
-	// チャンク本体の読み込み
-	assert(format.chunk.size <= sizeof(format.fmt));
-	file.read(( char* ) &format.fmt, format.chunk.size);
-	// Dataチャンクの読み込み
-	ChunkHeader data;
-	file.read(( char* ) &data, sizeof(data));
-	// JUNKチャンクを検出した場合
-	if ( strncmp(data.id, "JUNK", 4) == 0 ){
-		// 読み取り位置をJUNKチャンクの終わりまで進める
-		file.seekg(data.size, std::ios_base::cur);
-		// 再読み込み
-		file.read(( char* ) &data, sizeof(data));
-	}
-	if ( (strncmp)(data.id,"data",4 )!=0 ){
-		assert(0);
-	}
-	// Dataチャンクのデータ部(波形データ)の読み込み
-	char* pBuffer = new char[data.size];
-	// Waveファイルを閉じる
+
 	file.close();
-	// returnするための音声データ
+
 	SoundData soundData = {};
-	soundData.wfex = format.fmt; // Waveフォーマット情報をセット
-	soundData.pBuffer = reinterpret_cast< BYTE* >( pBuffer );
-	soundData.bufferSize = data.size; // バッファサイズをセット
-
+	soundData.wfex = wfex;
+	soundData.pBuffer = pBuffer;
+	soundData.bufferSize = bufferSize;
 	return soundData;
-
 }
+
 // 音声データを解放する関数
 void SoundUnload(SoundData* soundData){
 	// 音声データのバッファを解放
@@ -709,6 +697,8 @@ void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData){
 	// 波形データの再生
 	result = pSourceVouce->SubmitSourceBuffer(&buf);
 	result = pSourceVouce->Start();
+
+	
 
 }
 
@@ -1326,8 +1316,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	const int vertexCountX = kSubdivision + 1;
 	const int vertexCountY = kSubdivision + 1;
 
-	const int vertexNum = vertexCountX * vertexCountY;   // ✅ 無駄をなくした頂点数：289
-	const int indexNum = kSubdivision * kSubdivision * 6; // ✅ 必要なインデックス数：1536
+	const int vertexNum = vertexCountX * vertexCountY;   
+	const int indexNum = kSubdivision * kSubdivision * 6;
 
 	uint32_t latIndex;
 	uint32_t lonIndex;
@@ -1642,7 +1632,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	result = xAudio2->CreateMasteringVoice(&masterVoice);
 
 	// 音声読み込み
-	SoundData soundData1 = SoundLoadWave("resources/maou_se_voice_human05.wav");
+	SoundData soundData1 = SoundLoadWave("resources/BGM.wav");
 
 	// 音声再生
 	SoundPlayWave(xAudio2.Get(), soundData1);
