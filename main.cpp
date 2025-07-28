@@ -16,7 +16,6 @@
 #include<sstream>
 #include <wrl.h>
 #include <xaudio2.h>
-#include <fstream>
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
 #include <strsafe.h>
@@ -623,9 +622,11 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 #pragma endregion
 
-SoundData SoundLoadWave(const char* filename){
+#pragma region 音声データ関数
 
-	HRESULT result;
+
+
+SoundData SoundLoadWave(const char* filename){
 
 	// ファイル入力ストリームのインスタンス
 	std::ifstream file;
@@ -633,12 +634,88 @@ SoundData SoundLoadWave(const char* filename){
 	file.open(filename, std::ios_base::binary);
 	// ファイルオープン失敗を検出
 	assert(file.is_open());
+	// RIFFヘッダーの読み込み
+	RiffHeader riff;
+	file.read(( char* ) &riff, sizeof(riff));
+	// ファイルがRIFFかチェック
+	if ( strncmp(riff.chunk.id,"RIFF",4)!=0 ){
+		assert(0);
+	}
+	// タイプがWAVEかチェック
+	if ( strncmp(riff.type,"WAVE",4)!=0 ){
+		assert(0);
+	}
+	// Formatチャンクの読み込み
+	ForamatChunk format = {};
+	file.read(( char* ) &format, sizeof(ChunkHeader));
+	if ( strncmp(format.chunk.id,"fmt",4)!=0 ){
+		assert(0);
+	}
+	// チャンク本体の読み込み
+	assert(format.chunk.size <= sizeof(format.fmt));
+	file.read(( char* ) &format.fmt, format.chunk.size);
+	// Dataチャンクの読み込み
+	ChunkHeader data;
+	file.read(( char* ) &data, sizeof(data));
+	// JUNKチャンクを検出した場合
+	if ( strncmp(data.id, "JUNK", 4) == 0 ){
+		// 読み取り位置をJUNKチャンクの終わりまで進める
+		file.seekg(data.size, std::ios_base::cur);
+		// 再読み込み
+		file.read(( char* ) &data, sizeof(data));
+	}
+	if ( (strncmp)(data.id,"data",4 )!=0 ){
+		assert(0);
+	}
+	// Dataチャンクのデータ部(波形データ)の読み込み
+	char* pBuffer = new char[data.size];
+	// Waveファイルを閉じる
+	file.close();
+	// returnするための音声データ
+	SoundData soundData = {};
+	soundData.wfex = format.fmt; // Waveフォーマット情報をセット
+	soundData.pBuffer = reinterpret_cast< BYTE* >( pBuffer );
+	soundData.bufferSize = data.size; // バッファサイズをセット
 
+	return soundData;
 
+}
+// 音声データを解放する関数
+void SoundUnload(SoundData* soundData){
+	// 音声データのバッファを解放
+	delete[] soundData->pBuffer;
+
+	soundData->pBuffer = 0;
+	soundData->bufferSize = 0;
+	soundData->wfex = {}; // Waveフォーマット情報を初期化
+
+}
+// 音声再生
+void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData){
+
+	HRESULT result;
+
+	// 波形フォーマットを元にSourceVoiceの生成
+	IXAudio2SourceVoice* pSourceVouce = nullptr;
+	result = xAudio2->CreateSourceVoice(&pSourceVouce, &soundData.wfex);
+	assert(SUCCEEDED(result));
+
+	// 再生する波形データの設定
+	XAUDIO2_BUFFER buf = {};
+	buf.pAudioData = soundData.pBuffer; // 波形データのポインタ
+	buf.AudioBytes = soundData.bufferSize; // 波形データのサイズ
+	buf.Flags = XAUDIO2_END_OF_STREAM; // 波形データの終端を通知
+
+	// 波形データの再生
+	result = pSourceVouce->SubmitSourceBuffer(&buf);
+	result = pSourceVouce->Start();
 
 }
 
 
+
+
+#pragma endregion
 
 
 
@@ -662,6 +739,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// main関数は始まってすぐに登録するといい
 	SetUnhandledExceptionFilter(ExportDump);
 
+
+	
 
 
 #pragma region log
@@ -1562,11 +1641,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// マスターボイスをを生成
 	result = xAudio2->CreateMasteringVoice(&masterVoice);
 
+	// 音声読み込み
+	SoundData soundData1 = SoundLoadWave("resources/maou_se_voice_human05.wav");
 
-
+	// 音声再生
+	SoundPlayWave(xAudio2.Get(), soundData1);
 
 #pragma endregion
 
+
+	
 
 
 
@@ -1670,6 +1754,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 			// ImGuiの内部コマンドを生成する
 			ImGui::Render();
+
+
+			
+			
+
+
+
 
 
 
@@ -1829,6 +1920,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region オブジェクトを解放
 
 	CloseHandle(fenceEvent);
+	//XAudio2解放
+	xAudio2.Reset();
+	// 音声データ解放
+	SoundUnload(&soundData1);
 
 
 #ifdef _DEBUG
