@@ -1,7 +1,11 @@
 #include "WindowProc.h"
+#include "externals/imgui/imgui.h"
+#include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+// WindowProcの初期化
 void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32_t kClientHeight){
 
 
@@ -47,7 +51,7 @@ void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32
 
 
 }
-
+// ウィンドウの更新
 void WindowProc::Update(){
 
 	MSG msg = {};
@@ -65,23 +69,16 @@ void WindowProc::Update(){
 
 
 }
-
-LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
-	
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 	if ( ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam) ) {
-
 		return true;
 	}
 
-	// メッセージに応じてゲーム固有の処理を行う
 	switch ( msg ) {
-		// ウィンドウが破壊された
 	case WM_DESTROY:
-		// OSに対して、アプリの終了を伝える
 		PostQuitMessage(0);
-
 		return 0;
 	}
-	// 標準のメッセージ処理を行う
+
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }

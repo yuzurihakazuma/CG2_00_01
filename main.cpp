@@ -1631,7 +1631,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-
+	UINT msg[];
 
 	while ( true ){
 		

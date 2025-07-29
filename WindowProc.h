@@ -5,11 +5,11 @@
 class WindowProc{
 public:
 	
-
+	// ウィンドウの初期化
 	void Initialize(WNDCLASS wc ,const int32_t kClientWidth,const int32_t kClientHeight);
-
+	// ウィンドウの更新
 	void Update();
-
+	// ウィンドウの取得
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 private:
