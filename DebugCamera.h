@@ -12,7 +12,6 @@ class DebugCamera{
 public:
 
 
-	~DebugCamera();
 
 	// 初期化
 	void Initialize();

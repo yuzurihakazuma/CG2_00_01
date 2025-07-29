@@ -46,7 +46,7 @@ using namespace MatrixMath;
 
 
 //インスタンスの定義
-DebugCamera* debugCamera = new DebugCamera();
+DebugCamera debugCamera;
 
 
 
@@ -833,7 +833,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// メイン関数内の初期化部分
 
 	// デバックカメラ
-	debugCamera->Initialize();
+	debugCamera.Initialize();
 
 
 
@@ -1717,7 +1717,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 			// デバッグカメラの更新
-			debugCamera->Update();
+			debugCamera.Update();
 
 
 
@@ -1739,9 +1739,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 				}
 			}
 
-			/*
-			keyboard->Acquire();
-			keyboard->GetDeviceState(sizeof(key), key);*/
+			
 
 			// 押した瞬間だけ反応
 			if ( !isSpacePressed && ( key[DIK_SPACE] & 0x80 ) ) {
@@ -1792,7 +1790,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			//transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
-			Matrix4x4 viewMatrix = debugCamera->IsActive() ? debugCamera->GetViewMatrix() : Inverse(cameraMatrix); // ← 通常カメラの行列
+			Matrix4x4 viewMatrix = debugCamera.IsActive() ? debugCamera.GetViewMatrix() : Inverse(cameraMatrix); // ← 通常カメラの行列
 
 			Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
@@ -2017,10 +2015,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	keyboard.Reset();
 	// 音声データ解放
 	SoundUnload(&soundData1);
-	if ( debugCamera ) {
-		delete debugCamera;
-		debugCamera = nullptr;
-	}
+
 
 	CloseWindow(hwnd);
 

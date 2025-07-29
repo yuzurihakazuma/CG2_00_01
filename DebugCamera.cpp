@@ -6,18 +6,6 @@
 
 
 
-DebugCamera::~DebugCamera(){
-
-	if ( isDebugCamera_ ) {
-		isDebugCamera_ = false; // デバッグカメラを無効化
-	}
-	// ここで必要なクリーンアップ処理を行う
-	// 例えば、リソースの解放など
-	// 現在は特に何もしていないが、必要に応じて追加すること
-
-
-
-}
 
 void DebugCamera::Initialize(){
 
@@ -56,31 +44,22 @@ void DebugCamera::Update(){
 
 // ビュー行列の更新
 void DebugCamera::UpdateViewMatrix(){
-	// ----------------------------------------
+	
 	// 回転角から回転行列を計算する（Z→X→Yの順）
-	// ----------------------------------------
 	Matrix4x4 rotateX = MatrixMath::MakeRotateX(rotation_.x);
 	Matrix4x4 rotateY = MatrixMath::MakeRotateY(rotation_.y);
 	Matrix4x4 rotateZ = MatrixMath::MakeRotateZ(rotation_.z);
 
-	// ----------------------------------------
 	// 累積回転行列を生成する（順序に注意）
-	// ----------------------------------------
 	Matrix4x4 rotationMatrix = MatrixMath::Multiply(rotateZ, MatrixMath::Multiply(rotateX, rotateY));
 
-	// ----------------------------------------
 	// 平行移動行列を計算する
-	// ----------------------------------------
 	Matrix4x4 translationMatrix = MatrixMath::MakeTranslate(translation_);
 
-	// ----------------------------------------
-	// ワールド行列を生成する（順序：回転 → 平行移動）
-	// ----------------------------------------
+	// ワールド行列を生成する（順序：回転 → 平行移動
 	Matrix4x4 worldMatrix = MatrixMath::Multiply(rotationMatrix, translationMatrix);
 
-	// ----------------------------------------
 	// ビュー行列はワールド行列の逆行列
-	// ----------------------------------------
 	viewMatrix_ = MatrixMath::Inverse(worldMatrix);
 }
 
