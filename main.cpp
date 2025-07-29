@@ -1765,8 +1765,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 			// 描画用のDescriptorHeapの設定
-			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap.Get()};
-			commandList->SetDescriptorHeaps(1, descriptorHeaps);
+			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeaps[] = { srvDescriptorHeap };
+			commandList->SetDescriptorHeaps(1, descriptorHeaps->GetAddressOf());
 
 			commandList->RSSetViewports(1, &viewport);// Viewportを設定
 			commandList->RSSetScissorRects(1, &scissorRect);// Scirssorを設定
@@ -1916,11 +1916,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	SoundUnload(&soundData1);
 
 
-#ifdef _DEBUG
 
-	debugController->Release();
-
-#endif // _DEBUG
 	CloseWindow(hwnd);
 
 
