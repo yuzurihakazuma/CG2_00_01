@@ -6,12 +6,13 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // WindowProcの初期化
-void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32_t kClientHeight){
+void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32_t kClientHeight,HWND hwand){
 
 
 	wc_ = wc; // ウィンドウクラス
 	kClientWidth_ = kClientWidth; // クライアント領域の横幅
 	kClientHeight_ = kClientHeight; // クライアント領域の縦幅
+	hwnd_ = hwand; // ウィンドウハンドル
 	// ウィンドウプロシージャを設定
 	wc_.lpfnWndProc = WndProc;
 

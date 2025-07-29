@@ -741,13 +741,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	wc.style = CS_HREDRAW | CS_VREDRAW; // ウィンドウのスタイル
 	wc.hbrBackground = reinterpret_cast< HBRUSH >( COLOR_WINDOW + 1 ); // 背景色
 	wc.lpfnWndProc = windowProc.WndProc; // ウィンドウプロシージャの関数ポインタ
-	HWND hwnd; // ウィンドウハンドル
 
 	const int kClientWidth = 1280; // ウィンドウの幅
 	const int kClientHeight = 720; // ウィンドウの高さ
 	
 	// ウィンドウプロシージャの初期化
-	windowProc.Initialize(wc, kClientWidth, kClientHeight);
+	windowProc.Initialize(wc, kClientWidth, kClientHeight,windowProc.GetHwnd());
 
 
 #pragma region 入力デバイス
@@ -920,7 +919,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	swapChainDesc.BufferCount = 2; // ダブルバッファ
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // モニタにうつしたら、中身を破棄
 	// コマンドキュー、ウィンドウハンドル、設定を渡して生成する
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, tempSwapChain.GetAddressOf());
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), windowProc.GetHwnd(), &swapChainDesc, nullptr, nullptr, tempSwapChain.GetAddressOf());
 	assert(SUCCEEDED(hr));
 
 	// IDXGISwapChain4 にアップキャストする
@@ -1607,7 +1606,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplWin32_Init(windowProc.GetHwnd());
 	ImGui_ImplDX12_Init(device.Get(),
 		swapChainDesc.BufferCount,
 		rtvDesc.Format,
@@ -1965,7 +1964,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	SoundUnload(&soundData1);
 
 
-	CloseWindow(hwnd);
+	CloseWindow(windowProc.GetHwnd());
 
 
 #pragma endregion

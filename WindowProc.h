@@ -6,7 +6,7 @@ class WindowProc{
 public:
 	
 	// ウィンドウの初期化
-	void Initialize(WNDCLASS wc ,const int32_t kClientWidth,const int32_t kClientHeight);
+	void Initialize(WNDCLASS wc ,const int32_t kClientWidth,const int32_t kClientHeight,HWND hwnd);
 	// ウィンドウの更新
 	void Update();
 	// ウィンドウの取得
