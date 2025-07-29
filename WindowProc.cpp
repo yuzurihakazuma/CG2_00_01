@@ -59,9 +59,10 @@ void WindowProc::Update(){
 	while ( PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) ) {
 		// メッセージがWM_QUITならばアプリケーションを終了
 		if ( msg.message == WM_QUIT ) {
-			PostQuitMessage(0);
+			isClosed_ = true; // ウィンドウが閉じられたことを記録
 			return;
 		}
+		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
 	
@@ -69,7 +70,7 @@ void WindowProc::Update(){
 
 
 }
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
+LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 	if ( ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam) ) {
 		return true;
 	}
@@ -80,5 +81,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 		return 0;
 	}
 
+	// デフォルトのウィンドウプロシージャを呼び出す
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }

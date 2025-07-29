@@ -741,7 +741,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	wc.style = CS_HREDRAW | CS_VREDRAW; // ウィンドウのスタイル
 	wc.hbrBackground = reinterpret_cast< HBRUSH >( COLOR_WINDOW + 1 ); // 背景色
 	wc.lpfnWndProc = windowProc.WndProc; // ウィンドウプロシージャの関数ポインタ
-	HWND hwnd = nullptr; // ウィンドウハンドル
+	HWND hwnd; // ウィンドウハンドル
 
 	const int kClientWidth = 1280; // ウィンドウの幅
 	const int kClientHeight = 720; // ウィンドウの高さ
@@ -769,6 +769,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	assert(SUCCEEDED(inputKey));
 	// 押されたかどうかを格納する配列
 	bool isSpacePressed = false;
+	// // 全キーの入力状態を取得する
+	BYTE keys[256] = {};
+	BYTE preKeys[256] = {};
 
 #pragma endregion
 
@@ -907,7 +910,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	assert(SUCCEEDED(hr));
 
 	// スワップチェーンを生成する
-	Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain = nullptr;
+	Microsoft::WRL::ComPtr<IDXGISwapChain1> tempSwapChain;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc {};
 	swapChainDesc.Width = kClientWidth;   //画面の幅。ウィンドウのクライアント領域を同じものにしていく
 	swapChainDesc.Height = kClientHeight; //画面の高さ。ウィンドウのクライアント領域を同じようにしておく
@@ -917,8 +920,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	swapChainDesc.BufferCount = 2; // ダブルバッファ
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // モニタにうつしたら、中身を破棄
 	// コマンドキュー、ウィンドウハンドル、設定を渡して生成する
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast< IDXGISwapChain1** >( swapChain.GetAddressOf() ));
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, tempSwapChain.GetAddressOf());
 	assert(SUCCEEDED(hr));
+
+	// IDXGISwapChain4 にアップキャストする
+	Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain;
+	hr = tempSwapChain.As(&swapChain);
+	assert(SUCCEEDED(hr));
+
 
 	// RTV用のヒープでディスクリプタの数は2。RTVはshader内で触るものではないので,ShaderVisibleはfalse
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
@@ -937,10 +946,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	// SwapChainからResourceを引っ張ってくる
 	Microsoft::WRL::ComPtr<ID3D12Resource> swapChainResources[2] = { nullptr };
-	hr = swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainResources[0]));
+	hr = tempSwapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainResources[0]));
 	// うまく取得できなければ起動できない
 	assert(SUCCEEDED(hr));
-	hr = swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainResources[1]));
+	hr = tempSwapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainResources[1]));
 	assert(SUCCEEDED(hr));
 	// RTVの設定
 	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc {};
@@ -1025,7 +1034,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// 比較関数はLessEqual。つまり、近ければ描画される
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-
+	depthStencilDesc.StencilEnable = false;
 
 
 
@@ -1631,10 +1640,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-	UINT msg[];
+	
 
-	while ( true ){
-		
+	while ( !windowProc.IsClosed() ){
 		
 		// ウィンドウ
 		windowProc.Update();
@@ -1669,9 +1677,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 			// キーボード情報の取得開始
-			// // 全キーの入力状態を取得する
-			BYTE keys[256] = {};
-			BYTE preKeys[256] = {};
+			
 
 			if ( keyboard ) {
 				HRESULT hr = keyboard->Acquire();
@@ -1692,7 +1698,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			if ( isSpacePressed && !( keys[DIK_SPACE] & 0x80 ) ) {
 				isSpacePressed = false;
 			}
-
+			memcpy(preKeys, keys, sizeof(keys));
 
 
 
@@ -1716,7 +1722,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			// Noneにしておく
 			barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 			// バリアを張る対象のリソース。現在のバックバッファに対して行う
-			barrier.Transition.pResource = swapChainResources->GetAddressOf()[backBufferIndex];
+			barrier.Transition.pResource = swapChainResources[backBufferIndex].Get();
 			// 遷移前(現在)のResourceState
 			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
 			// 遷移後のResoureceState
@@ -1805,8 +1811,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 			// 描画用のDescriptorHeapの設定
-			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeaps[] = { srvDescriptorHeap };
-			commandList->SetDescriptorHeaps(1, descriptorHeaps->GetAddressOf());
+			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap.Get() };
+			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			commandList->RSSetViewports(1, &viewport);// Viewportを設定
 			commandList->RSSetScissorRects(1, &scissorRect);// Scirssorを設定
