@@ -39,6 +39,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 #include "DebugCamera.h"
 #include "struct.h"
+#include "WindowProc.h"
 
 using namespace MatrixMath;
 
@@ -47,7 +48,6 @@ using namespace MatrixMath;
 
 //インスタンスの定義
 DebugCamera debugCamera;
-
 
 
 
@@ -209,30 +209,6 @@ void Log(std::ostream& os, const std::string& message){
 	OutputDebugStringA(message.c_str());
 }
 
-#pragma endregion
-
-#pragma region ウィンドウ関数
-// ウィンドウプロシーシャ
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
-
-	if ( ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam) ) {
-
-		return true;
-	}
-
-	// メッセージに応じてゲーム固有の処理を行う
-	switch ( msg ) {
-		// ウィンドウが破壊された
-	case WM_DESTROY:
-		// OSに対して、アプリの終了を伝える
-		PostQuitMessage(0);
-
-		return 0;
-	}
-	// 標準のメッセージ処理を行う
-	return DefWindowProc(hwnd, msg, wparam, lparam);
-
-}
 #pragma endregion
 
 #pragma region CompileShader関数
@@ -758,48 +734,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
-#pragma region ウィンドウ
+	// ウィンドウのタイトル
+	WindowProc windowProc;
 
-	WNDCLASS wc {};
-	// ウィンドウプロシーシャ
-	wc.lpfnWndProc = WindowProc;
-	// ウィンドウクラス名（なんでもいい）
-	wc.lpszClassName = L"CG2WindowClass";
-	// インスタンスハンドル
-	wc.hInstance = GetModuleHandle(nullptr);
-	// カーソル
-	wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	WNDCLASS wc = {}; // ウィンドウクラスの初期化
+	wc.style = CS_HREDRAW | CS_VREDRAW; // ウィンドウのスタイル
+	wc.hbrBackground = reinterpret_cast< HBRUSH >( COLOR_WINDOW + 1 ); // 背景色
+	wc.lpfnWndProc = windowProc.WndProc; // ウィンドウプロシージャの関数ポインタ
+	HWND hwnd = nullptr; // ウィンドウハンドル
 
-	RegisterClass(&wc);
+	const int kClientWidth = 1280; // ウィンドウの幅
+	const int kClientHeight = 720; // ウィンドウの高さ
+	
+	// ウィンドウプロシージャの初期化
+	windowProc.Initialize(wc, kClientWidth, kClientHeight);
 
-	// クライアント領域サイズ
-	const int32_t kClientWidth = 1280;
-	const int32_t kClientHeight = 720;
-
-	//ウィンドウサイズを表す構造体にクライアント領域を入れる
-	RECT wrc = { 0,0,kClientWidth,kClientHeight };
-
-	// クライアント領域を元に実際のサイズにwrcを変更してもらう
-	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
-
-	// ウィンドウの生成
-	HWND hwnd = CreateWindow(
-		wc.lpszClassName,      // 利用するクラス名
-		L"CG2",                // タイトルバーの文字(なんでもいい)
-		WS_OVERLAPPEDWINDOW,   // よく見るウィンドウスタイル
-		CW_USEDEFAULT,		   // 表示X座標(Windowsに任せる)
-		CW_USEDEFAULT,		   // 表示Y座標(WindowsOSに任せる)
-		wrc.right - wrc.left,  // ウィンドウ横幅
-		wrc.bottom - wrc.top,  // ウィンドウ立幅
-		nullptr,			   // 親ウィンドウハンドル
-		nullptr,			   // メニューハンドル
-		wc.hInstance,		   // インスタンスハンドル
-		nullptr				   // オプション
-	);
-	// ウィンドウを表示
-	ShowWindow(hwnd, SW_SHOW);
-
-#pragma endregion
 
 #pragma region 入力デバイス
 
@@ -824,16 +773,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma endregion
 
 
-#pragma region 初期化呼び出し
 
-	// メイン関数内の初期化部分
+
 
 	// デバックカメラ
 	debugCamera.Initialize();
 
 
 
-#pragma endregion
 
 
 
@@ -1685,16 +1632,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-	MSG msg {};
 
-	while ( msg.message != WM_QUIT ) {
+	while ( true ){
+		
+		
+		// ウィンドウ
+		windowProc.Update();
 
-		if ( PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) ) {
-			if ( msg.message == WM_QUIT ) break; // ここで即ループを抜ける
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
 
-		} else {
+
+
 			// ImGuiの開始処理
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
@@ -1723,26 +1670,26 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 			// キーボード情報の取得開始
 			// // 全キーの入力状態を取得する
-			BYTE key[256] = {};
-			BYTE preKey[256] = {};
+			BYTE keys[256] = {};
+			BYTE preKeys[256] = {};
 
 			if ( keyboard ) {
 				HRESULT hr = keyboard->Acquire();
 				if ( SUCCEEDED(hr) ) {
-					keyboard->GetDeviceState(sizeof(key), key);
+					keyboard->GetDeviceState(sizeof(keys), keys);
 				}
 			}
 
 			
 
 			// 押した瞬間だけ反応
-			if ( !isSpacePressed && ( key[DIK_SPACE] & 0x80 ) ) {
+			if ( !isSpacePressed && ( keys[DIK_SPACE] & 0x80 ) ) {
 				isSpacePressed = true;
 				SoundPlayWave(xAudio2.Get(), soundData1);
 				Log(logStream, "Space key pressed");
 			}
 			// 離した瞬間にフラグを戻す
-			if ( isSpacePressed && !( key[DIK_SPACE] & 0x80 ) ) {
+			if ( isSpacePressed && !( keys[DIK_SPACE] & 0x80 ) ) {
 				isSpacePressed = false;
 			}
 
@@ -1987,10 +1934,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			hr = commandList->Reset(commandAllocator.Get(), nullptr);
 			assert(SUCCEEDED(hr));
 
+			// 終了キー:ESC 押されたら終了
+			if ( preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0 ) {
+				break;
+			}
 
-
-
-		}
 
 
 	}

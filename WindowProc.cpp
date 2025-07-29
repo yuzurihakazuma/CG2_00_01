@@ -1,0 +1,87 @@
+#include "WindowProc.h"
+#include "externals/imgui/imgui_impl_win32.h"
+
+
+void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32_t kClientHeight){
+
+
+	wc_ = wc; // ウィンドウクラス
+	kClientWidth_ = kClientWidth; // クライアント領域の横幅
+	kClientHeight_ = kClientHeight; // クライアント領域の縦幅
+	// ウィンドウプロシージャを設定
+	wc_.lpfnWndProc = WndProc;
+
+	// ウィンドウクラス名
+	wc_.lpszClassName = L"CG2WindowClass";
+
+	// インスタンスハンドル
+	wc_.hInstance = GetModuleHandle(nullptr);
+	// カーソル
+	wc_.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	// ウィンドウクラスを登録
+	RegisterClass(&wc_);
+
+	// クライアント領域サイズ
+	RECT wrc = { 0, 0, kClientWidth_, kClientHeight_ };
+
+	// クライアント領域を元に実際のサイズにwrcを変更してもらう
+	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
+
+
+	// ウィンドウの生成
+	hwnd_ = CreateWindow(
+		wc_.lpszClassName,      // 利用するクラス名
+		L"CG2",                // タイトルバーの文字(なんでもいい)
+		WS_OVERLAPPEDWINDOW,   // よく見るウィンドウスタイル
+		CW_USEDEFAULT,		   // 表示X座標(Windowsに任せる)
+		CW_USEDEFAULT,		   // 表示Y座標(WindowsOSに任せる)
+		wrc.right - wrc.left,  // ウィンドウ横幅
+		wrc.bottom - wrc.top,  // ウィンドウ立幅
+		nullptr,			   // 親ウィンドウハンドル
+		nullptr,			   // メニューハンドル
+		wc_.hInstance,		   // インスタンスハンドル
+		nullptr				   // オプション
+	);
+	// ウィンドウの表示
+	ShowWindow(hwnd_, SW_SHOW);
+
+
+}
+
+void WindowProc::Update(){
+
+	MSG msg = {};
+	// メッセージキューからメッセージを取得
+	while ( PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) ) {
+		// メッセージがWM_QUITならばアプリケーションを終了
+		if ( msg.message == WM_QUIT ) {
+			PostQuitMessage(0);
+			return;
+		}
+		DispatchMessage(&msg);
+	}
+	
+
+
+
+}
+
+LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
+	
+	if ( ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam) ) {
+
+		return true;
+	}
+
+	// メッセージに応じてゲーム固有の処理を行う
+	switch ( msg ) {
+		// ウィンドウが破壊された
+	case WM_DESTROY:
+		// OSに対して、アプリの終了を伝える
+		PostQuitMessage(0);
+
+		return 0;
+	}
+	// 標準のメッセージ処理を行う
+	return DefWindowProc(hwnd, msg, wparam, lparam);
+}
