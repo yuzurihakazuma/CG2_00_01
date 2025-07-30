@@ -592,6 +592,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 				// DirectX座標系に合わせて反転
 				position.x *= -1.0f;
 				position.z *= -1.0f;
+				texcoord.x *= -1.0f; // テクスチャ座標のX軸を反転
 				normal.x *= -1.0f;
 				normal.z *= -1.0f;
 
