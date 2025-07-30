@@ -1889,7 +1889,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 			//描画！(DraoCall/ドローコール)
-		   //commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+		   commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 
 
