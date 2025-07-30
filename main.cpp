@@ -1319,7 +1319,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region ModelDataを使った実装
 	
 	// モデルを読み込む
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "axis.obj");
 	// 1. すべての頂点の合計を求める
 	Vector3 center = { 0.0f, 0.0f, 0.0f };
 	for ( const auto& v : modelData.vertices ) {
