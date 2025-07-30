@@ -545,9 +545,16 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 				// DirectX座標系に合わせて反転
 				position.x *= -1.0f;
+				texcoord.x *= -1.0f; // テクスチャ座標のX軸を反転
 				position.z *= -1.0f;
+				
+				
+				
 				normal.x *= -1.0f;
 				normal.z *= -1.0f;
+
+
+
 
 				VertexData vertex = {};
 				vertex.position = position;
@@ -1312,7 +1319,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region ModelDataを使った実装
 	
 	// モデルを読み込む
-	ModelData modelData = LoadObjFile("resources", "axis.obj");
+	ModelData modelData = LoadObjFile("resources", "plane.obj");
 	// 1. すべての頂点の合計を求める
 	Vector3 center = { 0.0f, 0.0f, 0.0f };
 	for ( const auto& v : modelData.vertices ) {
