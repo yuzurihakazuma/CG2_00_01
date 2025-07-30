@@ -40,11 +40,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "DebugCamera.h"
 #include "struct.h"
 #include "WindowProc.h"
-
+#include "LogManager.h"
+using namespace logs;
 using namespace MatrixMath;
-
-
-
 
 //インスタンスの定義
 DebugCamera debugCamera;
@@ -171,43 +169,49 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception){
 #pragma region log関数
 
 
-// log系
-std::wstring ConvertString(const std::string& str){
-	if ( str.empty() ) {
-		return std::wstring();
-	}
 
-	auto sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), NULL, 0);
-	if ( sizeNeeded == 0 ) {
-		return std::wstring();
-	}
-	std::wstring result(sizeNeeded, 0);
-	MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), &result[0], sizeNeeded);
-	return result;
-}
-
-std::string ConvertString(const std::wstring& str){
-	if ( str.empty() ) {
-		return std::string();
-	}
-
-	auto sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), NULL, 0, NULL, NULL);
-	if ( sizeNeeded == 0 ) {
-		return std::string();
-	}
-	std::string result(sizeNeeded, 0);
-	WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), result.data(), sizeNeeded, NULL, NULL);
-	return result;
-}
+LogManager logmanager;
 
 
 
 
-// ログファイルを書き出す
-void Log(std::ostream& os, const std::string& message){
-	os << message << std::endl;
-	OutputDebugStringA(message.c_str());
-}
+//// log系
+//std::wstring ConvertString(const std::string& str){
+//	if ( str.empty() ) {
+//		return std::wstring();
+//	}
+//
+//	auto sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), NULL, 0);
+//	if ( sizeNeeded == 0 ) {
+//		return std::wstring();
+//	}
+//	std::wstring result(sizeNeeded, 0);
+//	MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), &result[0], sizeNeeded);
+//	return result;
+//}
+//
+//std::string ConvertString(const std::wstring& str){
+//	if ( str.empty() ) {
+//		return std::string();
+//	}
+//
+//	auto sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), NULL, 0, NULL, NULL);
+//	if ( sizeNeeded == 0 ) {
+//		return std::string();
+//	}
+//	std::string result(sizeNeeded, 0);
+//	WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), result.data(), sizeNeeded, NULL, NULL);
+//	return result;
+//}
+//
+//
+//
+//
+//// ログファイルを書き出す
+//void Log(std::ostream& os, const std::string& message){
+//	os << message << std::endl;
+//	OutputDebugStringA(message.c_str());
+//}
 
 #pragma endregion
 
@@ -227,7 +231,7 @@ Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 	// 1.hlslファイルを読み込む
 
 	// これからシェーダーをコンパイルする旨をログに出す
-	Log(os, ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
+	logmanager.Log(os,logmanager.ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
 	// hislファイルを読む
 	Microsoft::WRL::ComPtr<IDxcBlobEncoding> shaderSource = nullptr;
 	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
@@ -717,6 +721,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region log
 
 
+	
+	
+
+
+
 
 	// ログのディレクトリを用意
 	std::filesystem::create_directory("logs");
@@ -784,9 +793,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	debugCamera.Initialize();
 
 
-
-
-
+	
 
 
 
@@ -825,7 +832,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		// ソフトウェアアダプタでなければ採用！
 		if ( !( adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE ) ) {
 			// 採用したアダプタの情報をログに出力。wstringの方なので注意
-			Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
+			logmanager.Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
 			break;
 		}
 		useAdapter = nullptr; // ソフトウェアアダプタの場合は見なかったことにする
