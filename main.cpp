@@ -533,10 +533,12 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		std::istringstream s(line); // 先頭の認別子を読む
 		s >> identifier; // 先頭の識別子を読み込む
 		if ( identifier == "v" ) {
-			Vector4 positeion; // 位置を格納する変数
-			s >> positeion.x >> positeion.y >> positeion.z; // 位置を読み込む
-			positeion.w = 1.0f;
-			positions.push_back(positeion); // 位置を格納する
+			Vector4 position; // 位置を格納する変数
+			s >> position.x >> position.y >> position.z; // 位置を読み込む
+			// DirectX座標系に合わせて反転
+			position.x *= -1.0f;
+			position.w = 1.0f;
+			positions.push_back(position); // 位置を格納する
 		} else if ( identifier == "vt" ) {
 			Vector2 texcoord; // テクスチャ座標を格納する変数
 			s >> texcoord.x >> texcoord.y; // テクスチャ座標を読み込む
@@ -546,9 +548,10 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		} else if ( identifier == "vn" ) {
 			Vector3 normal; // 法線を格納する変数
 			s >> normal.x >> normal.y >> normal.z; // 法線を読み込む
+			normal.x *= -1.0f;
 			normals.push_back(normal); // 法線を格納する
 		} else if ( identifier == "f" ) {
-
+			VertexData triangle[3]; // 三角形の頂点データを格納する配列
 			for ( int32_t faceVertex = 0; faceVertex < 3; ++faceVertex ) {
 				std::string vertexDefinition;
 				s >> vertexDefinition;
@@ -558,28 +561,25 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 				for ( int32_t element = 0; element < 3; ++element ) {
 					std::string index;
 					std::getline(v, index, '/');
-					elementIndices[element] = std::stoi(index) - 1;
+					elementIndices[element] = std::stoi(index);
 				}
+				triangle[faceVertex] = {
+					positions[elementIndices[0] - 1], // 位置は1オリジンなので-1する
+					texcoords[elementIndices[1] - 1], // テクスチャ座標も1オリジンなので-1する
+					normals[elementIndices[2] - 1] // 法線も1オリジンなので-1する
+				};
 
-				Vector4 position = positions[elementIndices[0]];
-				Vector2 texcoord = texcoords[elementIndices[1]];
-				Vector3 normal = normals[elementIndices[2]];
 
-				// DirectX座標系に合わせて反転
-				position.x *= -1.0f;
-				position.z *= -1.0f;
-				texcoord.x *= -1.0f; // テクスチャ座標のX軸を反転
-				normal.x *= -1.0f;
-				normal.z *= -1.0f;
 
-				VertexData vertex = {};
-				vertex.position = position;
-				vertex.texcoord = texcoord;
-				vertex.normal = normal;
 
-				modelData.vertices.push_back(vertex);
-				modelData.indices.push_back(static_cast< uint32_t >( modelData.vertices.size() - 1 ));
 			}
+
+			modelData.vertices.push_back(triangle[2]);
+			modelData.vertices.push_back(triangle[1]);
+			modelData.vertices.push_back(triangle[0]);
+			modelData.indices.push_back(static_cast< uint32_t >( modelData.vertices.size() - 3 ));
+			modelData.indices.push_back(static_cast< uint32_t >( modelData.vertices.size() - 2 ));
+			modelData.indices.push_back(static_cast< uint32_t >( modelData.vertices.size() - 1 ));
 		} else if ( identifier == "mtllib" ) {
 			// マテリアルの指定
 			std::string materialFilename; // マテリアル名を格納する変数
@@ -590,6 +590,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 	}
 	return modelData;
 }
+
 
 
 #pragma endregion
