@@ -115,6 +115,21 @@ struct SoundData{
 	unsigned int bufferSize;
 
 };
+struct MOdelGPUData{
+	ModelData modelData;
+	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
+	Microsoft::WRL::ComPtr<ID3D12Resource> indexResource;
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
+	D3D12_INDEX_BUFFER_VIEW indexBufferView {};
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource;
+	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource;
+	Transform transform; // ← モデルごとのTransform
+
+	bool useMonsterBall = false; // 描画切り替え用
+};
+
+
 
 #pragma region リソースリークチェック
 
@@ -1453,57 +1468,170 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma region ModelDataを使った実装
 
-	// モデルを読み込む
-	ModelData modelData = LoadObjFile("resources", "axis.obj");
-	// 1. すべての頂点の合計を求める
-	Vector3 center = { 0.0f, 0.0f, 0.0f };
-	for ( const auto& v : modelData.vertices ) {
-		center.x += v.position.x;
-		center.y += v.position.y;
-		center.z += v.position.z;
-	}
+	//// モデルを読み込む
+	////
+	////ModelData modelData;
+	//
+	//
+	//ModelData modelData = LoadObjFile("resources", "axis.obj");
+	////ModelData modelData = LoadObjFile("resources", "multiMaterial.obj");
+	////ModelData modelData = LoadObjFile("resources", "multiMesh.obj");
+	//
 
-	// 2. 頂点数で割って中心座標を求める
-	size_t vertexCount = modelData.vertices.size();
-	if ( vertexCount > 0 ) {
-		center.x /= vertexCount;
-		center.y /= vertexCount;
-		center.z /= vertexCount;
-	}
 
-	// 3. すべての頂点座標から中心座標を引く
-	for ( auto& v : modelData.vertices ) {
-		v.position.x -= center.x;
-		v.position.y -= center.y;
-		v.position.z -= center.z;
-	}
+	//// 1. すべての頂点の合計を求める
+	//Vector3 center = { 0.0f, 0.0f, 0.0f };
+	//for ( const auto& v : modelData.vertices ) {
+	//	center.x += v.position.x;
+	//	center.y += v.position.y;
+	//	center.z += v.position.z;
+	//}
 
-	// 頂点リソースを作る
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
+	//// 2. 頂点数で割って中心座標を求める
+	//size_t vertexCount = modelData.vertices.size();
+	//if ( vertexCount > 0 ) {
+	//	center.x /= vertexCount;
+	//	center.y /= vertexCount;
+	//	center.z /= vertexCount;
+	//}
 
-	// 頂点バッファビューを作成する
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
-	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-	vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
-	vertexBufferView.StrideInBytes = sizeof(VertexData);
+	//// 3. すべての頂点座標から中心座標を引く
+	//for ( auto& v : modelData.vertices ) {
+	//	v.position.x -= center.x;
+	//	v.position.y -= center.y;
+	//	v.position.z -= center.z;
+	//}
 
-	// 頂点リソースにデータを書き込む
-	VertexData* vertexData = nullptr;
-	vertexResource->Map(0, nullptr, reinterpret_cast< void** >( &vertexData ));
-	std::copy(modelData.vertices.begin(), modelData.vertices.end(), vertexData);
+	//// 頂点リソースを作る
+	//Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
 
-	// インデックスリソースも同様に
-	Microsoft::WRL::ComPtr<ID3D12Resource> indexResource = CreateBufferResource(device, sizeof(uint32_t) * modelData.indices.size());
-	D3D12_INDEX_BUFFER_VIEW indexBufferView {};
-	indexBufferView.BufferLocation = indexResource->GetGPUVirtualAddress();
-	indexBufferView.SizeInBytes = UINT(sizeof(uint32_t) * modelData.indices.size());
-	indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+	//// 頂点バッファビューを作成する
+	//D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
+	//vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+	//vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
+	//vertexBufferView.StrideInBytes = sizeof(VertexData);
 
-	uint32_t* indexData = nullptr;
-	indexResource->Map(0, nullptr, reinterpret_cast< void** >( &indexData ));
-	std::copy(modelData.indices.begin(), modelData.indices.end(), indexData);
-	indexResource->Unmap(0, nullptr);
+	//// 頂点リソースにデータを書き込む
+	//VertexData* vertexData = nullptr;
+	//vertexResource->Map(0, nullptr, reinterpret_cast< void** >( &vertexData ));
+	//std::copy(modelData.vertices.begin(), modelData.vertices.end(), vertexData);
+
+	//// インデックスリソースも同様に
+	//Microsoft::WRL::ComPtr<ID3D12Resource> indexResource = CreateBufferResource(device, sizeof(uint32_t) * modelData.indices.size());
+	//D3D12_INDEX_BUFFER_VIEW indexBufferView {};
+	//indexBufferView.BufferLocation = indexResource->GetGPUVirtualAddress();
+	//indexBufferView.SizeInBytes = UINT(sizeof(uint32_t) * modelData.indices.size());
+	//indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+	//uint32_t* indexData = nullptr;
+	//indexResource->Map(0, nullptr, reinterpret_cast< void** >( &indexData ));
+	//std::copy(modelData.indices.begin(), modelData.indices.end(), indexData);
+	//indexResource->Unmap(0, nullptr);
 #pragma endregion
+
+
+#pragma region modelを配列化
+
+	// 読み込むファイル名リスト
+	std::vector<std::pair<std::string, std::string>>modelFiles = {
+		{"resources", "plane.obj"},
+		{"resources", "axis.obj"},
+		{"resources", "multiMaterial.obj"},
+		{"resources", "multiMesh.obj"},
+	};
+	// モデル表示名リスト（UIに表示する用）
+	std::vector<std::string> modelNames = {
+		"plane", "axis", "multiMaterial", "multiMesh"
+	};
+
+	// モデルごとのデータをまとめて保存
+	std::vector<MOdelGPUData> models;
+	
+	for ( const auto&[dir,filrname]:modelFiles ){
+		MOdelGPUData data;
+
+		// モデル読み込み
+		data.modelData = LoadObjFile(dir, filrname);
+
+		
+		data.transform.scale = { 1.0f, 1.0f, 1.0f };
+		data.transform.rotate = { 0.0f, 0.0f, 0.0f };
+		data.transform.translate = { 0.0f, 0.0f, 0.0f };
+
+		// 中心か
+		Vector3 center = { 0.0f, 0.0f, 0.0f };
+		for ( const auto& v : data.modelData.vertices ) {
+			center.x += v.position.x;
+			center.y += v.position.y;
+			center.z += v.position.z;
+		}
+		size_t vertexCount = data.modelData.vertices.size();
+		if ( vertexCount > 0 ) {
+			center.x /= vertexCount;
+			center.y /= vertexCount;
+			center.z /= vertexCount;
+		}
+		// 中心を引く
+		for ( auto& v : data.modelData.vertices ) {
+			v.position.x -= center.x;
+			v.position.y -= center.y;
+			v.position.z -= center.z;
+		}
+
+		// 頂点バッファ作成
+		data.vertexResource = CreateBufferResource(device, sizeof(VertexData) * vertexCount);
+		data.vertexBufferView.BufferLocation = data.vertexResource->GetGPUVirtualAddress();
+		data.vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * vertexCount);
+		data.vertexBufferView.StrideInBytes = sizeof(VertexData);
+		// 頂点リソースにデータを書き込む
+		VertexData* vertexMapped = nullptr;
+		data.vertexResource->Map(0, nullptr, reinterpret_cast< void** >( &vertexMapped ));
+		std::copy(data.modelData.vertices.begin(), data.modelData.vertices.end(), vertexMapped);
+		data.vertexResource->Unmap(0, nullptr);
+		// インデックスバッファ作成
+		size_t indexCount = data.modelData.indices.size();
+		data.indexResource = CreateBufferResource(device, sizeof(uint32_t) * indexCount);
+		data.indexBufferView.BufferLocation = data.indexResource->GetGPUVirtualAddress();
+		data.indexBufferView.SizeInBytes = UINT(sizeof(uint32_t) * indexCount);
+		data.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+		// インデックスリソースにデータを書き込む
+		uint32_t* indexMapped = nullptr;
+		data.indexResource->Map(0, nullptr, reinterpret_cast< void** >( &indexMapped ));
+		std::copy(data.modelData.indices.begin(), data.modelData.indices.end(), indexMapped);
+		data.indexResource->Unmap(0, nullptr);
+
+		// --- 中心座標引き算の後に続けて ---
+
+// Materialバッファを作成
+		data.materialResource = CreateBufferResource(device, sizeof(Material));
+		Material* mat = nullptr;
+		data.materialResource->Map(0, nullptr, reinterpret_cast< void** >( &mat ));
+		mat->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+		mat->enableLighting = true;
+		mat->uvTransfrom = MakeIdentity4x4();
+
+		// WVPバッファを作成
+		data.wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
+		TransformationMatrix* wvp = nullptr;
+		data.wvpResource->Map(0, nullptr, reinterpret_cast< void** >( &wvp ));
+		wvp->WVP = MakeIdentity4x4();
+		wvp->World = MakeIdentity4x4();
+
+
+		// --- 配列に追加 ---
+    models.push_back(std::move(data));
+
+	}
+
+
+
+
+
+#pragma endregion
+
+
+
+
 
 #pragma region ViewportとScissor
 
@@ -1641,7 +1769,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-	
+	int selectedModelIndex = 0;
 
 	while ( !windowProc.IsClosed() ){
 		
@@ -1733,6 +1861,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
+			Matrix4x4 cameraMatrixMoldes = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
+			Matrix4x4 viewMatrixModels = debugCamera.IsActive() ? debugCamera.GetViewMatrix() : Inverse(cameraMatrixMoldes);
+			Matrix4x4 projectionMatrixModels = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+
+			// モデルごとに WVP を更新
+			for ( auto& model : models ) {
+				Matrix4x4 worldMatrix = MakeAffine(model.transform.scale, model.transform.rotate, model.transform.translate);
+				Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrixModels, projectionMatrixModels));
+
+				TransformationMatrix* wvpData = nullptr;
+				model.wvpResource->Map(0, nullptr, reinterpret_cast< void** >( &wvpData ));
+				wvpData->World = worldMatrix;
+				wvpData->WVP = wvpMatrix;
+			}
+
 
 			// 球描画
 			//transform.rotate.y += 0.03f;
@@ -1759,7 +1902,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 			ImGui::Begin("Settings");
 
+			
 			ImGui::ColorEdit4("Color", &materialData->color.x);
+
+			// --- モデル選択のUI ---
+			if ( ImGui::BeginCombo("Model", modelNames[selectedModelIndex].c_str()) ) {
+				for ( int n = 0; n < modelNames.size(); n++ ) {
+					bool isSelected = ( selectedModelIndex == n );
+					if ( ImGui::Selectable(modelNames[n].c_str(), isSelected) ) {
+						selectedModelIndex = n;
+					}
+					if ( isSelected )
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			if ( selectedModelIndex >= 0 && selectedModelIndex < models.size() ) {
+				Transform& t = models[selectedModelIndex].transform;
+
+				ImGui::DragFloat3("Translate", &t.translate.x, 0.1f);
+				ImGui::SliderAngle("Rotate X", &t.rotate.x);
+				ImGui::SliderAngle("Rotate Y", &t.rotate.y);
+				ImGui::SliderAngle("Rotate Z", &t.rotate.z);
+				ImGui::DragFloat3("Scale", &t.scale.x, 0.01f, 0.0f, 10.0f);
+			}
+
+			
+			
 			ImGui::SliderAngle("RotateX", &transformSprite.rotate.x, -500, 500);
 			ImGui::SliderAngle("RotateY", &transformSprite.rotate.y, -500, 500);
 			ImGui::SliderAngle("RotateZ", &transformSprite.rotate.z, -500, 500);
@@ -1824,51 +1993,65 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-			commandList->IASetPrimitiveTopology(
-				D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			
+			if ( selectedModelIndex >= 0 && selectedModelIndex < models.size() ) {
+				const auto& model = models[selectedModelIndex];
 
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			commandList->IASetIndexBuffer(&indexBufferView);
+				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				commandList->IASetVertexBuffers(0, 1, &model.vertexBufferView);
+				commandList->IASetIndexBuffer(&model.indexBufferView);
+
+				commandList->SetGraphicsRootConstantBufferView(0, model.materialResource->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(1, model.wvpResource->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootDescriptorTable(2, model.useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+				commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
+
+				commandList->DrawIndexedInstanced(
+					static_cast< UINT >( model.modelData.indices.size() ),
+					1, 0, 0, 0
+				);
+			}
+
+
+
+
+
+#pragma region Sphereの描画
+
+
+			// Sphereの描画前にこれを追加（重要！）
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
+
+			// Sphereの描画
+			// 形状の種類を設定（ここでは三角形リスト）
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			// ルート定数バッファなどはそのまま
+			// インデックスバッファのビューを設定
+			commandList->IASetIndexBuffer(&indexBufferViewSphere);
+
+			// ルートパラメータ 0：マテリアル（定数バッファ）
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+
+			// ルートパラメータ 1：WVP行列（定数バッファ）
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2);
+
+			// ルートパラメータ 2：テクスチャ（SRV）
+			// チェックボックスの状態によって使うテクスチャを切り替える
+			commandList->SetGraphicsRootDescriptorTable(
+				2,
+				useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2
+			);
+
+			// ルートパラメータ 3：ディレクショナルライト（定数バッファ）
 			commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
 
-			// インデックス数分描画
-			commandList->DrawIndexedInstanced(UINT(modelData.indices.size()), 1, 0, 0, 0);
+			// 描画コマンドの発行（Draw Call）
+			// 1インスタンスあたりのインデックス数：sphereVertexNum
+			commandList->DrawIndexedInstanced(indexNum, 1, 0, 0, 0);
 
+#pragma endregion
 
-
-			//// Sphereの描画
-			//// 形状の種類を設定（ここでは三角形リスト）
-			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-			//// インデックスバッファのビューを設定
-			//commandList->IASetIndexBuffer(&indexBufferViewSphere);
-
-			//// ルートパラメータ 0：マテリアル（定数バッファ）
-			//commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
-
-			//// ルートパラメータ 1：WVP行列（定数バッファ）
-			//commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
-
-			//// ルートパラメータ 2：テクスチャ（SRV）
-			//// チェックボックスの状態によって使うテクスチャを切り替える
-			//commandList->SetGraphicsRootDescriptorTable(
-			//	2,
-			//	useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2
-			//);
-
-			//// ルートパラメータ 3：ディレクショナルライト（定数バッファ）
-			//commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
-
-			//// 描画コマンドの発行（Draw Call）
-			//// 1インスタンスあたりのインデックス数：sphereVertexNum
-			//commandList->DrawIndexedInstanced(indexNum, 1, 0, 0, 0);
-
+#pragma region Spriteの描画
 
 
 
@@ -1892,6 +2075,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		   commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 
+#pragma endregion
 
 
 
