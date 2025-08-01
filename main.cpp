@@ -117,7 +117,7 @@ struct SoundData{
 	unsigned int bufferSize;
 
 };
-struct MOdelGPUData{
+struct ModelGPUData{
 	ModelData modelData;
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexResource;
@@ -127,7 +127,7 @@ struct MOdelGPUData{
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource;
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource;
 	Transform transform; // ← モデルごとのTransform
-
+	Material* materialData = nullptr;
 	bool useMonsterBall = false; // 描画切り替え用
 };
 
@@ -1540,20 +1540,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// 読み込むファイル名リスト
 	std::vector<std::pair<std::string, std::string>>modelFiles = {
 		{"resources", "plane.obj"},
-		{"resources", "axis.obj"},
-		{"resources", "multiMaterial.obj"},
+		{"resources", "bunny.obj"},
+		{"resources", "teapot.obj"},
 		{"resources", "multiMesh.obj"},
 	};
 	// モデル表示名リスト（UIに表示する用）
 	std::vector<std::string> modelNames = {
-		"plane", "axis", "multiMaterial", "multiMesh"
+		"plane", "bunny", "teapot", "multiMesh"
 	};
 
 	// モデルごとのデータをまとめて保存
-	std::vector<MOdelGPUData> models;
+	std::vector<ModelGPUData> models;
 	
 	for ( const auto&[dir,filrname]:modelFiles ){
-		MOdelGPUData data;
+		ModelGPUData data;
 
 		// モデル読み込み
 		data.modelData = LoadObjFile(dir, filrname);
@@ -1621,6 +1621,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		data.wvpResource->Map(0, nullptr, reinterpret_cast< void** >( &wvp ));
 		wvp->WVP = MakeIdentity4x4();
 		wvp->World = MakeIdentity4x4();
+
+		// Materialバッファを作成
+		data.materialResource = CreateBufferResource(device, sizeof(Material));
+		data.materialResource->Map(0, nullptr, reinterpret_cast< void** >( &mat ));
+		mat->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+		mat->enableLighting = 1; // Lambertに初期化（0:なし, 1:Lambert, 2:Half）
+		mat->uvTransfrom = MakeIdentity4x4();
+
+		// ★ ここで materialData に保持する
+		data.materialData = mat;
 
 
 		// --- 配列に追加 ---
@@ -1952,14 +1962,32 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 				}
 				ImGui::EndCombo();
 			}
-			if ( selectedModelIndex >= 0 && selectedModelIndex < models.size() ) {
-				Transform& t = models[selectedModelIndex].transform;
 
+			if ( selectedModelIndex >= 0 && selectedModelIndex < models.size() ) {
+				ModelGPUData& model = models[selectedModelIndex]; // ← Transform と Material にアクセスするため参照
+
+				Transform& t = model.transform;
 				ImGui::DragFloat3("Translate", &t.translate.x, 0.1f);
 				ImGui::SliderAngle("Rotate X", &t.rotate.x);
 				ImGui::SliderAngle("Rotate Y", &t.rotate.y);
 				ImGui::SliderAngle("Rotate Z", &t.rotate.z);
 				ImGui::DragFloat3("Scale", &t.scale.x, 0.01f, 0.0f, 10.0f);
+
+				ImGui::ColorEdit4("Model Color", &model.materialData->color.x); // モデル色の調整
+
+				// --- モデルごとのライティング切り替え ---
+				static const char* lightModeNames[] = { "No Light", "Lambert", "Half-Lambert" };
+				int currentMode = model.materialData->enableLighting;
+				if ( ImGui::BeginCombo("Model Lighting", lightModeNames[currentMode]) ) {
+					for ( int i = 0; i < 3; ++i ) {
+						bool selected = ( currentMode == i );
+						if ( ImGui::Selectable(lightModeNames[i], selected) ) {
+							model.materialData->enableLighting = i;
+						}
+						if ( selected ) ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				}
 			}
 
 			
@@ -1972,12 +2000,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			ImGui::SliderAngle("Sphere Rotate Z", &transform.rotate.z);
 			ImGui::DragFloat3("Sphere Scale", &transform.scale.x, 0.01f, 0.0f, 10.0f);
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-			// ==================== ライト設定 ====================
+			
 			ImGui::SeparatorText("Light Settings");
+						
+			// ライトモード（0 = ライトなし, 1 = Lambert, 2 = Half-Lambert）
 			ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
 			ImGui::SliderFloat("LightX", &directionalLightData->direction.x, -10.0f, 10.0f);
 			ImGui::SliderFloat("LightY", &directionalLightData->direction.y, -10.0f, 10.0f);
 			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z, -10.0f, 10.0f);
+			static int lightMode = 1; // 0: none, 1: lambert, 2: half-lambert
+			ImGui::Text("Lighting Mode");
+			ImGui::RadioButton("No Light", &lightMode, 0); ImGui::SameLine();
+			ImGui::RadioButton("Lambert", &lightMode, 1); ImGui::SameLine();
+			ImGui::RadioButton("Half-Lambert", &lightMode, 2);
+			materialData->enableLighting = lightMode;
+
+
+			
+
 
 			ImGui::SeparatorText("Sprite Transform");
 
@@ -2042,10 +2082,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 #pragma region モデル描画
-
-
-
-
 
 
 			if ( selectedModelIndex >= 0 && selectedModelIndex < models.size() ) {

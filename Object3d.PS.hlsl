@@ -14,26 +14,34 @@ struct PixelShaderOutput
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
-    float4 transformedUV = mul(float32_t4(input.texcoord, 1.0f, 1.0f), gMaterial.uvTransform);
-    float32_t4 textureColor = gTextrue.Sample(gSampler, transformedUV.xy);
-    
-    //float32_t4 textrueColor = gTextrue.Sample(gSampler, input.texcoord);
-    if (gMaterial.enableLighting != 0) // Lightingする場合
+
+    // UV変換（アフィン行列使用）
+    float4 transformedUV = mul(float4(input.texcoord, 1.0f, 1.0f), gMaterial.uvTransform);
+    float4 textureColor = gTextrue.Sample(gSampler, transformedUV.xy);
+
+    float3 normal = normalize(input.normal);
+    float3 lightDir = normalize(-gDirectionalLight.direction);
+
+    float3 baseColor = (gMaterial.color.rgb * textureColor.rgb);
+    float lightingFactor = 1.0f;
+
+    if (gMaterial.enableLighting == 1)
     {
-        float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
-        
-        float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
-        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
-        
+        // Lambert
+        lightingFactor = max(dot(normal, lightDir), 0.0f);
     }
-    else
+    else if (gMaterial.enableLighting == 2)
     {
-        // Lightingしない場合。前回までと同じ演算
-        output.color = gMaterial.color * textureColor;
-        
+        // Half-Lambert
+        float NdotL = dot(normal, lightDir);
+        lightingFactor = pow(NdotL * 0.5f + 0.5f, 2.0f);
     }
-   
-    
+
+    if (gMaterial.enableLighting != 0)
+    {
+        baseColor *= gDirectionalLight.color.rgb * gDirectionalLight.intensity * lightingFactor;
+    }
+
+    output.color = float4(baseColor, gMaterial.color.a * textureColor.a);
     return output;
-    
 }
