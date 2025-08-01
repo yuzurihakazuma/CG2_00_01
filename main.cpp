@@ -18,6 +18,8 @@
 #include <xaudio2.h>
 #define DIRECTINPUT_VERSION 0x0800 // DirectInputのバージョンを指定
 #include <dinput.h>
+#include <Xinput.h>
+#pragma comment(lib, "xinput.lib")
 // Debug用のあれやこれを使えるようにする
 #include <dbghelp.h>
 #include <strsafe.h>
@@ -788,6 +790,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// // 全キーの入力状態を取得する
 	BYTE keys[256] = {};
 	BYTE preKeys[256] = {};
+
+	
+
 
 #pragma endregion
 
@@ -1830,7 +1835,37 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			memcpy(preKeys, keys, sizeof(keys));
 
 
+			XINPUT_STATE state {};
+			DWORD dwResult = XInputGetState(0, &state); // コントローラー番号0番（1台目）から入力を取得
 
+			// コントローラーが接続されている場合
+			if ( dwResult == ERROR_SUCCESS ) {
+				// ボタンの入力判定例（Aボタンが押された瞬間だけ処理）
+				static bool prevAButtonPressed = false;
+				bool isAButtonPressed = ( state.Gamepad.wButtons & XINPUT_GAMEPAD_A );
+
+				if ( !prevAButtonPressed && isAButtonPressed ) {
+					SoundPlayWave(xAudio2.Get(), soundData1);  // Aボタン押したら音を再生
+					Log(logStream, "A Button pressed");
+				}
+
+				prevAButtonPressed = isAButtonPressed;
+
+				// スティック入力の例（左スティックの値を取得）
+				float LX = state.Gamepad.sThumbLX / 32767.0f;
+				float LY = state.Gamepad.sThumbLY / 32767.0f;
+
+				// デッドゾーン処理（一定以上傾けた時のみ反応するように）
+				const float DEADZONE = 0.2f;
+				if ( fabsf(LX) < DEADZONE ) LX = 0.0f;
+				if ( fabsf(LY) < DEADZONE ) LY = 0.0f;
+
+				// スティックでオブジェクトを動かす例
+				transform.translate.x += LX * 0.1f; // 横方向
+				transform.translate.z += LY * 0.1f; // 前後方向
+			} else {
+				// コントローラー未接続時の処理
+			}
 
 
 
@@ -1929,20 +1964,34 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 			
 			
-			ImGui::SliderAngle("RotateX", &transformSprite.rotate.x, -500, 500);
-			ImGui::SliderAngle("RotateY", &transformSprite.rotate.y, -500, 500);
-			ImGui::SliderAngle("RotateZ", &transformSprite.rotate.z, -500, 500);
-			ImGui::DragFloat3("transform", &transformSprite.translate.x, -180, 180);
-			ImGui::DragFloat3("transformSprite", &transform.translate.x);
-			ImGui::SliderAngle("RotateXSprite", &transform.rotate.x, -500, 500);
-			ImGui::SliderAngle("RotateYSprite", &transform.rotate.y, -500, 500);
-			ImGui::SliderAngle("RotateZSprite", &transform.rotate.z, -500, 500);
+			ImGui::SeparatorText("Sphere");
+
+			ImGui::DragFloat3("Sphere Translate", &transform.translate.x, 0.1f);
+			ImGui::SliderAngle("Sphere Rotate X", &transform.rotate.x);
+			ImGui::SliderAngle("Sphere Rotate Y", &transform.rotate.y);
+			ImGui::SliderAngle("Sphere Rotate Z", &transform.rotate.z);
+			ImGui::DragFloat3("Sphere Scale", &transform.scale.x, 0.01f, 0.0f, 10.0f);
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+			// ==================== ライト設定 ====================
+			ImGui::SeparatorText("Light Settings");
 			ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
 			ImGui::SliderFloat("LightX", &directionalLightData->direction.x, -10.0f, 10.0f);
 			ImGui::SliderFloat("LightY", &directionalLightData->direction.y, -10.0f, 10.0f);
 			ImGui::SliderFloat("LightZ", &directionalLightData->direction.z, -10.0f, 10.0f);
-			ImGui::DragFloat2("UVTransform", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+
+			ImGui::SeparatorText("Sprite Transform");
+
+			ImGui::Text("Rotation");
+			ImGui::SliderAngle("Sprite Rotate X", &transformSprite.rotate.x, -180.0f, 180.0f);
+			ImGui::SliderAngle("Sprite Rotate Y", &transformSprite.rotate.y, -180.0f, 180.0f);
+			ImGui::SliderAngle("Sprite Rotate Z", &transformSprite.rotate.z, -180.0f, 180.0f);
+
+			ImGui::Text("Translation");
+			ImGui::DragFloat3("Sprite Translate", &transformSprite.translate.x, 1.0f, -180.0f, 180.0f);
+
+			// ==================== UV設定 ====================
+			ImGui::SeparatorText("UV Settings");
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
 
@@ -1992,8 +2041,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere); // VBVを設定
 
 
+#pragma region モデル描画
 
-			
+
+
+
+
+
 			if ( selectedModelIndex >= 0 && selectedModelIndex < models.size() ) {
 				const auto& model = models[selectedModelIndex];
 
@@ -2012,6 +2066,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 				);
 			}
 
+#pragma endregion
 
 
 
