@@ -270,7 +270,7 @@ Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 	Microsoft::WRL::ComPtr<IDxcBlobUtf8> shaderError = nullptr;
 	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
 	if ( shaderError != nullptr && shaderError->GetStringLength() != 0 ) {
-		Log(os, shaderError->GetStringPointer());
+		logmanager.Log(os, shaderError->GetStringPointer());
 		// 警告・エラーダメゼッタイ
 		assert(false);
 	}
@@ -282,7 +282,7 @@ Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
 	assert(SUCCEEDED(hr));
 	// 成功したログを出す
-	Log(os, ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}\n", filePath, profile)));
+	logmanager.Log(os, logmanager.ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}\n", filePath, profile)));
 	// 実行用のパイナリを返却
 	return shaderBlob;
 }
@@ -360,7 +360,7 @@ DirectX::ScratchImage LoadTexture(const std::string& filePath){
 
 	// テクスチャファイルを読み込んでプログラムで扱えるようにする
 	DirectX::ScratchImage image {};
-	std::wstring filePathw = ConvertString(filePath);
+	std::wstring filePathw =logmanager.ConvertString(filePath);
 	HRESULT hr = DirectX::LoadFromWICFile(filePathw.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
 	assert(SUCCEEDED(hr));
 
@@ -723,7 +723,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	
 	
-
+	logmanager.Initialize(); // ログの初期化
 
 
 

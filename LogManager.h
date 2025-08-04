@@ -9,18 +9,18 @@
 #include <Windows.h>
 
 namespace logs{
-
 	class LogManager{
-
+	public:
 
 		std::wstring ConvertString(const std::string& str);
 
 		std::string ConvertString(const std::wstring& str);
 
-		// ログファイルを書き出す
+	
+
 		void Log(std::ostream& os, const std::string& message);
 
-		void Instantiate();
+		void Initialize();
 
 		// シングルトンアクセス用（必要なら）
 		static LogManager* GetInstance(){

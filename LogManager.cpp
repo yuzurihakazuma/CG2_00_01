@@ -1,7 +1,7 @@
 #include "LogManager.h"
 
 
-	void logs::LogManager::Instantiate(){
+	void logs::LogManager::Initialize(){
 
 		// ログのディレクトリを用意
 		std::filesystem::create_directory("logs");
@@ -16,6 +16,8 @@
 		std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
 		//時刻を使ってファイル名を決定
 		std::string logFilePath = std::string("logs/") + dateString + ".log";
+		// ファイルを作って書き込み準備
+		std::ofstream logStream(logFilePath);
 	}
 
 	std::wstring logs::LogManager::ConvertString(const std::string& str){
@@ -45,6 +47,10 @@
 		WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), result.data(), sizeNeeded, NULL, NULL);
 		return result;
 	}
+
+
+	
+
 
 	void logs::LogManager::Log(std::ostream& os, const std::string& message){
 		os << message << std::endl;
