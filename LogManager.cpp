@@ -17,44 +17,48 @@
 		//時刻を使ってファイル名を決定
 		std::string logFilePath = std::string("logs/") + dateString + ".log";
 		// ファイルを作って書き込み準備
-		std::ofstream logStream(logFilePath);
+		logStream_.open(logFilePath); // ← メンバ変数で開く
 	}
 
+	void logs::LogManager::Finalize(){
+		if ( logStream_.is_open() ) {
+			logStream_.close();
+		}
+	}
 	std::wstring logs::LogManager::ConvertString(const std::string& str){
-		if ( str.empty() ) {
-			return std::wstring();
-		}
-
-		auto sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), NULL, 0);
-		if ( sizeNeeded == 0 ) {
-			return std::wstring();
-		}
+		if ( str.empty() ) return std::wstring();
+		int sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), ( int ) str.size(), NULL, 0);
+		if ( sizeNeeded == 0 ) return std::wstring();
 		std::wstring result(sizeNeeded, 0);
-		MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), &result[0], sizeNeeded);
+		MultiByteToWideChar(CP_UTF8, 0, str.c_str(), ( int ) str.size(), &result[0], sizeNeeded);
 		return result;
 	}
 
 	std::string logs::LogManager::ConvertString(const std::wstring& str){
-		if ( str.empty() ) {
-			return std::string();
-		}
-
-		auto sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), NULL, 0, NULL, NULL);
-		if ( sizeNeeded == 0 ) {
-			return std::string();
-		}
+		if ( str.empty() ) return std::string();
+		int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, str.data(), ( int ) str.size(), NULL, 0, NULL, NULL);
+		if ( sizeNeeded == 0 ) return std::string();
 		std::string result(sizeNeeded, 0);
-		WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), result.data(), sizeNeeded, NULL, NULL);
+		WideCharToMultiByte(CP_UTF8, 0, str.data(), ( int ) str.size(), &result[0], sizeNeeded, NULL, NULL);
 		return result;
 	}
 
 
-	
 
-
-	void logs::LogManager::Log(std::ostream& os, const std::string& message){
-		os << message << std::endl;
+	// std::string用
+	void logs::LogManager::Log(const std::string& message){
+		if ( logStream_.is_open() ) {
+			logStream_ << message << std::endl;
+		}
 		OutputDebugStringA(message.c_str());
 	}
 
-	
+	// std::wstring用
+	void logs::LogManager::Log(const std::wstring& message){
+		// 必要ならUTF-8変換してファイルに書き込む
+		std::string converted = ConvertString(message); // UTF-8変換
+		if ( logStream_.is_open() ) {
+			logStream_ << converted << std::endl;
+		}
+		OutputDebugStringW(message.c_str());
+	}

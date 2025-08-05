@@ -12,7 +12,6 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <numbers>
-#include <fstream> // ファイルを書いたり読み込んだりするライブラリ
 #include<sstream>
 #include <wrl.h>
 #include <xaudio2.h>
@@ -170,7 +169,7 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception){
 
 
 
-LogManager logmanager;
+LogManager logManager;
 
 
 
@@ -225,13 +224,12 @@ Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 	// 初期化で生成したものを4つ
 	const Microsoft::WRL::ComPtr<IDxcUtils>& dxcUtils,
 	const Microsoft::WRL::ComPtr<IDxcCompiler3>& dxcCompiler,
-	const Microsoft::WRL::ComPtr<IDxcIncludeHandler>& includeHandler,
-	std::ostream& os){
+	const Microsoft::WRL::ComPtr<IDxcIncludeHandler>& includeHandler){
 
 	// 1.hlslファイルを読み込む
 
 	// これからシェーダーをコンパイルする旨をログに出す
-	logmanager.Log(os,logmanager.ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
+	logManager.Log(logManager.ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
 	// hislファイルを読む
 	Microsoft::WRL::ComPtr<IDxcBlobEncoding> shaderSource = nullptr;
 	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
@@ -270,7 +268,7 @@ Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 	Microsoft::WRL::ComPtr<IDxcBlobUtf8> shaderError = nullptr;
 	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
 	if ( shaderError != nullptr && shaderError->GetStringLength() != 0 ) {
-		logmanager.Log(os, shaderError->GetStringPointer());
+		logManager.Log(shaderError->GetStringPointer());
 		// 警告・エラーダメゼッタイ
 		assert(false);
 	}
@@ -282,7 +280,7 @@ Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
 	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
 	assert(SUCCEEDED(hr));
 	// 成功したログを出す
-	logmanager.Log(os, logmanager.ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}\n", filePath, profile)));
+	logManager.Log(logManager.ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}\n", filePath, profile)));
 	// 実行用のパイナリを返却
 	return shaderBlob;
 }
@@ -360,7 +358,7 @@ DirectX::ScratchImage LoadTexture(const std::string& filePath){
 
 	// テクスチャファイルを読み込んでプログラムで扱えるようにする
 	DirectX::ScratchImage image {};
-	std::wstring filePathw =logmanager.ConvertString(filePath);
+	std::wstring filePathw =logManager.ConvertString(filePath);
 	HRESULT hr = DirectX::LoadFromWICFile(filePathw.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
 	assert(SUCCEEDED(hr));
 
@@ -723,25 +721,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	
 	
-	logmanager.Initialize(); // ログの初期化
+	logManager.Initialize(); // ログの初期化
 
-
-
-	// ログのディレクトリを用意
-	std::filesystem::create_directory("logs");
-	// 現在時刻を取得（UTC時刻）
-	std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-	// ログファイルの名前にコンマ何秒はいらないので、削って秒にする
-	std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>
-		nowSeconds = std::chrono::time_point_cast< std::chrono::seconds >( now );
-	// 日本時間（PCの設定時間）に変換
-	std::chrono::zoned_time localTime(std::chrono::current_zone(), nowSeconds);
-	// formatを使って年月日_時分秒の文字列に変換
-	std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
-	//時刻を使ってファイル名を決定
-	std::string logFilePath = std::string("logs/") + dateString + ".log";
-	// ファイルを作って書き込み準備
-	std::ofstream logStream(logFilePath);
 
 #pragma endregion
 
@@ -832,7 +813,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		// ソフトウェアアダプタでなければ採用！
 		if ( !( adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE ) ) {
 			// 採用したアダプタの情報をログに出力。wstringの方なので注意
-			logmanager.Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
+			logManager.Log(logManager.ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
 			break;
 		}
 		useAdapter = nullptr; // ソフトウェアアダプタの場合は見なかったことにする
@@ -854,14 +835,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		// 指定した機能レベルでデバイスが生成できたかを確認
 		if ( SUCCEEDED(hr) ) {
 			// 生成できたのでログ出力を行ってループを抜ける
-			Log(logStream, std::format("FeatrueLevel : {}\n", featureLevelStrings[i]));
+			logManager.Log(std::format("FeatrueLevel : {}\n", featureLevelStrings[i]));
 			break;
 		}
 
 	}
 	// デバイスの生成がうまくいかなかったので起動できない
 	assert(device != nullptr);
-	Log(logStream, ConvertString(L"Complete create D3D12Device!!!\n"));// 初期化完了のログを出す
+	logManager.Log(logManager.ConvertString(L"Complete create D3D12Device!!!\n"));// 初期化完了のログを出す
 
 #pragma endregion
 
@@ -1133,7 +1114,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	hr = D3D12SerializeRootSignature(&descriptionRootSignature,
 		D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
 	if ( FAILED(hr) ) {
-		Log(logStream, reinterpret_cast< char* >( errorBlob->GetBufferPointer() ));
+		logManager.Log(reinterpret_cast< char* >( errorBlob->GetBufferPointer() ));
 		assert(false);
 
 	}
@@ -1178,11 +1159,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	// Shaderをコンパイルする
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = CompileShader(L"Object3D.VS.hlsl",
-		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler, logStream);
+		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
 	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob = CompileShader(L"Object3D.PS.hlsl",
-		L"ps_6_0", dxcUtils, dxcCompiler, includeHandler, logStream);
+		L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
 
 	// PSOを生成する
@@ -1700,7 +1681,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			if ( !isSpacePressed && ( keys[DIK_SPACE] & 0x80 ) ) {
 				isSpacePressed = true;
 				SoundPlayWave(xAudio2.Get(), soundData1);
-				Log(logStream, "Space key pressed");
+				logManager.Log("Space key pressed");
 			}
 			// 離した瞬間にフラグを戻す
 			if ( isSpacePressed && !( keys[DIK_SPACE] & 0x80 ) ) {
@@ -1975,13 +1956,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	CloseWindow(windowProc.GetHwnd());
 
+	//出力ウィンドウへの文字出力
+	logManager.Log("HelloWored\n");
+	logManager.Log(logManager.ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
+
+	logManager.Finalize();
 
 #pragma endregion
 
 
-	//出力ウィンドウへの文字出力
-	Log(logStream, "HelloWored\n");
-	Log(logStream, ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
+	
 
 	// COMの終了処理
 	CoUninitialize();

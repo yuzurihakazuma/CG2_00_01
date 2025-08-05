@@ -14,11 +14,13 @@ namespace logs{
 
 		std::wstring ConvertString(const std::string& str);
 
+
 		std::string ConvertString(const std::wstring& str);
 
-	
+		void Finalize();
 
-		void Log(std::ostream& os, const std::string& message);
+		void Log(const std::string& message);
+		void Log(const std::wstring& message);
 
 		void Initialize();
 
@@ -29,7 +31,7 @@ namespace logs{
 		}
 
 	private:
-		std::ofstream logStream; // ログファイルのストリーム
+		std::ofstream logStream_; // ログファイルのストリーム
 
 	};
 
