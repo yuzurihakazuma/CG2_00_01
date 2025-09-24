@@ -41,6 +41,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "WindowProc.h"
 #include "LogManager.h"
 #include "CrashDumper.h"
+#include "ShaderCompiler.h"
 using namespace logs;
 using namespace MatrixMath;
 
@@ -141,152 +142,10 @@ Transform transformSprite { {1.0f,1.0f,1.0f,},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} 
 Transform uvTransformSprite { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 
-#pragma region Creash関数
-//static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception){
-//	// 時刻を取得して、時刻を名前に手に入れたファイルを作成。Dumpsディレクトリを以下に出力
-//	SYSTEMTIME time;
-//	GetLocalTime(&time);
-//	wchar_t filePath[MAX_PATH] = { 0 };
-//	CreateDirectory(L"./Dumps", nullptr);
-//	StringCchPrintfW(filePath, MAX_PATH, L"./Dumps/%04d-%02d%02d-%02d%02d.dmp", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute);
-//	HANDLE dumpFileHandle = CreateFile(filePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_WRITE | FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
-//	// processId(このexeのId)とクラッシュ(例外)の発生したthreadIdを取得
-//	DWORD processId = GetCurrentProcessId();
-//	DWORD threadId = GetCurrentThreadId();
-//	// 設定情報を入力
-//	MINIDUMP_EXCEPTION_INFORMATION minidumpInformation { 0 };
-//	minidumpInformation.ThreadId = threadId;
-//	minidumpInformation.ExceptionPointers = exception;
-//	minidumpInformation.ClientPointers = TRUE;
-//	// Dumpを出力。MiniDumpNormalは最低限の情報を出力するフラグ
-//	MiniDumpWriteDump(GetCurrentProcess(), processId, dumpFileHandle, MiniDumpNormal, &minidumpInformation, nullptr, nullptr);
-//	// 他に関連づけられているSEH例外ハンドラがあれば実行。通常はプロセスを終了する
-//	return EXCEPTION_EXECUTE_HANDLER;
-//}
-
-#pragma endregion
-
-#pragma region log関数
+LogManager logManager;// ログマネージャーのインスタンス
 
 
 
-LogManager logManager;
-
-
-
-
-//// log系
-//std::wstring ConvertString(const std::string& str){
-//	if ( str.empty() ) {
-//		return std::wstring();
-//	}
-//
-//	auto sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), NULL, 0);
-//	if ( sizeNeeded == 0 ) {
-//		return std::wstring();
-//	}
-//	std::wstring result(sizeNeeded, 0);
-//	MultiByteToWideChar(CP_UTF8, 0, reinterpret_cast< const char* >( &str[0] ), static_cast< int >( str.size() ), &result[0], sizeNeeded);
-//	return result;
-//}
-//
-//std::string ConvertString(const std::wstring& str){
-//	if ( str.empty() ) {
-//		return std::string();
-//	}
-//
-//	auto sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), NULL, 0, NULL, NULL);
-//	if ( sizeNeeded == 0 ) {
-//		return std::string();
-//	}
-//	std::string result(sizeNeeded, 0);
-//	WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast< int >( str.size() ), result.data(), sizeNeeded, NULL, NULL);
-//	return result;
-//}
-//
-//
-//
-//
-//// ログファイルを書き出す
-//void Log(std::ostream& os, const std::string& message){
-//	os << message << std::endl;
-//	OutputDebugStringA(message.c_str());
-//}
-
-#pragma endregion
-
-#pragma region CompileShader関数
-
-Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
-	// CompilerするShaderファイルへのパス
-	const std::wstring& filePath,
-	// Compilerに仕様するProfile
-	const wchar_t* profile,
-	// 初期化で生成したものを4つ
-	const Microsoft::WRL::ComPtr<IDxcUtils>& dxcUtils,
-	const Microsoft::WRL::ComPtr<IDxcCompiler3>& dxcCompiler,
-	const Microsoft::WRL::ComPtr<IDxcIncludeHandler>& includeHandler){
-
-	// 1.hlslファイルを読み込む
-
-	// これからシェーダーをコンパイルする旨をログに出す
-	logManager.Log(logManager.ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
-	// hislファイルを読む
-	Microsoft::WRL::ComPtr<IDxcBlobEncoding> shaderSource = nullptr;
-	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
-	// 読めなかったら止める
-	assert(SUCCEEDED(hr));
-	// 読み込んだファイルの内容を設定する
-	DxcBuffer shaderSourceBuffer;
-	shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
-	shaderSourceBuffer.Size = shaderSource->GetBufferSize();
-	shaderSourceBuffer.Encoding = DXC_CP_UTF8; // UTF8の文字コードであることを通知
-
-	// 2.Compileする
-	LPCWSTR arguments[] = {
-		filePath.c_str(), // コンバイル対象のhlslファイル名
-		L"-E",L"main",    // エントリーポイントの指定。　基本的にmain以外にはしない
-		L"-T",profile,    // ShaderProfileの設定
-		L"-Zi",L"-Qembed_debug", // デバック用の情報を埋め込む
-		L"-Od",           // 最適化を外しとく
-		L"-Zpr"           // メモリレイアウトは行優先
-	};
-	// 実際にshaderをコンバイルする
-	Microsoft::WRL::ComPtr<IDxcResult> shaderResult = nullptr;
-	hr = dxcCompiler->Compile(
-		&shaderSourceBuffer, // 読み込んだファイル
-		arguments,           // コンバイルオプション
-		_countof(arguments), // コンバイルオプションの数
-		includeHandler.Get(),      // includeが含んだ諸々
-		IID_PPV_ARGS(&shaderResult) //コンバイル結果
-	);
-	// コンバイルエラーではなくdxcが起動できないなど致命的な状況
-	assert(SUCCEEDED(hr));
-
-	// 3. 警告・エラーが出てないか確認する
-
-	// 警告・エラーがでていたらログに出して止める
-	Microsoft::WRL::ComPtr<IDxcBlobUtf8> shaderError = nullptr;
-	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
-	if ( shaderError != nullptr && shaderError->GetStringLength() != 0 ) {
-		logManager.Log(shaderError->GetStringPointer());
-		// 警告・エラーダメゼッタイ
-		assert(false);
-	}
-
-	// 4.Compile結果を受け取って返す
-
-	// コンバイル結果から実行用のパイナリ部分を取得
-	Microsoft::WRL::ComPtr<IDxcBlob> shaderBlob = nullptr;
-	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
-	assert(SUCCEEDED(hr));
-	// 成功したログを出す
-	logManager.Log(logManager.ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}\n", filePath, profile)));
-	// 実行用のパイナリを返却
-	return shaderBlob;
-}
-
-#pragma endregion
 
 #pragma region Resource関数
 
@@ -709,28 +568,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	Microsoft::WRL::ComPtr<ID3D12Device> device;
 	// リソースチェック
 	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
-
-
-
-	
-	
-	//SetUnhandledExceptionFilter(ExportDump);
-
-
-
-
-
-
-
-#pragma region log
-
-
-	
 	
 	logManager.Initialize(); // ログの初期化
 
-
-#pragma endregion
 
 	// ウィンドウのタイトル
 	WindowProc windowProc;
@@ -778,8 +618,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	// デバックカメラ
 	debugCamera.Initialize();
-
-
+	
+	// ShaderCompilerのインスタンス
+	ShaderCompiler shaderCompiler;
+	shaderCompiler.Initialize(); // いまは何もしない（将来の拡張用）
 	
 
 
@@ -1164,12 +1006,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
 	// Shaderをコンパイルする
-	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = CompileShader(L"Object3D.VS.hlsl",
-		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
+	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob =
+		shaderCompiler.CompileShader(L"Object3D.VS.hlsl", L"vs_6_0",
+			dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
-	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob = CompileShader(L"Object3D.PS.hlsl",
-		L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
+	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob =
+		shaderCompiler.CompileShader(L"Object3D.PS.hlsl", L"ps_6_0",
+			dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
 
 	// PSOを生成する

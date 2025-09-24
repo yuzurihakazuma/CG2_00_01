@@ -104,6 +104,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="LogManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Matrix4x4.cpp" />
+    <ClCompile Include="ShaderCompiler.cpp" />
     <ClCompile Include="WindowProc.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -134,6 +135,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="ImGuiManager.h" />
     <ClInclude Include="LogManager.h" />
     <ClInclude Include="Matrix4x4.h" />
+    <ClInclude Include="ShaderCompiler.h" />
     <ClInclude Include="struct.h" />
     <ClInclude Include="WindowProc.h" />
   </ItemGroup>
