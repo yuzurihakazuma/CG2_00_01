@@ -606,10 +606,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	assert(SUCCEEDED(inputKey));
 	// 押されたかどうかを格納する配列
 	bool isSpacePressed = false;
-	// // 全キーの入力状態を取得する
-	BYTE keys[256] = {};
-	BYTE preKeys[256] = {};
-
+	
 #pragma endregion
 
 
