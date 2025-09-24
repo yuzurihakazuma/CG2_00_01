@@ -638,6 +638,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	}
 #endif // _DEBUG
 
+
 #pragma region DirectX12を初期化しよう
 
 
