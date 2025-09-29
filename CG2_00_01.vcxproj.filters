@@ -21,7 +21,7 @@
     <ClCompile Include="engine\base\main.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="engine\base\Matrix4x4.cpp">
+    <ClCompile Include="engine\math\Matrix4x4.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="externals\imgui\imgui.cpp">
@@ -48,19 +48,19 @@
     <ClCompile Include="engine\3d\DebugCamera.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="WindowProc.cpp">
+    <ClCompile Include="engine\base\WindowProc.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="ImGuiManager.cpp">
+    <ClCompile Include="engine\io\ImGuiManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="LogManager.cpp">
+    <ClCompile Include="engine\base\LogManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="CrashDumper.cpp">
+    <ClCompile Include="engine\base\CrashDumper.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="ShaderCompiler.cpp">
+    <ClCompile Include="engine\base\ShaderCompiler.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
@@ -69,7 +69,7 @@
     <FxCompile Include="Object3d.VS.hlsl" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="engine\base\Matrix4x4.h">
+    <ClInclude Include="engine\math\Matrix4x4.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="externals\imgui\imgui.h">
@@ -102,19 +102,19 @@
     <ClInclude Include="engine\base\struct.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="WindowProc.h">
+    <ClInclude Include="engine\base\WindowProc.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="ImGuiManager.h">
+    <ClInclude Include="engine\io\ImGuiManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="LogManager.h">
+    <ClInclude Include="engine\base\LogManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="CrashDumper.h">
+    <ClInclude Include="engine\base\CrashDumper.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="ShaderCompiler.h">
+    <ClInclude Include="engine\base\ShaderCompiler.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
