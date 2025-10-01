@@ -1008,12 +1008,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	// Shaderをコンパイルする
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob =
-		shaderCompiler.CompileShader(L"Object3D.VS.hlsl", L"vs_6_0",
+		shaderCompiler.CompileShader(L"resources/shaders/Object3D.VS.hlsl", L"vs_6_0",
 			dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
 	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob =
-		shaderCompiler.CompileShader(L"Object3D.PS.hlsl", L"ps_6_0",
+		shaderCompiler.CompileShader(L"resources/shaders/Object3D.PS.hlsl", L"ps_6_0",
 			dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
 
@@ -1142,7 +1142,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	//vertexDataSprite[5].normal = { 0.0f,0.0f,0.0f };
 
 
-
+	
 
 #pragma endregion
 
