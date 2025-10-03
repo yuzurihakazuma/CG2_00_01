@@ -1546,8 +1546,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
-	// パーティクルの数を定義
+	
+#pragma region Particles
 
+	// パーティクルの数を定義
+	const uint32_t kNumParticles = 10;
+	// 各パーティクルのTransformを格納する配列
+	std::vector<Transform> particleTransforms(kNumParticles);
+
+	
+
+#pragma endregion
 
 
 
@@ -1598,7 +1607,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-			// キーボード情報の取得開始
+		// キーボード情報の取得開始
 
 
 		if ( keyboard ) {
@@ -1627,8 +1636,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-
+		//-------------------------------
 		// ゲームの処理
+		//-------------------------------
 
 
 
@@ -1654,8 +1664,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-
+		//-------------------------------
 		// 球描画
+		//------------------------------- 
+		
+
 		//transform.rotate.y += 0.03f;
 		Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 		Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
@@ -1666,8 +1679,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		transformationMatrixData->World = worldMatrix;
 		transformationMatrixData->WVP = worldViewProjectionMatrix;
 
-
+		//-------------------------------
 		// Sprite
+		//-------------------------------
 		Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 		Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
 		Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
@@ -1677,7 +1691,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
 
 
-
+		//-------------------------------
+		//ImGui
+		//-------------------------------
 		ImGui::Begin("Settings");
 
 		ImGui::ColorEdit4("Color", &materialData->color.x);
@@ -1796,13 +1812,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 		commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
 
+
 		// インデックス数分描画
 		commandList->DrawIndexedInstanced(UINT(modelData.indices.size()), 1, 0, 0, 0);
 
 		
 
-
+		//-------------------------------
 		//// Sphereの描画
+		//-------------------------------
+		
 		//// 形状の種類を設定（ここでは三角形リスト）
 		//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
