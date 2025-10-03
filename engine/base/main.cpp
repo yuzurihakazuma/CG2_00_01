@@ -1016,7 +1016,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	blendDesc.RenderTarget[0].RenderTargetWriteMask =
 		D3D12_COLOR_WRITE_ENABLE_ALL;
 
-	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL; 
 	blendDesc.RenderTarget[0].BlendEnable = TRUE;
 	// NormalBlend 通常ブレンド
 	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
