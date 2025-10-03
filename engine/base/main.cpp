@@ -841,9 +841,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// モンスターボールか否かをするために宣言
 	bool useMonsterBall = true;
 
+	// 3枚目のTexTureを読んで転送する
+	DirectX::ScratchImage mipImages3 = LoadTexture("resources/fence.png");
+	const DirectX::TexMetadata& metadata3 = mipImages3.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textrueResource3 = CreateTextureResource(device, metadata3);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource3 = UploadTextureData(textrueResource3, mipImages3, device, commandList);
+
+	bool useFence = true;
+
 	// DepthStencilTextureをウィンドウのサイズで作成
 	Microsoft::WRL::ComPtr<ID3D12Resource> deptStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
 
+
+	//---------------------
+	// uvChecker用SRV
+	//---------------------
+	
 	// metaDataを基にSRVの設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc {};
 	srvDesc.Format = metadata.format;
@@ -851,6 +864,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ	
 	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
 
+
+	// SRVを作成するDescriptorHeapの場所を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 1);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 1);
+	// SRVの生成
+	device->CreateShaderResourceView(textrueResource.Get(), &srvDesc, textureSrvHandleCPU);
+	
+	//---------------------
+	// monsterBall用SRV2
+	//---------------------
+	
 	// metaDataを基にSRV2の設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2 {};
 	srvDesc2.Format = metadata2.format;
@@ -858,18 +882,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ	
 	srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
 
-	// SRVを作成するDescriptorHeapの場所を決める
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 1);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 1);
-	// SRVの生成
-	device->CreateShaderResourceView(textrueResource.Get(), &srvDesc, textureSrvHandleCPU);
-
 	// SRV2を作成するDescriptorHeapの場所を決める
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 2);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 2);
 
 	// SRV2の生成
 	device->CreateShaderResourceView(textrueResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
+
+	//---------------------
+	// fence用SRV3
+	//---------------------
+
+	// metaDataを基にSRV3の設定
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc3 {};
+	srvDesc3.Format = metadata3.format;
+	srvDesc3.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc3.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ	
+	srvDesc3.Texture2D.MipLevels = UINT(metadata3.mipLevels);
+
+	// SRV3を作成するDescriptorHeapの場所を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU3 = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 3);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 3);
+
+	// SRV3の生成
+	device->CreateShaderResourceView(textrueResource3.Get(), &srvDesc3, textureSrvHandleCPU3);
+
 
 
 
@@ -1344,7 +1381,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region ModelDataを使った実装
 
 	// モデルを読み込む
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "fence.obj");
 	// 1. すべての頂点の合計を求める
 	Vector3 center = { 0.0f, 0.0f, 0.0f };
 	for ( const auto& v : modelData.vertices ) {
@@ -1647,7 +1684,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		ImGui::SliderAngle("RotateXSprite", &transform.rotate.x, -500, 500);
 		ImGui::SliderAngle("RotateYSprite", &transform.rotate.y, -500, 500);
 		ImGui::SliderAngle("RotateZSprite", &transform.rotate.z, -500, 500);
-		ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+		
+		if ( ImGui::Checkbox("useMonsterBall", &useMonsterBall)){
+			//useMonsterBallがtrueになったら、useFenseをfalseにする
+			if ( useMonsterBall )			{
+				useFence = false;
+			}
+
+		}
+		if ( ImGui::Checkbox("fence", &useFence)){
+			//useMonsterBallがtrueになったら、useFenseをfalseにする
+			if ( useFence )			{
+				useMonsterBall = false;
+			}
+
+		}
+
+
+		/*ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+		ImGui::Checkbox("fence", &useFence);
+		*/
+		
 		ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
 		ImGui::SliderFloat("LightX", &directionalLightData->direction.x, -10.0f, 10.0f);
 		ImGui::SliderFloat("LightY", &directionalLightData->direction.y, -10.0f, 10.0f);
@@ -1713,7 +1770,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		// ルート定数バッファなどはそのまま
 		commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 		commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
-		commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU : textureSrvHandleGPU2);
+		
+		
+		// 表示するテクスチャのハンドルを一時的に保持する変数
+		D3D12_GPU_DESCRIPTOR_HANDLE selectedTextureHandle;
+
+		if ( useFence ) {
+			// fenceのチェックボックスがONなら、3番目のテクスチャ
+			selectedTextureHandle = textureSrvHandleGPU3;
+		} else if ( useMonsterBall ) {
+			// monsterBallのチェックボックスがONなら、2番目のテクスチャ
+			selectedTextureHandle = textureSrvHandleGPU2;
+		} else {
+			// どちらもOFFなら、デフォルトの1番目のテクスチャ(uvChecker)
+			selectedTextureHandle = textureSrvHandleGPU;
+		}
+
+		// 選択されたテクスチャをセット
+		commandList->SetGraphicsRootDescriptorTable(2, selectedTextureHandle);
+
+
+
 		commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
 
 		// インデックス数分描画
