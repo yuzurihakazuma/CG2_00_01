@@ -1381,7 +1381,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region ModelDataを使った実装
 
 	// モデルを読み込む
-	ModelData modelData = LoadObjFile("resources", "fence.obj");
+	ModelData modelData = LoadObjFile("resources", "plane.obj");
 	// 1. すべての頂点の合計を求める
 	Vector3 center = { 0.0f, 0.0f, 0.0f };
 	for ( const auto& v : modelData.vertices ) {
@@ -1546,6 +1546,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
+	// パーティクルの数を定義
+
+
+
+
 #pragma region サウンド
 
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
@@ -1699,8 +1704,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			}
 
 		}
-
-
 		/*ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 		ImGui::Checkbox("fence", &useFence);
 		*/
@@ -1789,13 +1792,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		// 選択されたテクスチャをセット
 		commandList->SetGraphicsRootDescriptorTable(2, selectedTextureHandle);
 
-
+		
 
 		commandList->SetGraphicsRootConstantBufferView(3, directionalResourceLight->GetGPUVirtualAddress());
 
 		// インデックス数分描画
 		commandList->DrawIndexedInstanced(UINT(modelData.indices.size()), 1, 0, 0, 0);
 
+		
 
 
 		//// Sphereの描画
