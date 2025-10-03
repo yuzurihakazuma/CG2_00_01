@@ -45,8 +45,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 using namespace logs;
 using namespace MatrixMath;
 
-//インスタンスの定義
-DebugCamera debugCamera;
 
 
 
@@ -616,8 +614,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-	// デバックカメラ
-	debugCamera.Initialize();
 	
 	// ShaderCompilerのインスタンス
 	ShaderCompiler shaderCompiler;
@@ -1505,9 +1501,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #pragma region 入力・更新
 
 
-			// デバッグカメラの更新
-			debugCamera.Update();
-
 
 
 #pragma endregion
@@ -1577,7 +1570,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			//transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
-			Matrix4x4 viewMatrix = debugCamera.IsActive() ? debugCamera.GetViewMatrix() : Inverse(cameraMatrix); // ← 通常カメラの行列
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix); // ← 通常カメラの行列
 
 			Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
