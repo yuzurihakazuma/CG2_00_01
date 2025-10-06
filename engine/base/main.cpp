@@ -1805,6 +1805,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 			selectedTextureHandle = textureSrvHandleGPU;
 		}
 
+
 		// 選択されたテクスチャをセット
 		commandList->SetGraphicsRootDescriptorTable(2, selectedTextureHandle);
 
