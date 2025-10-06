@@ -5,10 +5,6 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="ヘッダー ファイル">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="リソース ファイル">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
@@ -37,25 +33,32 @@
     <Filter Include="ソース ファイル\scene">
       <UniqueIdentifier>{044f5b13-3ca7-44c2-8ead-4a9cb6d61ef0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\2d">
+    <Filter Include="シェーダーファイル">
+      <UniqueIdentifier>{3ab81b6d-4563-4a8e-bd90-e2aad10ce1a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\ヘッダー ファイル">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="ソース ファイル\ヘッダー ファイル\2d">
       <UniqueIdentifier>{6f7b86ac-6501-4093-94b3-68c7b3f7e8ed}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\3d">
+    <Filter Include="ソース ファイル\ヘッダー ファイル\3d">
       <UniqueIdentifier>{a6da21fa-1625-4544-8501-29f1cfaa3798}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\audio">
+    <Filter Include="ソース ファイル\ヘッダー ファイル\audio">
       <UniqueIdentifier>{b970f579-51f5-4fd8-853b-d4c72460332f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\base">
+    <Filter Include="ソース ファイル\ヘッダー ファイル\base">
       <UniqueIdentifier>{f97595b0-fd56-4615-a26d-6d5f6968c070}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\input/output">
+    <Filter Include="ソース ファイル\ヘッダー ファイル\input/output">
       <UniqueIdentifier>{3b8ddc80-10f2-4217-81dc-34c253521a38}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\math">
+    <Filter Include="ソース ファイル\ヘッダー ファイル\math">
       <UniqueIdentifier>{677d4acc-07f0-4a09-bb7f-4957e55b0d85}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\scene">
+    <Filter Include="ソース ファイル\ヘッダー ファイル\scene">
       <UniqueIdentifier>{87075e1e-8e9e-42bf-8920-a451b77b0a3e}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -107,8 +110,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="resources\shaders\Object3d.PS.hlsl" />
-    <FxCompile Include="resources\shaders\Object3d.VS.hlsl" />
+    <FxCompile Include="resources\shaders\Object3d.PS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
+    <FxCompile Include="resources\shaders\Object3d.VS.hlsl">
+      <Filter>シェーダーファイル</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\imgui\imgui.h">
@@ -136,28 +143,28 @@
       <Filter>imgui</Filter>
     </ClInclude>
     <ClInclude Include="engine\base\CrashDumper.h">
-      <Filter>ヘッダー ファイル\base</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\base</Filter>
     </ClInclude>
     <ClInclude Include="engine\3d\DebugCamera.h">
-      <Filter>ヘッダー ファイル\3d</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\3d</Filter>
     </ClInclude>
     <ClInclude Include="engine\io\ImGuiManager.h">
-      <Filter>ヘッダー ファイル\base</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\base</Filter>
     </ClInclude>
     <ClInclude Include="engine\base\LogManager.h">
-      <Filter>ヘッダー ファイル\base</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\base</Filter>
     </ClInclude>
     <ClInclude Include="engine\math\Matrix4x4.h">
-      <Filter>ヘッダー ファイル\math</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\math</Filter>
     </ClInclude>
     <ClInclude Include="engine\base\ShaderCompiler.h">
-      <Filter>ヘッダー ファイル\base</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\base</Filter>
     </ClInclude>
     <ClInclude Include="engine\base\struct.h">
-      <Filter>ヘッダー ファイル\math</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\math</Filter>
     </ClInclude>
     <ClInclude Include="engine\base\WindowProc.h">
-      <Filter>ヘッダー ファイル\base</Filter>
+      <Filter>ソース ファイル\ヘッダー ファイル\base</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -167,6 +174,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj" />
-    <None Include="resources\shaders\Object3d.hlsli" />
+    <None Include="resources\shaders\Object3d.hlsli">
+      <Filter>シェーダーファイル</Filter>
+    </None>
   </ItemGroup>
 </Project>
