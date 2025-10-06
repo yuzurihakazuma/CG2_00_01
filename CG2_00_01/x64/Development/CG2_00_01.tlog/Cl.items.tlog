@@ -1,0 +1,15 @@
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\base\CrashDumper.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\CrashDumper.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\3d\DebugCamera.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\DebugCamera.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\base\main.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\main.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui_demo.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui_demo.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui_draw.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui_draw.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui_impl_dx12.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui_impl_dx12.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui_impl_win32.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui_impl_win32.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui_tables.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui_tables.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\externals\imgui\imgui_widgets.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\imgui_widgets.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\io\ImGuiManager.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\ImGuiManager.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\base\LogManager.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\LogManager.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\math\Matrix4x4.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\Matrix4x4.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\base\ShaderCompiler.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\ShaderCompiler.obj
+C:\Users\k024g\Downloads\CG2\CG2_00_01\engine\base\WindowProc.cpp;C:\Users\k024g\Downloads\CG2\CG2_00_01\CG2_00_01\x64\Development\WindowProc.obj

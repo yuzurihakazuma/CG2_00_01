@@ -1,0 +1,10 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatrueLevel : 12.2
+
+Complete create D3D12Device!!!
+
+Begin CompileShader,path:Object3D.VS.hlsl,profile:vs_6_0
+
+Compile Succeeded,path:Object3D.VS.hlsl,profile:vs_6_0
+
