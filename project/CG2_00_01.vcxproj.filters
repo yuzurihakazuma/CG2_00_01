@@ -116,6 +116,8 @@
     <FxCompile Include="resources\shaders\Object3d.VS.hlsl">
       <Filter>シェーダーファイル</Filter>
     </FxCompile>
+    <FxCompile Include="resources\shaders\Particle.PS.hlsl" />
+    <FxCompile Include="resources\shaders\Particle.VS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\imgui\imgui.h">
@@ -177,5 +179,6 @@
     <None Include="resources\shaders\Object3d.hlsli">
       <Filter>シェーダーファイル</Filter>
     </None>
+    <None Include="resources\shaders\Particle.hlsli" />
   </ItemGroup>
 </Project>
