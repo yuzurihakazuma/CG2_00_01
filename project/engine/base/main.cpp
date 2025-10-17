@@ -747,6 +747,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 #endif // _DEBUG
 
 
+#pragma region Particles
+
+	// パーティクルの数を定義
+	const uint32_t kNumInstance = 10;
+	// Instancing用のTransformationMatrixリソースを作る
+	Microsoft::WRL::ComPtr<ID3D12Resource> instancingRessource = CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
+	// 書き込むためのアドレスを取得
+	TransformationMatrix* instancingData = nullptr;
+	instancingRessource->Map(0, nullptr, reinterpret_cast< void** >( &instancingData ));
+	// 単位行列を書き込んでおく
+	for ( uint32_t index = 0; index < kNumInstance; index++ ){
+		instancingData[index].WVP = MakeIdentity4x4();
+		instancingData[index].World = MakeIdentity4x4();
+
+	}
+
+#pragma endregion
+
+
 #pragma region CommandList
 
 	// コマンドキューを生成する
@@ -911,6 +930,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// SRV3の生成
 	device->CreateShaderResourceView(textrueResource3.Get(), &srvDesc3, textureSrvHandleCPU3);
 
+	//---------------------
+	// instancingSrvDesc
+	//---------------------
+
+
+	// metaDataを基にSRV3の設定
+	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
+	instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	instancingSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	instancingSrvDesc.Buffer.FirstElement = 0;
+	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+	instancingSrvDesc.Buffer.NumElements = kNumInstance;
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 4);
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 4);
+	device->CreateShaderResourceView(instancingRessource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
 
 
 
@@ -965,6 +1001,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
+
+
 #pragma region PSO
 
 	// RootSignature作成
@@ -979,6 +1017,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使う
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // offsetを自動計算
 
+	// Particle用
+	D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
+
+	descriptorRangeForInstancing[0].BaseShaderRegister = 0; //0から始める
+	descriptorRangeForInstancing[0].NumDescriptors = 1; // 数は1つ
+	descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使う
+	descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // offsetを自動計算
+
 
 
 	// PootParameter作成。複数設定できるので配列。
@@ -986,9 +1032,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // CBVを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; //PixelShaderで使う 
 	rootParameters[0].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
-	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // CBVを使う
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; 
 	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; //VertexShaderで使う 
 	rootParameters[1].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
+	rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing; // Tableの中身の配列を指定
+	rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing); // Tableで利用する敵
+	
 	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; //DescriptorTableを使う
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // PixelShaderで使う
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; // Tableの中身の配列を指定
@@ -1550,17 +1599,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
-	
-#pragma region Particles
+#pragma region InstancingTransform
 
-	// パーティクルの数を定義
-	const uint32_t kNumParticles = 10;
-	// 各パーティクルのTransformを格納する配列
-	std::vector<Transform> particleTransforms(kNumParticles);
-
-	
+	Transform transforms[kNumInstance];
+	for ( uint32_t  index = 0; index < kNumInstance; ++index ){
+		transforms[index].scale = { 1.0f,1.0f,1.0f };
+		transforms[index].rotate = { 0.0f,0.0f,0.0f };
+		transforms[index].translate = { index*0.1f,index+0.1f,index*0.1f };
+	}
 
 #pragma endregion
+
+
 
 
 
@@ -1673,15 +1723,32 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		//------------------------------- 
 		
 
-		//transform.rotate.y += 0.03f;
+
+		//-------------------------------
+		// saaaaaaaaaaaaaaaaaaaaaaa
+		//------------------------------- 
+
+
+
+
 		Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 		Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix); // ← 通常カメラの行列
 
 		Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+
+		for ( uint32_t index = 0; index < kNumInstance; ++index ){
+		Matrix4x4 worldMatrix = MakeAffine(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
 		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-		transformationMatrixData->World = worldMatrix;
-		transformationMatrixData->WVP = worldViewProjectionMatrix;
+		instancingData[index].WVP = worldViewProjectionMatrix;
+		instancingData[index].World = worldMatrix;
+
+		}
+
+	
+		//Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+		//transformationMatrixData->World = worldMatrix;
+		//transformationMatrixData->WVP = worldViewProjectionMatrix;
 
 		//-------------------------------
 		// Sprite
@@ -1695,6 +1762,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		transformationMatirxDataSprite->WVP = worldViewProjectionMatrixSprite;
 
 
+		
 		//-------------------------------
 		//ImGui
 		//-------------------------------
@@ -1819,7 +1887,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 		// インデックス数分描画
-		commandList->DrawIndexedInstanced(UINT(modelData.indices.size()), 1, 0, 0, 0);
+		commandList->DrawIndexedInstanced(UINT(modelData.indices.size()), kNumInstance, 0, 0, 0);
 
 		
 

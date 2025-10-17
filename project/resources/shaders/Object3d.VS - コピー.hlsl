@@ -14,7 +14,7 @@ struct VertexShaderInput
 {
     float32_t4 position : POSITION0;
     float32_t2 texcoord : TEXCOORD0;
-    float32_t3 normal   : NORMAL0;
+    float32_t3 normal : NORMAL0;
 };
 
 // 頂点シェーダー本体
@@ -31,7 +31,7 @@ VertexShaderOutput main(VertexShaderInput input, uint instanceId : SV_InstanceID
     output.texcoord = input.texcoord;
 
     // 法線はWorldの3x3で変換（非一様スケールなら本来は逆転置）
-    float32_t3x3 world3x3 = (float32_t3x3)tm.World;
+    float32_t3x3 world3x3 = (float32_t3x3) tm.World;
     output.normal = normalize(mul(input.normal, world3x3));
 
     return output;
