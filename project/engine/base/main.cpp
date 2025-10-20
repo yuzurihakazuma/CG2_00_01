@@ -421,7 +421,8 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 			Vector4 position; // 位置を格納する変数
 			s >> position.x >> position.y >> position.z; // 位置を読み込む
 			// DirectX座標系に合わせて反転
-			position.x *= -1.0f;
+			//position.x *= -1.0f;
+			position.x *= 1.0f;
 			position.w = 1.0f;
 			positions.push_back(position); // 位置を格納する
 		} else if ( identifier == "vt" ) {
@@ -433,7 +434,8 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		} else if ( identifier == "vn" ) {
 			Vector3 normal; // 法線を格納する変数
 			s >> normal.x >> normal.y >> normal.z; // 法線を読み込む
-			normal.x *= -1.0f;
+			normal.x *= 1.0f;
+			//normal.x *= -1.0f;
 			normals.push_back(normal); // 法線を格納する
 		} else if ( identifier == "f" ) {
 			VertexData triangle[3]; // 三角形の頂点データを格納する配列
@@ -1605,7 +1607,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	for ( uint32_t  index = 0; index < kNumInstance; ++index ){
 		transforms[index].scale = { 1.0f,1.0f,1.0f };
 		transforms[index].rotate = { 0.0f,0.0f,0.0f };
-		transforms[index].translate = { index*0.1f,index+0.1f,index*0.1f };
+		transforms[index].translate = { index+0.1f,index+0.1f,index+0.1f };
 	}
 
 #pragma endregion
@@ -1935,7 +1937,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
 		// 行列定数バッファ
-		commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+		//commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 		// ここで更新してSpriteの画像を変えないようにする
 		commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
