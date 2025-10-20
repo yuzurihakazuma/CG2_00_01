@@ -767,7 +767,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma endregion
 
-
 #pragma region CommandList
 
 	// コマンドキューを生成する
