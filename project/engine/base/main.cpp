@@ -935,7 +935,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	//---------------------
 
 
-	// metaDataを基にSRV3の設定
+	// metaDataを基にSRV4の設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
 	instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN;
 	instancingSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -1034,7 +1034,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	rootParameters[0].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
 	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; 
 	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; //VertexShaderで使う 
-	rootParameters[1].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
+	//rootParameters[1].Descriptor.ShaderRegister = 0; //レジスタ番号0とバインド 
 	rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing; // Tableの中身の配列を指定
 	rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing); // Tableで利用する敵
 	
@@ -1149,12 +1149,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	// Shaderをコンパイルする
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob =
-		shaderCompiler.CompileShader(L"resources/shaders/Object3D.VS.hlsl", L"vs_6_0",
+		shaderCompiler.CompileShader(L"resources/shaders/Particle.VS.hlsl", L"vs_6_0",
 			dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
 	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob =
-		shaderCompiler.CompileShader(L"resources/shaders/Object3D.PS.hlsl", L"ps_6_0",
+		shaderCompiler.CompileShader(L"resources/shaders/Particle.PS.hlsl", L"ps_6_0",
 			dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
 
@@ -1860,8 +1860,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 		// ルート定数バッファなどはそのまま
 		commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
-		commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+		//commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 		
+		commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 		
 		// 表示するテクスチャのハンドルを一時的に保持する変数
 		D3D12_GPU_DESCRIPTOR_HANDLE selectedTextureHandle;
