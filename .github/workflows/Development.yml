@@ -1,0 +1,35 @@
+name: DevelopmentBuild
+on:
+  push:
+    branches:
+      - master
+env:
+  # リポジトリのルートディレクトリを基点としたソリューションファイルのパス
+  SOLUTION_FILE_PATH: project/CG2_00_01.sln
+  # Visual Studio の構成(Debug / Release/Development )
+  CONFIGURATION: Development
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      # どこにあるか分からない .sln を探索
+      - name: Locate solution
+        id: find_sln
+        shell: pwsh
+        run: |
+          $sln = Get-ChildItem -Recurse -Filter *.sln | Select-Object -First 1
+          if (-not $sln) { throw "No .sln found in repo" }
+          "SOLUTION_FILE_PATH=$($sln.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Found solution: $($sln.FullName)"
+      - name: Build
+        run: |
+          msbuild "${{ env.SOLUTION_FILE_PATH }}" /t:Build /p:Platform=x64,Configuration=${{ env.CONFIGURATION }} /m
