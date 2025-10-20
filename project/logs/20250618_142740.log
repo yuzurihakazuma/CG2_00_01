@@ -1,0 +1,20 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatrueLevel : 12.2
+
+Complete create D3D12Device!!!
+
+Begin CompileShader,path:Object3D.VS.hlsl,profile:vs_6_0
+
+Compile Succeeded,path:Object3D.VS.hlsl,profile:vs_6_0
+
+Begin CompileShader,path:Object3D.PS.hlsl,profile:ps_6_0
+
+Object3D.PS.hlsl:11:16: error: use of undeclared identifier 'DirectionalLight'
+ConstantBuffer<DirectionalLight> gDirectionalLight
+               ^
+Object3D.PS.hlsl:11:51: error: expected ';' after top level declarator
+ConstantBuffer<DirectionalLight> gDirectionalLight
+                                                  ^
+                                                  ;
+

@@ -1,0 +1,25 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatrueLevel : 12.2
+
+Complete create D3D12Device!!!
+
+Begin CompileShader,path:resources/shaders/Object3D.VS.hlsl,profile:vs_6_0
+
+resources/shaders/Object3D.VS.hlsl:7:62: error: invalid register specification, expected 'b' binding
+ConstantBuffer<TransformationMatirx> gTransformationMatrix : register(t0);
+                                                             ^
+
+Compile Succeeded,path:resources/shaders/Object3D.VS.hlsl,profile:vs_6_0
+
+Begin CompileShader,path:resources/shaders/Object3D.PS.hlsl,profile:ps_6_0
+
+resources/shaders/Object3D.PS.hlsl:54:2: error: expected '}'
+}
+ ^
+resources/shaders/Object3D.PS.hlsl:15:1: note: to match this '{'
+{
+^
+
+Compile Succeeded,path:resources/shaders/Object3D.PS.hlsl,profile:ps_6_0
+

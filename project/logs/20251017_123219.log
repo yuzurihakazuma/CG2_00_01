@@ -1,0 +1,28 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatrueLevel : 12.2
+
+Complete create D3D12Device!!!
+
+Begin CompileShader,path:resources/shaders/Particle.VS.hlsl,profile:vs_6_0
+
+resources/shaders/Particle.VS.hlsl:9:40: error: redefinition of 'gTransformationMatrices' with a different type: 'StructuredBuffer<TransformationMatirx>' vs 'const TransformationMatirx [10]'
+StructuredBuffer<TransformationMatirx> gTransformationMatrices : register(t0);
+                                       ^
+resources/shaders/Particle.VS.hlsl:7:22: note: previous definition is here
+TransformationMatirx gTransformationMatrices[10];
+                     ^
+resources/shaders/Particle.VS.hlsl:25:67: error: use of undeclared identifier 'instanceId'; did you mean 'instanceid'?
+    output.position = mul(input.position, gTransformationMatrices[instanceId].WVP);
+                                                                  ^~~~~~~~~~
+                                                                  instanceid
+resources/shaders/Particle.VS.hlsl:22:58: note: 'instanceid' declared here
+VertexShaderOutput main(VertexShaderInput input,uint32_t instanceid:SV_InstanceID)
+                                                         ^
+
+Compile Succeeded,path:resources/shaders/Particle.VS.hlsl,profile:vs_6_0
+
+Begin CompileShader,path:resources/shaders/Particle.PS.hlsl,profile:ps_6_0
+
+Compile Succeeded,path:resources/shaders/Particle.PS.hlsl,profile:ps_6_0
+

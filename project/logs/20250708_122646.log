@@ -1,0 +1,44 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatrueLevel : 12.2
+
+Complete create D3D12Device!!!
+
+Begin CompileShader,path:Object3D.VS.hlsl,profile:vs_6_0
+
+In file included from Object3D.VS.hlsl:1:
+./object3d.hlsli:13:5: error: unknown type name 'Material4x4'; did you mean 'Material'?
+    Material4x4 uvTransform;
+    ^~~~~~~~~~~
+    Material
+./object3d.hlsli:9:8: note: 'Material' declared here
+struct Material
+       ^
+./object3d.hlsli:13:17: error: field has incomplete type 'Material'
+    Material4x4 uvTransform;
+                ^
+./object3d.hlsli:9:8: note: definition of 'Material' is not complete until the closing '}'
+struct Material
+       ^
+
+Compile Succeeded,path:Object3D.VS.hlsl,profile:vs_6_0
+
+Begin CompileShader,path:Object3D.PS.hlsl,profile:ps_6_0
+
+In file included from Object3D.PS.hlsl:1:
+./object3d.hlsli:13:5: error: unknown type name 'Material4x4'; did you mean 'Material'?
+    Material4x4 uvTransform;
+    ^~~~~~~~~~~
+    Material
+./object3d.hlsli:9:8: note: 'Material' declared here
+struct Material
+       ^
+./object3d.hlsli:13:17: error: field has incomplete type 'Material'
+    Material4x4 uvTransform;
+                ^
+./object3d.hlsli:9:8: note: definition of 'Material' is not complete until the closing '}'
+struct Material
+       ^
+
+Compile Succeeded,path:Object3D.PS.hlsl,profile:ps_6_0
+
