@@ -39,6 +39,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib, "shlwapi.lib")        // Shell API に必要
 #pragma comment(lib, "windowscodecs.lib")  // WIC（テクスチャ読み込み）に必要
 
+#include <random>
+
 
 #include "DebugCamera.h"
 #include "struct.h"
@@ -71,6 +73,13 @@ struct Material{
 struct TransformationMatrix{
 	Matrix4x4 WVP;
 	Matrix4x4 World;
+};
+
+
+struct ParticleForGPU{
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	Vector4 color;
 };
 
 struct DirectionalLight{
@@ -136,6 +145,28 @@ enum BlendMods{
 };
 
 
+// Transform変数を作る
+Transform transform { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+Transform cameraTransfrom { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
+Transform transformSprite { {1.0f,1.0f,1.0f,},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+Transform uvTransformSprite { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+
+LogManager logManager;// ログマネージャーのインスタンス
+
+
+
+
+// パーティクル
+struct Particle{
+	Transform transform; // パーティクルの座標変換情報
+	Vector3 velocity; // パーティクルの速度
+	Vector4 color; // パーティクルの色
+};
+
+std::random_device seedGenerator; // 乱数の種を生成するオブジェクト
+std::mt19937 randomEngine(seedGenerator()); // メルセンヌ・ツイスタの乱数エンジン
+
+
 
 
 #pragma region リソースリークチェック
@@ -157,15 +188,6 @@ struct D3DResourceLeakChecker{
 
 
 
-
-// Transform変数を作る
-Transform transform { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-Transform cameraTransfrom { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-10.0f} };
-Transform transformSprite { {1.0f,1.0f,1.0f,},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-Transform uvTransformSprite { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-
-
-LogManager logManager;// ログマネージャーのインスタンス
 
 
 
@@ -573,6 +595,22 @@ void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData){
 
 #pragma endregion
 
+#pragma region Particle関数
+// パーティクル生成関数
+Particle MakeNewParticle(std::mt19937& randomEngine){
+std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+Particle particle;
+particle.transform.scale = { 1.0f,1.0f,1.0f };
+particle.transform.rotate = { 0.0f,0.0f,0.0f };
+particle.transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+particle.velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+particle.color = { distribution(randomEngine) , distribution(randomEngine) , distribution(randomEngine),1.0f };
+
+return particle;
+
+}
+
+#pragma endregion
 
 
 
@@ -754,15 +792,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// パーティクルの数を定義
 	const uint32_t kNumInstance = 10;
 	// Instancing用のTransformationMatrixリソースを作る
-	Microsoft::WRL::ComPtr<ID3D12Resource> instancingRessource = CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
+	Microsoft::WRL::ComPtr<ID3D12Resource> instancingRessource = CreateBufferResource(device, sizeof(ParticleForGPU) * kNumInstance);
 	// 書き込むためのアドレスを取得
-	TransformationMatrix* instancingData = nullptr;
+	ParticleForGPU* instancingData = nullptr;
 	instancingRessource->Map(0, nullptr, reinterpret_cast< void** >( &instancingData ));
+
+	Particle particles[kNumInstance];
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+
 	// 単位行列を書き込んでおく
-	for ( uint32_t index = 0; index < kNumInstance; index++ ){
+	for ( uint32_t index = 0; index < kNumInstance; ++index ){
+		particles[index] = MakeNewParticle(randomEngine);
 		instancingData[index].WVP = MakeIdentity4x4();
 		instancingData[index].World = MakeIdentity4x4();
-
+		instancingData[index].color = particles[index].color;
+		
 	}
 
 #pragma endregion
@@ -944,7 +988,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	instancingSrvDesc.Buffer.FirstElement = 0;
 	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 	instancingSrvDesc.Buffer.NumElements = kNumInstance;
-	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(ParticleForGPU);
 	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 4);
 	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 4);
 	device->CreateShaderResourceView(instancingRessource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
@@ -1561,10 +1605,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 	// WVB用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
-	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
+	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(device, sizeof(ParticleForGPU));
 
 	// データを書き込む
-	TransformationMatrix* transformationMatrixData = nullptr;
+	ParticleForGPU* transformationMatrixData = nullptr;
 
 	// 書き込むためのアドレスを取得
 	wvpResource->Map(0, nullptr, reinterpret_cast< void** >( &transformationMatrixData ));
@@ -1573,10 +1617,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	transformationMatrixData->WVP = MakeIdentity4x4();
 
 	// Sprite用のTransformationMatirx用のリソースを作る。Matrix4x4 一つ分のサイズを用意する
-	Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
+	Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(ParticleForGPU));
 
 	// データを書き込む
-	TransformationMatrix* transformationMatirxDataSprite = nullptr;
+	ParticleForGPU* transformationMatirxDataSprite = nullptr;
 	// 書き込むためのアドレスを取得
 	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast< void** >( &transformationMatirxDataSprite ));
 	// 単位行列を書き込んでおく
@@ -1602,12 +1646,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 #pragma region InstancingTransform
 
-	Transform transforms[kNumInstance];
-	for ( uint32_t  index = 0; index < kNumInstance; ++index ){
-		transforms[index].scale = { 1.0f,1.0f,1.0f };
-		transforms[index].rotate = { 0.0f,0.0f,0.0f };
-		transforms[index].translate = { index+0.1f,index+0.1f,index+0.1f };
-	}
+	
 
 #pragma endregion
 
@@ -1636,7 +1675,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 
-
+	// 60fps固定用の時間計測
+	const float kDeltaTime = 1.0f / 60.0f;
 
 
 	while ( !windowProc.IsClosed() ){
@@ -1645,8 +1685,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		windowProc.Update();
 
 
-
-
+		
 		// ImGuiの開始処理
 		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
@@ -1720,17 +1759,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 		//-------------------------------
-		// 球描画
+		// パーティクル用
 		//------------------------------- 
 		
-
-
-		//-------------------------------
-		// saaaaaaaaaaaaaaaaaaaaaaa
-		//------------------------------- 
-
-
-
+		
 
 		Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 		Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
@@ -1739,10 +1771,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 
 		for ( uint32_t index = 0; index < kNumInstance; ++index ){
-		Matrix4x4 worldMatrix = MakeAffine(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
+		Matrix4x4 worldMatrix = MakeAffine(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
 		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 		instancingData[index].WVP = worldViewProjectionMatrix;
 		instancingData[index].World = worldMatrix;
+		particles[index].transform.translate += particles[index].velocity * kDeltaTime;
 
 		}
 
@@ -1850,10 +1883,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		commandList->SetPipelineState(graphicsPinelineState.Get()); //PSOを設定
 		commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere); // VBVを設定
 
-
-
-		commandList->IASetPrimitiveTopology(
-			D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 		commandList->IASetIndexBuffer(&indexBufferView);

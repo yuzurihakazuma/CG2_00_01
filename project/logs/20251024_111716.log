@@ -1,0 +1,35 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatrueLevel : 12.2
+
+Complete create D3D12Device!!!
+
+Begin CompileShader,path:resources/shaders/Particle.VS.hlsl,profile:vs_6_0
+
+resources/shaders/Particle.VS.hlsl:36:12: error: no member named 'normal' in 'VertexShaderOutput'
+    output.normal = normalize(mul(input.normal, world3x3));
+    ~~~~~~ ^
+resources/shaders/Particle.VS.hlsl:38:12: error: no member named 'colorg' in 'VertexShaderOutput'; did you mean 'color'?
+    output.colorg = gParticle[instanceId].color;
+           ^~~~~~
+           color
+resources/shaders/Particle.hlsli:6:16: note: 'color' declared here
+    float32_t3 color : COLOR0;
+               ^
+resources/shaders/Particle.VS.hlsl:38:19: warning: implicit truncation of vector type [-Wconversion]
+    output.colorg = gParticle[instanceId].color;
+                  ^
+
+Compile Succeeded,path:resources/shaders/Particle.VS.hlsl,profile:vs_6_0
+
+Begin CompileShader,path:resources/shaders/Particle.PS.hlsl,profile:ps_6_0
+
+resources/shaders/Particle.PS.hlsl:19:36: warning: implicit truncation of vector type [-Wconversion]
+    output.color = gMaterial.color * textureColor * input.color;
+                                   ^
+resources/shaders/Particle.PS.hlsl:19:18: error: cannot convert from 'float32_t3' to 'float32_t4'
+    output.color = gMaterial.color * textureColor * input.color;
+                 ^
+
+Compile Succeeded,path:resources/shaders/Particle.PS.hlsl,profile:ps_6_0
+

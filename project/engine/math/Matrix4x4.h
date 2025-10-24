@@ -8,6 +8,35 @@ struct Sphere {
 	float radius; // 半径
 };
 
+
+// --- 複合代入（左辺を書き換えるので参照で返す） ---
+inline constexpr Vector3& operator+=(Vector3& lhs, const Vector3& rhs) noexcept{
+	lhs.x += rhs.x; lhs.y += rhs.y; lhs.z += rhs.z; return lhs;
+}
+inline constexpr Vector3& operator-=(Vector3& lhs, const Vector3& rhs) noexcept{
+	lhs.x -= rhs.x; lhs.y -= rhs.y; lhs.z -= rhs.z; return lhs;
+}
+inline constexpr Vector3& operator*=(Vector3& v, float s) noexcept{
+	v.x *= s; v.y *= s; v.z *= s; return v;
+}
+inline constexpr Vector3& operator/=(Vector3& v, float s) noexcept{
+	// 必要なら assert(s != 0.0f);
+	v.x /= s; v.y /= s; v.z /= s; return v;
+}
+
+// --- 単項マイナス ---
+inline constexpr Vector3 operator-(const Vector3& v) noexcept{
+	return { -v.x, -v.y, -v.z };
+}
+
+// --- 通常演算（値で受けて複合代入を再利用） ---
+inline constexpr Vector3 operator+(Vector3 lhs, const Vector3& rhs) noexcept{ return lhs += rhs; }
+inline constexpr Vector3 operator-(Vector3 lhs, const Vector3& rhs) noexcept{ return lhs -= rhs; }
+
+inline constexpr Vector3 operator*(Vector3 v, float s) noexcept{ return v *= s; }
+inline constexpr Vector3 operator*(float s, Vector3 v) noexcept{ return v *= s; } // 逆順も対応
+inline constexpr Vector3 operator/(Vector3 v, float s) noexcept{ return v /= s; }
+
 namespace MatrixMath {
 	// 行列の加法
 	Matrix4x4 Add(const Matrix4x4& m1, const Matrix4x4& m2);
