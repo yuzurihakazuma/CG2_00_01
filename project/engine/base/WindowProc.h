@@ -13,7 +13,7 @@ public:
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 	HWND GetHwnd() const{ return hwnd_; }
-	bool IsClosed() const{ return isClosed_; } // ← 追加
+	bool IsClosed() const{ return isClosed_; } 
 
 private:
 	

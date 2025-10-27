@@ -656,7 +656,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// ウィンドウプロシージャの初期化
 	windowProc.Initialize(wc, kClientWidth, kClientHeight);
 
-
+	// 入力クラスの初期化
 	input.Initialize();
 
 
