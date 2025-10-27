@@ -652,7 +652,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	const int kClientHeight = 720; // ウィンドウの高さ
 
 	// ウィンドウプロシージャの初期化
-	windowProc.Initialize(wc, kClientWidth, kClientHeight, windowProc.GetHwnd());
+	windowProc.Initialize(wc, kClientWidth, kClientHeight);
 
 
 #pragma region 入力デバイス
@@ -1680,14 +1680,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 #pragma endregion
-
-#pragma region InstancingTransform
-
-
-
-#pragma endregion
-
-
 
 
 
