@@ -48,6 +48,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include "LogManager.h"
 #include "CrashDumper.h"
 #include "ShaderCompiler.h"
+#include "ImGuiManager.h"
+#include"Input.h"
 using namespace logs;
 using namespace MatrixMath;
 
