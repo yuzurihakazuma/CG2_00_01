@@ -172,6 +172,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="engine\math\Matrix4x4.cpp" />
     <ClCompile Include="engine\base\ShaderCompiler.cpp" />
     <ClCompile Include="engine\base\WindowProc.cpp" />
+    <ClCompile Include="engine\io\Input.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="resources\shaders\Object3d.PS.hlsl">
@@ -218,6 +219,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="engine\base\ShaderCompiler.h" />
     <ClInclude Include="engine\base\struct.h" />
     <ClInclude Include="engine\base\WindowProc.h" />
+    <ClInclude Include="engine\io\Input.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\imgui\LICENSE.txt" />
