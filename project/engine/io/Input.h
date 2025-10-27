@@ -2,17 +2,19 @@
 #define NOMINMAX
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
-
 #include <Windows.h>
 #include <wrl.h>
 #include <cstdint>
+#include"LogManager.h"
 
 #pragma comment(lib, "dinput8.lib")
 #pragma comment(lib, "dxguid.lib")
 
+
+
 class Input{
 public:
-	// namespaceÈ—ª
+	// namespaceçœç•¥
 	template<typename T> using ComPtr = Microsoft::WRL::ComPtr<T>;
 
 
@@ -20,25 +22,25 @@ public:
 
 	void Update();
 	/// <summary>
-	/// ƒL[‚Ì‰Ÿ‰º‚ğƒ`ƒFƒbƒN
+	/// ã‚­ãƒ¼ã®æŠ¼ä¸‹ã‚’ãƒã‚§ãƒƒã‚¯
 	/// </summary>
-	/// <param name="keyNumber">ƒL[”Ô†(DIK_0“™)</param>
-	/// <returns>‰Ÿ‚³‚ê‚Ä‚¢‚é‚©</returns>
+	/// <param name="keyNumber">ã‚­ãƒ¼ç•ªå·(DIK_0ç­‰)</param>
+	/// <returns>æŠ¼ã•ã‚Œã¦ã„ã‚‹ã‹</returns>
 	bool Pushkey(BYTE keyNumber);
 	/// <summary>
-	/// ƒL[‚ÌƒgƒŠƒK[ƒ`ƒFƒbƒN
+	/// ã‚­ãƒ¼ã®ãƒˆãƒªã‚¬ãƒ¼ãƒã‚§ãƒƒã‚¯
 	/// </summary>
-	/// <param name="keyNumber">ƒL[”Ô†(DIK_0“™)</param>
-	/// <returns>ƒgƒŠƒK[‚©</returns>
+	/// <param name="keyNumber">ã‚­ãƒ¼ç•ªå·(DIK_0ç­‰)</param>
+	/// <returns>ãƒˆãƒªã‚¬ãƒ¼ã‹</returns>
 	bool Triggerkey(BYTE keyNumber);
 
 
 private:
-	// ƒL[ƒ{[ƒh‚ÌƒfƒoƒCƒX
+	// ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰ã®ãƒ‡ãƒã‚¤ã‚¹
 	ComPtr<IDirectInputDevice8> keyboard;
-	// ‘SƒL[‚Ìó‘Ô
+	// å…¨ã‚­ãƒ¼ã®çŠ¶æ…‹
 	BYTE keys[256] = {};
-	// ‘O‰ñƒtƒŒ[ƒ€‚Ì‘SƒL[‚Ìó‘Ô
+	// å‰å›ãƒ•ãƒ¬ãƒ¼ãƒ ã®å…¨ã‚­ãƒ¼ã®çŠ¶æ…‹
 	BYTE preKeys[256] = {};
 };
 

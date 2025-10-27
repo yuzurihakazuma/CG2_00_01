@@ -154,7 +154,7 @@ Transform transformSprite { {1.0f,1.0f,1.0f,},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} 
 Transform uvTransformSprite { {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
 LogManager logManager;// ログマネージャーのインスタンス
-
+Input input; // 入力クラスのインスタンス
 
 
 
@@ -657,31 +657,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	windowProc.Initialize(wc, kClientWidth, kClientHeight);
 
 
-#pragma region 入力デバイス
-
-	//DirectInputの初期化
-	Microsoft::WRL::ComPtr<IDirectInput8> directInput;
-	HRESULT inputKey = DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, reinterpret_cast< void** >( directInput.GetAddressOf() ), nullptr);
-	assert(SUCCEEDED(inputKey));
-	// キーボードデバイスの生成
-	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard = nullptr;
-	inputKey = directInput->CreateDevice(GUID_SysKeyboard, keyboard.GetAddressOf(), NULL);
-	assert(SUCCEEDED(inputKey));
-
-	// 入力データ形式のセット
-	inputKey = keyboard->SetDataFormat(&c_dfDIKeyboard);
-	assert(SUCCEEDED(inputKey));
-	// 排他制御レベルのセット
-	inputKey = keyboard->SetCooperativeLevel(GetActiveWindow(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-	assert(SUCCEEDED(inputKey));
-	// 押されたかどうかを格納する配列
-	bool isSpacePressed = false;
-	// // 全キーの入力状態を取得する
-	BYTE keys[256] = {};
-	BYTE preKeys[256] = {};
-
-#pragma endregion
-
+	input.Initialize();
 
 
 
@@ -1727,37 +1703,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 		// メインループ内
-
+		input.Update(); // ← 追加：Inputの更新処理
 
 
 
 
 		// キーボード情報の取得開始
 
-
-		if ( keyboard ) {
-			HRESULT hr = keyboard->Acquire();
-			if ( SUCCEEDED(hr) ) {
-				keyboard->GetDeviceState(sizeof(keys), keys);
-			}
-		}
-
-
-
-		// 押した瞬間だけ反応
-		if ( !isSpacePressed && ( keys[DIK_SPACE] & 0x80 ) ) {
-			isSpacePressed = true;
+		// スペースキーが押されたら音を鳴らす
+		if ( input.Triggerkey(DIK_SPACE) ){
 			SoundPlayWave(xAudio2.Get(), soundData1);
-			logManager.Log("Space key pressed");
+
 		}
-		// 離した瞬間にフラグを戻す
-		if ( isSpacePressed && !( keys[DIK_SPACE] & 0x80 ) ) {
-			isSpacePressed = false;
-		}
-		memcpy(preKeys, keys, sizeof(keys));
 
 
 
+		
 
 
 
@@ -2070,8 +2031,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		hr = commandList->Reset(commandAllocator.Get(), nullptr);
 		assert(SUCCEEDED(hr));
 
-		// 終了キー:ESC 押されたら終了
-		if ( preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0 ) {
+		if ( input.Triggerkey(DIK_ESCAPE) ) {
 			break;
 		}
 
@@ -2089,8 +2049,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	CloseHandle(fenceEvent);
 	//XAudio2解放
 	xAudio2.Reset();
-	// キーボード解放
-	keyboard.Reset();
 	// 音声データ解放
 	SoundUnload(&soundData1);
 

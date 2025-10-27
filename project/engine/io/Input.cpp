@@ -1,55 +1,61 @@
 #include "Input.h"
 #include <cassert>
 
+using namespace logs;
+
 void Input::Initialize(){
 
-	//DirectInput‚Ì‰Šú‰»
+	//DirectInputã®åˆæœŸåŒ–
 	Microsoft::WRL::ComPtr<IDirectInput8> directInput;
 	HRESULT inputKey = DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, reinterpret_cast< void** >( directInput.GetAddressOf() ), nullptr);
 	assert(SUCCEEDED(inputKey));
-	// ƒL[ƒ{[ƒhƒfƒoƒCƒX‚Ì¶¬
-	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard = nullptr;
+	// ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰ãƒ‡ãƒã‚¤ã‚¹ã®ç”Ÿæˆ
 	inputKey = directInput->CreateDevice(GUID_SysKeyboard, keyboard.GetAddressOf(), NULL);
 	assert(SUCCEEDED(inputKey));
 
-	// “ü—Íƒf[ƒ^Œ`®‚ÌƒZƒbƒg
+	// å…¥åŠ›ãƒ‡ãƒ¼ã‚¿å½¢å¼ã®ã‚»ãƒƒãƒˆ
 	inputKey = keyboard->SetDataFormat(&c_dfDIKeyboard);
 	assert(SUCCEEDED(inputKey));
-	// ”r‘¼§ŒäƒŒƒxƒ‹‚ÌƒZƒbƒg
+	// æ’ä»–åˆ¶å¾¡ãƒ¬ãƒ™ãƒ«ã®ã‚»ãƒƒãƒˆ
 	inputKey = keyboard->SetCooperativeLevel(GetActiveWindow(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
 	assert(SUCCEEDED(inputKey));
+	// ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰ã®å–å¾—é–‹å§‹
+	inputKey = keyboard->Acquire();
+	assert(SUCCEEDED(inputKey));
+
 
 }
 
 void Input::Update(){
-
-	HRESULT result;
-
-	// ƒL[ƒ{[ƒgî•ñ‚Ìæ“¾ŠJn
-	keyboard->Acquire();
-
-	// ‘SƒL[‚Ì“ü—Íî•ñ‚ğæ“¾‚·‚é
-	BYTE key[256] = {};
-	keyboard->GetDeviceState(sizeof(key), key);
-	// Œ»İ‚ÌƒL[î•ñ‚ğ•Û‘¶
-	BYTE keyPre[256] = {};
-	keyboard->GetDeviceState(sizeof(keyPre), keyPre);
-
-	// ‘O‰ñ‚ÌƒL[î•ñ‚ğ•Û‘¶
+	// å‰å›ã®ã‚­ãƒ¼çŠ¶æ…‹ã‚’ä¿å­˜
 	memcpy(preKeys, keys, sizeof(keys));
+	// å…¨ã‚­ãƒ¼ã®å…¥åŠ›çŠ¶æ…‹ã‚’å–å¾—
+	HRESULT result = keyboard->GetDeviceState(sizeof(keys), keys);
+	if ( FAILED(result) ) {
+		
+		// å…¥åŠ›å–å¾—ã«å¤±æ•— â†’ å†å–å¾—ã‚’è©¦ã¿ã‚‹
+		result = keyboard->Acquire();
+		result = keyboard->GetDeviceState(sizeof(keys), keys);
 
-	// ƒL[ƒ{[ƒhî•ñ‚Ìæ“¾ŠJn
-	result = keyboard->Acquire();
-	// ‘SƒL[‚Ì“ü—Íî•ñ‚ğæ“¾‚·‚é
-	result = keyboard->GetDeviceState(sizeof(keys), keys);
-
-
+		// ãã‚Œã§ã‚‚å¤±æ•— â†’ å…¨ã‚­ãƒ¼ã‚’æœªå…¥åŠ›ã«åˆæœŸåŒ–
+		if ( FAILED(result) ) {
+			ZeroMemory(keys, sizeof(keys));
+		}
+	}
 }
 
+/// <summary>
+/// ã‚­ãƒ¼ã®æŠ¼ä¸‹ã‚’ãƒã‚§ãƒƒã‚¯
+/// </summary>
+/// <param name="keyNumber">ã‚­ãƒ¼ç•ªå·(DIK_0ç­‰)</param>
 bool Input::Pushkey(BYTE keyNumber){
-	return false;
+	return ( keys[keyNumber] & 0x80 );
 }
 
+/// <summary>
+/// ã‚­ãƒ¼ã®ãƒˆãƒªã‚¬ãƒ¼ãƒã‚§ãƒƒã‚¯
+/// </summary>
+/// <param name="keyNumber">ã‚­ãƒ¼ç•ªå·(DIK_0ç­‰)</param>
 bool Input::Triggerkey(BYTE keyNumber){
-	return false;
+	return !( preKeys[keyNumber] & 0x80 ) && ( keys[keyNumber] & 0x80 );
 }
