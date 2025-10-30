@@ -148,6 +148,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="engine\base\DirectXComon.cpp" />
     <ClCompile Include="engine\base\CrashDumper.cpp" />
     <ClCompile Include="engine\3d\DebugCamera.cpp">
       <RuntimeLibrary Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
@@ -203,6 +204,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="engine\base\DirectXComon.h" />
     <ClInclude Include="engine\base\CrashDumper.h" />
     <ClInclude Include="engine\3d\DebugCamera.h" />
     <ClInclude Include="externals\imgui\imconfig.h" />
