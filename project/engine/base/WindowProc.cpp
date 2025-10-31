@@ -12,25 +12,54 @@ void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32
 	wc_ = wc; // ウィンドウクラス
 	kClientWidth_ = kClientWidth; // クライアント領域の横幅
 	kClientHeight_ = kClientHeight; // クライアント領域の縦幅
+
+	// ウィンドウクラスの設定
+	SetupWindowClass(wc_);
+	// ウィンドウクラスの登録
+	RegisterWindowClass();
+	// クライアント領域の調整
+	AdjustClientRect();
+	// メインウィンドウの作成
+	CreateMainWindow();
+	// メインウィンドウの表示
+	ShowMainWindow();
+
+}
+// ウィンドウクラスの設定
+void WindowProc::SetupWindowClass(WNDCLASS& wc){
+
 	// ウィンドウプロシージャを設定
-	wc_.lpfnWndProc = WndProc;
+	wc.lpfnWndProc = WndProc;
 
 	// ウィンドウクラス名
-	wc_.lpszClassName = L"CG2WindowClass";
+	wc.lpszClassName = L"CG2WindowClass";
 
 	// インスタンスハンドル
-	wc_.hInstance = GetModuleHandle(nullptr);
+	wc.hInstance = GetModuleHandle(nullptr);
 	// カーソル
-	wc_.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+
+}
+
+// ウィンドウクラスの登録
+void WindowProc::RegisterWindowClass(){
+
 	// ウィンドウクラスを登録
 	RegisterClass(&wc_);
 
+}
+// クライアント領域の調整
+void WindowProc::AdjustClientRect(){
+
 	// クライアント領域サイズ
-	RECT wrc = { 0, 0, kClientWidth_, kClientHeight_ };
+	wrc_ = { 0, 0, kClientWidth_, kClientHeight_ };
 
-	// クライアント領域を元に実際のサイズにwrcを変更してもらう
-	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
+	// クライアント領域を元に実際のサイズにwrc_を変更してもらう
+	AdjustWindowRect(&wrc_, WS_OVERLAPPEDWINDOW, false);
 
+}
+// メインウィンドウの作成
+void WindowProc::CreateMainWindow(){
 
 	// ウィンドウの生成
 	hwnd_ = CreateWindow(
@@ -39,18 +68,25 @@ void WindowProc::Initialize(WNDCLASS wc, const int32_t kClientWidth, const int32
 		WS_OVERLAPPEDWINDOW,   // よく見るウィンドウスタイル
 		CW_USEDEFAULT,		   // 表示X座標(Windowsに任せる)
 		CW_USEDEFAULT,		   // 表示Y座標(WindowsOSに任せる)
-		wrc.right - wrc.left,  // ウィンドウ横幅
-		wrc.bottom - wrc.top,  // ウィンドウ立幅
+		wrc_.right - wrc_.left,  // ウィンドウ横幅
+		wrc_.bottom - wrc_.top,  // ウィンドウ立幅
 		nullptr,			   // 親ウィンドウハンドル
 		nullptr,			   // メニューハンドル
 		wc_.hInstance,		   // インスタンスハンドル
 		nullptr				   // オプション
 	);
-	// ウィンドウの表示
-	ShowWindow(hwnd_, SW_SHOW);
+
 
 
 }
+// メインウィンドウの表示
+void WindowProc::ShowMainWindow(){
+
+	// ウィンドウの表示
+	ShowWindow(hwnd_, SW_SHOW);
+
+}
+
 // ウィンドウの更新
 void WindowProc::Update(){
 
@@ -65,8 +101,11 @@ void WindowProc::Update(){
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
-	
+
 }
+
+
+// ウィンドウプロシージャ
 LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 	if ( ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam) ) {
 		return true;
@@ -81,3 +120,5 @@ LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 	// デフォルトのウィンドウプロシージャを呼び出す
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
+
+

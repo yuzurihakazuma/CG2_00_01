@@ -650,11 +650,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	wc.hbrBackground = reinterpret_cast< HBRUSH >( COLOR_WINDOW + 1 ); // 背景色
 	wc.lpfnWndProc = windowProc.WndProc; // ウィンドウプロシージャの関数ポインタ
 
-	const int kClientWidth = 1280; // ウィンドウの幅
-	const int kClientHeight = 720; // ウィンドウの高さ
+	//const int kClientWidth = 1280; // ウィンドウの幅
+	//const int kClientHeight = 720; // ウィンドウの高さ
 
 	// ウィンドウプロシージャの初期化
-	windowProc.Initialize(wc, kClientWidth, kClientHeight);
+	windowProc.Initialize(wc, windowProc.GetClientWidth(), windowProc.GetClientHeight());
 
 	// 入力クラスの初期化
 	input.Initialize();
@@ -1686,7 +1686,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	const float kDeltaTime = 1.0f / 60.0f;
 
 
-	while ( !windowProc.IsClosed() ){
+	while ( !windowProc.GetIsClosed() ){
 
 		// ウィンドウ
 		windowProc.Update();

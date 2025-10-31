@@ -12,11 +12,27 @@ public:
 	// ウィンドウの取得
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-	HWND GetHwnd() const{ return hwnd_; }
-	bool IsClosed() const{ return isClosed_; } 
+
+	/// <summary>
+	/// Get
+	/// </summary>
+	/// <returns></returns>
+	HWND GetHwnd() const{ return hwnd_; } // ウィンドウハンドルの取得
+	bool GetIsClosed() const{ return isClosed_; } // ウィンドウが閉じられたかどうかの取得
+	int32_t GetClientWidth() const{ return kClientWidth_; } // クライアント領域の横幅の取得
+	int32_t GetClientHeight() const{ return kClientHeight_; } // クライアント領域の縦幅の取得
+
 
 private:
 	
+	void SetupWindowClass(WNDCLASS& wc); // ウィンドウクラスの設定
+	void RegisterWindowClass(); // ウィンドウクラスの登録
+	void AdjustClientRect(); // クライアント領域の調整
+	void CreateMainWindow(); // メインウィンドウの作成
+	void ShowMainWindow(); // メインウィンドウの表示
+
+
+
 	WNDCLASS wc_ = {}; // ウィンドウクラス
 	
 	
@@ -30,5 +46,11 @@ private:
 
 	HWND hwnd_ = nullptr; // ウィンドウハンドル
 	static inline bool isClosed_ = false; // ← 追加（staticならWndProcからアクセス可能）
+
+
+	RECT wrc_ = {}; // ウィンドウサイズ調整用のRECT
+
+
+
 };
 
