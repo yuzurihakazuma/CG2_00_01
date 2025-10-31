@@ -34,6 +34,7 @@ private:
 
 
 	WNDCLASS wc_ = {}; // ウィンドウクラス
+	RECT wrc_ = {}; // ウィンドウサイズ調整用のRECT
 	
 	
 	static constexpr int kDefaultClientWidth = 1280; // デフォルトのクライアント領域の横幅
@@ -48,7 +49,6 @@ private:
 	static inline bool isClosed_ = false; // ← 追加（staticならWndProcからアクセス可能）
 
 
-	RECT wrc_ = {}; // ウィンドウサイズ調整用のRECT
 
 
 

@@ -2,7 +2,7 @@
 
 class DirectXComon{
 public:
-	// ‰Šú‰»
+	// åˆæœŸåŒ–
 	void Initialize();
 
 

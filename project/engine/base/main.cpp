@@ -650,7 +650,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	wc.hbrBackground = reinterpret_cast< HBRUSH >( COLOR_WINDOW + 1 ); // 背景色
 	wc.lpfnWndProc = windowProc.WndProc; // ウィンドウプロシージャの関数ポインタ
 
-	//const int kClientWidth = 1280; // ウィンドウの幅
+	const int kClientWidth = 1280; // ウィンドウの幅
 	//const int kClientHeight = 720; // ウィンドウの高さ
 
 	// ウィンドウプロシージャの初期化
@@ -820,8 +820,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// スワップチェーンを生成する
 	Microsoft::WRL::ComPtr<IDXGISwapChain1> tempSwapChain;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc {};
-	swapChainDesc.Width = kClientWidth;   //画面の幅。ウィンドウのクライアント領域を同じものにしていく
-	swapChainDesc.Height = kClientHeight; //画面の高さ。ウィンドウのクライアント領域を同じようにしておく
+	swapChainDesc.Width = windowProc.GetClientWidth();   //画面の幅。ウィンドウのクライアント領域を同じものにしていく
+	swapChainDesc.Height = windowProc.GetClientHeight(); //画面の高さ。ウィンドウのクライアント領域を同じようにしておく
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; //色の形式
 	swapChainDesc.SampleDesc.Count = 1; //マルチサンプルしない
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; //描画のターゲットとして利用する
@@ -913,7 +913,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 
 	// DepthStencilTextureをウィンドウのサイズで作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> deptStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
+	Microsoft::WRL::ComPtr<ID3D12Resource> deptStencilResource = CreateDepthStencilTextureResource(device, windowProc.GetClientWidth(), windowProc.GetClientHeight());
 
 
 	//---------------------
@@ -1550,8 +1550,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	// ビューボート
 	D3D12_VIEWPORT viewport {};
 	// クライアント領域のサイズと一緒にして画面全体に表示
-	viewport.Width = kClientWidth;
-	viewport.Height = kClientHeight;
+	viewport.Width = windowProc.GetClientWidth();
+	viewport.Height = windowProc.GetClientHeight();
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -1561,9 +1561,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 	D3D12_RECT scissorRect {};
 	// 基本的にビューボートと同じ矩形が構成されるようにする
 	scissorRect.left = 0;
-	scissorRect.right = kClientWidth;
+	scissorRect.right = windowProc.GetClientWidth();
 	scissorRect.top = 0;
-	scissorRect.bottom = kClientHeight;
+	scissorRect.bottom = windowProc.GetClientHeight();
 
 
 
@@ -1760,7 +1760,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		Matrix4x4 cameraMatrix = MakeAffine(cameraTransfrom.scale, cameraTransfrom.rotate, cameraTransfrom.translate);
 		Matrix4x4 viewMatrix = Inverse(cameraMatrix); // ← 通常カメラの行列
 
-		Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+		Matrix4x4 projectionMatrix = PerspectiveFov(1.0f, float(windowProc.GetClientWidth()) / float(windowProc.GetClientHeight()), 0.1f, 100.0f);
 		uint32_t numInstance = 0;// 有効なインスタンス数をカウントする変数
 
 		for ( uint32_t index = 0; index < kNumMaxInstance; ++index ){
@@ -1793,7 +1793,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 		//-------------------------------
 		Matrix4x4 worldMatrixSprite = MakeAffine(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 		Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
-		Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+		Matrix4x4 projectionMatrixSprite = Orthographic(0.0f, 0.0f, float(windowProc.GetClientWidth()), float(windowProc.GetClientWidth()), 0.0f, 100.0f);
 		Matrix4x4 viewProjection = Multiply(viewMatrixSprite, projectionMatrixSprite);
 		Matrix4x4 worldViewProjectionMatrixSprite = Multiply(viewProjection, worldMatrixSprite);
 		transformationMatirxDataSprite->World = worldMatrixSprite;
@@ -2057,7 +2057,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int){
 
 	//出力ウィンドウへの文字出力
 	logManager.Log("HelloWored\n");
-	logManager.Log(logManager.ConvertString(std::format(L"WSTRING{}\n", kClientWidth)));
+	logManager.Log(logManager.ConvertString(std::format(L"WSTRING{}\n", windowProc.GetClientWidth())));
 
 	logManager.Finalize();
 
