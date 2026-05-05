@@ -35,7 +35,6 @@ void Boss::Initialize() {
     lastUsedCardId_ = -1;
 
     isAttackDebuffed_ = false;
-    attackDebuffTimer_ = 0;
 
     appearTimer_ = appearDuration_;
 
@@ -308,12 +307,7 @@ void Boss::Update() {
         break;
     }
 
-    if (isAttackDebuffed_) {
-        attackDebuffTimer_--;
-        if (attackDebuffTimer_ <= 0) {
-            isAttackDebuffed_ = false;
-        }
-    }
+    
 }
 
 void Boss::UpdateAppear() {

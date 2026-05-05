@@ -54,7 +54,6 @@ public:
 
     void ApplyAttackDebuff(int duration) {
         isAttackDebuffed_ = true;
-        attackDebuffTimer_ = duration;
     }
 
     void Freeze(int durationFrames) {
@@ -134,7 +133,6 @@ private:
     int lastUsedCardId_ = -1;
 
     bool isAttackDebuffed_ = false;
-    int attackDebuffTimer_ = 0;
 
     float appearStartY_ = -4.0f;
     float appearTargetY_ = 2.0f;

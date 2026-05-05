@@ -14,14 +14,17 @@ void AttackDebuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss
 
 	// プレイヤーが使った場合、敵全員にデバフを付与
 	if (isPlayerCaster_) {
+
+		if (boss && !boss->IsDead()) {
+			boss->ApplyAttackDebuff(duration_);  // ※Bossクラスに関数を作っておく必要があります
+		}
+
 		if (enemyManager) {
 			for (auto &enemy : enemyManager->GetEnemies()) {
 				if (enemy && !enemy->IsDead()) {
 					enemy->ApplyAttackDebuff(duration_); // ※Enemyクラスに関数を作っておく必要があります
 				}
-				if (boss && !boss->IsDead()) {
-					boss->ApplyAttackDebuff(duration_);  // ※Bossクラスに関数を作っておく必要があります
-				}
+				
 			}
 		}
 	}
