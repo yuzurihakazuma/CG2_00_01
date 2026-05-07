@@ -1,15 +1,111 @@
 ﻿#include "HandManager.h"
 
+#include <algorithm>
+
 #include "Engine/3D/Model/ModelManager.h"
+#include "Engine/2D/Sprite.h"
+#include "Engine/Base/WindowProc.h"
+#include "Engine/Camera/Camera.h"
+#include "engine/math/Matrix4x4.h"
+
+using namespace MatrixMath;
+
+namespace {
+struct ScreenRect {
+	Vector2 center;
+	Vector2 size;
+};
+
+std::unique_ptr<Sprite> CreateCooldownOverlay() {
+	auto overlay = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	if (overlay) {
+		overlay->SetAnchorPoint({ 0.5f, 1.0f });
+		overlay->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
+	}
+	return overlay;
+}
+
+Vector2 ProjectHandPosition(const Camera* camera, const Vector3& pos) {
+	if (!camera) {
+		return { -10000.0f, -10000.0f };
+	}
+
+	Matrix4x4 viewProjection = camera->GetViewProjectionMatrix();
+	Vector4 clip{};
+	clip.x = pos.x * viewProjection.m[0][0] + pos.y * viewProjection.m[1][0] + pos.z * viewProjection.m[2][0] + viewProjection.m[3][0];
+	clip.y = pos.x * viewProjection.m[0][1] + pos.y * viewProjection.m[1][1] + pos.z * viewProjection.m[2][1] + viewProjection.m[3][1];
+	clip.z = pos.x * viewProjection.m[0][2] + pos.y * viewProjection.m[1][2] + pos.z * viewProjection.m[2][2] + viewProjection.m[3][2];
+	clip.w = pos.x * viewProjection.m[0][3] + pos.y * viewProjection.m[1][3] + pos.z * viewProjection.m[2][3] + viewProjection.m[3][3];
+
+	if (clip.w == 0.0f) {
+		return { -10000.0f, -10000.0f };
+	}
+
+	float invW = 1.0f / clip.w;
+	float ndcX = clip.x * invW;
+	float ndcY = clip.y * invW;
+	float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+	float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+
+	return {
+		(ndcX * 0.5f + 0.5f) * screenW,
+		(-ndcY * 0.5f + 0.5f) * screenH
+	};
+}
+
+ScreenRect GetCardScreenRect(const Camera* camera, const Obj3d* cardObj) {
+	if (!camera || !cardObj) {
+		return { { -10000.0f, -10000.0f }, { 0.0f, 0.0f } };
+	}
+
+	const Matrix4x4 world = MakeAffine(
+		cardObj->GetScale(),
+		cardObj->GetRotation(),
+		cardObj->GetTranslation()
+	);
+
+	const Vector3 localCorners[4] = {
+		{ -0.74f, -1.0f, 0.0f },
+		{ 0.74f, -1.0f, 0.0f },
+		{ -0.74f, 1.0f, 0.0f },
+		{ 0.74f, 1.0f, 0.0f }
+	};
+
+	Vector2 first = ProjectHandPosition(camera, Transforms(localCorners[0], world));
+	float minX = first.x;
+	float maxX = first.x;
+	float minY = first.y;
+	float maxY = first.y;
+
+	for (int i = 1; i < 4; ++i) {
+		Vector2 p = ProjectHandPosition(camera, Transforms(localCorners[i], world));
+		if (p.x < minX) { minX = p.x; }
+		if (p.x > maxX) { maxX = p.x; }
+		if (p.y < minY) { minY = p.y; }
+		if (p.y > maxY) { maxY = p.y; }
+	}
+
+	const float paddingX = -3.0f;
+	const float paddingY = 8.0f;
+	return {
+		{ (minX + maxX) * 0.5f, (minY + maxY) * 0.5f },
+		{ (maxX - minX) + paddingX, (maxY - minY) + paddingY }
+	};
+}
+}
 
 void HandManager::Initialize(Camera* camera, uint32_t noiseTextureIndex) {
 	hand_.clear();
 	handModels_.clear();
+	cooldownOverlays_.clear();
 	isDissolving_.clear();
 	dissolveThresholds_.clear();
 	selectedCardIndex_ = 0;
 	camera_ = camera;
 	noiseTextureIndex_ = noiseTextureIndex;
+	cooldownCardId_ = -1;
+	cooldownTimer_ = 0;
+	cooldownDuration_ = 0;
 }
 
 bool HandManager::AddCard(const Card& newCard) {
@@ -46,6 +142,7 @@ bool HandManager::AddCard(const Card& newCard) {
 			}
 
 			handModels_[i] = std::move(model);
+			cooldownOverlays_[i] = CreateCooldownOverlay();
 
 			// ディゾルブをキャンセルして、新しいカードを実体化させる
 			isDissolving_[i] = false;
@@ -78,6 +175,7 @@ bool HandManager::AddCard(const Card& newCard) {
 		}
 
 		handModels_.push_back(std::move(model));
+		cooldownOverlays_.push_back(CreateCooldownOverlay());
 		isDissolving_.push_back(false);
 		dissolveThresholds_.push_back(0.0f);
 
@@ -175,6 +273,38 @@ void HandManager::Draw() {
 	}
 }
 
+void HandManager::DrawCooldownOverlays() {
+	if (cooldownTimer_ <= 0 || cooldownDuration_ <= 0) {
+		return;
+	}
+
+	if (cooldownOverlays_.size() < hand_.size()) {
+		cooldownOverlays_.resize(hand_.size());
+	}
+
+	for (int i = 0; i < static_cast<int>(hand_.size()); ++i) {
+		if (!IsCardCoolingDown(i)) {
+			continue;
+		}
+
+		if (!cooldownOverlays_[i]) {
+			cooldownOverlays_[i] = CreateCooldownOverlay();
+		}
+		if (!cooldownOverlays_[i] || !handModels_[i]) {
+			continue;
+		}
+
+		const float ratio = GetCardCooldownRatio(i);
+		const ScreenRect rect = GetCardScreenRect(camera_, handModels_[i].get());
+
+		cooldownOverlays_[i]->SetPosition({ rect.center.x, rect.center.y + rect.size.y * 0.5f });
+		cooldownOverlays_[i]->SetSize({ rect.size.x, rect.size.y * ratio });
+		cooldownOverlays_[i]->SetColor({ 0.0f, 0.0f, 0.0f, 0.58f });
+		cooldownOverlays_[i]->Update();
+		cooldownOverlays_[i]->Draw();
+	}
+}
+
 Card HandManager::GetSelectedCard() const {
 	if (hand_.empty()) {
 		// CardDatabase.hの構造体に合わせてエラーカードを返す
@@ -197,6 +327,7 @@ void HandManager::RemoveSelectedCard() {
 	// データと見た目の両方を消す！
 	hand_.erase(hand_.begin() + selectedCardIndex_);
 	handModels_.erase(handModels_.begin() + selectedCardIndex_);
+	cooldownOverlays_.erase(cooldownOverlays_.begin() + selectedCardIndex_);
 	isDissolving_.erase(isDissolving_.begin() + selectedCardIndex_);
 	dissolveThresholds_.erase(dissolveThresholds_.begin() + selectedCardIndex_);
 
@@ -241,6 +372,7 @@ bool HandManager::SwapSelectedCard(const Card& newCard) {
 	}
 
 	handModels_[selectedCardIndex_] = std::move(model);
+	cooldownOverlays_[selectedCardIndex_] = CreateCooldownOverlay();
 	isDissolving_[selectedCardIndex_] = false;
 	dissolveThresholds_[selectedCardIndex_] = 0.0f;
 
@@ -258,6 +390,7 @@ void HandManager::RemoveCard(int index) {
 	if (index >= 0 && index < static_cast<int>(hand_.size())) {
 		hand_.erase(hand_.begin() + index);
 		handModels_.erase(handModels_.begin() + index);
+		cooldownOverlays_.erase(cooldownOverlays_.begin() + index);
 		isDissolving_.erase(isDissolving_.begin() + index);
 		dissolveThresholds_.erase(dissolveThresholds_.begin() + index);
 
@@ -350,6 +483,7 @@ void HandManager::AddPendingCard(const Card &pendingCard) {
 	}
 
 	handModels_.push_back(std::move(model));
+	cooldownOverlays_.push_back(CreateCooldownOverlay());
 	isDissolving_.push_back(false);
 	dissolveThresholds_.push_back(0.0f);
 
@@ -364,6 +498,7 @@ void HandManager::RemoveCardImmediate(int index) {
 
 	hand_.erase(hand_.begin() + index);
 	handModels_.erase(handModels_.begin() + index);
+	cooldownOverlays_.erase(cooldownOverlays_.begin() + index);
 	isDissolving_.erase(isDissolving_.begin() + index);
 	dissolveThresholds_.erase(dissolveThresholds_.begin() + index);
 
@@ -374,6 +509,32 @@ void HandManager::RemoveCardImmediate(int index) {
 	if (selectedCardIndex_ < 0) {
 		selectedCardIndex_ = 0;
 	}
+}
+
+void HandManager::SetCooldownDisplay(int cardId, int remainingFrames, int durationFrames) {
+	cooldownCardId_ = cardId;
+	cooldownTimer_ = (remainingFrames > 0) ? remainingFrames : 0;
+	cooldownDuration_ = (durationFrames > 0) ? durationFrames : 0;
+}
+
+bool HandManager::IsCardCoolingDown(int index) const {
+	if (index < 0 || index >= static_cast<int>(hand_.size())) {
+		return false;
+	}
+
+	return cooldownTimer_ > 0 && cooldownDuration_ > 0 && hand_[index].id == cooldownCardId_;
+}
+
+float HandManager::GetCardCooldownRatio(int index) const {
+	if (!IsCardCoolingDown(index)) {
+		return 0.0f;
+	}
+
+	return std::clamp(
+		static_cast<float>(cooldownTimer_) / static_cast<float>(cooldownDuration_),
+		0.0f,
+		1.0f
+	);
 }
 #include "HandManager.h"
 

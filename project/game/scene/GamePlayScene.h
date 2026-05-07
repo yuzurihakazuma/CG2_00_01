@@ -234,6 +234,8 @@ private: // メンバ変数
 	bool isCardReady_ = false;       // 現在カードを構えているか
 	Card readiedCard_{};             // 構えているカードの情報
 	int cardReadyTimer_ = 0;         // 構えていられる残り時間
+	int fistCooldownTimer_ = 0;
+	const int fistCooldownDuration_ = 60;
 
 	// ポーズ画面関連
 	bool isPaused_ = false;                  // ポーズ中かどうか

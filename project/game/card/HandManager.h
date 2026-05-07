@@ -1,18 +1,21 @@
 ﻿#pragma once
 #include <vector>
 #include <string>
+#include <memory>
 #include "game/card/CardDatabase.h"
 
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/base/Input.h"
 
 class Camera;
+class Sprite;
 
 class HandManager {
 private:
 
 	std::vector<Card> hand_;     //現在の手札
 	std::vector<std::unique_ptr<Obj3d>> handModels_; //カードの見た目
+	std::vector<std::unique_ptr<Sprite>> cooldownOverlays_;
 
 	std::vector<bool> isDissolving_;         // ディゾルブ中か
 	std::vector<float> dissolveThresholds_;  // ディゾルブ進行度
@@ -22,6 +25,12 @@ private:
 
 	Camera* camera_ = nullptr;
 	uint32_t noiseTextureIndex_ = 0; // ノイズテクスチャ番号
+	int cooldownCardId_ = -1;
+	int cooldownTimer_ = 0;
+	int cooldownDuration_ = 0;
+
+	bool IsCardCoolingDown(int index) const;
+	float GetCardCooldownRatio(int index) const;
 
 public:
 	//初期化
@@ -35,6 +44,7 @@ public:
 
 	//描画
 	void Draw();
+	void DrawCooldownOverlays();
 
 	//指定した番号のカード情報を取得
 	Card GetCard(int index)const;
@@ -75,4 +85,6 @@ public:
 
 	// 指定したインデックスのカードを即座に消す
 	void RemoveCardImmediate(int index);
+
+	void SetCooldownDisplay(int cardId, int remainingFrames, int durationFrames);
 };
