@@ -666,10 +666,10 @@ void GamePlayScene::Update() {
 	}
 
 	// ボスを倒していたらゲームクリアへ遷移
-	if (bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
-		SceneManager::GetInstance()->ChangeScene("GAMECLEAR");
-		return;
-	}
+	//if (bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
+	//	SceneManager::GetInstance()->ChangeScene("GAMECLEAR");
+	//	return;
+	//}
 
 	// 敵とプレイヤーの当たり判定
 	if (enemyManager_ && !isBossIntroPlaying) {
