@@ -1682,6 +1682,10 @@ void GamePlayScene::DrawDebugUI() {
 		handManager_.AddCard(CardDatabase::GetCardData(11));
 	}
 
+	if (ImGui::Button("コストブースト(ID:12)")) {
+		handManager_.AddCard(CardDatabase::GetCardData(12));
+	}
+
 	ImGui::Separator();
 	ImGui::Text("[Player Hand] : %d/10", handManager_.GetHandSize());
 

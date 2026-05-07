@@ -24,6 +24,7 @@
 #include "game/card/RuinBeamEffect.h"
 #include "game/card/BossSummonEffect.h"
 #include "game/card/MapOpen.h"
+#include "game/card/CostBoostEffect.h"
 
 
 using namespace VectorMath;
@@ -47,6 +48,7 @@ void CardUseSystem::Initialize(Camera* camera) {
 	effectFactory_[9] = [](const Card &c) { return std::make_unique<AttackDebuffEffect>(300); };
 	effectFactory_[10] = [](const Card &c) {return std::make_unique<ClawEffect>(c.effectValue); };
 	effectFactory_[11] = [this](const Card &card) {return std::make_unique<MapOpen>(minimap_);};
+	effectFactory_[12]= [](const Card &c) { return std::make_unique<CostBoostEffect>(c.effectValue); };
 
 	// ID:101 ボスクロー（前回作ったもの）
 	effectFactory_[101] = [](const Card &c) { return std::make_unique<BossClawEffect>(c.effectValue); };
