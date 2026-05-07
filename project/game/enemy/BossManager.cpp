@@ -400,22 +400,39 @@ void BossManager::Update(
 	// ボス死亡時の処理
 	// =========================================================
 	if (boss_->IsDead() && !bossDeadHandled_) {
-		// 経験値付与
+		// 経験値追加
 		if (player) {
 			player->AddExp(5);
 		}
 
-		// ドロップカード生成
+		// ドロップカード処理
 		if (boss_->HasAnyCard()) {
 			Card dropCard = boss_->GetRandomDropCard();
 			if (dropCard.id != -1) {
 				Vector3 dropPos = boss_->GetPosition();
 
-				// 地面の高さに補正
+				// 地面の高さに調整
 				dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
 
 				cardPickupManager->AddPickup(dropPos, dropCard);
 			}
+		}
+
+		// ボス部屋で倒したら中央に階段を出す
+		if (mapManager->IsBossMap()) {
+			LevelData& level = const_cast<LevelData&>(mapManager->GetLevelData());
+
+			int centerX = level.width / 2;
+			int centerZ = level.height / 2;
+
+			// 中央タイルを階段にする
+			level.tiles[centerZ][centerX] = 3;
+
+			// 階段タイル情報も更新する
+			mapManager->SetStairsTile({ centerX, centerZ });
+
+			// 見た目を更新する
+			mapManager->RebuildMapObjects();
 		}
 
 		bossDeadHandled_ = true;
