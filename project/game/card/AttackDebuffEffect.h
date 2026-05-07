@@ -18,5 +18,9 @@ private:
 	int duration_ = 300;
 	bool isPlayerCaster_ = true;
 	bool isFinished_ = false;
+
+	int timer_ = 0; //  エフェクト表示用のタイマーを追加
+	Vector3 casterPos_ = { 0,0,0 }; //  発生位置を保存
+
 };
 

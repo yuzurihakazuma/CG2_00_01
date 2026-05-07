@@ -9,8 +9,7 @@ public:
 	void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) override;
 
 	// 毎フレーム更新
-	void Update(Player* player, EnemyManager *enemyManager, Boss* boss,
-		 const Vector3& bossPos, const LevelData& level) override;
+	void Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) override;
 
 	// 描画
 	void Draw() override;
@@ -19,15 +18,17 @@ public:
 	bool IsFinished() const override { return isFinished_; }
 
 private:
-	std::unique_ptr<Obj3d> obj_ = nullptr;    // 表示用オブジェクト
-	Vector3 pos_ = { 0.0f, 0.0f, 0.0f };      // 位置
-	Vector3 velocity_ = { 0.0f, 0.0f, 0.0f }; // 移動速度
-	Vector3 scale_ = { 0.5f, 0.5f, 0.5f };    // 弾の大きさ
+	std::unique_ptr<Obj3d> indicatorObj_ = nullptr; // 範囲インジケーター（危険表示）
 
-	bool isPlayerCaster_ = true;              // 使用者がプレイヤーか
-	bool isFinished_ = false;                 // 終了フラグ
+	Vector3 pos_ = { 0.0f, 0.0f, 0.0f };      // 魔法の中心位置
 
-	float rotAngle_ = 0.0f;
-	int sparkTimer_ = 0;
+	bool isPlayerCaster_ = true;
+	bool isFinished_ = false;
 
+	int delayTimer_ = 0;      //  発動までの準備時間（予兆・クールタイム）
+	int timer_ = 0;           // 吹雪が降る時間
+	int startTimer_ = 0;      // 開始時のタイマー（フェードアウト用）
+
+	float range_ = 4.0f;      // 吹雪が降る円の半径
+	int damage_ = 1;          //  ダメージを 1 に変更
 };
