@@ -11,222 +11,156 @@
 using namespace VectorMath;
 
 void IceBulletEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) {
-	// 使用者情報を保存
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
 
-	// 正面方向を計算
+	delayTimer_ = 30; // 0.5秒間（30フレーム）の「発動前クールタイム（予兆）」を作る
+	timer_ = 60;      // その後、1秒間（60フレーム）雪を降らせる
+	startTimer_ = timer_;
+
+	// 魔法陣の中心を少し前(5.0f)に設置
 	Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
-
-	// 使用者の少し前から発射
 	pos_ = {
-		casterPos.x + forward.x * 1.5f,
-		casterPos.y,
-		casterPos.z + forward.z * 1.5f
+		casterPos.x + forward.x * 5.0f,
+		casterPos.y, // 地面
+		casterPos.z + forward.z * 5.0f
 	};
 
-	// 弾速を設定
-	velocity_ = {
-		forward.x * 0.4f,
-		0.0f,
-		forward.z * 0.4f
-	};
+	// 範囲インジケーター（危険表示）を作成
+	indicatorObj_ = Obj3d::Create("sphere");
+	if (indicatorObj_) {
+		indicatorObj_->SetCamera(camera);
+		indicatorObj_->SetTranslation(pos_);
+		indicatorObj_->SetScale({ range_, 0.05f, range_ });
 
-	// 表示用オブジェクトを生成
-	obj_ = Obj3d::Create("sphere");
-	if (obj_) {
-		obj_->SetCamera(camera);
-		obj_->SetScale(scale_);
-		obj_->SetTranslation(pos_);
-		if (obj_->GetModel() && obj_->GetModel()->GetMaterial()) {
-			obj_->GetModel()->GetMaterial()->emissive = 2.0f; // 氷弾をBloom対象に戻す
+		Model* model = indicatorObj_->GetModel();
+		if (model) {
+			model->SetTexture("resources/white1x1.png");
+			Model::Material* material = model->GetMaterial();
+			if (material) {
+				material->color = { 1.0f, 0.0f, 0.0f, 0.1f };
+				material->emissive = 1.0f;
+			}
 		}
-		obj_->Update();
-
-		
-
+		indicatorObj_->Update();
 	}
-
 }
 
-void IceBulletEffect::Update(Player* player, EnemyManager *enemyManager, Boss* boss,
-	 const Vector3& bossPos, const LevelData& level) {
+void IceBulletEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
 
-	// 終了済みなら何もしない
-	if (isFinished_) {
+	if (isFinished_) return;
+
+	// ==========================================
+	// 🌟 発動前の予兆（クールタイム）処理
+	// ==========================================
+	if (delayTimer_ > 0) {
+		delayTimer_--;
+
+		if (indicatorObj_) {
+			Model* model = indicatorObj_->GetModel();
+			if (model && model->GetMaterial()) {
+				Model::Material* material = model->GetMaterial();
+				float progress = 1.0f - (static_cast<float>(delayTimer_) / 30.0f);
+				material->color.w = 0.1f + (progress * 0.4f);
+			}
+			indicatorObj_->Update();
+		}
 		return;
 	}
 
-	// 弾を進める
-	pos_ += velocity_;
-
-	rotAngle_ += 0.15f;
-
-	// --- 1. コア (Core): 中心で輝く冷気の結晶 ---
-	for ( int i = 0; i < 3; i++ ) {
-		Vector3 corePos = {
-			pos_.x + ( rand() % 11 - 5 ) * 0.05f,
-			pos_.y + ( rand() % 11 - 5 ) * 0.05f,
-			pos_.z + ( rand() % 11 - 5 ) * 0.05f
-		};
-		// 外側へ向かう微小な速度
-		Vector3 coreVel = {
-			( rand() % 11 - 5 ) * 0.02f,
-			( rand() % 11 - 5 ) * 0.02f,
-			( rand() % 11 - 5 ) * 0.02f
-		};
-		Vector4 coreColor = { 0.8f, 0.9f, 1.0f, 1.0f }; // 白に近い水色
-		float coreLife = 0.1f + static_cast< float >( rand() % 3 ) * 0.05f;
-		float coreScale = 0.15f + static_cast< float >( rand() % 3 ) * 0.05f;
-
-		GPUParticleManager::GetInstance()->Emit(corePos, coreVel, coreLife, coreScale, coreColor);
+	// ==========================================
+	// ❄️ ここから下が実際の発動（氷が降る）処理
+	// ==========================================
+	timer_--;
+	if (timer_ <= 0) {
+		isFinished_ = true;
+		return;
 	}
 
-	// --- 2. トレイル (Trail): 通った後に残る冷気のモヤ ---
-	// 炎と違い、冷気は「下に沈む」ようにすると氷っぽくなります
-	for ( int i = 0; i < 8; i++ ) {
-		float angleX = static_cast< float >(rand() % 628) * 0.01f;
-		float angleY = static_cast< float >(rand() % 628) * 0.01f;
-		float radius = 0.5f;
-
-		Vector3 trailPos = {
-			pos_.x + std::cosf(angleX) * std::cosf(angleY) * radius,
-			pos_.y + std::sinf(angleY) * radius,
-			pos_.z + std::sinf(angleX) * std::cosf(angleY) * radius
-		};
-
-		// 進行方向と逆に少し戻りつつ、下に沈む
-		Vector3 trailVel = {
-			-velocity_.x * 0.5f + ( rand() % 11 - 5 ) * 0.01f,
-			-0.05f - static_cast< float >( rand() % 5 ) * 0.01f, // 💡 マイナスにして下へ落とす
-			-velocity_.z * 0.5f + ( rand() % 11 - 5 ) * 0.01f
-		};
-
-		// 外側に行くほど濃い青に
-		float b = 0.8f + static_cast< float >( rand() % 3 ) * 0.1f;
-		Vector4 trailColor = { 0.2f, 0.6f, b, 0.6f };
-
-		float trailLife = 0.4f + static_cast< float >( rand() % 5 ) * 0.1f;
-		float trailScale = 0.4f + static_cast< float >( rand() % 4 ) * 0.1f;
-
-		GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, trailLife, trailScale, trailColor);
-	}
-
-	// --- 3. スパーク (Spark): たまに飛ぶ鋭い氷の破片 ---
-	sparkTimer_++;
-	if ( sparkTimer_ % 3 == 0 ) {
-		for ( int i = 0; i < 3; i++ ) {
-			Vector3 sparkVel = {
-				( rand() % 11 - 5 ) * 0.15f,
-				-0.1f - static_cast< float >(rand() % 5) * 0.05f, // 破片も少し下向きに重力を感じるように
-				( rand() % 11 - 5 ) * 0.15f
-			};
-			Vector4 sparkColor = { 0.5f, 0.9f, 1.0f, 1.0f }; // 鮮やかなシアン
-			float sparkLife = 0.2f + static_cast< float >(rand() % 3) * 0.1f;
-			float sparkScale = 0.05f + static_cast< float >(rand() % 2) * 0.05f;
-
-			GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, sparkLife, sparkScale, sparkColor);
+	if (indicatorObj_) {
+		Model* model = indicatorObj_->GetModel();
+		if (model && model->GetMaterial()) {
+			Model::Material* material = model->GetMaterial();
+			float alpha = static_cast<float>(timer_) / static_cast<float>(startTimer_) * 0.5f;
+			material->color.w = alpha;
 		}
+		indicatorObj_->Update();
 	}
 
+	// 1. パーティクル：円の範囲に上から雪と氷を降らせる
+	for (int i = 0; i < 15; i++) {
+		float angle = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
+		float r = (static_cast<float>(rand()) / RAND_MAX) * range_;
 
-	// 表示位置を更新
-	if ( obj_ ) {
-		obj_->SetTranslation(pos_);
-		obj_->Update();
+		Vector3 pPos = {
+			pos_.x + std::sinf(angle) * r,
+			pos_.y + 3.0f + (rand() % 10 * 0.1f),
+			pos_.z + std::cosf(angle) * r
+		};
+
+		Vector3 pVel = {
+			(rand() % 11 - 5) * 0.02f,
+			-3.0f - static_cast<float>(rand() % 20) * 0.1f,
+			(rand() % 11 - 5) * 0.02f
+		};
+
+		Vector4 color = { 0.5f, 0.8f, 1.0f, 0.8f };
+		float scale = 0.15f + static_cast<float>(rand() % 4) * 0.1f;
+
+		if (rand() % 10 == 0) {
+			color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			scale = 0.4f + static_cast<float>(rand() % 4) * 0.1f;
+		}
+
+		GPUParticleManager::GetInstance()->Emit(pPos, pVel, 1.0f, scale, color);
 	}
 
+	// ==========================================
+	// ❄️ 2. 円形の当たり判定
+	// ==========================================
+	// 🌟 修正: 連続ヒットをやめ、氷が降り始めた最初の瞬間（timer_ が 59 になった時）に1回だけ判定する！
+	if (timer_ == 59) {
+		if (isPlayerCaster_) {
+			// --- 雑魚敵への判定 ---
+			if (enemyManager) {
+				for (auto& enemy : enemyManager->GetEnemies()) {
+					if (enemy && !enemy->IsDead()) {
+						Vector3 ePos = enemy->GetPosition();
+						Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 
-	// 表示位置を更新
-	if (obj_) {
-		obj_->SetTranslation(pos_);
-		obj_->Update();
-	}
-
-	// プレイヤーが使った場合
-	if (isPlayerCaster_) {
-		if (enemyManager) {
-			for (auto &enemy : enemyManager->GetEnemies()) {
-				// 雑魚敵への判定
-				if (enemy && !enemy->IsDead()) {
-
-					// ループ中の個別の敵の座標を取得する！
-					Vector3 ePos = enemy->GetPosition();
-
-					Vector3 diff = {
-						ePos.x - pos_.x,
-						0.0f,
-						ePos.z - pos_.z
-					};
-
-					if (Length(diff) < 1.5f) {
-						enemy->TakeDamage(2);
-						enemy->Freeze(300);
-						isFinished_ = true;
-						return;
+						if (Length(diff) < range_) {
+							enemy->TakeDamage(damage_); // ダメージ1
+							enemy->Freeze(120); // 凍結
+						}
 					}
 				}
 			}
-		}
-
-		// ボスへの判定
-		if (boss && !boss->IsDead()) {
-			Vector3 diff = {
-				bossPos.x - pos_.x,
-				0.0f,
-				bossPos.z - pos_.z
-			};
-
-			if (Length(diff) < 2.5f) {
-				boss->TakeDamage(2);
-				boss->Freeze(300);
-				isFinished_ = true;
-				return;
-			}
-		}
-
-		// 遠くまで飛んだら消す
-		if (pos_.x > 100.0f || pos_.x < -100.0f || pos_.z > 100.0f || pos_.z < -100.0f) {
-			isFinished_ = true;
-			return;
-		}
-	}
-	// 敵またはボスが使った場合
-	else {
-		if (player && !player->IsDead()) {
-			Vector3 playerPos = player->GetPosition();
-
-			// Y軸を無視してXZ平面で判定
-			Vector3 diff = {
-				playerPos.x - pos_.x,
-				0.0f,
-				playerPos.z - pos_.z
-			};
-
-			if (Length(diff) < 1.5f) {
-				int damage = 2;
-
-				if (boss && boss->IsAttackDebuffed()) {
-					damage = 1;
+			// --- ボスへの判定 ---
+			if (boss && !boss->IsDead()) {
+				Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
+				if (Length(diff) < range_) {
+					boss->TakeDamage(damage_); // ダメージ1
+					boss->Freeze(60); // 凍結
 				}
-
-				player->TakeDamage(damage, pos_);
-				isFinished_ = true;
-				return;
 			}
 		}
-	}
+		// --- 敵が使った場合（プレイヤーへの判定） ---
+		else {
+			if (player && !player->IsDead()) {
+				Vector3 pPos = player->GetPosition();
+				Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
 
-	// 当たり判定の後で壁との衝突を確認する
-	if (Collision::CheckBlockCollision(pos_, 0.5f, level)) {
-		isFinished_ = true;
-		return;
+				if (Length(diff) < range_) {
+					int dmg = boss && boss->IsAttackDebuffed() ? damage_ / 2 : damage_;
+					player->TakeDamage(dmg, pos_);
+				}
+			}
+		}
 	}
 }
 
 void IceBulletEffect::Draw() {
-	// 有効中だけ描画
-	//if (!isFinished_ && obj_) {
-	//	obj_->Draw();
-	//}
+	if (indicatorObj_ && !isFinished_) {
+		indicatorObj_->Draw();
+	}
 }

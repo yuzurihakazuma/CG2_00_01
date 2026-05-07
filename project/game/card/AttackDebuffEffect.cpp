@@ -14,15 +14,7 @@ void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool i
 	timer_ = duration_;
 	casterPos_ = casterPos;
 
-	// 魔法発動時に、プレイヤーの周囲に360度全方位へ向かって紫色の波紋（パーティクル）を放つ
-	for (int i = 0; i < 60; i++) {
-		float angle = (3.141592f * 2.0f / 60.0f) * i;
-		Vector3 vel = { std::sinf(angle) * 0.3f, 0.0f, std::cosf(angle) * 0.3f };
-		Vector4 purpleColor = { 0.6f, 0.0f, 0.8f, 1.0f };
-
-		// スケールを 0.15f -> 0.4f に巨大化！寿命も 0.5f -> 0.8f に伸ばして遠くまでハッキリ見せる
-		GPUParticleManager::GetInstance()->Emit(casterPos_, vel, 0.8f, 0.4f, purpleColor);
-	}
+	
 }
 
 void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
