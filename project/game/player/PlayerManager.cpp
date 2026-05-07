@@ -61,44 +61,64 @@ void PlayerManager::Update(
 
     const LevelData& level = mapManager->GetLevelData();
 
-    // プレイヤー周囲のマスだけ判定する
-    int centerGridX = static_cast<int>(std::round(playerPos_.x / level.tileSize));
-    int centerGridZ = static_cast<int>(std::round(playerPos_.z / level.tileSize));
+    // 現在フレームでプレイヤーが移動した量を求める
+    Vector3 newPos = player_->GetPosition();
+    Vector3 moveDelta = newPos - oldPos;
 
-    int startX = std::max(0, centerGridX - 1);
-    int endX = std::min(level.width - 1, centerGridX + 1);
-    int startZ = std::max(0, centerGridZ - 1);
-    int endZ = std::min(level.height - 1, centerGridZ + 1);
+    // 指定座標でプレイヤーAABBが壁に当たるかを調べる
+    auto IsWallHit = [&](const Vector3& checkPos) -> bool {
+        AABB playerAABB;
+        playerAABB.min = { checkPos.x - 0.5f, checkPos.y - 0.5f, checkPos.z - 0.5f };
+        playerAABB.max = { checkPos.x + 0.5f, checkPos.y + 0.5f, checkPos.z + 0.5f };
 
-    bool isPlayerHit = false;
+        int centerGridX = static_cast<int>(std::round(checkPos.x / level.tileSize));
+        int centerGridZ = static_cast<int>(std::round(checkPos.z / level.tileSize));
 
-    for (int z = startZ; z <= endZ && !isPlayerHit; z++) {
-        for (int x = startX; x <= endX; x++) {
-            // 壁タイル以外は無視
-            if (level.tiles[z][x] != 1 && level.tiles[z][x] != 2) {
-                continue;
-            }
+        int startX = std::max(0, centerGridX - 1);
+        int endX = std::min(level.width - 1, centerGridX + 1);
+        int startZ = std::max(0, centerGridZ - 1);
+        int endZ = std::min(level.height - 1, centerGridZ + 1);
 
-            float worldX = x * level.tileSize;
-            float worldZ = z * level.tileSize;
+        for (int z = startZ; z <= endZ; z++) {
+            for (int x = startX; x <= endX; x++) {
+                // 壁タイル以外は無視する
+                if (level.tiles[z][x] != 1 && level.tiles[z][x] != 2) {
+                    continue;
+                }
 
-            // 壁ブロックの当たり判定を作成
-            AABB blockAABB;
-            blockAABB.min = { worldX - 1.0f, level.baseY, worldZ - 1.0f };
-            blockAABB.max = { worldX + 1.0f, level.baseY + 2.0f, worldZ + 1.0f };
+                float worldX = x * level.tileSize;
+                float worldZ = z * level.tileSize;
 
-            // 壁に当たったら更新前の位置に戻す
-            if (Collision::IsCollision(playerAABB, blockAABB)) {
-                player_->SetPosition(oldPos);
-                playerPos_ = oldPos;
-                isPlayerHit = true;
-                break;
+                AABB blockAABB;
+                blockAABB.min = { worldX - 1.0f, level.baseY, worldZ - 1.0f };
+                blockAABB.max = { worldX + 1.0f, level.baseY + 2.0f, worldZ + 1.0f };
+
+                if (Collision::IsCollision(playerAABB, blockAABB)) {
+                    return true;
+                }
             }
         }
+
+        return false;
+        };
+
+    // まず元の位置から開始する
+    Vector3 resolvedPos = oldPos;
+
+    // x方向だけ先に反映して、壁に当たらなければ通す
+    if (!IsWallHit({ oldPos.x + moveDelta.x, oldPos.y, oldPos.z })) {
+        resolvedPos.x = oldPos.x + moveDelta.x;
     }
 
-    // プレイヤーの現在スケールを保存
-    playerScale_ = player_->GetScale();
+    // 次にx反映後の位置を基準にz方向を判定する
+    if (!IsWallHit({ resolvedPos.x, oldPos.y, oldPos.z + moveDelta.z })) {
+        resolvedPos.z = oldPos.z + moveDelta.z;
+    }
+
+    // 最終的に通れた分だけプレイヤー位置へ反映する
+    player_->SetPosition(resolvedPos);
+    playerPos_ = resolvedPos;
+
 }
 
 void PlayerManager::Draw() {
