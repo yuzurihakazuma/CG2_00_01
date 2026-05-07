@@ -121,8 +121,11 @@ public:
     void SpawnCardsRandom(int cardCount, int margin, SpawnManager* spawnManager, CardPickupManager* cardPickupManager, EnemyManager* enemyManager, Camera* camera);
     std::vector<std::pair<int, int>> GetSpawnTilesInRoom(
         const DungeonGenerator::Room& room,
-        int margin
+        int margin,
+        const Vector3* avoidWorldPos = nullptr,
+        float avoidDistance = 0.0f
     ) const;
+
 
 public:
     // ボスマップ判定

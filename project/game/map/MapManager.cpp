@@ -791,8 +791,17 @@ void MapManager::RegenerateDungeonAndRespawnPlayer(
             std::mt19937 mt(rd());
 
             for (const auto& room : rooms) {
-                auto roomTilesForEnemy = GetSpawnTilesInRoom(room, enemySpawnMargin);
+                // 敵はプレイヤーの近くに湧かないように現在位置を渡す
+                auto roomTilesForEnemy = GetSpawnTilesInRoom(
+                    room,
+                    enemySpawnMargin,
+                    &playerPos,
+                    20.0f
+                );
+
+                // カードは今まで通りでOK
                 auto roomTilesForCard = GetSpawnTilesInRoom(room, cardSpawnMargin);
+
 
                 if (room.enemySpawnMax > 0 && room.enemySpawnPercent > 0 && !roomTilesForEnemy.empty()) {
                     std::shuffle(roomTilesForEnemy.begin(), roomTilesForEnemy.end(), mt);
@@ -884,7 +893,9 @@ void MapManager::UpdateMinimap(
 
 std::vector<std::pair<int, int>> MapManager::GetSpawnTilesInRoom(
     const DungeonGenerator::Room& room,
-    int margin
+    int margin,
+    const Vector3* avoidWorldPos,
+    float avoidDistance
 ) const {
     std::vector<std::pair<int, int>> result;
 
@@ -924,6 +935,21 @@ std::vector<std::pair<int, int>> MapManager::GetSpawnTilesInRoom(
 
             if (IsNearStairsTile(x, z)) {
                 continue;
+            }
+
+            // プレイヤー付近の敵スポーン候補を除外する
+            if (avoidWorldPos && avoidDistance > 0.0f) {
+                Vector3 worldPos = GetTileWorldPosition(x, z, 0.0f);
+                Vector3 diff = {
+                    worldPos.x - avoidWorldPos->x,
+                    0.0f,
+                    worldPos.z - avoidWorldPos->z
+                };
+
+                if (VectorMath::Length(diff) < avoidDistance) {
+                    continue;
+                }
+
             }
 
             result.push_back({ x, z });
