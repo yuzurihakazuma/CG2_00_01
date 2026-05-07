@@ -1120,6 +1120,13 @@ void GamePlayScene::Update() {
 
 	// プレイヤーが生存中なら手札UIを更新
 	if (playerManager_ && !playerManager_->IsDead()) {
+		if (fistCooldownTimer_ > 0) {
+			fistCooldownTimer_--;
+		}
+		handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
+		if (uiCamera_) {
+			uiCamera_->Update();
+		}
 		handManager_.Update();
 	}
 
@@ -1471,6 +1478,8 @@ void GamePlayScene::Draw() {
 
 	if (!isBossIntroPlaying) {
 
+		handManager_.DrawCooldownOverlays();
+
 		if (handManager_.GetHandSize() > 0 && descBgSprite_) {
 			descBgSprite_->Draw();
 		}
@@ -1727,6 +1736,8 @@ void GamePlayScene::ResetBattleDebug() {
 	if (playerCardSystem_) {
 		playerCardSystem_->Reset();
 	}
+	fistCooldownTimer_ = 0;
+	handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 
 	/*for (auto &system : enemyCardSystems_) {
 		if (system) {
@@ -1865,6 +1876,10 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
+	if (selectedCard.id == 1 && fistCooldownTimer_ > 0) {
+		return;
+	}
+
 	// 攻撃カード構え中は他の攻撃カードを使えない
 	if (isCardReady_ && selectedCard.id != 1 && static_cast<int>(selectedCard.effectType) == 0) {
 		return;
@@ -1902,6 +1917,11 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 
 			// ※ 先ほど作成したデバフUIクラス等があれば、ここで一緒に呼び出して文字を表示します
 			floorEffectManager_.ActivateDebuff(selectedCard.name);
+		}
+
+		if (selectedCard.id == 1) {
+			fistCooldownTimer_ = fistCooldownDuration_;
+			handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 		}
 	}
 
