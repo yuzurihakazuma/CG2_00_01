@@ -108,6 +108,8 @@ void GamePlayScene::Initialize(){
 
 	if ( testObj_ ){
 
+		testObj_->SetPipelineType(PipelineType::Object3D_CullNone);
+
 		testObj_->SetCamera(camera_.get());
 		testObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
 
@@ -168,6 +170,9 @@ void GamePlayScene::Initialize(){
 	hitEffectPlane_ = Obj3d::Create("plane");
 	hitEffectPlane_->SetEnvironmentMap(textures_["skybox"].srvIndex);
 	if ( hitEffectPlane_ ) {
+		
+		hitEffectPlane_->SetPipelineType(PipelineType::Object3D_CullNone);
+
 		hitEffectPlane_->SetCamera(camera_.get());
 
 		// 2. 目の前に配置する
@@ -283,20 +288,14 @@ void GamePlayScene::Draw(){
 	// --- 3D描画の前準備 ---
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 
-	// --- カリングありの3D描画 ---
-	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D);
 	
 	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(9, textures_["skybox"].srvIndex);
 	
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	
-
-
 	
 	EditorManager::GetInstance()->Draw();
 
-	// --- カリングなしの3D描画 ---
-	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
 	if ( testObj_ ){ 
 		testObj_->Draw();
 	}
