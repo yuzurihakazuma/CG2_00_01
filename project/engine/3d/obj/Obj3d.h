@@ -10,6 +10,7 @@
 #include "engine/math/Matrix4x4.h"
 #include "Animation.h"
 #include "IAnimatable.h"
+#include "engine/graphics/PipelineType.h"
 
 // 前方宣言
 class Obj3dCommon;
@@ -57,6 +58,7 @@ public:
 	
 	void PlayAnimation(Animation* animation);
 
+	void SetPipelineType(PipelineType type) { pipelineType_ = type; }
 	
 public:
 	// -------------------------------------------------
@@ -133,5 +135,7 @@ private:
 	std::string name_ = "Obj3d";
 
 	uint32_t skyboxTextureIndex_ = 0;
+
+	PipelineType pipelineType_ = PipelineType::Object3D;
 
 };

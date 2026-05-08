@@ -201,7 +201,7 @@ void PipelineManager::CreateObject3DRootSignature(){
 	builder.AddDescriptorTableSRV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [7]: ノイズ画像 (t1)
 	builder.AddCBV(5, D3D12_SHADER_VISIBILITY_PIXEL);                // [8]: ディゾルブ進行度 (b5)
 
-	builder.AddDescriptorTableSRV(2, D3D12_SHADER_VISIBILITY_PIXEL); // [9]: 環境マップ (t2)
+	builder.AddDescriptorTableSRV(3, D3D12_SHADER_VISIBILITY_PIXEL); // [9]: 環境マップ (t2)
 
 	builder.AddDefaultSampler(0);                                    // サンプラー (s0)
 	// 構築して object3DRootSignature_ に入れる！
@@ -254,7 +254,7 @@ void PipelineManager::CreateInstancedObject3DRootSignature(){
 	builder.AddDescriptorTableSRV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [7]: ノイズ画像 (t1)
 	builder.AddCBV(5, D3D12_SHADER_VISIBILITY_PIXEL);                // [8]: ディゾルブ進行度 (b5)
 
-	builder.AddDescriptorTableSRV(2, D3D12_SHADER_VISIBILITY_PIXEL); // [9]: 環境マップ (t2)
+	builder.AddDescriptorTableSRV(3, D3D12_SHADER_VISIBILITY_PIXEL); // [9]: 環境マップ (t3)
 
 	builder.AddDefaultSampler(0);                                    // サンプラー (s0)
 	builder.Build(dxCommon_->GetDevice(), instancedObject3DRootSignature_);
@@ -390,7 +390,7 @@ void PipelineManager::CreateSkinningObject3DRootSignature(){
 	builder.AddDescriptorTableSRV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [7]: ノイズ画像 (t1)
 	builder.AddCBV(5, D3D12_SHADER_VISIBILITY_PIXEL);                // [8]: ディゾルブ (b5)
 	builder.AddDescriptorTableSRV(2, D3D12_SHADER_VISIBILITY_VERTEX);// [9]: MatrixPalette (t2) ← 追加
-	builder.AddDescriptorTableSRV(2, D3D12_SHADER_VISIBILITY_PIXEL); // [10]: 環境マップ (t2)
+	builder.AddDescriptorTableSRV(3, D3D12_SHADER_VISIBILITY_PIXEL); // [10]: 環境マップ (t3)
 
 	builder.AddDefaultSampler(0);
 	builder.Build(dxCommon_->GetDevice(), skinningObject3DRootSignature_);

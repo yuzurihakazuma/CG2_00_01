@@ -11,7 +11,7 @@ ConstantBuffer<SpotLight> gSpotLight : register(b4); // スポットライトの定数バッ
 Texture2D<float4> gNoiseTexture : register(t1); // ノイズテクスチャ
 ConstantBuffer<DissolveData> gDissolve : register(b5); // ディゾルブ用の定数バッファ
 
-TextureCube<float32_t4> gEnvironmentTexture : register(t2); // 環境マップテクスチャ
+TextureCube<float32_t4> gEnvironmentTexture : register(t3); // 環境マップテクスチャ
 
 
 struct PixelShaderOutput
