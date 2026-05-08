@@ -15,6 +15,7 @@
 #include "engine/graphics/SrvManager.h"
 #include "Animation.h" 
 #include "engine/math/QuaternionMath.h"
+#include "engine/graphics/PipelineManager.h"
 
 using namespace MatrixMath;
 
@@ -175,6 +176,8 @@ void Obj3d::Draw(){
 	ID3D12GraphicsCommandList* commandList =
 		obj3dCommon_->GetDxCommon()->GetCommandList();
 	assert(commandList != nullptr);
+
+	PipelineManager::GetInstance()->SetPipeline(commandList, pipelineType_);
 
 	// 1. 座標情報の転送 (WVP) -> RootParameter[1]
 	// ※PipelineManagerの設定（RootSignature）と番号を合わせてください
