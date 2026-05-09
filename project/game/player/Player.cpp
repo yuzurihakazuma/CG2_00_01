@@ -102,6 +102,10 @@ void Player::Initialize() {
     costRecoveryTimer_ = 0;   // コスト回復タイマー初期化
     costRecoveryInterval_ = 180; // コスト回復速度初期化
 
+    maxCost_ = 5; // 初期最大コスト
+    cost_ = maxCost_;
+    costRecoveryMultiplier_ = 1.0f; // バフをリセット
+
     hp_ = 8;                  // 現在HP初期化
     maxHp_ = 8;               // 最大HP初期化
     isDead_ = false;          // 死亡状態リセット
@@ -523,6 +527,22 @@ void Player::UseCost(int value) {
     }
 }
 
+void Player::AddMaxCost(int amount) {
+    maxCost_ += amount;
+    // 上限が増えた分、現在のコストも即座に回復してあげる（使い勝手が良くなります）
+    if (amount > 0) {
+        cost_ += amount;
+    }
+    // 上限が減った時に、現在のコストが上限をオーバーしないようにする安全対策
+    if (cost_ > maxCost_) {
+        cost_ = maxCost_;
+    }
+}
+
+void Player::SetCostRecoveryMultiplier(float multiplier) {
+    costRecoveryMultiplier_ = multiplier;
+}
+
 void Player::Heal(int amount) {
     if (isDead_) {
         return; // 死亡中は回復しない
@@ -553,7 +573,8 @@ void Player::UpdateCost() {
         return;
     }
 
-    costRecoveryTimer_++;
+    costRecoveryTimer_ += static_cast<int>(1.0f * costRecoveryMultiplier_);
+
     if (costRecoveryTimer_ >= costRecoveryInterval_) {
         costRecoveryTimer_ = 0;
         cost_ += 1;

@@ -63,6 +63,9 @@ public:
     bool CanUseCost(int value) const;   // コスト使用可能判定
     void UseCost(int value);            // コスト消費
 
+    void AddMaxCost(int amount);        // 最大コスト増減
+    void SetCostRecoveryMultiplier(float multiplier);  //  コスト回復速度倍率セット
+
     int GetHP() const { return hp_; }         // 現在HP取得
     int GetMaxHP() const { return maxHp_; }   // 最大HP取得
     bool IsDead() const { return isDead_; }   // 死亡判定
@@ -215,4 +218,6 @@ private:
     char hitPoseNameBuffer_[64] = "hit";
     char deathPoseNameBuffer_[64] = "death";
     char blendStartPoseNameBuffer_[64] = "idle";
+
+    float costRecoveryMultiplier_ = 1.0f; // コスト回復速度倍率
 };

@@ -10,3 +10,4 @@ id,name,cost,effectType,sffectValue,description,modelName,effectName,seName,rari
 9,攻撃力低下,6,3,0,フロア内の敵\n攻撃力を下げる(1回のみ),CardAtkDown,nullptr,nullptr,0,0,1
 10,クロー,8,0,5,5ダメージ与える,CardClaw,nullptr,nullptr,0,1,0
 11,マップ表示,3,3,0,ミニマップを全て表示する,CardScanner,nullptr,nullptr,0,0,0
+12,コストブースト,4,2,3,10秒間コストの\n上限上昇と自動回復倍,CardCostBoost,nullptr,nullptr,0,0,1
