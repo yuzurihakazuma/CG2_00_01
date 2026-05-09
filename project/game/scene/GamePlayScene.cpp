@@ -119,6 +119,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("CardAtkDown", "resources/card", "CardAtkDown.obj");
 	ModelManager::GetInstance()->LoadModel("CardClaw", "resources/card", "CardClaw.obj");
 	ModelManager::GetInstance()->LoadModel("CardScanner", "resources/card", "MapOpen.obj");
+	ModelManager::GetInstance()->LoadModel("CardCostBoost", "resources/card", "CardCostBoost.obj");
 
 
 	// 追加のカード用棘モデル
