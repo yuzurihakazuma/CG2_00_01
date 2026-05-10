@@ -15,7 +15,7 @@
 #include "game/card/CardDatabase.h"
 #include "engine/collision/Collision.h"
 #include "engine/math/VectorMath.h"
-
+#include "engine/particle/GPUParticleManager.h"
 
 using namespace VectorMath;
 

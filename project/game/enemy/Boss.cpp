@@ -1,690 +1,878 @@
 #include "game/enemy/Boss.h"
 #include "engine/math/VectorMath.h"
 #include "game/card/CardDatabase.h"
+#include "engine/particle/GPUParticleManager.h" 
 #include <algorithm>
 #include <cmath>
 #include <random>
-
 using namespace VectorMath;
 
 namespace {
-constexpr float kBossAppearDropHeight = 18.0f;
+	constexpr float kBossAppearDropHeight = 18.0f;
 }
 
 void Boss::Initialize() {
-    rot_ = { 0.0f, 0.0f, 0.0f };
-    scale_ = { 2.0f, 2.0f, 2.0f };
+	rot_ = { 0.0f, 0.0f, 0.0f };
+	scale_ = { 2.0f, 2.0f, 2.0f };
 
-    state_ = State::Appear;
+	state_ = State::Appear;
 
-    maxHP_ = 60;
-    hp_ = maxHP_;
-    isDead_ = false;
+	maxHP_ = 60;
+	hp_ = maxHP_;
+	isDead_ = false;
 
-    thinkTimer_ = 0;
+	thinkTimer_ = 0;
 
-    isActionLocked_ = false;
-    actionLockTimer_ = 0;
+	isActionLocked_ = false;
+	actionLockTimer_ = 0;
 
-    isHit_ = false;
-    hitTimer_ = 0;
-    knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+	isHit_ = false;
+	hitTimer_ = 0;
+	knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
 
-    cardUseRequest_ = false;
-    selectedCard_ = { -1, "", 0 };
-    lastUsedCardId_ = -1;
+	cardUseRequest_ = false;
+	selectedCard_ = { -1, "", 0 };
+	lastUsedCardId_ = -1;
 
-    isAttackDebuffed_ = false;
+	isAttackDebuffed_ = false;
 
-    appearTimer_ = appearDuration_;
+	appearTimer_ = appearDuration_;
 
-    cardCooldownTimers_.clear();
-    cardCooldownTimer_ = 0;
-    castDurationCurrent_ = castTime_;
+	cardCooldownTimers_.clear();
+	cardCooldownTimer_ = 0;
+	castDurationCurrent_ = castTime_;
 
-    SetSpawnPosition({ 10.0f, 2.0f, 10.0f });
-    InitializeBossCards();
+	SetSpawnPosition({ 10.0f, 2.0f, 10.0f });
+	InitializeBossCards();
 }
 
 void Boss::InitializeBossCards() {
-    heldCards_.clear();
-    heldCards_.push_back(CardDatabase::GetCardData(101));
-    heldCards_.push_back(CardDatabase::GetCardData(102));
-    heldCards_.push_back(CardDatabase::GetCardData(103));
-    heldCards_.push_back(CardDatabase::GetCardData(104));
+	heldCards_.clear();
+	heldCards_.push_back(CardDatabase::GetCardData(101));
+	heldCards_.push_back(CardDatabase::GetCardData(102));
+	heldCards_.push_back(CardDatabase::GetCardData(103));
+	heldCards_.push_back(CardDatabase::GetCardData(104));
 }
 
 Card Boss::SelectCardForDistance(float dist, bool isEnraged) {
-    std::vector<Card> candidates;
-    auto addWeightedCard = [&](int cardId, int weight) {
-        if (weight <= 0) {
-            return;
-        }
+	std::vector<Card> candidates;
+	auto addWeightedCard = [&](int cardId, int weight) {
+		if (weight <= 0) {
+			return;
+		}
 
-        for (const auto& card : heldCards_) {
-            if (card.id != cardId || !IsCardReady(card.id)) {
-                continue;
-            }
+		for (const auto& card : heldCards_) {
+			if (card.id != cardId || !IsCardReady(card.id)) {
+				continue;
+			}
 
-            for (int i = 0; i < weight; ++i) {
-                candidates.push_back(card);
-            }
-            return;
-        }
-    };
+			for (int i = 0; i < weight; ++i) {
+				candidates.push_back(card);
+			}
+			return;
+		}
+		};
 
-    if (dist < 5.5f) {
-        addWeightedCard(101, 5);
-        addWeightedCard(102, isEnraged ? 2 : 1);
-        addWeightedCard(104, isEnraged ? 3 : 2);
-        addWeightedCard(103, 1);
-    } else if (dist < 14.0f) {
-        addWeightedCard(102, isEnraged ? 7 : 5);
-        addWeightedCard(104, isEnraged ? 6 : 4);
-        addWeightedCard(103, isEnraged ? 3 : 2);
-        addWeightedCard(101, 2);
-    } else {
-        addWeightedCard(102, isEnraged ? 8 : 6);
-        addWeightedCard(104, isEnraged ? 7 : 5);
-        addWeightedCard(103, isEnraged ? 5 : 4);
-    }
+	if (dist < 5.5f) {
+		addWeightedCard(101, 5);
+		addWeightedCard(102, isEnraged ? 2 : 1);
+		addWeightedCard(104, isEnraged ? 3 : 2);
+		addWeightedCard(103, 1);
+	}
+	else if (dist < 14.0f) {
+		addWeightedCard(102, isEnraged ? 7 : 5);
+		addWeightedCard(104, isEnraged ? 6 : 4);
+		addWeightedCard(103, isEnraged ? 3 : 2);
+		addWeightedCard(101, 2);
+	}
+	else {
+		addWeightedCard(102, isEnraged ? 8 : 6);
+		addWeightedCard(104, isEnraged ? 7 : 5);
+		addWeightedCard(103, isEnraged ? 5 : 4);
+	}
 
-    // 連続で同じカードばかりにならないように、別カード候補がある時は前回と同じものを除外する
-    bool hasDifferentCard = false;
-    for (const auto& card : candidates) {
-        if (card.id != lastUsedCardId_) {
-            hasDifferentCard = true;
-            break;
-        }
-    }
-    if (hasDifferentCard) {
-        candidates.erase(
-            std::remove_if(
-                candidates.begin(),
-                candidates.end(),
-                [&](const Card& card) { return card.id == lastUsedCardId_; }
-            ),
-            candidates.end()
-        );
-    }
+	// 連続で同じカードばかりにならないように、別カード候補がある時は前回と同じものを除外する
+	bool hasDifferentCard = false;
+	for (const auto& card : candidates) {
+		if (card.id != lastUsedCardId_) {
+			hasDifferentCard = true;
+			break;
+		}
+	}
+	if (hasDifferentCard) {
+		candidates.erase(
+			std::remove_if(
+				candidates.begin(),
+				candidates.end(),
+				[&](const Card& card) { return card.id == lastUsedCardId_; }
+			),
+			candidates.end()
+		);
+	}
 
-    if (candidates.empty()) {
-        for (const auto& card : heldCards_) {
-            if (IsCardReady(card.id)) {
-                candidates.push_back(card);
-            }
-        }
-    }
+	if (candidates.empty()) {
+		for (const auto& card : heldCards_) {
+			if (IsCardReady(card.id)) {
+				candidates.push_back(card);
+			}
+		}
+	}
 
-    if (candidates.empty()) {
-        return Card{ -1, "", 0 };
-    }
+	if (candidates.empty()) {
+		return Card{ -1, "", 0 };
+	}
 
-    static std::random_device rd;
-    static std::mt19937 mt(rd());
-    std::uniform_int_distribution<int> distCard(0, static_cast<int>(candidates.size()) - 1);
-    return candidates[distCard(mt)];
+	static std::random_device rd;
+	static std::mt19937 mt(rd());
+	std::uniform_int_distribution<int> distCard(0, static_cast<int>(candidates.size()) - 1);
+	return candidates[distCard(mt)];
 }
 
 int Boss::GetCastTimeForCard(int cardId, bool isEnraged) const {
-    if (cardId == 104) {
-        return isEnraged ? 90 : 120;
-    }
+	if (cardId == 104) {
+		return isEnraged ? 90 : 120;
+	}
 
-    if (cardId == 103) {
-        return isEnraged ? 46 : 58;
-    }
+	if (cardId == 103) {
+		return isEnraged ? 46 : 58;
+	}
 
-    if (cardId == 101) {
-        return isEnraged ? 28 : 38;
-    }
+	if (cardId == 101) {
+		return isEnraged ? 28 : 38;
+	}
 
-    if (cardId == 102) {
-        return isEnraged ? 34 : 46;
-    }
+	if (cardId == 102) {
+		return isEnraged ? 34 : 46;
+	}
 
-    return isEnraged ? 40 : castTime_;
+	return isEnraged ? 40 : castTime_;
 }
 
 int Boss::GetRecoveryTimeForCard(int cardId, bool isEnraged) const {
-    if (cardId == 104) {
-        return isEnraged ? 34 : 48;
-    }
+	if (cardId == 104) {
+		return isEnraged ? 34 : 48;
+	}
 
-    if (cardId == 103) {
-        return isEnraged ? 28 : 40;
-    }
+	if (cardId == 103) {
+		return isEnraged ? 28 : 40;
+	}
 
-    if (cardId == 102) {
-        return isEnraged ? 24 : 34;
-    }
+	if (cardId == 102) {
+		return isEnraged ? 24 : 34;
+	}
 
-    if (cardId == 101) {
-        return isEnraged ? 18 : 26;
-    }
+	if (cardId == 101) {
+		return isEnraged ? 18 : 26;
+	}
 
-    return isEnraged ? 18 : 26;
+	return isEnraged ? 18 : 26;
 }
 
 void Boss::ApplyCastingPose(float normalizedTime) {
-    float t = std::clamp(normalizedTime, 0.0f, 1.0f);
-    float settle = t * t * (3.0f - 2.0f * t);
-    float sway = std::sinf(t * 6.28318f) * 0.08f;
+	float t = std::clamp(normalizedTime, 0.0f, 1.0f);
+	float settle = t * t * (3.0f - 2.0f * t);
+	float sway = std::sinf(t * 6.28318f) * 0.08f;
 
-    rot_.x = 0.10f + settle * 0.22f;
-    rot_.z = sway;
+	rot_.x = 0.10f + settle * 0.22f;
+	rot_.z = sway;
 
-    // 破壊光線は必殺技らしく、腰を落としてためてから前へ押し出す構えにする
-    if (selectedCard_.id == 104) {
-        float charge = std::sinf(t * 3.14159f);
-        float pulse = 0.5f + 0.5f * std::sinf(t * 18.84954f);
-        float hold = t * t * (3.0f - 2.0f * t);
+	// 破壊光線は必殺技らしく、腰を落としてためてから前へ押し出す構えにする
+	if (selectedCard_.id == 104) {
+		float charge = std::sinf(t * 3.14159f);
+		float pulse = 0.5f + 0.5f * std::sinf(t * 18.84954f);
+		float hold = t * t * (3.0f - 2.0f * t);
 
-        rot_.x = 0.22f + hold * 0.55f;
-        rot_.z = std::sinf(t * 12.56636f) * 0.08f;
+		rot_.x = 0.22f + hold * 0.55f;
+		rot_.z = std::sinf(t * 12.56636f) * 0.08f;
 
-        scale_ = {
-            2.0f + charge * 0.25f + pulse * 0.04f,
-            1.75f - charge * 0.22f,
-            2.0f + hold * 1.25f + pulse * 0.08f
-        };
+		scale_ = {
+			2.0f + charge * 0.25f + pulse * 0.04f,
+			1.75f - charge * 0.22f,
+			2.0f + hold * 1.25f + pulse * 0.08f
+		};
 
-        if (t > 0.72f) {
-            float finisher = (t - 0.72f) / 0.28f;
-            finisher = std::clamp(finisher, 0.0f, 1.0f);
+		if (t > 0.72f) {
+			float finisher = (t - 0.72f) / 0.28f;
+			finisher = std::clamp(finisher, 0.0f, 1.0f);
 
-            rot_.x += finisher * 0.18f;
-            scale_.z += finisher * 0.45f;
-            scale_.y -= finisher * 0.06f;
-        }
-        return;
-    }
+			rot_.x += finisher * 0.18f;
+			scale_.z += finisher * 0.45f;
+			scale_.y -= finisher * 0.06f;
+		}
+		return;
+	}
 
 
 
-    if (selectedCard_.id == 103) {
-        scale_ = {
-            2.1f + settle * 0.15f,
-            2.0f + settle * 0.35f,
-            2.1f + settle * 0.15f
-        };
-        return;
-    }
+	if (selectedCard_.id == 103) {
+		scale_ = {
+			2.1f + settle * 0.15f,
+			2.0f + settle * 0.35f,
+			2.1f + settle * 0.15f
+		};
+		return;
+	}
 
-    scale_ = {
-        2.0f + settle * 0.22f,
-        2.0f + settle * 0.18f,
-        2.0f + settle * 0.22f
-    };
+	scale_ = {
+		2.0f + settle * 0.22f,
+		2.0f + settle * 0.18f,
+		2.0f + settle * 0.22f
+	};
 }
 
 void Boss::ApplyPreBattlePose(float normalizedTime) {
-    float t = std::clamp(normalizedTime, 0.0f, 1.0f);
-    float ease = t * t * (3.0f - 2.0f * t);
+	float t = std::clamp(normalizedTime, 0.0f, 1.0f);
+	float ease = t * t * (3.0f - 2.0f * t);
 
-    rot_.x = 0.10f + ease * 0.22f;
-    rot_.z = std::sinf(t * 3.14159f) * 0.05f;
+	rot_.x = 0.10f + ease * 0.22f;
+	rot_.z = std::sinf(t * 3.14159f) * 0.05f;
 
-    scale_ = {
-        2.0f + ease * 0.10f,
-        2.0f - ease * 0.06f,
-        2.0f + ease * 0.18f
-    };
+	scale_ = {
+		2.0f + ease * 0.10f,
+		2.0f - ease * 0.06f,
+		2.0f + ease * 0.18f
+	};
 }
 
 void Boss::ResetPose() {
-    rot_.x = 0.0f;
-    rot_.z = 0.0f;
-    scale_ = { 2.0f, 2.0f, 2.0f };
+	rot_.x = 0.0f;
+	rot_.z = 0.0f;
+	scale_ = { 2.0f, 2.0f, 2.0f };
 }
 
 void Boss::Update() {
-    if (isDead_) {
-        state_ = State::Dead;
-        return;
-    }
+	if (isDead_) {
+		state_ = State::Dead;
+		return;
+	}
 
-    cardUseRequest_ = false;
+	cardUseRequest_ = false;
 
-    if (state_ == State::Appear) {
-        UpdateAppear();
-        return;
-    }
+	if (state_ == State::Appear) {
+		UpdateAppear();
+		return;
+	}
 
-    if (cardCooldownTimer_ > 0) {
-        cardCooldownTimer_--;
-    }
+	if (cardCooldownTimer_ > 0) {
+		cardCooldownTimer_--;
+	}
 
-    for (auto& [cardId, timer] : cardCooldownTimers_) {
-        if (timer > 0) {
-            timer--;
-        }
-    }
+	for (auto& [cardId, timer] : cardCooldownTimers_) {
+		if (timer > 0) {
+			timer--;
+		}
+	}
 
-    if (isHit_) {
-        pos_ += knockbackVelocity_;
-        knockbackVelocity_ *= 0.85f;
+	if (isHit_) {
+		pos_ += knockbackVelocity_;
+		knockbackVelocity_ *= 0.85f;
 
-        hitTimer_--;
-        if (hitTimer_ <= 0) {
-            isHit_ = false;
-            knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
-        }
-        return;
-    }
+		hitTimer_--;
+		if (hitTimer_ <= 0) {
+			isHit_ = false;
+			knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+		}
+		return;
+	}
 
-    if (isActionLocked_) {
-        actionLockTimer_--;
-        if (actionLockTimer_ <= 0) {
-            isActionLocked_ = false;
-        }
-        return;
-    }
+	if (isActionLocked_) {
+		actionLockTimer_--;
+		if (actionLockTimer_ <= 0) {
+			isActionLocked_ = false;
+		}
+		return;
+	}
 
-    if (thinkTimer_ > 0) {
-        thinkTimer_--;
-    }
+	if (thinkTimer_ > 0) {
+		thinkTimer_--;
+	}
 
-    if (thinkTimer_ <= 0) {
-        DecideNextState();
-    }
+	if (thinkTimer_ <= 0) {
+		DecideNextState();
+	}
 
-    switch (state_) {
-    case State::Idle:
-        UpdateIdle();
-        break;
+	UpdateEnrageEffect();
 
-    case State::Chase:
-        UpdateChase();
-        break;
+	switch (state_) {
+	case State::Idle:
+		UpdateIdle();
+		break;
 
-    case State::UseCard:
-        UpdateUseCard();
-        break;
+	case State::Chase:
+		UpdateChase();
+		break;
 
-    case State::Appear:
-    case State::Dead:
-        break;
-    }
+	case State::UseCard:
+		UpdateUseCard();
+		break;
 
-    
+	case State::Appear:
+	case State::Dead:
+		break;
+	}
+
+
 }
 
 void Boss::UpdateAppear() {
-    if (appearTimer_ > 0) {
-        appearTimer_--;
-    }
+	if (appearTimer_ > 0) {
+		appearTimer_--;
+	}
 
-    float t = 1.0f - (static_cast<float>(appearTimer_) / static_cast<float>(appearDuration_));
-    t = std::clamp(t, 0.0f, 1.0f);
+	float t = 1.0f - (static_cast<float>(appearTimer_) / static_cast<float>(appearDuration_));
+	t = std::clamp(t, 0.0f, 1.0f);
 
-    // 落下は速く、着地前で少しためる
-    float eased = 1.0f - std::pow(1.0f - t, 4.0f);
+	// 落下は速く、着地前で少しためる
+	float eased = 1.0f - std::pow(1.0f - t, 4.0f);
 
-    pos_.y = appearStartY_ + (appearTargetY_ - appearStartY_) * eased;
+	pos_.y = appearStartY_ + (appearTargetY_ - appearStartY_) * eased;
 
-    // 落下中の前傾とひねり
-    rot_.x = (1.0f - t) * 0.45f;
-    rot_.y += 0.18f;
-    rot_.z = std::sinf(t * 9.42477f) * 0.12f;
+	// 落下中の前傾とひねり
+	rot_.x = (1.0f - t) * 0.45f;
+	rot_.y += 0.18f;
+	rot_.z = std::sinf(t * 9.42477f) * 0.12f;
 
-    // 着地前後の膨らみ
-    float impact = std::sinf(t * 3.14159f);
-    scale_ = {
-        2.0f + impact * 0.12f,
-        2.0f - impact * 0.08f,
-        2.0f + impact * 0.12f
-    };
+	// 着地前後の膨らみ
+	float impact = std::sinf(t * 3.14159f);
+	scale_ = {
+		2.0f + impact * 0.12f,
+		2.0f - impact * 0.08f,
+		2.0f + impact * 0.12f
+	};
 
-    if (appearTimer_ <= 0) {
-        pos_.y = appearTargetY_;
-        rot_.x = 0.0f;
-        rot_.z = 0.0f;
+	if (appearTimer_ > 0) {
+		// ボスの巨体に合わせて、毎フレーム大量の炎を出す
+		for (int i = 0; i < 15; i++) {
+			Vector3 trailPos = {
+				pos_.x + (rand() % 31 - 15) * 0.1f, // ボスの体幅に合わせて散らす
+				pos_.y + (rand() % 21 - 10) * 0.1f,
+				pos_.z + (rand() % 31 - 15) * 0.1f
+			};
 
-        Vector3 dir = {
-            playerPos_.x - pos_.x,
-            0.0f,
-            playerPos_.z - pos_.z
-        };
+			// 落下スピードを強調するため、パーティクルを「上方向」に勢いよく流す
+			Vector3 trailVel = {
+				(rand() % 11 - 5) * 0.02f,
+				0.3f + (rand() % 10) * 0.05f, // 🌟 上へ向かって尾を引く！
+				(rand() % 11 - 5) * 0.02f
+			};
 
-        if (Length(dir) > 0.01f) {
-            rot_.y = std::atan2f(dir.x, dir.z);
-        }
+			// 大気摩擦で燃えているような 濃いオレンジ と 赤色
+			Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 0.3f, 0.0f, 0.8f } : Vector4{ 1.0f, 0.1f, 0.0f, 0.8f };
 
-        state_ = State::Idle;
-        thinkTimer_ = 20;
-    }
+			float scale = 0.8f + (rand() % 10) * 0.1f;
+
+			// 少し長めに画面に残して、綺麗な軌跡（線）を作る
+			GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, 0.8f, scale, color);
+		}
+	}
+
+	if (appearTimer_ <= 0) {
+		pos_.y = appearTargetY_;
+		rot_.x = 0.0f;
+		rot_.z = 0.0f;
+
+		Vector3 dir = {
+			playerPos_.x - pos_.x,
+			0.0f,
+			playerPos_.z - pos_.z
+		};
+
+		if (Length(dir) > 0.01f) {
+			rot_.y = std::atan2f(dir.x, dir.z);
+		}
+
+		Vector3 landPos = pos_;
+		landPos.y = appearTargetY_ - 1.5f;
+
+		for (int i = 0; i < 120; i++) {
+			float angle = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
+			float speed = 0.1f + (rand() % 10) * 0.015f;
+			Vector3 smokeVel = {
+				std::sinf(angle) * speed,
+				0.02f + (rand() % 10) * 0.01f, // 少しだけ上に浮かせる
+				std::cosf(angle) * speed
+			};
+			// 暗い床でもハッキリ見える「明るいグレーと白」の土埃
+			Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.8f, 0.8f, 0.8f } : Vector4{ 0.6f, 0.6f, 0.6f, 0.8f };
+			// サイズを元の2〜3倍に超巨大化！
+			float scale = 3.0f + (rand() % 20) * 0.1f;
+
+			// 寿命を長く（1.5秒）してしっかり見せる
+			GPUParticleManager::GetInstance()->Emit(landPos, smokeVel, 1.5f, scale, color);
+		}
+
+		for (int i = 0; i < 60; i++) {
+			float angle = (3.141592f * 2.0f / 60.0f) * i; // 綺麗な円に並べる
+			float speed = 0.4f; // 光の輪は速く広げる
+			Vector3 ringVel = {
+				std::sinf(angle) * speed,
+				0.0f,
+				std::cosf(angle) * speed
+			};
+			GPUParticleManager::GetInstance()->Emit(landPos, ringVel, 0.8f, 1.5f, { 1.0f, 1.0f, 0.8f, 1.0f });
+		}
+		for (int i = 0; i < 40; i++) {
+			Vector3 sparkVel = {
+				(rand() % 21 - 10) * 0.05f,
+				(rand() % 10) * 0.1f + 0.1f, // 上に強く跳ねる
+				(rand() % 21 - 10) * 0.05f
+			};
+			float scale = 0.5f + (rand() % 5) * 0.1f;
+			GPUParticleManager::GetInstance()->Emit(landPos, sparkVel, 1.0f, scale, { 1.0f, 0.6f, 0.1f, 1.0f });
+		}
+	
+		state_ = State::Idle;
+		thinkTimer_ = 20;
+	}
 }
-
 void Boss::DecideNextState() {
-    if (state_ == State::Appear) {
-        return;
-    }
+	if (state_ == State::Appear) {
+		return;
+	}
 
-    if (state_ == State::UseCard && isCasting_) {
-        return;
-    }
+	if (state_ == State::UseCard && isCasting_) {
+		return;
+	}
 
-    Vector3 toPlayer = {
-        playerPos_.x - pos_.x,
-        0.0f,
-        playerPos_.z - pos_.z
-    };
+	Vector3 toPlayer = {
+		playerPos_.x - pos_.x,
+		0.0f,
+		playerPos_.z - pos_.z
+	};
 
-    float playerDist = Length(toPlayer);
+	float playerDist = Length(toPlayer);
 
-    if (state_ == State::UseCard) {
-        return;
-    }
+	if (state_ == State::UseCard) {
+		return;
+	}
 
-    if (playerDist <= chaseRange_) {
-        state_ = State::Chase;
-    } else {
-        state_ = State::Idle;
-    }
+	if (playerDist <= chaseRange_) {
+		state_ = State::Chase;
+	}
+	else {
+		state_ = State::Idle;
+	}
 }
 
 void Boss::UpdateIdle() {
-    Vector3 dir = {
-        playerPos_.x - pos_.x,
-        0.0f,
-        playerPos_.z - pos_.z
-    };
+	Vector3 dir = {
+		playerPos_.x - pos_.x,
+		0.0f,
+		playerPos_.z - pos_.z
+	};
 
-    float dist = Length(dir);
-    if (thinkTimer_ > 0) {
-        return;
-    }
+	float dist = Length(dir);
+	if (thinkTimer_ > 0) {
+		return;
+	}
 
-    if (dist <= chaseRange_) {
-        state_ = State::Chase;
-        thinkTimer_ = 0;
-    }
+	if (dist <= chaseRange_) {
+		state_ = State::Chase;
+		thinkTimer_ = 0;
+	}
 }
 
 void Boss::UpdateChase() {
-    if (isCasting_) {
-        isCasting_ = false;
-        scale_ = { 2.0f, 2.0f, 2.0f };
-        rot_.x = 0.0f;
-        rot_.z = 0.0f;
-    }
+	if (isCasting_) {
+		isCasting_ = false;
+		scale_ = { 2.0f, 2.0f, 2.0f };
+		rot_.x = 0.0f;
+		rot_.z = 0.0f;
+	}
 
-    Vector3 dir = {
-        playerPos_.x - pos_.x,
-        0.0f,
-        playerPos_.z - pos_.z
-    };
+	Vector3 dir = {
+		playerPos_.x - pos_.x,
+		0.0f,
+		playerPos_.z - pos_.z
+	};
 
-    float dist = Length(dir);
-    const bool isEnraged = hp_ <= (maxHP_ / 2);
-    const float moveSpeed = isEnraged ? 0.11f : 0.08f;
-    const float cardStartRange = isEnraged ? 28.0f : 24.0f;
-    const float stopRange = isEnraged ? 2.4f : 3.0f;
+	float dist = Length(dir);
+	const bool isEnraged = hp_ <= (maxHP_ / 2);
+	const float moveSpeed = isEnraged ? 0.11f : 0.08f;
+	const float cardStartRange = isEnraged ? 28.0f : 24.0f;
+	const float stopRange = isEnraged ? 2.4f : 3.0f;
 
-    if (dist > 0.01f) {
-        Vector3 normDir = Normalize(dir);
-        rot_.y = std::atan2f(normDir.x, normDir.z);
-    }
+	if (dist > 0.01f) {
+		Vector3 normDir = Normalize(dir);
+		rot_.y = std::atan2f(normDir.x, normDir.z);
+	}
 
-    // 中距離から技に入れるようにして、追いかけるだけの時間を短くする。
-    if (cardCooldownTimer_ <= 0 && dist <= cardStartRange) {
-        state_ = State::UseCard;
-        thinkTimer_ = 0;
-        return;
-    }
+	// 中距離から技に入れるようにして、追いかけるだけの時間を短くする。
+	if (cardCooldownTimer_ <= 0 && dist <= cardStartRange) {
+		state_ = State::UseCard;
+		thinkTimer_ = 0;
+		return;
+	}
 
-    if (dist > stopRange) {
-        Vector3 normDir = Normalize(dir);
-        pos_ += normDir * moveSpeed;
-    }
+	if (dist > stopRange) {
+		Vector3 normDir = Normalize(dir);
+		pos_ += normDir * moveSpeed;
+	}
 }
 
 void Boss::UpdateUseCard() {
-    // HPが半分以下なら怒り状態
-    const bool isEnraged = hp_ <= (maxHP_ / 2);
+	// HPが半分以下なら怒り状態
+	const bool isEnraged = hp_ <= (maxHP_ / 2);
 
-    // =========================================================
-    // 1. 詠唱開始前（ここで「どのカードを使うか」を抽選で決める！）
-    // =========================================================
-    if (!isCasting_) {
-        Vector3 startDir = {
-            playerPos_.x - pos_.x,
-            0.0f,
-            playerPos_.z - pos_.z
-        };
-        float dist = Length(startDir);
+	// =========================================================
+	// 1. 詠唱開始前（ここで「どのカードを使うか」を抽選で決める！）
+	// =========================================================
+	if (!isCasting_) {
+		Vector3 startDir = {
+			playerPos_.x - pos_.x,
+			0.0f,
+			playerPos_.z - pos_.z
+		};
+		float dist = Length(startDir);
 
-        std::vector<Card> candidates;
-        auto addWeightedCard = [&](int cardId, int weight) {
-            if (weight <= 0) return;
-            for (const auto &card : heldCards_) {
-                if (card.id != cardId || !IsCardReady(card.id)) continue;
-                for (int i = 0; i < weight; ++i) {
-                    candidates.push_back(card);
-                }
-                return;
-            }
-            };
+		std::vector<Card> candidates;
+		auto addWeightedCard = [&](int cardId, int weight) {
+			if (weight <= 0) return;
+			for (const auto& card : heldCards_) {
+				if (card.id != cardId || !IsCardReady(card.id)) continue;
+				for (int i = 0; i < weight; ++i) {
+					candidates.push_back(card);
+				}
+				return;
+			}
+			};
 
-        // 距離と怒り状態に応じた確率の振り分け
-        if (dist < 5.5f) {
-            addWeightedCard(101, 5);
-            addWeightedCard(102, isEnraged ? 2 : 1);
-            if (isEnraged) addWeightedCard(104, 3); // 近距離でも怒り時は少し撃つ
-            addWeightedCard(103, 1);
-        } else if (dist < 14.0f) {
-            addWeightedCard(102, isEnraged ? 7 : 5);
-            if (isEnraged) addWeightedCard(104, 6); // 中距離はビーム率高め
-            addWeightedCard(103, isEnraged ? 3 : 2);
-            addWeightedCard(101, 2);
-        } else {
-            addWeightedCard(102, isEnraged ? 8 : 6);
-            if (isEnraged) addWeightedCard(104, 7); // 遠距離もビーム率高め
-            addWeightedCard(103, isEnraged ? 5 : 4);
-        }
+		// 距離と怒り状態に応じた確率の振り分け
+		if (dist < 5.5f) {
+			addWeightedCard(101, 5);
+			addWeightedCard(102, isEnraged ? 2 : 1);
+			if (isEnraged) addWeightedCard(104, 3); // 近距離でも怒り時は少し撃つ
+			addWeightedCard(103, 1);
+		}
+		else if (dist < 14.0f) {
+			addWeightedCard(102, isEnraged ? 7 : 5);
+			if (isEnraged) addWeightedCard(104, 6); // 中距離はビーム率高め
+			addWeightedCard(103, isEnraged ? 3 : 2);
+			addWeightedCard(101, 2);
+		}
+		else {
+			addWeightedCard(102, isEnraged ? 8 : 6);
+			if (isEnraged) addWeightedCard(104, 7); // 遠距離もビーム率高め
+			addWeightedCard(103, isEnraged ? 5 : 4);
+		}
 
-        // 連続で同じカードにならないようにする処理
-        bool hasDifferentCard = false;
-        for (const auto &card : candidates) {
-            if (card.id != lastUsedCardId_) {
-                hasDifferentCard = true;
-                break;
-            }
-        }
-        if (hasDifferentCard) {
-            candidates.erase(
-                std::remove_if(candidates.begin(), candidates.end(),
-                    [&](const Card &card) { return card.id == lastUsedCardId_; }
-                ),
-                candidates.end()
-            );
-        }
+		// 連続で同じカードにならないようにする処理
+		bool hasDifferentCard = false;
+		for (const auto& card : candidates) {
+			if (card.id != lastUsedCardId_) {
+				hasDifferentCard = true;
+				break;
+			}
+		}
+		if (hasDifferentCard) {
+			candidates.erase(
+				std::remove_if(candidates.begin(), candidates.end(),
+					[&](const Card& card) { return card.id == lastUsedCardId_; }
+				),
+				candidates.end()
+			);
+		}
 
-        // 候補が空なら、使えるものをとにかく入れる
-        if (candidates.empty()) {
-            for (const auto &card : heldCards_) {
-                if (IsCardReady(card.id)) candidates.push_back(card);
-            }
-        }
+		// 候補が空なら、使えるものをとにかく入れる
+		if (candidates.empty()) {
+			for (const auto& card : heldCards_) {
+				if (IsCardReady(card.id)) candidates.push_back(card);
+			}
+		}
 
-        // それでも使えるカードがない場合はチェイス(追跡)に戻る
-        if (candidates.empty()) {
-            state_ = State::Chase;
-            thinkTimer_ = 20;
-            scale_ = { 2.0f, 2.0f, 2.0f };
-            rot_.x = 0.0f;
-            rot_.z = 0.0f;
-            return;
-        }
+		// それでも使えるカードがない場合はチェイス(追跡)に戻る
+		if (candidates.empty()) {
+			state_ = State::Chase;
+			thinkTimer_ = 20;
+			scale_ = { 2.0f, 2.0f, 2.0f };
+			rot_.x = 0.0f;
+			rot_.z = 0.0f;
+			return;
+		}
 
-        // ★ 確率の配列の中からランダムで1つ決定！
-        static std::random_device rd;
-        static std::mt19937 mt(rd());
-        std::uniform_int_distribution<int> distCard(0, static_cast<int>(candidates.size()) - 1);
+		// ★ 確率の配列の中からランダムで1つ決定！
+		static std::random_device rd;
+		static std::mt19937 mt(rd());
+		std::uniform_int_distribution<int> distCard(0, static_cast<int>(candidates.size()) - 1);
 
-        selectedCard_ = candidates[distCard(mt)];
+		selectedCard_ = candidates[distCard(mt)];
 
-        // 詠唱タイマーをセットして詠唱開始
-        isCasting_ = true;
-        castDurationCurrent_ = GetCastTimeForCard(selectedCard_.id, isEnraged);
-        castTimer_ = castDurationCurrent_;
-        return;
-    }
+		// 詠唱タイマーをセットして詠唱開始
+		isCasting_ = true;
+		castDurationCurrent_ = GetCastTimeForCard(selectedCard_.id, isEnraged);
+		castTimer_ = castDurationCurrent_;
+		return;
+	}
 
-    // =========================================================
-    // 2. 詠唱中の処理（プレイヤーの方を向いてポーズを取る）
-    // =========================================================
-    if (castTimer_ > 0) {
-        castTimer_--;
+	// =========================================================
+	// 2. 詠唱中の処理（プレイヤーの方を向いてポーズを取る）
+	// =========================================================
+	if (castTimer_ > 0) {
+		castTimer_--;
 
-        Vector3 dir = {
-            playerPos_.x - pos_.x,
-            0.0f,
-            playerPos_.z - pos_.z
-        };
-        if (Length(dir) > 0.01f) {
-            rot_.y = std::atan2f(dir.x, dir.z);
-        }
+		Vector3 dir = {
+			playerPos_.x - pos_.x,
+			0.0f,
+			playerPos_.z - pos_.z
+		};
+		if (Length(dir) > 0.01f) {
+			rot_.y = std::atan2f(dir.x, dir.z);
+		}
 
-        float t = 1.0f - static_cast<float>(castTimer_) / static_cast<float>(castDurationCurrent_);
-        ApplyCastingPose(t);
-        return;
-    }
+		float t = 1.0f - static_cast<float>(castTimer_) / static_cast<float>(castDurationCurrent_);
+		ApplyCastingPose(t);
 
-    // =========================================================
-    // 3. 詠唱完了・カード発動処理
-    // =========================================================
-    scale_ = { 2.0f, 2.0f, 2.0f };
-    rot_.x = 0.0f;
-    rot_.z = 0.0f;
+		if (selectedCard_.id == 104) {
+			// ボスの胸〜口元あたりをエネルギーの「中心（コア）」とする
+			Vector3 corePos = { pos_.x, pos_.y + 2.0f, pos_.z };
 
-    Vector3 dir = {
-        playerPos_.x - pos_.x,
-        0.0f,
-        playerPos_.z - pos_.z
-    };
-    if (Length(dir) > 0.01f) {
-        rot_.y = std::atan2f(dir.x, dir.z);
-    }
+			// 毎フレーム周囲から光の粒子を発生させて吸い込む
+			for (int i = 0; i < 4; i++) {
+				// コアから 6.0f 〜 12.0f 離れたランダムな空間（球体状）の座標を計算
+				float angleY = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
+				float angleX = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
+				float radius = 6.0f + (rand() % 60) * 0.1f;
 
-    // 発動の合図を送る
-    lastUsedCardId_ = selectedCard_.id;
-    cardUseRequest_ = true;
+				Vector3 spawnPos = {
+					corePos.x + std::sinf(angleY) * std::cosf(angleX) * radius,
+					corePos.y + std::sinf(angleX) * radius,
+					corePos.z + std::cosf(angleY) * std::cosf(angleX) * radius
+				};
 
-    // クールダウン設定
-    if (selectedCard_.id == 101) {
-        cardCooldownTimer_ = isEnraged ? 28 : 38;
-        StartCardCooldown(101, isEnraged ? 45 : 60);
-    } else if (selectedCard_.id == 102) {
-        cardCooldownTimer_ = isEnraged ? 24 : 34;
-        StartCardCooldown(102, isEnraged ? 45 : 65);
-    } else if (selectedCard_.id == 104) {
-        // ビームのクールダウン
-        cardCooldownTimer_ = isEnraged ? 42 : 56;
-        StartCardCooldown(104, isEnraged ? 80 : 110);
-    } else if (selectedCard_.id == 103) {
-        cardCooldownTimer_ = isEnraged ? 48 : 64;
-        StartCardCooldown(103, isEnraged ? 90 : 120);
-    }
+				// 発生地点から「コアに向かって飛んでいくベクトル（速度）」を計算
+				Vector3 toCore = { corePos.x - spawnPos.x, corePos.y - spawnPos.y, corePos.z - spawnPos.z };
 
-    // 発動後の硬直とチェイスへの復帰
-    state_ = State::Chase;
-    thinkTimer_ = isEnraged ? 10 : 18;
+				// 速度を距離に比例させる（約20フレームでコアに到達する速度）
+				Vector3 particleVel = { toCore.x * 0.05f, toCore.y * 0.05f, toCore.z * 0.05f };
 
-    isActionLocked_ = true;
-    actionLockTimer_ = GetRecoveryTimeForCard(selectedCard_.id, isEnraged);
+				// ビームっぽく、眩しい黄色と白の光にする
+				Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 1.0f, 0.5f, 1.0f } : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
 
-    isCasting_ = false;
+				// アニメーション終盤（t が 1.0 に近づく）ほど、粒子が大きくなって迫力が増す！
+				float scale = 0.2f + (t * 0.6f) + (rand() % 5) * 0.1f;
+
+				// 寿命を0.35秒(約21フレーム)に設定。コアに到達した瞬間にフッと消える！
+				GPUParticleManager::GetInstance()->Emit(spawnPos, particleVel, 0.35f, scale, color);
+			}
+		}
+
+		return;
+	}
+
+	// =========================================================
+	// 3. 詠唱完了・カード発動処理
+	// =========================================================
+	scale_ = { 2.0f, 2.0f, 2.0f };
+	rot_.x = 0.0f;
+	rot_.z = 0.0f;
+
+	Vector3 dir = {
+		playerPos_.x - pos_.x,
+		0.0f,
+		playerPos_.z - pos_.z
+	};
+	if (Length(dir) > 0.01f) {
+		rot_.y = std::atan2f(dir.x, dir.z);
+	}
+
+	// 発動の合図を送る
+	lastUsedCardId_ = selectedCard_.id;
+	cardUseRequest_ = true;
+
+	// クールダウン設定
+	if (selectedCard_.id == 101) {
+		cardCooldownTimer_ = isEnraged ? 28 : 38;
+		StartCardCooldown(101, isEnraged ? 45 : 60);
+	}
+	else if (selectedCard_.id == 102) {
+		cardCooldownTimer_ = isEnraged ? 24 : 34;
+		StartCardCooldown(102, isEnraged ? 45 : 65);
+	}
+	else if (selectedCard_.id == 104) {
+		// ビームのクールダウン
+		cardCooldownTimer_ = isEnraged ? 42 : 56;
+		StartCardCooldown(104, isEnraged ? 80 : 110);
+	}
+	else if (selectedCard_.id == 103) {
+		cardCooldownTimer_ = isEnraged ? 48 : 64;
+		StartCardCooldown(103, isEnraged ? 90 : 120);
+	}
+
+	// 発動後の硬直とチェイスへの復帰
+	state_ = State::Chase;
+	thinkTimer_ = isEnraged ? 10 : 18;
+
+	isActionLocked_ = true;
+	actionLockTimer_ = GetRecoveryTimeForCard(selectedCard_.id, isEnraged);
+
+	isCasting_ = false;
 }
 
+void Boss::UpdateEnrageEffect() {
+	// 死んでいる時、登場中、またはHPが半分より多い場合はエフェクトを出さない
+	if (isDead_ || state_ == State::Appear || hp_ > (maxHP_ / 2)) {
+		return;
+	}
+
+	// 毎フレーム、全身から赤いオーラを立ち昇らせる
+	for (int i = 0; i < 4; i++) {
+		Vector3 auraPos = {
+			pos_.x + (rand() % 31 - 15) * 0.1f,
+			pos_.y + (rand() % 21) * 0.1f,
+			pos_.z + (rand() % 31 - 15) * 0.1f
+		};
+
+		Vector3 auraVel = {
+			(rand() % 11 - 5) * 0.01f,
+			0.05f + (rand() % 10) * 0.01f,
+			(rand() % 11 - 5) * 0.01f
+		};
+
+		Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.0f, 0.0f, 0.6f } : Vector4{ 1.0f, 0.2f, 0.0f, 0.4f };
+		float scale = 0.8f + (rand() % 5) * 0.1f;
+
+		GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
+	}
+}
 Card Boss::GetRandomDropCard() const {
-    if (heldCards_.empty()) {
-        return Card{ -1, "", 0 };
-    }
+	if (heldCards_.empty()) {
+		return Card{ -1, "", 0 };
+	}
 
-    static std::random_device rd;
-    static std::mt19937 mt(rd());
-    std::uniform_int_distribution<int> distCard(0, static_cast<int>(heldCards_.size()) - 1);
+	static std::random_device rd;
+	static std::mt19937 mt(rd());
+	std::uniform_int_distribution<int> distCard(0, static_cast<int>(heldCards_.size()) - 1);
 
-    return heldCards_[distCard(mt)];
+	return heldCards_[distCard(mt)];
 }
 
 void Boss::TakeDamage(int damage) {
-    if (isDead_) {
-        return;
-    }
+	if (isDead_) {
+		return;
+	}
 
-    if (state_ == State::UseCard) {
-        cardUseRequest_ = false;
-        isActionLocked_ = false;
-        actionLockTimer_ = 0;
-        state_ = State::Chase;
-        thinkTimer_ = 15;
-        isCasting_ = false;
-        scale_ = { 2.0f, 2.0f, 2.0f };
-        rot_.x = 0.0f;
-        rot_.z = 0.0f;
-    }
+	// 詠唱中に殴られたらキャンセルする
+	if (state_ == State::UseCard) {
+		cardUseRequest_ = false;
+		isActionLocked_ = false;
+		actionLockTimer_ = 0;
+		state_ = State::Chase;
+		thinkTimer_ = 15;
+		isCasting_ = false;
+		scale_ = { 2.0f, 2.0f, 2.0f };
+		rot_.x = 0.0f;
+		rot_.z = 0.0f;
+	}
 
-    hp_ -= damage;
+	hp_ -= damage;
 
-    isHit_ = true;
-    hitTimer_ = hitDuration_;
+	for (int i = 0; i < 20; i++) {
+		Vector3 sparkVel = {
+			(rand() % 11 - 5) * 0.2f,      // 散らばる速度を抑えめに
+			(rand() % 11 - 5) * 0.2f + 0.1f,
+			(rand() % 11 - 5) * 0.2f
+		};
+		Vector3 sparkPos = {
+			pos_.x + (rand() % 21 - 10) * 0.1f, // 発生位置もボスの中心付近に絞る
+			pos_.y + 1.0f + (rand() % 21) * 0.1f,
+			pos_.z + (rand() % 21 - 10) * 0.1f
+		};
 
-    Vector3 hitDir = {
-        pos_.x - playerPos_.x,
-        0.0f,
-        pos_.z - playerPos_.z
-    };
+		// サイズを 0.8~1.7 -> 0.4~0.7 に縮小
+		float scale = 0.4f + (rand() % 4) * 0.1f;
 
-    if (Length(hitDir) > 0.01f) {
-        hitDir = Normalize(hitDir);
-        knockbackVelocity_ = hitDir * 0.15f;
-    }
+		GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, scale, { 1.0f, 0.8f, 0.2f, 1.0f });
+	}
 
-    if (hp_ <= 0) {
-        hp_ = 0;
-        isDead_ = true;
-        state_ = State::Dead;
-    }
+	isHit_ = true;
+	hitTimer_ = hitDuration_;
+
+	Vector3 hitDir = {
+		pos_.x - playerPos_.x,
+		0.0f,
+		pos_.z - playerPos_.z
+	};
+
+	if (Length(hitDir) > 0.01f) {
+		hitDir = Normalize(hitDir);
+		knockbackVelocity_ = hitDir * 0.15f;
+	}
+
+	if (hp_ <= 0) {
+		hp_ = 0;
+		isDead_ = true;
+		state_ = State::Dead;
+
+		for (int i = 0; i < 80; i++) {
+			Vector3 expPos = {
+				pos_.x + (rand() % 41 - 20) * 0.1f,
+				pos_.y + (rand() % 41) * 0.1f,
+				pos_.z + (rand() % 41 - 20) * 0.1f
+			};
+			Vector3 expVel = {
+				(rand() % 21 - 10) * 0.2f,
+				(rand() % 21 - 10) * 0.2f + 0.3f,
+				(rand() % 21 - 10) * 0.2f
+			};
+			Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 0.2f, 0.0f, 1.0f } : Vector4{ 1.0f, 0.6f, 0.0f, 1.0f };
+
+			// サイズを 1.5~3.0 -> 0.8~1.3 に縮小
+			float scale = 0.8f + (rand() % 6) * 0.1f;
+			// 寿命も少し短くしてサッと消えるように (1.5f -> 1.0f)
+			GPUParticleManager::GetInstance()->Emit(expPos, expVel, 1.0f, scale, color);
+		}
+
+		for (int i = 0; i < 40; i++) {
+			Vector3 smokePos = {
+				pos_.x + (rand() % 21 - 10) * 0.2f,
+				pos_.y + (rand() % 21) * 0.2f,
+				pos_.z + (rand() % 21 - 10) * 0.2f
+			};
+			Vector3 smokeVel = {
+				(rand() % 21 - 10) * 0.2f,
+				(rand() % 11) * 0.2f,
+				(rand() % 21 - 10) * 0.2f
+			};
+			float scale = 1.0f + (rand() % 6) * 0.1f;
+			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.5f, scale, { 0.2f, 0.2f, 0.2f, 0.8f });
+		}
+	}
 }
-
 void Boss::SetActionLock(int frame) {
-    isActionLocked_ = true;
-    actionLockTimer_ = frame;
+	isActionLocked_ = true;
+	actionLockTimer_ = frame;
 }
 
 bool Boss::IsVisible() const {
-    if (!isHit_) {
-        return true;
-    }
+	if (!isHit_) {
+		return true;
+	}
 
-    return (hitTimer_ % 2) == 0;
+	return (hitTimer_ % 2) == 0;
 }
 
 bool Boss::IsCardReady(int cardId) const {
-    auto it = cardCooldownTimers_.find(cardId);
-    if (it == cardCooldownTimers_.end()) {
-        return true;
-    }
-    return it->second <= 0;
+	auto it = cardCooldownTimers_.find(cardId);
+	if (it == cardCooldownTimers_.end()) {
+		return true;
+	}
+	return it->second <= 0;
 }
 
 void Boss::StartCardCooldown(int cardId, int time) {
-    cardCooldownTimers_[cardId] = time;
+	cardCooldownTimers_[cardId] = time;
 }
 
 int Boss::GetCardCooldownTime(int cardId) const {
-    auto it = cardCooldownTimers_.find(cardId);
-    if (it == cardCooldownTimers_.end()) {
-        return 0;
-    }
-    return it->second;
+	auto it = cardCooldownTimers_.find(cardId);
+	if (it == cardCooldownTimers_.end()) {
+		return 0;
+	}
+	return it->second;
 }
 
 void Boss::SetSpawnPosition(const Vector3& pos) {
-    appearTargetY_ = pos.y;
-    appearStartY_ = pos.y + kBossAppearDropHeight;
-    pos_ = { pos.x, appearStartY_, pos.z };
+	appearTargetY_ = pos.y;
+	appearStartY_ = pos.y + kBossAppearDropHeight;
+	pos_ = { pos.x, appearStartY_, pos.z };
 }

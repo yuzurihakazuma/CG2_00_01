@@ -3,7 +3,7 @@
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
 #include "game/player/Player.h"
-
+#include "engine/particle/GPUParticleManager.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -64,6 +64,116 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         return;
     }
 
+    Vector3 forward = { std::sinf(rot_.y), 0.0f, std::cosf(rot_.y) };
+    Vector3 endPos = {
+        pos_.x + forward.x * baseScale_.z,
+        pos_.y,
+        pos_.z + forward.z * baseScale_.z
+    };
+
+    if (lifeTimer_ > 0) {
+        for (int i = 0; i < 20; ++i) { // 量を増やす
+            Vector3 corePos = pos_;
+            corePos.x += (rand() % 21 - 10) * 0.1f;
+            corePos.y += (rand() % 21 - 10) * 0.1f;
+            corePos.z += (rand() % 21 - 10) * 0.1f;
+
+            // ビームの進行方向に沿って噴射する速度
+            Vector3 coreVel = {
+                forward.x * (0.2f + (rand() % 10) * 0.05f) + (rand() % 11 - 5) * 0.05f,
+                (rand() % 11 - 5) * 0.05f,
+                forward.z * (0.2f + (rand() % 10) * 0.05f) + (rand() % 11 - 5) * 0.05f
+            };
+            // 眩しい白とピンク
+            Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.4f, 1.0f, 1.0f };
+            GPUParticleManager::GetInstance()->Emit(corePos, coreVel, 0.3f, 0.7f, color);
+        }
+
+        // 2. ビームの本体（Core）を流れるエネルギーの奔流（★大量・高速）
+        // ビームの線上に沿って、200箇所にパーティクルを発生させる。
+        for (int i = 0; i < 200; ++i) {
+            float t = static_cast<float>(i) / 199.0f;
+            Vector3 particlePos = {
+                pos_.x + (endPos.x - pos_.x) * t,
+                pos_.y + (endPos.y - pos_.y) * t,
+                pos_.z + (endPos.z - pos_.z) * t
+            };
+
+            // ビームの中心軸に固まらせるオフセット
+            particlePos.x += (rand() % 11 - 5) * 0.1f;
+            particlePos.y += (rand() % 11 - 5) * 0.1f;
+            particlePos.z += (rand() % 11 - 5) * 0.1f;
+
+            // 速度：始点から終点へ向かって超高速で流す（0.8f〜1.2f）
+            Vector3 particleVel = {
+                forward.x * (0.8f + (rand() % 5) * 0.1f) + (rand() % 11 - 5) * 0.02f,
+                (rand() % 11 - 5) * 0.02f,
+                forward.z * (0.8f + (rand() % 5) * 0.1f) + (rand() % 11 - 5) * 0.02f
+            };
+
+            // 色：中心を白（眩しさ）、周囲をピンク。
+            Vector4 color = (rand() % 10 < 3) ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.2f, 0.8f, 1.0f };
+
+            // サイズ：眩しく、一本の「芯」に見えるようにする。
+            float scale = 0.4f + (rand() % 4) * 0.1f;
+
+            // 寿命を少し長く（0.5秒）して、流れる線を綺麗に作る。
+            GPUParticleManager::GetInstance()->Emit(particlePos, particleVel, 0.5f, scale, color);
+        }
+
+        // 3. ビームから漏れる「放電」と「プラズマ
+        for (int i = 0; i < 50; ++i) {
+            float t = static_cast<float>(rand()) / RAND_MAX; // 線上のランダムな位置
+            Vector3 particlePos = {
+                pos_.x + (endPos.x - pos_.x) * t,
+                pos_.y + (endPos.y - pos_.y) * t,
+                pos_.z + (endPos.z - pos_.z) * t
+            };
+
+            // ビームの中心軸から、外側に向かって不規則に散らす
+            particlePos.x += (rand() % 31 - 15) * 0.15f; // 少し広めに
+            particlePos.y += (rand() % 31 - 15) * 0.15f;
+            particlePos.z += (rand() % 31 - 15) * 0.15f;
+
+            // 速度：ビームの進行方向＋外側へ散らす
+            Vector3 particleVel = {
+                forward.x * 0.3f + (rand() % 21 - 10) * 0.1f,
+                (rand() % 21 - 10) * 0.1f,
+                forward.z * 0.3f + (rand() % 21 - 10) * 0.1f
+            };
+
+            // 色：青紫色。ピンクと白の中に混ぜる。
+            Vector4 color = { 0.6f, 0.0f, 1.0f, 1.0f };
+
+            // サイズ：不規則で雷のように見せる。
+            float scale = 0.5f + (rand() % 6) * 0.1f;
+
+            // 寿命を短く（0.3秒）して、常にバチバチしているように見せる。
+            GPUParticleManager::GetInstance()->Emit(particlePos, particleVel, 0.3f, scale, color);
+        }
+
+        // 4. 先端（着弾点）の「空間破壊」エネルギー球（★巨大・その場に留まる）
+        // ダサい飛び散るスパークは最小限にし、代わりにその場に留まる巨大な渦にする。
+        for (int i = 0; i < 30; ++i) {
+            Vector3 expPos = endPos;
+            expPos.x += (rand() % 31 - 15) * 0.1f; // 少し広めに
+            expPos.y += (rand() % 31 - 15) * 0.1f;
+            expPos.z += (rand() % 31 - 15) * 0.1f;
+
+            // 速度：その場に留まるか、渦を巻くようにする。
+            Vector3 expVel = {
+                (rand() % 11 - 5) * 0.05f,
+                (rand() % 11 - 5) * 0.05f,
+                (rand() % 11 - 5) * 0.05f
+            };
+            // 眩しい白とピンク。
+            Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.4f, 1.0f, 1.0f };
+            // サイズを巨大に！ (1.0f 〜 2.0f)
+            float scale = 1.0f + (rand() % 11) * 0.1f;
+            // 寿命を長くして（1.0秒）残像を作る。
+            GPUParticleManager::GetInstance()->Emit(expPos, expVel, 1.0f, scale, color);
+        }
+    }
     if (hitTimer_ > 0) {
         hitTimer_--;
     }
@@ -84,6 +194,13 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         });
         obj_->SetRotation(rot_);
         obj_->SetTranslation(pos_);
+        obj_->Update();
+        Model* model = obj_->GetModel();
+        if (model && model->GetMaterial()) {
+            Model::Material* material = model->GetMaterial();
+            // grow と pulse に合わせた透明度アニメーション
+            material->color.w = grow * pulse * 0.6f;
+        }
         obj_->Update();
     }
 

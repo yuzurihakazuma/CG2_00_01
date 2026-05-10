@@ -84,6 +84,7 @@ private:
     void UpdateIdle();
     void UpdateChase();
     void UpdateUseCard();
+    void UpdateEnrageEffect();
     void InitializeBossCards();
     Card SelectCardForDistance(float dist, bool isEnraged);
     int GetCastTimeForCard(int cardId, bool isEnraged) const;
