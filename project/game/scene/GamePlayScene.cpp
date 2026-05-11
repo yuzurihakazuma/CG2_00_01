@@ -1730,6 +1730,10 @@ void GamePlayScene::DrawDebugUI() {
 		handManager_.AddCard(CardDatabase::GetCardData(12));
 	}
 
+	if (ImGui::Button("蹴り(ID:13)")) {
+		handManager_.AddCard(CardDatabase::GetCardData(13));
+	}
+
 	ImGui::Separator();
 	ImGui::Text("[Player Hand] : %d/10", handManager_.GetHandSize());
 
