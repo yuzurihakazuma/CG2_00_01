@@ -66,6 +66,7 @@ public:
     void SetScale(const Vector3& scale) override { scale_ = scale; }
     void SetLoopAnimation(bool loop) { isLoop_ = loop; }
     void SetNoiseTexture(uint32_t index) { noiseTextureIndex_ = index; }
+    void SetColor(const Vector4& color);
     void SetDissolveThreshold(float threshold);
 
     const Vector3& GetTranslation() const override { return translate_; }

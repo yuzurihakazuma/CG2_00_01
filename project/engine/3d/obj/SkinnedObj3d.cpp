@@ -309,3 +309,10 @@ Vector3 SkinnedObj3d::GetJointTranslationOffset(const std::string& jointName) co
 
     return { 0.0f, 0.0f, 0.0f };
 }
+
+void SkinnedObj3d::SetColor(const Vector4& color) {
+    // モデルの持っているマテリアルの色を上書きする
+    if (model_ && model_->GetMaterial()) {
+        model_->GetMaterial()->color = color;
+    }
+}
