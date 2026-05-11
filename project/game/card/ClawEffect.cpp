@@ -8,6 +8,9 @@
 
 using namespace VectorMath;
 
+// デバッグ用変数の実体と初期値（例として1ダメージ）
+int ClawEffect::debugBaseDamage = 1;
+
 void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
@@ -105,6 +108,9 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	// 当たり判定 (判定時間を短くして「一瞬で切り裂く」感を出す)
 	bool isAttacking = ( timer_ >= 2 && timer_ <= 6 ) || ( timer_ >= 12 && timer_ <= 16 );
 	if ( isAttacking && !hasHit_ ) {
+
+		// ImGuiで設定したダメージをここで使う！
+		int randomDamage = damage_ + (rand() % 2);
 		if ( isPlayerCaster_ ) {
 			// 敵への判定（略：既存のダメージロジックと同じ）
 			if ( enemyManager ) {
@@ -113,7 +119,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 					Vector3 ePos = enemy->GetPosition();
 					Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 					if ( Length(diff) < 2.5f ) { // 判定を少し広げて当てやすく
-						enemy->TakeDamage(damage_);
+						enemy->TakeDamage(randomDamage);
 						hasHit_ = true; break;
 					}
 				}
@@ -122,7 +128,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			if ( boss && !boss->IsDead() ) {
 				Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
 				if ( Length(diff) < 3.5f ) {
-					boss->TakeDamage(damage_);
+					boss->TakeDamage(randomDamage);
 					hasHit_ = true;
 				}
 			}
@@ -132,7 +138,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				Vector3 pPos = player->GetPosition();
 				Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
 				if ( Length(diff) < 2.0f ) {
-					player->TakeDamage(damage_, pos_);
+					player->TakeDamage(randomDamage, pos_);
 					hasHit_ = true;
 				}
 			}

@@ -44,6 +44,7 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
+#include "game/card/ClawEffect.h"
 
 
 using namespace VectorMath;
@@ -1836,6 +1837,15 @@ void GamePlayScene::DrawDebugUI() {
 	}
 
 	ImGui::Separator();
+
+	ImGui::Separator();
+	ImGui::Text("[ Damage Adjust ]");
+
+	// クローも同様に実装したら、以下のコメントアウトを外せばOKです！
+	ImGui::SliderInt("クローの基本ダメージ", &ClawEffect::debugBaseDamage, 1, 20);
+
+	ImGui::Separator();
+
 	ImGui::Text("[Player Hand] : %d/10", handManager_.GetHandSize());
 
 	//手札の数だけループしてボタンを作る
@@ -1853,6 +1863,8 @@ void GamePlayScene::DrawDebugUI() {
 
 	ImGui::End();
 
+
+	
 
 
 #endif
@@ -2027,8 +2039,19 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
+	auto isImmediateAttack = [](int id) {
+		switch (id) {
+		case 1:  // 拳
+		case 10: // クロー
+		case 13: // 蹴り
+			return true;
+		default:
+			return false;
+		}
+		};
+
 	// 攻撃カード構え中は他の攻撃カードを使えない
-	if (isCardReady_ && selectedCard.id != 1 && static_cast<int>(selectedCard.effectType) == 0) {
+	if (isCardReady_ && !isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
 		return;
 	}
 
@@ -2042,7 +2065,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	playerManager_->UseCost(selectedCard.cost);
 
 	// 攻撃カードなら構え状態にする
-	if (selectedCard.id != 1 && static_cast<int>(selectedCard.effectType) == 0) {
+	if (!isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
 		isCardReady_ = true;
 		readiedCard_ = selectedCard;
 		cardReadyTimer_ = 60 * 5;
