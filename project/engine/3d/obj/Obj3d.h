@@ -8,12 +8,12 @@
 // --- エンジン側のファイル ---
 #include "engine/math/struct.h"
 #include "engine/math/Matrix4x4.h"
+#include "engine/3d/model/Model.h"
 #include "Animation.h"
 #include "IAnimatable.h"
 
 // 前方宣言
 class Obj3dCommon;
-class Model;
 class Camera;
 class DirectXCommon;
 
@@ -81,6 +81,8 @@ public:
 	// ディゾルブ境界の色を設定する
 	void SetDissolveColor(const Vector3& color);
 	void SetNoiseTexture(uint32_t textureIndex);
+	void SetColor(const Vector4& color);
+	void ClearColorOverride();
 
 	// 座標変換行列を取得する関数
 	const TransformationMatrix& GetMatrixData() const { return matrixData_; }
@@ -118,6 +120,9 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> dissolveResource_;
 	DissolveData* dissolveData_ = nullptr;
 	uint32_t noiseTextureIndex_ = 0;
+	Microsoft::WRL::ComPtr<ID3D12Resource> materialOverrideResource_;
+	Model::Material* materialOverrideData_ = nullptr;
+	bool useMaterialOverride_ = false;
 
 	// 再生中のアニメーションデータ
 	Animation* currentAnimation_ = nullptr; 

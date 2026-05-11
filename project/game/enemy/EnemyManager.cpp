@@ -70,6 +70,45 @@ Enemy::Type GetRandomEnemyTypeForFloor(int floor) {
 
 	return Enemy::Type::Normal;
 }
+
+Vector4 GetEnemyDisplayColor(const Enemy& enemy) {
+	Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+	switch (enemy.GetCurrentAttackRangeType()) {
+	case CardAttackRangeType::Melee:
+		baseColor = { 1.0f, 0.45f, 0.35f, 1.0f };
+		break;
+	case CardAttackRangeType::Mid:
+		baseColor = { 0.95f, 0.9f, 0.35f, 1.0f };
+		break;
+	case CardAttackRangeType::Long:
+		baseColor = { 0.35f, 0.75f, 1.0f, 1.0f };
+		break;
+	default:
+		break;
+	}
+
+	if (enemy.IsFrozen()) {
+		Vector4 freezeColor = { 0.45f, 0.85f, 1.25f, 1.0f };
+		return {
+			baseColor.x * 0.35f + freezeColor.x * 0.65f,
+			baseColor.y * 0.35f + freezeColor.y * 0.65f,
+			baseColor.z * 0.35f + freezeColor.z * 0.65f,
+			1.0f
+		};
+	}
+
+	if (enemy.IsAttackDebuffed()) {
+		Vector4 debuffColor = { 0.65f, 0.35f, 0.9f, 1.0f };
+		return {
+			baseColor.x * 0.45f + debuffColor.x * 0.55f,
+			baseColor.y * 0.45f + debuffColor.y * 0.55f,
+			baseColor.z * 0.45f + debuffColor.z * 0.55f,
+			1.0f
+		};
+	}
+
+	return baseColor;
+}
 }
 
 
@@ -263,6 +302,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 			enemyObjs_[i]->SetTranslation(enemy->GetPosition());
 			enemyObjs_[i]->SetRotation(enemy->GetRotation());
 			enemyObjs_[i]->SetScale(enemy->GetScale());
+			enemyObjs_[i]->SetColor(GetEnemyDisplayColor(*enemy));
 			enemyObjs_[i]->Update();
 		}
 		// 敵が「カードを使いたい！」と合図を出した時の処理

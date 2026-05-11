@@ -106,7 +106,7 @@ void Model::InitializeSphere(ModelCommon* modelCommon, int subdivision){
 }
 
 
-void Model::Draw(uint32_t instanceCount) {
+void Model::Draw(uint32_t instanceCount, D3D12_GPU_VIRTUAL_ADDRESS materialAddress) {
 	// 1. コマンドリストを取得する
 	// ModelCommon経由でDirectXCommonから取得
 	ID3D12GraphicsCommandList* commandList = modelCommon_->GetDxCommon()->GetCommandList();
@@ -119,7 +119,10 @@ void Model::Draw(uint32_t instanceCount) {
 
 	// 4. マテリアル定数バッファの設定 (RootParameter 0番)
 	// ※元のObj3d.cppで 0番 に設定していたものです
-	commandList->SetGraphicsRootConstantBufferView(0, materialResource_->GetGPUVirtualAddress());
+	commandList->SetGraphicsRootConstantBufferView(
+		0,
+		materialAddress != 0 ? materialAddress : materialResource_->GetGPUVirtualAddress()
+	);
 	// プリミティブトポロジの設定（三角形リスト）
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
