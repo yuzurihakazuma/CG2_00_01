@@ -9,6 +9,9 @@ public:
 	// コンストラクタでダメージ(csvから読み込んだ値)を受け取る
 	ClawEffect(int damage) : damage_(damage) {}
 
+	// ImGuiで直接いじるためのデバッグ用ダメージ変数
+	static int debugBaseDamage;
+
 	// 初期化
 	void Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera)override;
 
