@@ -820,7 +820,7 @@ void MapManager::RegenerateDungeonAndRespawnPlayer(
                         tileIndex++;
 
                         Vector3 worldPos = spawnManager->TileToWorldPosition(tileX, tileZ, 0.0f);
-                        enemyManager->SpawnEnemyAt(worldPos, camera);
+                        enemyManager->SpawnEnemyAt(worldPos, camera, currentFloor_);
 
                         if (tileIndex >= maxTryCount) {
                             break;

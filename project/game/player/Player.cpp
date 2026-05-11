@@ -503,6 +503,10 @@ void Player::LockAction(int frame) {
 }
 
 void Player::AddExp(int value) {
+    if (isDead_) {
+        return;
+    }
+
     // 経験値加算
     exp_ += value;
 
@@ -556,6 +560,10 @@ void Player::Heal(int amount) {
 }
 
 void Player::LevelUp() {
+    if (isDead_) {
+        return;
+    }
+
     level_++;
     nextLevelExp_ += 2;
     maxHp_ += 2;

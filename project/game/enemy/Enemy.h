@@ -14,6 +14,13 @@ public:
         Retreat       // プレイヤーから離れる
     };
 
+    enum class Type {
+        Normal,
+        Fast,
+        Ranged,
+        Heavy
+    };
+
     void Initialize(); // 初期化
     void Update();     // 更新
 
@@ -42,6 +49,9 @@ public:
     }
     void SetBossRoomBehavior(bool isBossRoom) { isBossRoom_ = isBossRoom; }
     bool IsBossRoomBehavior() const { return isBossRoom_; }
+    void SetType(Type type);
+    Type GetType() const { return type_; }
+    int GetExpReward() const { return expReward_; }
 
     // 状態関連
     void SetState(State state) { state_ = state; } // 状態設定
@@ -52,17 +62,13 @@ public:
     void SetPickupCard(const Card& card) {
         pickupCard_ = card;
         hasPickupCard_ = true;
-        isPickupCardActivated_ = false;
-        pickupCardTimer_ = 0; // 拾っただけでは使用時間を減らさない
     }
 
     const Card& GetPickupCard() const { return pickupCard_; }
 
     void ClearPickupCard() {
         hasPickupCard_ = false;
-        isPickupCardActivated_ = false;
         pickupCard_ = { -1, "", 0 };
-        pickupCardTimer_ = 0; // タイマーもリセット
     }
 
     const Card& GetBaseCard() const { return baseCard_; }
@@ -113,6 +119,7 @@ private:
     bool IsStuck() const;                          // 詰まり判定
     float GetUseRangeForCurrentCard() const;       // 現在カードの使用距離
     float GetRetreatEnterRangeForCurrentCard() const; // 離脱開始距離
+    bool ShouldKeepDistanceForCurrentCard() const;
 
     void UpdatePatrol();        // 巡回処理
     void UpdateMoveToCard();    // カードへ向かう処理
@@ -141,6 +148,7 @@ private:
     int direction_ = 1;   // 旧巡回方向
 
     State state_ = State::Patrol; // 現在の状態
+    Type type_ = Type::Normal;
 
     Vector3 playerPos_{ 0.0f, 0.0f, 0.0f };          // プレイヤー位置
     Vector3 lastKnownPlayerPos_{ 0.0f, 0.0f, 0.0f }; // 最後に確認したプレイヤー位置
@@ -159,14 +167,11 @@ private:
 
     Card baseCard_{ -1, "", 0 };        // 固定のパンチカード
     bool hasPickupCard_ = false;        // 拾ったカードを持っているか
-    bool isPickupCardActivated_ = false; // 一度使って使用時間が始まったか
     Card pickupCard_{ -1, "", 0 };      // 拾ったカード
     Card currentUseCard_{ -1, "", 0 };  // 今回使うカード
 
-    int pickupCardTimer_ = 0;                // 使用開始後に使える残り時間
-    const int pickupCardDuration_ = 180;     // 使用後しばらくは同じカードを使い続けられる時間
-
     int hp_ = 3;               // 敵HP
+    int expReward_ = 1;
     bool isDead_ = false;      // 死亡フラグ
 
     bool isActionLocked_ = false; // 行動ロック中か
