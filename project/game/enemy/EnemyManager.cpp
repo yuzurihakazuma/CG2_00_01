@@ -12,8 +12,65 @@
 
 #include <cmath>
 #include <algorithm>
+#include <iterator>
+#include <random>
 
 using namespace VectorMath;
+
+namespace {
+struct EnemyTypeWeight {
+	Enemy::Type type;
+	int weight;
+};
+
+Enemy::Type GetRandomEnemyTypeForFloor(int floor) {
+	static const EnemyTypeWeight floor1[] = {
+		{ Enemy::Type::Normal, 70 },
+		{ Enemy::Type::Fast, 30 },
+	};
+	static const EnemyTypeWeight floor2[] = {
+		{ Enemy::Type::Normal, 45 },
+		{ Enemy::Type::Fast, 30 },
+		{ Enemy::Type::Ranged, 25 },
+	};
+	static const EnemyTypeWeight floor3Plus[] = {
+		{ Enemy::Type::Normal, 35 },
+		{ Enemy::Type::Fast, 25 },
+		{ Enemy::Type::Ranged, 25 },
+		{ Enemy::Type::Heavy, 15 },
+	};
+
+	const EnemyTypeWeight* weights = floor1;
+	int weightCount = static_cast<int>(std::size(floor1));
+	if (floor >= 3) {
+		weights = floor3Plus;
+		weightCount = static_cast<int>(std::size(floor3Plus));
+	}
+	else if (floor == 2) {
+		weights = floor2;
+		weightCount = static_cast<int>(std::size(floor2));
+	}
+
+	int totalWeight = 0;
+	for (int i = 0; i < weightCount; ++i) {
+		totalWeight += weights[i].weight;
+	}
+
+	static std::random_device rd;
+	static std::mt19937 mt(rd());
+	std::uniform_int_distribution<int> dist(1, totalWeight);
+	int roll = dist(mt);
+
+	for (int i = 0; i < weightCount; ++i) {
+		roll -= weights[i].weight;
+		if (roll <= 0) {
+			return weights[i].type;
+		}
+	}
+
+	return Enemy::Type::Normal;
+}
+}
 
 
 void EnemyManager::Initialize() {
@@ -81,7 +138,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		if (enemy->IsDead()) {
 			if (!enemyDeadHandled_[i]) {
 				if (player) {
-					player->AddExp(1);
+					player->AddExp(enemy->GetExpReward());
 				}
 				if (enemy->HasUsablePickupCard() && !enemy->IsBossRoomBehavior()) {
 					cardPickupManager->AddPickup(enemy->GetPosition(), enemy->GetPickupCard());
@@ -205,6 +262,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		if (enemyObjs_[i]) {
 			enemyObjs_[i]->SetTranslation(enemy->GetPosition());
 			enemyObjs_[i]->SetRotation(enemy->GetRotation());
+			enemyObjs_[i]->SetScale(enemy->GetScale());
 			enemyObjs_[i]->Update();
 		}
 		// 敵が「カードを使いたい！」と合図を出した時の処理
@@ -416,6 +474,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 		// 敵の本体を生成
 		auto newEnemy = std::make_unique<Enemy>();
 		newEnemy->Initialize();
+		newEnemy->SetType(Enemy::Type::Normal);
 		newEnemy->SetPosition(spawnPos);
 		newEnemy->SetBossRoomBehavior(true);
 
@@ -424,7 +483,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 		if (enemyObj) {
 			enemyObj->SetCamera(camera);
 			enemyObj->SetTranslation(spawnPos);
-			enemyObj->SetScale({ 1.0f, 1.0f, 1.0f });
+			enemyObj->SetScale(newEnemy->GetScale());
 			enemyObj->Update();
 		}
 
@@ -523,14 +582,14 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 
 		auto enemy = std::make_unique<Enemy>();
 		enemy->Initialize();
+		enemy->SetType(GetRandomEnemyTypeForFloor(mapManager->GetCurrentFloor()));
 		enemy->SetPosition(worldPos);
-		enemy->SetScale({ 1.0f, 1.0f, 1.0f });
 
 		auto enemyObj = std::unique_ptr<Obj3d>(Obj3d::Create("enemy"));
 		if (enemyObj) {
 			enemyObj->SetCamera(camera); // camera_.get() から camera に変更
 			enemyObj->SetTranslation(worldPos);
-			enemyObj->SetScale({ 1.0f, 1.0f, 1.0f });
+			enemyObj->SetScale(enemy->GetScale());
 			enemyObj->Update();
 		}
 
@@ -742,18 +801,18 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 }
 
 // 指定したワールド座標に敵をスポーンさせる
-void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera) {
+void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int floor) {
 	auto enemy = std::make_unique<Enemy>();
 	enemy->Initialize();
+	enemy->SetType(GetRandomEnemyTypeForFloor(floor));
 	enemy->SetPosition(worldPos);
-	enemy->SetScale({ 1.0f, 1.0f, 1.0f });
 
 	// 敵の見た目（3Dモデル）を生成
 	auto enemyObj = std::unique_ptr<Obj3d>(Obj3d::Create("enemy"));
 	if (enemyObj) {
 		enemyObj->SetCamera(camera);
 		enemyObj->SetTranslation(worldPos);
-		enemyObj->SetScale({ 1.0f, 1.0f, 1.0f });
+		enemyObj->SetScale(enemy->GetScale());
 		enemyObj->Update();
 	}
 

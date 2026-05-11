@@ -43,7 +43,7 @@ public:
 	const std::vector<std::unique_ptr<Enemy>> &GetEnemies() const { return enemies_; }
 
 	// 指定したワールド座標に敵をスポーンさせる
-	void SpawnEnemyAt(const Vector3& worldPos, Camera* camera);
+	void SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int floor = 1);
 
 private:
 

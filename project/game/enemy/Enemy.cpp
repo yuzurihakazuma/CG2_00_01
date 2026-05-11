@@ -13,6 +13,34 @@ float RandomRange(float minValue, float maxValue) {
     std::uniform_real_distribution<float> dist(minValue, maxValue);
     return dist(mt);
 }
+
+struct EnemyTypeSetting {
+    int baseCardId;
+    int hp;
+    int expReward;
+    float speed;
+    float chaseSpeed;
+    Vector3 scale;
+};
+
+const EnemyTypeSetting& GetEnemyTypeSetting(Enemy::Type type) {
+    static const EnemyTypeSetting normal{ 1, 3, 1, 0.07f, 0.12f, { 1.0f, 1.0f, 1.0f } };
+    static const EnemyTypeSetting fast{ 7, 2, 1, 0.09f, 0.15f, { 0.85f, 0.85f, 0.85f } };
+    static const EnemyTypeSetting ranged{ 2, 2, 1, 0.06f, 0.10f, { 0.95f, 0.95f, 0.95f } };
+    static const EnemyTypeSetting heavy{ 10, 5, 2, 0.045f, 0.085f, { 1.22f, 1.22f, 1.22f } };
+
+    switch (type) {
+    case Enemy::Type::Fast:
+        return fast;
+    case Enemy::Type::Ranged:
+        return ranged;
+    case Enemy::Type::Heavy:
+        return heavy;
+    case Enemy::Type::Normal:
+    default:
+        return normal;
+    }
+}
 }
 
 void Enemy::Initialize() {
@@ -24,10 +52,8 @@ void Enemy::Initialize() {
     state_ = State::Patrol;
     baseCard_ = CardDatabase::GetCardData(1); // 固定の基本カード
     hasPickupCard_ = false;
-    isPickupCardActivated_ = false;
     pickupCard_ = { -1, "", 0 };
     currentUseCard_ = { -1, "", 0 };
-    pickupCardTimer_ = 0; // 使用開始後に使える残り時間
 
     hp_ = 3;                 // 敵HP初期化
     isDead_ = false;         // 死亡状態リセット
@@ -60,6 +86,19 @@ void Enemy::Initialize() {
     investigateTimer_ = 0;
     lastKnownPlayerPos_ = pos_;
     isBossRoom_ = false;
+    SetType(Type::Normal);
+}
+
+void Enemy::SetType(Type type) {
+    type_ = type;
+
+    const EnemyTypeSetting& setting = GetEnemyTypeSetting(type_);
+    baseCard_ = CardDatabase::GetCardData(setting.baseCardId);
+    hp_ = setting.hp;
+    expReward_ = setting.expReward;
+    speed_ = setting.speed;
+    chaseSpeed_ = setting.chaseSpeed;
+    scale_ = setting.scale;
 }
 
 void Enemy::Update() {
@@ -74,13 +113,6 @@ void Enemy::Update() {
     cardUseRequest_ = false; // 毎フレーム使用要求は初期化
 
     // 拾ったカードは初回使用でタイマーが始まり、その間は使い続けられる
-    if (hasPickupCard_ && isPickupCardActivated_) {
-        pickupCardTimer_--;
-        if (pickupCardTimer_ <= 0) {
-            ClearPickupCard();
-        }
-    }
-
     if (isActionLocked_) {
         actionLockTimer_--; // 残り時間を減らす
         if (actionLockTimer_ <= 0) {
@@ -198,6 +230,7 @@ void Enemy::DecideNextState() {
     float playerDist = Length(toPlayer);          // プレイヤーとの距離
     const float activeChaseRange = isBossRoom_ ? bossRoomChaseRange_ : chaseRange_;
     const int investigateFrames = isBossRoom_ ? bossRoomInvestigateFrames_ : 150;
+    bool shouldKeepDistance = ShouldKeepDistanceForCurrentCard();
     float useRange = GetUseRangeForCurrentCard(); // 現在カードの射程
     float exitRange = useRange + 1.5f;            // 使用状態を維持する余裕距離
     float retreatEnter = GetRetreatEnterRangeForCurrentCard(); // 近すぎる判定距離
@@ -229,7 +262,7 @@ void Enemy::DecideNextState() {
     }
 
     // 拾いカードを持っている時の分岐
-    if (HasUsablePickupCard()) {
+    if (shouldKeepDistance) {
         if (state_ == State::UseCard) {
             if (playerDist < retreatEnter) {
                 state_ = State::Retreat;
@@ -262,7 +295,7 @@ void Enemy::DecideNextState() {
     }
 
     // 拾ったカードがない時の分岐
-    if (hasTargetCard_) {
+    if (!HasUsablePickupCard() && hasTargetCard_) {
         state_ = State::MoveToCard;
     } else if (playerDist <= useRange) {
         state_ = State::UseCard;
@@ -430,8 +463,6 @@ void Enemy::UpdateUseCard() {
         return;
     }
 
-    bool usedPickupCard = HasUsablePickupCard();
-
     // カード使用確定
     cardUseRequest_ = true;
     cardCooldownTimer_ = cardCooldown_;
@@ -441,15 +472,8 @@ void Enemy::UpdateUseCard() {
     SetActionLock(8);
 
     // プレイヤー寄りに、初回使用をきっかけに一定時間だけ使い続けられるようにする
-    if (usedPickupCard) {
-        if (!isPickupCardActivated_) {
-            isPickupCardActivated_ = true;
-            pickupCardTimer_ = pickupCardDuration_;
-        }
-    }
-
     // 使用後の行動
-    if (usedPickupCard) {
+    if (ShouldKeepDistanceForCurrentCard()) {
         state_ = State::Retreat;
     } else {
         state_ = State::ChasePlayer;
@@ -574,4 +598,9 @@ float Enemy::GetRetreatEnterRangeForCurrentCard() const {
     }
 
     return retreatEnterRange_;
+}
+
+bool Enemy::ShouldKeepDistanceForCurrentCard() const {
+    const Card& card = HasUsablePickupCard() ? pickupCard_ : baseCard_;
+    return card.attackRangeType != CardAttackRangeType::Melee;
 }
