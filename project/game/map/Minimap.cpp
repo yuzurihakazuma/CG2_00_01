@@ -25,9 +25,23 @@ void Minimap::Initialize() {
 }
 
 void Minimap::SetLevelData(const LevelData* levelData) {
+	// 再構築前の探索状態を退避する
+	std::vector<bool> discoveredStates;
+	discoveredStates.reserve(chunks_.size());
+	for (const Chunk& chunk : chunks_) {
+		discoveredStates.push_back(chunk.discovered);
+	}
+
 	levelData_ = levelData;
 	RebuildMapSprites();
+
+	// 再構築後に探索状態を戻す
+	const size_t restoreCount = (std::min)(discoveredStates.size(), chunks_.size());
+	for (size_t i = 0; i < restoreCount; ++i) {
+		chunks_[i].discovered = discoveredStates[i];
+	}
 }
+
 
 void Minimap::SetPlayerPosition(const Vector3& worldPos) {
 	playerWorldPos_ = worldPos;

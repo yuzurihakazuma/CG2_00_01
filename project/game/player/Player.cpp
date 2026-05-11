@@ -608,10 +608,18 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom) {
         damage /= 2;
     }
 
-    hp_ -= damage;
-    if (hp_ < 0) {
-        hp_ = 0;
+    int nextHp = hp_ - damage; // ダメージ適用後のHPを先に計算する
+
+    // チュートリアル中は必ずHPを1残して死亡しないようにする
+    if (isTutorialNoDeath_ && nextHp <= 0) {
+        hp_ = 1;
+    } else {
+        hp_ = nextHp;
+        if (hp_ < 0) {
+            hp_ = 0;
+        }
     }
+
 
     isHit_ = true;
     hitTimer_ = hitDuration_;

@@ -551,6 +551,12 @@ void GamePlayScene::Update() {
 
 	// チュートリアルの更新と、ゴール判定
 	if (tutorial_ && tutorial_->IsActive()) {
+		// チュートリアル中はプレイヤーが死亡しないようにする
+		if (player) {
+			const bool tutorialActive = tutorial_ && tutorial_->IsActive();
+			player->SetTutorialNoDeath(tutorialActive);
+		}
+
 		tutorial_->Update(input);
 		tutorial_->CheckPlayerGoal(playerPos_);
 

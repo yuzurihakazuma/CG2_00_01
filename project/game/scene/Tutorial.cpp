@@ -275,7 +275,13 @@ void Tutorial::CarveRect(const Rect& rect, int tile) {
 void Tutorial::OpenCorridor(const Rect& rect) {
 	CarveRect(rect, 0);
 	context_.mapManager->RebuildMapObjects();
+
+	// 通路開放後にミニマップの壁表示も作り直す
+	if (context_.minimap) {
+		context_.minimap->SetLevelData(&context_.mapManager->GetLevelData());
+	}
 }
+
 
 void Tutorial::SetTile(int x, int z, int tile) {
 	LevelData& level = const_cast<LevelData&>(context_.mapManager->GetLevelData());
@@ -414,6 +420,10 @@ void Tutorial::SpawnTutorialStairs() {
 	SetTile(stairsX_, stairsZ_, 3);
 	context_.mapManager->SetStairsTile({ stairsX_, stairsZ_ });
 	context_.mapManager->RebuildMapObjects();
+
+	if (context_.minimap) {
+		context_.minimap->SetLevelData(&context_.mapManager->GetLevelData());
+	}
 
 	stairsSpawned_ = true;
 }

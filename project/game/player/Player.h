@@ -67,6 +67,7 @@ public:
     void SetCostRecoveryMultiplier(float multiplier);  //  コスト回復速度倍率セット
 
     int GetHP() const { return hp_; }         // 現在HP取得
+    void SetTutorialNoDeath(bool enable) { isTutorialNoDeath_ = enable; } // チュートリアル中はHPが0にならないようにする
     int GetMaxHP() const { return maxHp_; }   // 最大HP取得
     bool IsDead() const { return isDead_; }   // 死亡判定
     bool IsDeathAnimationFinished() const { return isDead_ && deathAnimationTimer_ <= 0; } // 死亡演出が終わったか
@@ -196,6 +197,7 @@ private:
     int shieldHitCount_ = 0;
 
     bool isEnemyAtkDebuffed_ = false;
+    bool isTutorialNoDeath_ = false; // チュートリアル中だけ死亡を防ぐ
 
     // ここから下がアニメGUI用の状態
     std::string poseFilePath_ = "resources/player/player_pose.json";
