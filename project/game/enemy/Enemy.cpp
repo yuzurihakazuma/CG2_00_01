@@ -105,6 +105,8 @@ void Enemy::SetType(Type type) {
 void Enemy::Update() {
     if (isDead_) return; // 死亡していたら何もしない
 
+    UpdateStatusEffects();
+
     // UseCard 以外へ遷移していたら詠唱は切る
     if (state_ != State::UseCard && isCasting_) {
         isCasting_ = false;
@@ -514,6 +516,49 @@ void Enemy::UpdateRetreat() {
     }
 }
 
+void Enemy::UpdateStatusEffects() {
+    //  1. 凍結（Freeze）中の冷気エフェクト
+    if (isFrozen_) {
+        // 体の周囲から、下に向かって冷気（白い煙・氷の粒）がこぼれ落ちる
+        Vector3 auraPos = {
+            pos_.x + (rand() % 15 - 7) * 0.1f, // 体の幅に合わせて散らす
+            pos_.y + 0.8f + (rand() % 11 - 5) * 0.1f, // 少し高めの位置から
+            pos_.z + (rand() % 15 - 7) * 0.1f
+        };
+        Vector3 auraVel = {
+            (rand() % 11 - 5) * 0.005f,
+            -0.05f - (rand() % 5) * 0.01f, // 🌟 下に向かって落ちる重たい冷気
+            (rand() % 11 - 5) * 0.005f
+        };
+
+        // 氷のような水色と白を混ぜる
+        Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.6f, 0.9f, 1.0f, 0.6f } : Vector4{ 1.0f, 1.0f, 1.0f, 0.6f };
+        float scale = 0.3f + (rand() % 4) * 0.1f;
+
+        GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.5f, scale, color);
+    }
+
+    // ☠️ 2. 攻撃力ダウン中の毒々しいオーラ
+    if (isAttackDebuffed_) {
+        // 体の足元〜中心から、上に向かって不気味な泡や煙がフワフワ昇る
+        Vector3 auraPos = {
+            pos_.x + (rand() % 11 - 5) * 0.1f,
+            pos_.y + 0.2f + (rand() % 11) * 0.05f, // 足元付近から
+            pos_.z + (rand() % 11 - 5) * 0.1f
+        };
+        Vector3 auraVel = {
+            (rand() % 11 - 5) * 0.01f,
+            0.05f + (rand() % 5) * 0.01f, // 🌟 上に向かってフワフワ昇る
+            (rand() % 11 - 5) * 0.01f
+        };
+
+        // 毒々しい紫色
+        Vector4 color = { 0.6f, 0.2f, 0.8f, 0.6f };
+        float scale = 0.4f + (rand() % 4) * 0.1f;
+
+        GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.6f, scale, color);
+    }
+}
 void Enemy::TakeDamage(int damage) {
     if (isDead_) return; // 既に死亡していたら無視
 
