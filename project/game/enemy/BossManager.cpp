@@ -170,9 +170,12 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 
 			splitBosses_[i]->Initialize();
 
-			// 最初は中央に重ねて出して、カットイン中に左右へ開く
-			Vector3 splitSpawnPos = splitBossTargetPositions_[i];
-			splitBosses_[i]->SetSpawnPosition(splitSpawnPos);
+			// 最初は中央に重ねて出して、着地後に左右へ分裂させる
+splitBosses_[i]->SetSpawnPosition(spawnPos);
+
+// 分裂前は元ボスと同じ大きさで見せる
+splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
+
 
 
 			// 今のボス60HPを半分にして30HPずつにする
