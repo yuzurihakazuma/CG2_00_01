@@ -595,7 +595,7 @@ void Player::UpdateCost() {
 
 // ダメージ処理
 void Player::TakeDamage(int damage, const Vector3& attackFrom) {
-    if (isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_) {
+    if (isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_) {
         return;
     }
 
