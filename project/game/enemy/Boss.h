@@ -78,6 +78,13 @@ public:
     void PlayPreBattlePose(float normalizedTime) { ApplyPreBattlePose(normalizedTime); }
     void ClearPreBattlePose() { ResetPose(); }
 
+    // 強制的に吹き飛ばす力を与える関数
+    void ApplyKnockback(const Vector3 &velocity) {
+        knockbackVelocity_ = velocity;
+        isHit_ = true;
+        hitTimer_ = 10; // 吹き飛んでいる時間
+    }
+
 private:
     void DecideNextState();
     void UpdateAppear();
