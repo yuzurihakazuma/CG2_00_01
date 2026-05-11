@@ -1544,6 +1544,20 @@ void GamePlayScene::Draw() {
 
 	// 手札カードもBloom対象にしたいので、MRT描画中に3Dとして描く
 	if (!isBossIntroPlaying) {
+
+		// ==========================================
+		// ★ 修正1：黒幕を「手札」より先に描画する！
+		// ==========================================
+		if (isCardSwapMode_) {
+			SpriteCommon::GetInstance()->PreDraw(commandList);
+			if (swapDarkOverlay_) {
+				swapDarkOverlay_->Draw();
+			}
+			if (swapUiSprite_) {
+				swapUiSprite_->Draw();
+			}
+		}
+
 		commandList->ClearDepthStencilView(dxCommon->GetDsvHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 		Obj3dCommon::GetInstance()->PreDraw(commandList);
 		PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
@@ -1606,14 +1620,7 @@ void GamePlayScene::Draw() {
 
 		levelUpBonusManager_.Draw();
 
-		if (isCardSwapMode_ && swapDarkOverlay_) {
-			swapDarkOverlay_->Draw();
-		}
-
-		if (isCardSwapMode_ && swapUiSprite_) {
-			swapUiSprite_->Draw();
-		}
-
+		
 		DrawPauseUI();
 
 		SpriteCommon::GetInstance()->PreDraw(commandList);
