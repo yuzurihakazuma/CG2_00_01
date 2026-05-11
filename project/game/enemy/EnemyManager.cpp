@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <iterator>
 #include <random>
+#include "engine/particle/GPUParticleManager.h"
 
 using namespace VectorMath;
 
@@ -354,6 +355,51 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 					}
 					enemy->SetPickupCard(pickedCard);
 					pickup.isActive = false; // マップ上からカードを消す
+
+					Vector3 effectPos = enemy->GetPosition();
+					effectPos.y += 0.5f; // 体の中心あたり
+
+					// ① 足元から上に激しく立ち昇る黄金の光柱（適度な量とサイズに）
+					for (int i = 0; i < 40; i++) { // 数を40発に
+						Vector3 auraPos = {
+							effectPos.x + (rand() % 15 - 7) * 0.1f,
+							effectPos.y - 0.5f,
+							effectPos.z + (rand() % 15 - 7) * 0.1f
+						};
+						Vector3 auraVel = {
+							(rand() % 11 - 5) * 0.01f,
+							0.25f + (rand() % 10) * 0.05f,
+							(rand() % 11 - 5) * 0.01f
+						};
+						Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 0.8f, 0.2f, 1.0f } : Vector4{ 1.0f, 1.0f, 0.6f, 1.0f };
+
+						// 🌟 サイズを 1.0f 〜 1.8f の丁度いい大きさに
+						float scale = 1.0f + (rand() % 9) * 0.1f;
+
+						GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.6f, scale, color);
+					}
+
+					// ② 横に広がる衝撃波のリング（1段構えでスッキリと）
+					for (int i = 0; i < 24; i++) {
+						float angle = (3.141592f * 2.0f / 24.0f) * i;
+						float speed = 0.4f;
+						Vector3 ringVel = { std::sinf(angle) * speed, 0.0f, std::cosf(angle) * speed };
+						// 🌟 サイズ 1.5f の分かりやすいリング1つ
+						GPUParticleManager::GetInstance()->Emit(effectPos, ringVel, 0.4f, 1.5f, { 1.0f, 0.9f, 0.5f, 1.0f });
+					}
+
+					// ③ 周囲に弾け飛ぶ黄金の火花（少量のアクセント）
+					for (int i = 0; i < 20; i++) { // 20発に減らす
+						Vector3 sparkVel = {
+							(rand() % 21 - 10) * 0.1f,
+							(rand() % 21 - 5) * 0.1f,
+							(rand() % 21 - 10) * 0.1f
+						};
+						// サイズを 0.5f 〜 0.8f に
+						float scale = 0.5f + (rand() % 4) * 0.1f;
+						GPUParticleManager::GetInstance()->Emit(effectPos, sparkVel, 0.5f, scale, { 1.0f, 0.6f, 0.0f, 1.0f });
+					}
+
 					break; // 1度に拾うのは1枚だけ
 				}
 			}
