@@ -3,6 +3,7 @@
 #include "game/card/CardDatabase.h"
 #include <cmath>
 #include <random>
+#include "engine/particle/GPUParticleManager.h"
 
 using namespace VectorMath;
 
@@ -103,6 +104,8 @@ void Enemy::SetType(Type type) {
 
 void Enemy::Update() {
     if (isDead_) return; // 死亡していたら何もしない
+
+    UpdateStatusEffects();
 
     // UseCard 以外へ遷移していたら詠唱は切る
     if (state_ != State::UseCard && isCasting_) {
@@ -513,6 +516,49 @@ void Enemy::UpdateRetreat() {
     }
 }
 
+void Enemy::UpdateStatusEffects() {
+    //  1. 凍結（Freeze）中の冷気エフェクト
+    if (isFrozen_) {
+        // 体の周囲から、下に向かって冷気（白い煙・氷の粒）がこぼれ落ちる
+        Vector3 auraPos = {
+            pos_.x + (rand() % 15 - 7) * 0.1f, // 体の幅に合わせて散らす
+            pos_.y + 0.8f + (rand() % 11 - 5) * 0.1f, // 少し高めの位置から
+            pos_.z + (rand() % 15 - 7) * 0.1f
+        };
+        Vector3 auraVel = {
+            (rand() % 11 - 5) * 0.005f,
+            -0.05f - (rand() % 5) * 0.01f, // 🌟 下に向かって落ちる重たい冷気
+            (rand() % 11 - 5) * 0.005f
+        };
+
+        // 氷のような水色と白を混ぜる
+        Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.6f, 0.9f, 1.0f, 0.6f } : Vector4{ 1.0f, 1.0f, 1.0f, 0.6f };
+        float scale = 0.3f + (rand() % 4) * 0.1f;
+
+        GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.5f, scale, color);
+    }
+
+    // ☠️ 2. 攻撃力ダウン中の毒々しいオーラ
+    if (isAttackDebuffed_) {
+        // 体の足元〜中心から、上に向かって不気味な泡や煙がフワフワ昇る
+        Vector3 auraPos = {
+            pos_.x + (rand() % 11 - 5) * 0.1f,
+            pos_.y + 0.2f + (rand() % 11) * 0.05f, // 足元付近から
+            pos_.z + (rand() % 11 - 5) * 0.1f
+        };
+        Vector3 auraVel = {
+            (rand() % 11 - 5) * 0.01f,
+            0.05f + (rand() % 5) * 0.01f, // 🌟 上に向かってフワフワ昇る
+            (rand() % 11 - 5) * 0.01f
+        };
+
+        // 毒々しい紫色
+        Vector4 color = { 0.6f, 0.2f, 0.8f, 0.6f };
+        float scale = 0.4f + (rand() % 4) * 0.1f;
+
+        GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.6f, scale, color);
+    }
+}
 void Enemy::TakeDamage(int damage) {
     if (isDead_) return; // 既に死亡していたら無視
 
@@ -524,6 +570,47 @@ void Enemy::TakeDamage(int damage) {
     }
 
     hp_ -= damage;                    // HP減少
+
+    Vector3 hitDir = {
+            pos_.x - playerPos_.x,
+            0.0f,
+            pos_.z - playerPos_.z
+    }; // プレイヤーから敵への方向
+
+    if (Length(hitDir) > 0.01f) {
+        hitDir = Normalize(hitDir);
+        knockbackVelocity_ = hitDir * 0.18f; // 後ろへ少し吹き飛ばす
+    }
+    else {
+        hitDir = { 0.0f, 0.0f, 1.0f }; // 万が一のフォールバック
+        knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+    }
+
+    Vector3 hitCenter = { pos_.x, pos_.y + 0.5f, pos_.z };
+
+    // ① ヒット時の「光の波紋（衝撃波）」
+    for (int i = 0; i < 16; i++) {
+        float angle = (3.141592f * 2.0f / 16.0f) * i;
+        float speed = 0.35f;
+        Vector3 ringVel = { std::sinf(angle) * speed, 0.0f, std::cosf(angle) * speed };
+
+        // 🌟 サイズを 0.6f -> 1.0f に拡大！
+        GPUParticleManager::GetInstance()->Emit(hitCenter, ringVel, 0.15f, 1.0f, { 1.0f, 1.0f, 0.6f, 1.0f });
+    }
+
+    // ② 殴られた方向（後ろ）へ向かって、鋭く飛び散る火花！
+    for (int i = 0; i < 15; i++) {
+        Vector3 sparkVel = {
+            hitDir.x * 0.3f + (rand() % 11 - 5) * 0.05f,
+            0.15f + (rand() % 10) * 0.03f,
+            hitDir.z * 0.3f + (rand() % 11 - 5) * 0.05f
+        };
+        // 🌟 サイズを 0.3~0.5 -> 0.6~0.9 に拡大！
+        float scale = 0.6f + (rand() % 4) * 0.1f;
+        GPUParticleManager::GetInstance()->Emit(hitCenter, sparkVel, 0.35f, scale, { 1.0f, 0.4f, 0.0f, 1.0f });
+    }
+
+
     isHit_ = true;                    // ヒット状態開始
     hitTimer_ = hitDuration_;         // ヒット表示時間セット
     hitStunTimer_ = hitStunDuration_; // 被弾硬直時間セット
@@ -534,22 +621,45 @@ void Enemy::TakeDamage(int damage) {
     currentUseCard_ = { -1, "", 0 };
     cardCooldownTimer_ = 20; // 被弾直後は少しカードを使わせない
 
-    Vector3 hitDir = {
-        pos_.x - playerPos_.x,
-        0.0f,
-        pos_.z - playerPos_.z
-    }; // プレイヤーから敵への方向
-
-    if (Length(hitDir) > 0.01f) {
-        hitDir = Normalize(hitDir);
-        knockbackVelocity_ = hitDir * 0.18f; // 後ろへ少し吹き飛ばす
-    } else {
-        knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
-    }
+   
 
     if (hp_ <= 0) {
         hp_ = 0;
         isDead_ = true;
+
+        // ① 炎の爆発 (20発)
+        for (int i = 0; i < 20; i++) {
+            Vector3 expPos = {
+                pos_.x + (rand() % 21 - 10) * 0.05f,
+                pos_.y + 0.5f + (rand() % 21 - 10) * 0.05f,      
+                pos_.z + (rand() % 21 - 10) * 0.05f
+            };
+            Vector3 expVel = {
+                (rand() % 21 - 10) * 0.15f,
+                (rand() % 21 - 10) * 0.15f + 0.1f, 
+                (rand() % 21 - 10) * 0.15f
+            };
+            Vector4 color = (rand() % 2 == 0) ? Vector4{1.0f, 0.4f, 0.0f, 1.0f} : Vector4{1.0f, 0.8f, 0.0f, 1.0f};
+            float scale = 0.5f + (rand() % 4) * 0.1f;
+            GPUParticleManager::GetInstance()->Emit(expPos, expVel, 0.6f, scale, color);
+        }
+
+        // ② 黒煙 (10発)
+        for (int i = 0; i < 10; i++) {
+            Vector3 smokePos = {
+                pos_.x + (rand() % 21 - 10) * 0.1f,
+                pos_.y + 0.5f + (rand() % 11) * 0.1f,
+                pos_.z + (rand() % 21 - 10) * 0.1f
+            };
+            Vector3 smokeVel = {
+                (rand() % 21 - 10) * 0.1f,
+                0.05f + (rand() % 11) * 0.05f, // 上にフワッと昇る
+                (rand() % 21 - 10) * 0.1f
+            };
+            float scale = 0.6f + (rand() % 4) * 0.1f;
+            GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.0f, scale, { 0.3f, 0.3f, 0.3f, 0.8f });
+        }
+
     }
 }
 

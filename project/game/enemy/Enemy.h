@@ -132,6 +132,7 @@ private:
     void UpdateInvestigate();   // 最後に見た位置を調べる処理
     void UpdateUseCard();       // カード使用処理
     void UpdateRetreat();       // プレイヤーから離れる処理
+    void UpdateStatusEffects(); // 状態異常の常時エフェクト処理
 
 private:
     Vector3 pos_{ 5.0f, 0.0f, 5.0f };   // 位置
