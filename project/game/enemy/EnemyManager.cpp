@@ -557,6 +557,35 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 			summonCenter.z + std::cos(angle) * radius
 		};
 
+		// ① 足元から這い上がるような、赤黒い禍々しいオーラ
+		for (int j = 0; j < 40; j++) {
+			Vector3 auraPos = {
+				spawnPos.x + (rand() % 21 - 10) * 0.08f,
+				spawnPos.y + 0.1f + (rand() % 10) * 0.05f, // 足元から
+				spawnPos.z + (rand() % 21 - 10) * 0.08f
+			};
+			Vector3 auraVel = {
+				(rand() % 11 - 5) * 0.015f,
+				0.15f + (rand() % 10) * 0.03f, // 上に向かってフワァッと噴き出す
+				(rand() % 11 - 5) * 0.015f
+			};
+
+			// 赤黒い闇の魔法カラー
+			Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.0f, 0.0f, 0.8f } : Vector4{ 0.4f, 0.0f, 0.6f, 0.8f };
+			float scale = 0.8f + (rand() % 6) * 0.1f;
+
+			// 寿命を少し長くして（0.8秒）余韻を残す
+			GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
+		}
+
+		// ② 出現時のちょっとした衝撃波（紫色の波紋）
+		for (int j = 0; j < 20; j++) {
+			float ringAngle = (3.141592f * 2.0f / 20.0f) * j;
+			float speed = 0.25f;
+			Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
+			GPUParticleManager::GetInstance()->Emit(spawnPos, ringVel, 0.4f, 1.2f, { 0.6f, 0.0f, 0.9f, 1.0f });
+		}
+
 		// 敵の本体を生成
 		auto newEnemy = std::make_unique<Enemy>();
 		newEnemy->Initialize();
