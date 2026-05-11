@@ -200,8 +200,16 @@ bool PlayerManager::IsVisible() const {
 }
 
 void PlayerManager::ApplyInfiniteMode(bool isInfiniteMode) {
-    // 無限モード中だけステータスを固定
-    if (!player_ || !isInfiniteMode) {
+    // プレイヤーがいない時は何もしない
+    if (!player_) {
+        return;
+    }
+
+    // 無限モードのON/OFFに合わせて「完全無敵」を切り替える！
+    player_->SetDebugInvincible(isInfiniteMode);
+
+    // 無限モードじゃない時はここで終わる
+    if (!isInfiniteMode) {
         return;
     }
 

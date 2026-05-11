@@ -349,6 +349,21 @@ void GamePlayScene::Update() {
 	isEditingDebugText = ImGui::GetIO().WantTextInput;
 #endif
 
+	// ==========================================
+	// ★ ここに追加：さっき下で消した「F1の判定」をここに引っ越し！
+	// これでレベルアップ中だろうが何だろうが、絶対にF1キーが効くようになります
+	// ==========================================
+#ifdef _DEBUG
+	if (input->Triggerkey(DIK_F1)) {
+		isInfiniteMode_ = !isInfiniteMode_;
+	}
+#else
+	isInfiniteMode_ = false;
+#endif
+
+	if (playerManager_) {
+		playerManager_->ApplyInfiniteMode(isInfiniteMode_);
+	}
 	// プレイヤー本体を取得
 	Player* player = playerManager_ ? playerManager_->GetPlayer() : nullptr;
 
@@ -575,13 +590,6 @@ void GamePlayScene::Update() {
 	const bool isBossIntroPlayingNow = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
 	if (playerManager_) {
 
-#ifdef _DEBUG
-		if (input->Triggerkey(DIK_F1)) {
-			isInfiniteMode_ = !isInfiniteMode_;
-		}
-#else
-		isInfiniteMode_ = false;
-#endif
 
 		playerManager_->ApplyInfiniteMode(isInfiniteMode_);
 

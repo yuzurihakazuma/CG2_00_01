@@ -100,6 +100,8 @@ public:
     void SetEnemyAtkDebuffed(bool isDebuffed) { isEnemyAtkDebuffed_ = isDebuffed; }
     bool IsEnemyAtkDebuffed() const { return isEnemyAtkDebuffed_; }
 
+    void SetDebugInvincible(bool isInvincible) { isDebugInvincible_ = isInvincible; } //デバッグモード専用の完全無敵切り替え
+
 private:
     void LevelUp();      // レベルアップ処理
     void UpdateCost();   // コスト自然回復
@@ -220,4 +222,5 @@ private:
     char blendStartPoseNameBuffer_[64] = "idle";
 
     float costRecoveryMultiplier_ = 1.0f; // コスト回復速度倍率
+    bool isDebugInvincible_ = false; // デバッグ用無敵フラグ
 };
