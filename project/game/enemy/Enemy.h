@@ -73,6 +73,10 @@ public:
 
     const Card& GetBaseCard() const { return baseCard_; }
     const Card& GetCurrentUseCard() const { return currentUseCard_; }
+    CardAttackRangeType GetCurrentAttackRangeType() const {
+        const Card& card = HasUsablePickupCard() ? pickupCard_ : baseCard_;
+        return card.attackRangeType;
+    }
 
     // HP関連
     void TakeDamage(int damage);             // ダメージを受ける
@@ -93,6 +97,7 @@ public:
 
     // 敵を凍らせる
     void Freeze(int durationFrames);
+    bool IsFrozen() const { return isFrozen_; }
 
     // デバフを掛ける
     void ApplyAttackDebuff(int duration) {

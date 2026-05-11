@@ -83,6 +83,9 @@ void Obj3d::Initialize(Model* model){
 
 	// paddingも0で初期化
 	dissolveData_->padding = 0.0f;
+	materialOverrideResource_.Reset();
+	materialOverrideData_ = nullptr;
+	useMaterialOverride_ = false;
 
 	// ---------------------------------------------------------
 	// Transform変数の初期化
@@ -207,7 +210,12 @@ void Obj3d::Draw(){
 	// 3. モデルの描画処理を呼び出す 
 	// (ここで頂点、インデックス、マテリアル、テクスチャの設定とDrawCallが行われる)
 	if ( model_ ) {
-		model_->Draw();
+		model_->Draw(
+			1,
+			useMaterialOverride_ && materialOverrideResource_
+				? materialOverrideResource_->GetGPUVirtualAddress()
+				: 0
+		);
 	}
 }
 
@@ -225,6 +233,39 @@ void Obj3d::SetDissolveColor(const Vector3& color) {
 
 void Obj3d::SetNoiseTexture(uint32_t textureIndex) {
 	noiseTextureIndex_ = textureIndex;
+}
+
+void Obj3d::SetColor(const Vector4& color) {
+	if (!model_) {
+		return;
+	}
+
+	if (!materialOverrideResource_) {
+		materialOverrideResource_ = obj3dCommon_->GetDxCommon()->GetResourceFactory()->CreateBufferResource(sizeof(Model::Material));
+		materialOverrideResource_->Map(0, nullptr, reinterpret_cast<void**>(&materialOverrideData_));
+
+		if (materialOverrideData_) {
+			if (Model::Material* source = model_->GetMaterial()) {
+				*materialOverrideData_ = *source;
+			}
+			else {
+				materialOverrideData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+				materialOverrideData_->enableLighting = true;
+				materialOverrideData_->uvTransform = MatrixMath::MakeIdentity4x4();
+				materialOverrideData_->shininess = 32.0f;
+				materialOverrideData_->emissive = 0.0f;
+			}
+		}
+	}
+
+	if (materialOverrideData_) {
+		materialOverrideData_->color = color;
+		useMaterialOverride_ = true;
+	}
+}
+
+void Obj3d::ClearColorOverride() {
+	useMaterialOverride_ = false;
 }
 
 void Obj3d::PlayAnimation(Animation* animation){

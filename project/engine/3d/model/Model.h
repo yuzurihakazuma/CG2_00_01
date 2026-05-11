@@ -78,7 +78,7 @@ public: // メンバ関数
 	/// <summary>
 	/// 描画
 	/// </summary>
-	void Draw(uint32_t instanceCount = 1);
+	void Draw(uint32_t instanceCount = 1, D3D12_GPU_VIRTUAL_ADDRESS materialAddress = 0);
 
 	Material* GetMaterial(){ return materialData_; }
 
