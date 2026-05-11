@@ -674,6 +674,11 @@ void BossManager::Update(
 			mapManager->RebuildMapObjects();
 		}
 
+		// 分裂ボスでも通常ボスでも、倒れたら魔法を強制終了！
+		if (bossCardSystem_) {
+			bossCardSystem_->Reset();
+		}
+
 		bossDeadHandled_ = true;
 	}
 

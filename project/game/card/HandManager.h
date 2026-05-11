@@ -87,4 +87,17 @@ public:
 	void RemoveCardImmediate(int index);
 
 	void SetCooldownDisplay(int cardId, int remainingFrames, int durationFrames);
+
+	// カーソルの位置を強制的に移動させる関数
+	void SetSelectedCardIndex(int index) {
+		if (hand_.empty()) {
+			selectedCardIndex_ = 0;
+			return;
+		}
+		// 0未満や、手札の枚数以上の数字が入らないように安全対策
+		if (index < 0) index = 0;
+		if (index >= static_cast<int>(hand_.size())) index = static_cast<int>(hand_.size()) - 1;
+
+		selectedCardIndex_ = index;
+	}
 };
