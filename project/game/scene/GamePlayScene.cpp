@@ -682,7 +682,9 @@ void GamePlayScene::Update() {
 	// ==========================================
 	if (playerManager_ && boss && !boss->IsDead() && !isBossIntroPlaying) {
 		Vector3 playerPos = playerManager_->GetPosition();
-		Vector3 bossPos = boss->GetPosition();
+		// 分裂ボス時は2体の中心、通常時は通常ボス位置を使う
+		Vector3 bossPos = bossManager_->GetBossFocusPosition();
+
 
 		Vector3 diff = {
 			playerPos.x - bossPos.x,
@@ -731,7 +733,9 @@ void GamePlayScene::Update() {
 			// ボス部屋突入時の演出カメラ
 			if (isBossIntroPlaying && mapManager_ && mapManager_->IsBossMap() && boss) {
 
-				Vector3 bossPos = boss->GetPosition();
+				// 分裂ボス時は2体の中心、通常時は通常ボス位置を使う
+				Vector3 bossPos = bossManager_->GetBossFocusPosition();
+
 
 				// 最初に上空からボス出現地点を見る
 				if (bossIntroState == BossManager::IntroCameraState::SkyLook) {
@@ -835,12 +839,18 @@ void GamePlayScene::Update() {
 						bossManager_->SetBossIntroTimer(bossIntroTimer);
 					}
 					if (bossIntroTimer <= 0) {
-						if (bossManager_) {
-							bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
-							bossManager_->SetBossIntroTimer(40);
+						if (bossIntroTimer <= 0) {
+							if (bossManager_) {
+								bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
+								bossManager_->SetBossIntroTimer(40);
+							}
 						}
+
 					}
+
 				}
+				// 10階層用の分裂演出
+				
 
 				// 最後だけ通常のボス戦カメラへ寄せる
 				else if (bossIntroState == BossManager::IntroCameraState::ToBattle) {
@@ -893,7 +903,9 @@ void GamePlayScene::Update() {
 			// 通常のボス戦カメラ
 			else if (mapManager_ && mapManager_->IsBossMap() && boss && !boss->IsDead()) {
 
-				Vector3 bossPos = boss->GetPosition();
+				// 分裂ボス時は2体の中心、通常時は通常ボス位置を返す
+				Vector3 bossPos = bossManager_->GetBossFocusPosition();
+
 				Vector3 toBoss = {
 					bossPos.x - playerPos_.x,
 					0.0f,
@@ -1019,8 +1031,10 @@ void GamePlayScene::Update() {
 	if (boss && !boss->IsDead() && mapManager_ && mapManager_->IsBossMap() &&
 		bossHpBackSprite && bossHpFillSprite && camera_) {
 
-		Vector3 bossHeadPos = boss->GetPosition();
-		bossHeadPos.y += 2.8f; // 高すぎたので少し下げる
+		// 分裂ボス時は2体の中心位置にHPバーを出す
+		Vector3 bossHeadPos = bossManager_->GetBossFocusPosition();
+		bossHeadPos.y += 2.8f;
+
 
 		Vector2 screenPos = WorldToScreen(bossHeadPos);
 
@@ -1031,10 +1045,9 @@ void GamePlayScene::Update() {
 		const float fillHeight = 10.0f;
 
 		// HP割合
-		float hpRate = 0.0f;
-		if (boss->GetMaxHP() > 0) {
-			hpRate = static_cast<float>(boss->GetHP()) / static_cast<float>(boss->GetMaxHP());
-		}
+				// 分裂ボス時は2体合計HPの割合を使う
+		float hpRate = bossManager_->GetBossHpRate();
+
 		if (hpRate < 0.0f) hpRate = 0.0f;
 		if (hpRate > 1.0f) hpRate = 1.0f;
 
@@ -1652,6 +1665,27 @@ void GamePlayScene::DrawDebugUI() {
 			minimap_.get(),
 			[this]() { ResetBattleDebug(); }
 		); // ボタンを押したら次の階層へ
+	}
+	if (mapManager_ && ImGui::Button("Go to 5F Boss")) {
+		// 4階にしてから次の階層遷移を使って5階へ飛ばす
+		mapManager_->SetCurrentFloor(4);
+		mapManager_->AdvanceFloor(
+			enemyManager_.get(),
+			bossManager_.get(),
+			minimap_.get(),
+			[this]() { ResetBattleDebug(); }
+		);
+	}
+
+	if (mapManager_ && ImGui::Button("Go to 10F Boss")) {
+		// 9階にしてから次の階層遷移を使って10階へ飛ばす
+		mapManager_->SetCurrentFloor(9);
+		mapManager_->AdvanceFloor(
+			enemyManager_.get(),
+			bossManager_.get(),
+			minimap_.get(),
+			[this]() { ResetBattleDebug(); }
+		);
 	}
 
 	ImGui::Separator();

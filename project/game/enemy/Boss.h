@@ -14,6 +14,11 @@ public:
         Dead
     };
 
+    enum class CombatRole {
+        Melee,   // 近距離型
+        Ranged   // 遠距離型
+    };
+
 public:
     void Initialize();
     void Update();
@@ -77,6 +82,27 @@ public:
 
     void PlayPreBattlePose(float normalizedTime) { ApplyPreBattlePose(normalizedTime); }
     void ClearPreBattlePose() { ResetPose(); }
+
+    // HP
+    void SetMaxHP(int maxHp);
+    void SetHP(int hp);
+
+    void SetCombatRole(CombatRole role) { combatRole_ = role; }
+    CombatRole GetCombatRole() const { return combatRole_; }
+
+    void SetPartnerPosition(const Vector3& pos) {
+        partnerPos_ = pos;
+        hasPartnerPosition_ = true;
+    }
+
+    void ClearPartnerPosition() {
+        hasPartnerPosition_ = false;
+    }
+
+    void SetForceMeleeMode(bool flag) { forceMeleeMode_ = flag; }
+
+    void SetSplitBehaviorEnabled(bool flag) { isSplitBehaviorEnabled_ = flag; }
+    bool IsSplitBehaviorEnabled() const { return isSplitBehaviorEnabled_; }
 
 private:
     void DecideNextState();
@@ -145,4 +171,12 @@ private:
 
     bool cardUseRequest_ = false;
     std::unordered_map<int, int> cardCooldownTimers_;
+
+    CombatRole combatRole_ = CombatRole::Melee; // 個体ごとの役割
+    Vector3 partnerPos_{ 0.0f, 0.0f, 0.0f };    // 相方の位置
+    bool hasPartnerPosition_ = false;           // 相方位置が有効か
+    bool forceMeleeMode_ = false;               // 片方撃破後に両方近距離化
+    bool isSplitBehaviorEnabled_ = false;      // 10階層分裂ボス専用AIを使うか
+
 };
+

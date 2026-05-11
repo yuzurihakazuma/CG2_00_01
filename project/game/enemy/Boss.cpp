@@ -44,6 +44,12 @@ void Boss::Initialize() {
 
 	SetSpawnPosition({ 10.0f, 2.0f, 10.0f });
 	InitializeBossCards();
+
+	isSplitBehaviorEnabled_ = false;
+	combatRole_ = CombatRole::Melee;
+	hasPartnerPosition_ = false;
+	forceMeleeMode_ = false;
+
 }
 
 void Boss::InitializeBossCards() {
@@ -487,10 +493,39 @@ void Boss::UpdateChase() {
 	};
 
 	float dist = Length(dir);
+
+	// 相方ボスと重ならないように一定距離を保つ
+	Vector3 separation{ 0.0f, 0.0f, 0.0f };
+	if (isSplitBehaviorEnabled_ && hasPartnerPosition_) {
+		Vector3 toPartner = {
+			pos_.x - partnerPos_.x,
+			0.0f,
+			pos_.z - partnerPos_.z
+		};
+
+		float partnerDist = Length(toPartner);
+		const float keepDistance = 4.0f; // ボス同士の最低間隔
+
+		if (partnerDist > 0.001f && partnerDist < keepDistance) {
+			Vector3 away = Normalize(toPartner);
+			float pushPower = (keepDistance - partnerDist) * 0.08f;
+			separation = away * pushPower;
+		}
+	}
+
+
 	const bool isEnraged = hp_ <= (maxHP_ / 2);
 	const float moveSpeed = isEnraged ? 0.11f : 0.08f;
-	const float cardStartRange = isEnraged ? 28.0f : 24.0f;
-	const float stopRange = isEnraged ? 2.4f : 3.0f;
+
+	float cardStartRange = isEnraged ? 28.0f : 24.0f;
+	float stopRange = isEnraged ? 2.4f : 3.0f;
+
+	if (isSplitBehaviorEnabled_) {
+		const bool useMeleeRole = forceMeleeMode_ || combatRole_ == CombatRole::Melee;
+		cardStartRange = useMeleeRole ? (isEnraged ? 14.0f : 12.0f) : (isEnraged ? 30.0f : 26.0f);
+		stopRange = useMeleeRole ? (isEnraged ? 2.2f : 2.8f) : (isEnraged ? 8.0f : 9.5f);
+	}
+
 
 	if (dist > 0.01f) {
 		Vector3 normDir = Normalize(dir);
@@ -508,11 +543,17 @@ void Boss::UpdateChase() {
 		Vector3 normDir = Normalize(dir);
 		pos_ += normDir * moveSpeed;
 	}
+
+	// 相方との重なり防止を最後に足す
+	pos_ += separation;
+
 }
 
 void Boss::UpdateUseCard() {
 	// HPが半分以下なら怒り状態
 	const bool isEnraged = hp_ <= (maxHP_ / 2);
+
+	const bool useMeleeRole = forceMeleeMode_ || combatRole_ == CombatRole::Melee;
 
 	// =========================================================
 	// 1. 詠唱開始前（ここで「どのカードを使うか」を抽選で決める！）
@@ -537,24 +578,63 @@ void Boss::UpdateUseCard() {
 			}
 			};
 
-		// 距離と怒り状態に応じた確率の振り分け
-		if (dist < 5.5f) {
-			addWeightedCard(101, 5);
-			addWeightedCard(102, isEnraged ? 2 : 1);
-			if (isEnraged) addWeightedCard(104, 3); // 近距離でも怒り時は少し撃つ
-			addWeightedCard(103, 1);
+		if (!isSplitBehaviorEnabled_) {
+			// 5階など通常ボスは今まで通り
+			if (dist < 5.5f) {
+				addWeightedCard(101, 5);
+				addWeightedCard(102, isEnraged ? 2 : 1);
+				if (isEnraged) addWeightedCard(104, 3);
+				addWeightedCard(103, 1);
+			} else if (dist < 14.0f) {
+				addWeightedCard(102, isEnraged ? 7 : 5);
+				if (isEnraged) addWeightedCard(104, 6);
+				addWeightedCard(103, isEnraged ? 3 : 2);
+				addWeightedCard(101, 2);
+			} else {
+				addWeightedCard(102, isEnraged ? 8 : 6);
+				if (isEnraged) addWeightedCard(104, 7);
+				addWeightedCard(103, isEnraged ? 5 : 4);
+			}
+		} else {
+			// 10階の分裂ボスだけ役割付き重み付け
+			if (dist < 5.5f) {
+				if (useMeleeRole) {
+					addWeightedCard(101, 7);
+					addWeightedCard(102, 1);
+					addWeightedCard(104, isEnraged ? 2 : 1);
+					addWeightedCard(103, 1);
+				} else {
+					addWeightedCard(101, 2);
+					addWeightedCard(102, 4);
+					addWeightedCard(104, isEnraged ? 4 : 3);
+					addWeightedCard(103, 1);
+				}
+			} else if (dist < 14.0f) {
+				if (useMeleeRole) {
+					addWeightedCard(101, 5);
+					addWeightedCard(102, 3);
+					addWeightedCard(104, isEnraged ? 2 : 1);
+					addWeightedCard(103, 1);
+				} else {
+					addWeightedCard(101, 1);
+					addWeightedCard(102, isEnraged ? 7 : 6);
+					addWeightedCard(104, isEnraged ? 6 : 5);
+					addWeightedCard(103, 2);
+				}
+			} else {
+				if (useMeleeRole) {
+					addWeightedCard(102, 3);
+					addWeightedCard(104, 2);
+					addWeightedCard(103, 1);
+				} else {
+					addWeightedCard(102, isEnraged ? 8 : 7);
+					addWeightedCard(104, isEnraged ? 7 : 6);
+					addWeightedCard(103, 3);
+				}
+			}
 		}
-		else if (dist < 14.0f) {
-			addWeightedCard(102, isEnraged ? 7 : 5);
-			if (isEnraged) addWeightedCard(104, 6); // 中距離はビーム率高め
-			addWeightedCard(103, isEnraged ? 3 : 2);
-			addWeightedCard(101, 2);
-		}
-		else {
-			addWeightedCard(102, isEnraged ? 8 : 6);
-			if (isEnraged) addWeightedCard(104, 7); // 遠距離もビーム率高め
-			addWeightedCard(103, isEnraged ? 5 : 4);
-		}
+
+
 
 		// 連続で同じカードにならないようにする処理
 		bool hasDifferentCard = false;
@@ -875,4 +955,38 @@ void Boss::SetSpawnPosition(const Vector3& pos) {
 	appearTargetY_ = pos.y;
 	appearStartY_ = pos.y + kBossAppearDropHeight;
 	pos_ = { pos.x, appearStartY_, pos.z };
+}
+
+void Boss::SetMaxHP(int maxHp) {
+	// 最大HPが1未満にならないようにする
+	if (maxHp < 1) {
+		maxHp = 1;
+	}
+
+	maxHP_ = maxHp;
+
+	// 現在HPが最大HPを超えていたら合わせる
+	if (hp_ > maxHP_) {
+		hp_ = maxHP_;
+	}
+}
+
+void Boss::SetHP(int hp) {
+	// 0未満にならないようにする
+	if (hp < 0) {
+		hp = 0;
+	}
+
+	// 最大HPを超えないようにする
+	if (hp > maxHP_) {
+		hp = maxHP_;
+	}
+
+	hp_ = hp;
+
+	// 0なら死亡状態にしておく
+	if (hp_ <= 0) {
+		isDead_ = true;
+		state_ = State::Dead;
+	}
 }

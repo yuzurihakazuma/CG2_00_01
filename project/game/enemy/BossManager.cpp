@@ -30,6 +30,23 @@ void BossManager::Initialize(Camera* camera) {
         bossObj_->SetScale(boss_->GetScale());
     }
 
+	for (int i = 0; i < 2; ++i) {
+		// 分裂ボス本体を用意しておく
+		splitBosses_[i] = std::make_unique<Boss>();
+		splitBosses_[i]->Initialize();
+		splitBosses_[i]->SetScale(splitBossScale_);
+
+		// 分裂ボスの見た目オブジェクトも2つ用意する
+		splitBossObjs_[i] = std::unique_ptr<Obj3d>(Obj3d::Create("boss"));
+		if (splitBossObjs_[i]) {
+			splitBossObjs_[i]->SetCamera(camera);
+			splitBossObjs_[i]->SetScale(splitBossScale_);
+			splitBossObjs_[i]->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+			splitBossObjs_[i]->Update();
+		}
+	}
+
+
     beamWarningObj_ = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
     if (beamWarningObj_) {
         beamWarningObj_->SetCamera(camera);
@@ -79,6 +96,11 @@ void BossManager::Finalize() {
     bossHpFillSprite_.reset();
     bossObj_.reset();
     boss_.reset();
+	for (int i = 0; i < 2; ++i) {
+		splitBossObjs_[i].reset();
+		splitBosses_[i].reset();
+	}
+
 }
 
 void BossManager::Reset() {
@@ -115,20 +137,92 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
         return;
     }
 
-    // bossマップでは中央固定
-    Vector3 spawnPos = mapManager->GetMapCenterFloorPosition(2.0f);
+	// ボス部屋の中央位置
+	Vector3 spawnPos = mapManager->GetMapCenterFloorPosition(2.0f);
 
-    boss_->Initialize();
-    boss_->SetSpawnPosition(spawnPos);
-    boss_->SetScale({ 2.0f, 2.0f, 2.0f });
-    bossDeadHandled_ = false;
+	// 10階層だけ分裂ボスにする
+	const bool isSplitBossFloor = (mapManager->GetCurrentFloor() == 10);
+	bossType_ = isSplitBossFloor ? BossType::Split : BossType::Normal;
 
-    if (bossObj_) {
-        bossObj_->SetTranslation(boss_->GetPosition());
-        bossObj_->SetRotation(boss_->GetRotation());
-        bossObj_->SetScale(boss_->GetScale());
-        bossObj_->Update();
-    }
+	// 分裂演出の開始位置と最終配置を記録しておく
+	splitBossCenterPosition_ = spawnPos;
+	splitBossTargetPositions_[0] = spawnPos;
+	splitBossTargetPositions_[0].x -= splitBossOffset_;
+	splitBossTargetPositions_[1] = spawnPos;
+	splitBossTargetPositions_[1].x += splitBossOffset_;
+
+	bossDeadHandled_ = false;
+
+	if (bossType_ == BossType::Split) {
+		// 通常ボスは画面外へ逃がしておく
+		boss_->Initialize();
+		boss_->SetPosition({ 9999.0f, -9999.0f, 9999.0f });
+
+		if (bossObj_) {
+			bossObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+			bossObj_->Update();
+		}
+
+		for (int i = 0; i < 2; ++i) {
+			if (!splitBosses_[i]) {
+				continue;
+			}
+
+			splitBosses_[i]->Initialize();
+
+			// 最初は中央に重ねて出して、カットイン中に左右へ開く
+			Vector3 splitSpawnPos = splitBossTargetPositions_[i];
+			splitBosses_[i]->SetSpawnPosition(splitSpawnPos);
+
+
+			// 今のボス60HPを半分にして30HPずつにする
+			splitBosses_[i]->SetMaxHP(30);
+			splitBosses_[i]->SetHP(30);
+			// 10階の分裂ボスだけ専用AIを使う
+			splitBosses_[i]->SetSplitBehaviorEnabled(true);
+
+			if (i == 0) {
+				// 左側は遠距離型
+				splitBosses_[i]->SetCombatRole(Boss::CombatRole::Ranged);
+			} else {
+				// 右側は近距離型
+				splitBosses_[i]->SetCombatRole(Boss::CombatRole::Melee);
+			}
+
+			splitBosses_[i]->SetForceMeleeMode(false);
+
+
+			if (splitBossObjs_[i]) {
+				splitBossObjs_[i]->SetTranslation(splitBosses_[i]->GetPosition());
+				splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
+				splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
+				splitBossObjs_[i]->Update();
+			}
+		}
+
+		return;
+	}
+
+	// 5階層など通常ボスは今まで通り
+	boss_->Initialize();
+	boss_->SetSpawnPosition(spawnPos);
+	boss_->SetScale({ 2.0f, 2.0f, 2.0f });
+
+	if (bossObj_) {
+		bossObj_->SetTranslation(boss_->GetPosition());
+		bossObj_->SetRotation(boss_->GetRotation());
+		bossObj_->SetScale(boss_->GetScale());
+		bossObj_->Update();
+	}
+
+	// 分裂ボス側は画面外へ逃がしておく
+	for (int i = 0; i < 2; ++i) {
+		if (splitBossObjs_[i]) {
+			splitBossObjs_[i]->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+			splitBossObjs_[i]->Update();
+		}
+	}
+
 }
 
 void BossManager::StartBossIntro() {
@@ -138,6 +232,7 @@ void BossManager::StartBossIntro() {
 	bossCardRainTimer_ = bossCardRainInterval_;
 }
 
+
 void BossManager::EndBossIntro() {
     isBossIntroPlaying_ = false;
     bossIntroCameraState_ = IntroCameraState::None;
@@ -145,53 +240,89 @@ void BossManager::EndBossIntro() {
 }
 
 bool BossManager::ShouldTriggerGameClear(MapManager* mapManager) const {
-	// ボス部屋でボスを倒していたらクリア
+	// 無効な値ならクリアしない
 	if (!mapManager || !boss_) {
 		return false;
 	}
 
-	return mapManager->IsBossMap() && boss_->IsDead() && bossDeadHandled_;
+	// ボスマップでなければクリアしない
+	if (!mapManager->IsBossMap()) {
+		return false;
+	}
+
+	// 10階の分裂ボスは2体とも倒していて、死亡処理も終わっている時だけクリア
+	if (bossType_ == BossType::Split) {
+		bool leftDead = !splitBosses_[0] || splitBosses_[0]->IsDead();
+		bool rightDead = !splitBosses_[1] || splitBosses_[1]->IsDead();
+		return leftDead && rightDead && bossDeadHandled_;
+	}
+
+	// 5階など通常ボスは今まで通り
+	return boss_->IsDead() && bossDeadHandled_;
 }
 
+
 void BossManager::UpdateBeamWarning(MapManager* mapManager) {
-    if (!beamWarningObj_) {
-        return;
-    }
+	if (!beamWarningObj_) {
+		return;
+	}
 
-    const bool shouldShow =
-        boss_ &&
-        mapManager &&
-        mapManager->IsBossMap() &&
-        !boss_->IsDead() &&
-        !boss_->IsAppearing() &&
-        boss_->IsCasting() &&
-        boss_->GetSelectedCard().id == 104;
+	Boss* warningBoss = nullptr;
 
-    if (!shouldShow) {
-        beamWarningObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
-        beamWarningObj_->Update();
-        return;
-    }
+	if (bossType_ == BossType::Split) {
+		// 分裂ボス側でビーム詠唱中の個体を探す
+		for (int i = 0; i < 2; ++i) {
+			if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
+				continue;
+			}
 
-    const Vector3& bossPos = boss_->GetPosition();
-    float bossYaw = boss_->GetRotation().y;
-    Vector3 forward = {
-        std::sinf(bossYaw),
-        0.0f,
-        std::cosf(bossYaw)
-    };
+			if (!splitBosses_[i]->IsAppearing() &&
+				splitBosses_[i]->IsCasting() &&
+				splitBosses_[i]->GetSelectedCard().id == 104) {
+				warningBoss = splitBosses_[i].get();
+				break;
+			}
+		}
+	} else {
+		if (boss_ &&
+			!boss_->IsDead() &&
+			!boss_->IsAppearing() &&
+			boss_->IsCasting() &&
+			boss_->GetSelectedCard().id == 104) {
+			warningBoss = boss_.get();
+		}
+	}
 
-    const float warningLength = 16.0f;
-    Vector3 warningPos = {
-        bossPos.x + forward.x * (warningLength * 0.90f),
-        mapManager->GetFloorSurfaceY(0.08f),
-        bossPos.z + forward.z * (warningLength * 0.90f)
-    };
+	const bool shouldShow =
+		warningBoss &&
+		mapManager &&
+		mapManager->IsBossMap();
 
-    beamWarningObj_->SetTranslation(warningPos);
-    beamWarningObj_->SetRotation({ 0.0f, bossYaw, 0.0f });
-    beamWarningObj_->SetScale({ 0.45f, 0.04f, warningLength });
-    beamWarningObj_->Update();
+	if (!shouldShow) {
+		beamWarningObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+		beamWarningObj_->Update();
+		return;
+	}
+
+	const Vector3& bossPos = warningBoss->GetPosition();
+	float bossYaw = warningBoss->GetRotation().y;
+	Vector3 forward = {
+		std::sinf(bossYaw),
+		0.0f,
+		std::cosf(bossYaw)
+	};
+
+	const float warningLength = 16.0f;
+	Vector3 warningPos = {
+		bossPos.x + forward.x * (warningLength * 0.90f),
+		mapManager->GetFloorSurfaceY(0.08f),
+		bossPos.z + forward.z * (warningLength * 0.90f)
+	};
+
+	beamWarningObj_->SetTranslation(warningPos);
+	beamWarningObj_->SetRotation({ 0.0f, bossYaw, 0.0f });
+	beamWarningObj_->SetScale({ 0.45f, 0.04f, warningLength });
+	beamWarningObj_->Update();
 }
 
 void BossManager::Update(
@@ -211,7 +342,8 @@ void BossManager::Update(
 	// =========================================================
 	// ボス本体の更新
 	// =========================================================
-	if (!boss_->IsDead() && mapManager->IsBossMap()) {
+	if (bossType_ != BossType::Split && !boss_->IsDead() && mapManager->IsBossMap()) {
+
 		// 衝突で戻すために更新前の位置を保存
 		Vector3 oldBossPos = boss_->GetPosition();
 
@@ -271,6 +403,58 @@ void BossManager::Update(
 			bossObj_->Update();
 		}
 	}
+
+	if (mapManager->IsBossMap()) {
+		if (bossType_ == BossType::Split) {
+
+			bool leftAlive = splitBosses_[0] && !splitBosses_[0]->IsDead();
+			bool rightAlive = splitBosses_[1] && !splitBosses_[1]->IsDead();
+			bool oneDefeated = (leftAlive != rightAlive);
+
+			for (int i = 0; i < 2; ++i) {
+				if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
+					continue;
+				}
+
+				// 片方が倒れたら残った側も近距離型にする
+				splitBosses_[i]->SetForceMeleeMode(oneDefeated);
+
+				// 相方の位置を渡して、重ならないようにする
+				int partnerIndex = (i == 0) ? 1 : 0;
+				if (splitBosses_[partnerIndex] && !splitBosses_[partnerIndex]->IsDead()) {
+					splitBosses_[i]->SetPartnerPosition(splitBosses_[partnerIndex]->GetPosition());
+				} else {
+					splitBosses_[i]->ClearPartnerPosition();
+				}
+			}
+
+			// 分裂ボス2体をそれぞれ更新する
+			for (int i = 0; i < 2; ++i) {
+				if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
+					continue;
+				}
+
+				Vector3 oldBossPos = splitBosses_[i]->GetPosition();
+
+				splitBosses_[i]->SetPlayerPosition(targetPos);
+
+				// カットイン中はAppearだけ進める
+				if (!isBossIntroPlaying_ || splitBosses_[i]->IsAppearing()) {
+					splitBosses_[i]->Update();
+				}
+
+				if (splitBossObjs_[i]) {
+					splitBossObjs_[i]->SetTranslation(splitBosses_[i]->GetPosition());
+					splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
+					splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
+					splitBossObjs_[i]->Update();
+				}
+			}
+		} else if (!boss_->IsDead()) {
+			// ここは元の通常ボス更新のまま
+		}
+	}
+
 
 	UpdateBeamWarning(mapManager);
 
@@ -339,113 +523,165 @@ void BossManager::Update(
 	}
 
 	// =========================================================
-	// ボスの召喚リクエスト処理
-	// =========================================================
-	if (boss_->GetSummonRequest()) {
-		if (enemyManager && camera) {
-			Vector3 summonCenter = boss_->GetPosition();
-			// 召喚雑魚は通常湧きと同じ高さにそろえる。
-			summonCenter.y = 0.0f;
-			enemyManager->SpawnBossMinions(
-				boss_->GetSummonCount(),
-				summonCenter,
-				camera
-			);
-		}
-		boss_->ClearSummonRequest();
-	}
-
-	// =========================================================
-	// ボスのカード使用処理
-	// =========================================================
-	if (player &&
-		!boss_->IsDead() &&
-		!player->IsDead() &&
-		mapManager->IsBossMap() &&
-		!isBossIntroPlaying_ &&
-		!boss_->IsAppearing()) {
-
-		Vector3 bossPos = boss_->GetPosition();
-
-		if (boss_->GetCardUseRequest()) {
-			if (bossCardSystem_) {
-				Card useCard = boss_->GetSelectedCard();
-
-				// 召喚カードなら雑魚生成
-				if (useCard.id == 103) {
-					if (enemyManager && camera) {
-						Vector3 summonCenter = boss_->GetPosition();
-						summonCenter.y = 0.0f;
-						enemyManager->SpawnBossMinions(
-							boss_->GetSummonCount(),
-							summonCenter,
-							camera
-						);
-					}
-				}
-
-				bossCardSystem_->UseCard(
-					useCard,
-					bossPos,
-					boss_->GetRotation().y,
-					false
-				);
+    // ボスの召喚リクエスト処理
+    // =========================================================
+	if (bossType_ == BossType::Split) {
+		for (int i = 0; i < 2; ++i) {
+			Boss* splitBoss = splitBosses_[i].get();
+			if (!splitBoss || splitBoss->IsDead()) {
+				continue;
 			}
 
-			boss_->ClearCardUseRequest();
+			if (splitBoss->GetSummonRequest()) {
+				if (enemyManager && camera) {
+					Vector3 summonCenter = splitBoss->GetPosition();
+					summonCenter.y = 0.0f;
+					enemyManager->SpawnBossMinions(
+						splitBoss->GetSummonCount(),
+						summonCenter,
+						camera
+					);
+				}
+				splitBoss->ClearSummonRequest();
+			}
+		}
+	} else {
+		if (boss_->GetSummonRequest()) {
+			if (enemyManager && camera) {
+				Vector3 summonCenter = boss_->GetPosition();
+				summonCenter.y = 0.0f;
+				enemyManager->SpawnBossMinions(
+					boss_->GetSummonCount(),
+					summonCenter,
+					camera
+				);
+			}
+			boss_->ClearSummonRequest();
+		}
+	}
+
+
+	// =========================================================
+    // ボスのカード使用処理
+    // =========================================================
+	if (player &&
+		!player->IsDead() &&
+		mapManager->IsBossMap() &&
+		!isBossIntroPlaying_) {
+
+		if (bossType_ == BossType::Split) {
+			for (int i = 0; i < 2; ++i) {
+				Boss* splitBoss = splitBosses_[i].get();
+				if (!splitBoss || splitBoss->IsDead() || splitBoss->IsAppearing()) {
+					continue;
+				}
+
+				if (splitBoss->GetCardUseRequest()) {
+					if (bossCardSystem_) {
+						Card useCard = splitBoss->GetSelectedCard();
+
+						bossCardSystem_->UseCard(
+							useCard,
+							splitBoss->GetPosition(),
+							splitBoss->GetRotation().y,
+							false
+						);
+					}
+
+					splitBoss->ClearCardUseRequest();
+				}
+			}
+		} else if (!boss_->IsDead() && !boss_->IsAppearing()) {
+			if (boss_->GetCardUseRequest()) {
+				if (bossCardSystem_) {
+					Card useCard = boss_->GetSelectedCard();
+
+					bossCardSystem_->UseCard(
+						useCard,
+						boss_->GetPosition(),
+						boss_->GetRotation().y,
+						false
+					);
+				}
+
+				boss_->ClearCardUseRequest();
+			}
 		}
 	}
 
 	// =========================================================
-	// ボス死亡時の処理
-	// =========================================================
-	if (boss_->IsDead() && !bossDeadHandled_) {
-		// 経験値追加
+// ボス死亡時の処理
+// =========================================================
+	bool isBossBattleFinished = false;
+
+	if (bossType_ == BossType::Split) {
+		// 10階は2体とも倒れたら終了
+		bool leftDead = !splitBosses_[0] || splitBosses_[0]->IsDead();
+		bool rightDead = !splitBosses_[1] || splitBosses_[1]->IsDead();
+		isBossBattleFinished = leftDead && rightDead;
+	} else {
+		// 5階など通常ボスは今まで通り
+		isBossBattleFinished = boss_->IsDead();
+	}
+
+	if (isBossBattleFinished && !bossDeadHandled_) {
+		// 経験値付与
 		if (player) {
 			player->AddExp(5);
 		}
 
+		// 倒した側の位置に近いところへカードを落とす
+		Vector3 dropPos = boss_->GetPosition();
+		if (bossType_ == BossType::Split) {
+			dropPos = GetBossFocusPosition();
+		}
+
 		// ドロップカード処理
-		if (boss_->HasAnyCard()) {
-			Card dropCard = boss_->GetRandomDropCard();
-			if (dropCard.id != -1) {
-				Vector3 dropPos = boss_->GetPosition();
-
-				// 地面の高さに調整
-				dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
-
-				cardPickupManager->AddPickup(dropPos, dropCard);
+		if (bossType_ == BossType::Split) {
+			// 分裂ボスは残っている個体から1枚落とす
+			for (int i = 0; i < 2; ++i) {
+				if (splitBosses_[i] && splitBosses_[i]->HasAnyCard()) {
+					Card dropCard = splitBosses_[i]->GetRandomDropCard();
+					if (dropCard.id != -1) {
+						dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
+						cardPickupManager->AddPickup(dropPos, dropCard);
+					}
+					break;
+				}
+			}
+		} else {
+			if (boss_->HasAnyCard()) {
+				Card dropCard = boss_->GetRandomDropCard();
+				if (dropCard.id != -1) {
+					dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
+					cardPickupManager->AddPickup(dropPos, dropCard);
+				}
 			}
 		}
 
-		// ボス部屋で倒したら中央に階段を出す
+		// ボス部屋で倒したら中央に階段を置く
 		if (mapManager->IsBossMap()) {
 			LevelData& level = const_cast<LevelData&>(mapManager->GetLevelData());
 
 			int centerX = level.width / 2;
 			int centerZ = level.height / 2;
 
-			// 中央タイルを階段にする
 			level.tiles[centerZ][centerX] = 3;
-
-			// 階段タイル情報も更新する
 			mapManager->SetStairsTile({ centerX, centerZ });
-
-			// 見た目を更新する
 			mapManager->RebuildMapObjects();
 		}
 
 		bossDeadHandled_ = true;
 	}
 
+
 	// =========================================================
 	// ボスのカード演出更新
 	// =========================================================
-	if (!boss_->IsDead() &&
-		bossCardSystem_ &&
+	if (bossCardSystem_ &&
 		mapManager->IsBossMap() &&
-		!isBossIntroPlaying_ &&
-		!boss_->IsAppearing()) {
+		!isBossIntroPlaying_) {
+
 
 		bossCardSystem_->Update(
 			player,
@@ -466,14 +702,26 @@ void BossManager::Draw(MapManager* mapManager) {
 	}
 
 	// ボス本体の描画
-	if (!boss_->IsDead() && boss_->IsVisible() && mapManager->IsBossMap()) {
+	if (mapManager->IsBossMap()) {
 		if (beamWarningObj_) {
 			beamWarningObj_->Draw();
 		}
-		if (bossObj_) {
-			bossObj_->Draw();
+
+		if (bossType_ == BossType::Split) {
+			// 分裂ボスは2体描画する
+			for (int i = 0; i < 2; ++i) {
+				if (splitBosses_[i] && !splitBosses_[i]->IsDead() && splitBosses_[i]->IsVisible() && splitBossObjs_[i]) {
+					splitBossObjs_[i]->Draw();
+				}
+			}
+		} else {
+			// 通常ボスは今まで通り
+			if (!boss_->IsDead() && boss_->IsVisible() && bossObj_) {
+				bossObj_->Draw();
+			}
 		}
 	}
+
 
 	// ボスのカード演出描画
 	if (bossCardSystem_) {
@@ -482,13 +730,23 @@ void BossManager::Draw(MapManager* mapManager) {
 }
 
 void BossManager::DrawHpBar(MapManager* mapManager) {
-	// 必要な物が無ければ描画しない
+	// 無効な値なら描画しない
 	if (!boss_ || !mapManager) {
 		return;
 	}
 
 	// ボスHPバー描画
-	if (!boss_->IsDead() && mapManager->IsBossMap()) {
+	bool shouldDrawHpBar = false;
+
+	if (bossType_ == BossType::Split) {
+		bool leftAlive = splitBosses_[0] && !splitBosses_[0]->IsDead();
+		bool rightAlive = splitBosses_[1] && !splitBosses_[1]->IsDead();
+		shouldDrawHpBar = leftAlive || rightAlive;
+	} else {
+		shouldDrawHpBar = !boss_->IsDead();
+	}
+
+	if (shouldDrawHpBar && mapManager->IsBossMap()) {
 		if (bossHpBackSprite_) {
 			bossHpBackSprite_->Draw();
 		}
@@ -496,4 +754,55 @@ void BossManager::DrawHpBar(MapManager* mapManager) {
 			bossHpFillSprite_->Draw();
 		}
 	}
+}
+
+
+Vector3 BossManager::GetBossFocusPosition() const {
+	// 分裂ボス時は生きている個体の中心を見る
+	if (bossType_ == BossType::Split) {
+		Vector3 sum{ 0.0f, 0.0f, 0.0f };
+		int aliveCount = 0;
+
+		for (int i = 0; i < 2; ++i) {
+			if (splitBosses_[i] && !splitBosses_[i]->IsDead()) {
+				sum += splitBosses_[i]->GetPosition();
+				aliveCount++;
+			}
+		}
+
+		if (aliveCount > 0) {
+			return sum / static_cast<float>(aliveCount);
+		}
+
+		return splitBossCenterPosition_;
+	}
+
+	return boss_ ? boss_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
+}
+
+float BossManager::GetBossHpRate() const {
+	// 分裂ボス時は2体の合計HP割合を使う
+	if (bossType_ == BossType::Split) {
+		int totalHp = 0;
+		int totalMaxHp = 0;
+
+		for (int i = 0; i < 2; ++i) {
+			if (splitBosses_[i]) {
+				totalHp += splitBosses_[i]->GetHP();
+				totalMaxHp += splitBosses_[i]->GetMaxHP();
+			}
+		}
+
+		if (totalMaxHp <= 0) {
+			return 0.0f;
+		}
+
+		return static_cast<float>(totalHp) / static_cast<float>(totalMaxHp);
+	}
+
+	if (!boss_ || boss_->GetMaxHP() <= 0) {
+		return 0.0f;
+	}
+
+	return static_cast<float>(boss_->GetHP()) / static_cast<float>(boss_->GetMaxHP());
 }

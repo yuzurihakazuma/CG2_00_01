@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <array>
 #include "engine/math/VectorMath.h"
 
 // 前方宣言
@@ -22,7 +23,13 @@ public:
         BossReveal,     // 上空のボスを見せる
         BossDropFollow, // 落下中のボスを追う
         BossLandImpact, // 着地の見せ場
-        ToBattle        // 戦闘位置へ移動
+        ToBattle,        // 戦闘位置へ移動
+        BossSplit,   // 10階層用の分裂演出
+    };
+
+    enum class BossType {
+        Normal,
+        Split
     };
 
 public:
@@ -102,6 +109,32 @@ public:
     // ボス撃破時にゲームクリアするか判定
     bool ShouldTriggerGameClear(MapManager* mapManager) const;
 
+	// ボスタイプ判定
+    bool IsSplitBossBattle() const { return bossType_ == BossType::Split; }
+
+    Boss* GetBossAt(int index) const {
+        // 通常ボス時は0番だけ通常ボスを返す
+        if (bossType_ != BossType::Split) {
+            return index == 0 ? boss_.get() : nullptr;
+        }
+
+        // 分裂ボス時は配列から返す
+        if (index < 0 || index >= static_cast<int>(splitBosses_.size())) {
+            return nullptr;
+        }
+
+        return splitBosses_[index].get();
+    }
+	// 分裂ボス用の位置
+    Vector3 GetBossFocusPosition() const;
+	// HP割合取得（分裂ボスは平均）
+    float GetBossHpRate() const;
+	// 分裂ボスの中心位置（演出用）
+    Vector3 GetSplitBossCenterPosition() const { return splitBossCenterPosition_; }
+	// 分裂ボスのターゲット位置（攻撃エフェクトの中心など、演出用）
+    const Vector3& GetSplitBossTargetPosition(int index) const { return splitBossTargetPositions_[index]; }
+
+
 private:
     void UpdateBeamWarning(MapManager* mapManager);
 
@@ -126,4 +159,20 @@ private:
     const int bossCardRainInterval_ = 180;
     int bossCardRainMax_ = 5;
     bool isBossCardRainEnabled_ = true;
+
+	// ボスのタイプ
+    BossType bossType_ = BossType::Normal;
+
+    // 10階層用の分裂ボス2体
+    std::array<std::unique_ptr<Boss>, 2> splitBosses_{};
+    std::array<std::unique_ptr<Obj3d>, 2> splitBossObjs_{};
+
+    // 分裂演出の開始位置と左右の着地点
+    Vector3 splitBossCenterPosition_{ 0.0f, 0.0f, 0.0f };
+    std::array<Vector3, 2> splitBossTargetPositions_{};
+
+    // 分裂ボスの見た目調整
+    Vector3 splitBossScale_{ 1.45f, 1.45f, 1.45f };
+    float splitBossOffset_ = 3.2f;
+
 };
