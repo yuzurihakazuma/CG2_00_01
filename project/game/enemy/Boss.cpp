@@ -14,6 +14,8 @@ namespace {
 void Boss::Initialize() {
 	rot_ = { 0.0f, 0.0f, 0.0f };
 	scale_ = { 2.0f, 2.0f, 2.0f };
+	baseScale_ = scale_; // 通常ボスの基準サイズ
+
 
 	state_ = State::Appear;
 
@@ -192,10 +194,11 @@ void Boss::ApplyCastingPose(float normalizedTime) {
 		rot_.z = std::sinf(t * 12.56636f) * 0.08f;
 
 		scale_ = {
-			2.0f + charge * 0.25f + pulse * 0.04f,
-			1.75f - charge * 0.22f,
-			2.0f + hold * 1.25f + pulse * 0.08f
+	baseScale_.x + charge * 0.25f + pulse * 0.04f,
+	baseScale_.y - charge * 0.22f,
+	baseScale_.z + hold * 1.25f + pulse * 0.08f
 		};
+
 
 		if (t > 0.72f) {
 			float finisher = (t - 0.72f) / 0.28f;
@@ -212,18 +215,20 @@ void Boss::ApplyCastingPose(float normalizedTime) {
 
 	if (selectedCard_.id == 103) {
 		scale_ = {
-			2.1f + settle * 0.15f,
-			2.0f + settle * 0.35f,
-			2.1f + settle * 0.15f
+	baseScale_.x + 0.10f + settle * 0.15f,
+	baseScale_.y + settle * 0.35f,
+	baseScale_.z + 0.10f + settle * 0.15f
 		};
+
 		return;
 	}
 
 	scale_ = {
-		2.0f + settle * 0.22f,
-		2.0f + settle * 0.18f,
-		2.0f + settle * 0.22f
+	baseScale_.x + settle * 0.22f,
+	baseScale_.y + settle * 0.18f,
+	baseScale_.z + settle * 0.22f
 	};
+
 }
 
 void Boss::ApplyPreBattlePose(float normalizedTime) {
@@ -234,16 +239,18 @@ void Boss::ApplyPreBattlePose(float normalizedTime) {
 	rot_.z = std::sinf(t * 3.14159f) * 0.05f;
 
 	scale_ = {
-		2.0f + ease * 0.10f,
-		2.0f - ease * 0.06f,
-		2.0f + ease * 0.18f
+	baseScale_.x + ease * 0.10f,
+	baseScale_.y - ease * 0.06f,
+	baseScale_.z + ease * 0.18f
 	};
+
 }
 
 void Boss::ResetPose() {
 	rot_.x = 0.0f;
 	rot_.z = 0.0f;
-	scale_ = { 2.0f, 2.0f, 2.0f };
+	scale_ = baseScale_; // 個体ごとの基準サイズに戻す
+
 }
 
 void Boss::Update() {
@@ -341,9 +348,9 @@ void Boss::UpdateAppear() {
 	// 着地前後の膨らみ
 	float impact = std::sinf(t * 3.14159f);
 	scale_ = {
-		2.0f + impact * 0.12f,
-		2.0f - impact * 0.08f,
-		2.0f + impact * 0.12f
+	baseScale_.x + impact * 0.12f,
+	baseScale_.y - impact * 0.08f,
+	baseScale_.z + impact * 0.12f
 	};
 
 	if (appearTimer_ > 0) {
@@ -481,7 +488,8 @@ void Boss::UpdateIdle() {
 void Boss::UpdateChase() {
 	if (isCasting_) {
 		isCasting_ = false;
-		scale_ = { 2.0f, 2.0f, 2.0f };
+		scale_ = baseScale_; // 分裂ボスでも元サイズに戻す
+
 		rot_.x = 0.0f;
 		rot_.z = 0.0f;
 	}
@@ -664,7 +672,8 @@ void Boss::UpdateUseCard() {
 		if (candidates.empty()) {
 			state_ = State::Chase;
 			thinkTimer_ = 20;
-			scale_ = { 2.0f, 2.0f, 2.0f };
+			scale_ = baseScale_; // 個体ごとの元サイズに戻す
+
 			rot_.x = 0.0f;
 			rot_.z = 0.0f;
 			return;
@@ -742,7 +751,8 @@ void Boss::UpdateUseCard() {
 	// =========================================================
 	// 3. 詠唱完了・カード発動処理
 	// =========================================================
-	scale_ = { 2.0f, 2.0f, 2.0f };
+	scale_ = baseScale_; // 分裂ボスでも正しいサイズに戻す
+
 	rot_.x = 0.0f;
 	rot_.z = 0.0f;
 
@@ -839,7 +849,8 @@ void Boss::TakeDamage(int damage) {
 		state_ = State::Chase;
 		thinkTimer_ = 15;
 		isCasting_ = false;
-		scale_ = { 2.0f, 2.0f, 2.0f };
+		scale_ = baseScale_; // ダメージで中断しても元サイズに戻す
+
 		rot_.x = 0.0f;
 		rot_.z = 0.0f;
 	}

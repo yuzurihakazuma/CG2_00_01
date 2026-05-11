@@ -841,16 +841,96 @@ void GamePlayScene::Update() {
 					if (bossIntroTimer <= 0) {
 						if (bossIntroTimer <= 0) {
 							if (bossManager_) {
-								bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
-								bossManager_->SetBossIntroTimer(40);
+								if (bossManager_->IsSplitBossBattle()) {
+									// 10階だけ着地後に分裂演出へ進む
+									bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::BossSplit);
+									bossManager_->SetBossIntroTimer(28);
+								} else {
+									// 5階など通常ボスはそのまま戦闘カメラへ
+									bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
+									bossManager_->SetBossIntroTimer(40);
+								}
 							}
 						}
+
 
 					}
 
 				}
-				// 10階層用の分裂演出
-				
+				// 10階用の分裂演出
+				else if (bossIntroState == BossManager::IntroCameraState::BossSplit) {
+					Boss* leftBoss = bossManager_ ? bossManager_->GetBossAt(0) : nullptr;
+					Boss* rightBoss = bossManager_ ? bossManager_->GetBossAt(1) : nullptr;
+
+					Vector3 centerPos = bossManager_->GetSplitBossCenterPosition();
+
+					// 0.0 -> 1.0 で中央から左右へ分裂する
+					float splitT = 1.0f - static_cast<float>(bossIntroTimer) / 28.0f;
+					splitT = std::clamp(splitT, 0.0f, 1.0f);
+
+					// 少し勢いを付けるための補間
+					float eased = splitT * splitT * (3.0f - 2.0f * splitT);
+
+					// 分裂時に一度少し膨らんでから小さく落ち着く
+					float splitScale = 2.0f + 0.25f * std::sinf(splitT * 3.14159f);
+					float finalScale = splitScale + (1.45f - splitScale) * eased;
+
+					if (leftBoss) {
+						Vector3 target = bossManager_->GetSplitBossTargetPosition(0);
+						Vector3 pos = {
+							centerPos.x + (target.x - centerPos.x) * eased,
+							centerPos.y,
+							centerPos.z
+						};
+
+						leftBoss->SetPosition(pos);
+						leftBoss->SetScale({ finalScale, finalScale, finalScale });
+					}
+
+					if (rightBoss) {
+						Vector3 target = bossManager_->GetSplitBossTargetPosition(1);
+						Vector3 pos = {
+							centerPos.x + (target.x - centerPos.x) * eased,
+							centerPos.y,
+							centerPos.z
+						};
+
+						rightBoss->SetPosition(pos);
+						rightBoss->SetScale({ finalScale, finalScale, finalScale });
+					}
+
+					// カメラは着地位置をそのまま見せて、分裂だけ強調する
+					targetPos = {
+						centerPos.x,
+						centerPos.y + 5.2f,
+						centerPos.z - 9.5f
+					};
+
+					targetRot = {
+						0.40f, 0.0f, 0.0f
+					};
+
+					bossIntroTimer--;
+					if (bossManager_) {
+						bossManager_->SetBossIntroTimer(bossIntroTimer);
+					}
+
+					if (bossIntroTimer <= 0) {
+						// 最後は分裂後サイズに固定する
+						if (leftBoss) {
+							leftBoss->SetScale({ 1.45f, 1.45f, 1.45f });
+						}
+						if (rightBoss) {
+							rightBoss->SetScale({ 1.45f, 1.45f, 1.45f });
+						}
+
+						if (bossManager_) {
+							bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
+							bossManager_->SetBossIntroTimer(40);
+						}
+					}
+					}
+
 
 				// 最後だけ通常のボス戦カメラへ寄せる
 				else if (bossIntroState == BossManager::IntroCameraState::ToBattle) {

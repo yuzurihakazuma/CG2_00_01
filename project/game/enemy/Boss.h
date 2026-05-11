@@ -28,7 +28,12 @@ public:
     const Vector3& GetScale() const { return scale_; }
 
     void SetPosition(const Vector3& pos) { pos_ = pos; }
-    void SetScale(const Vector3& scale) { scale_ = scale; }
+    void SetScale(const Vector3& scale) {
+        // 現在の見た目サイズと基準サイズを両方更新する
+        scale_ = scale;
+        baseScale_ = scale;
+    }
+
     void SetSpawnPosition(const Vector3& pos);
 
     void SetPlayerPosition(const Vector3& pos) { playerPos_ = pos; }
@@ -104,6 +109,8 @@ public:
     void SetSplitBehaviorEnabled(bool flag) { isSplitBehaviorEnabled_ = flag; }
     bool IsSplitBehaviorEnabled() const { return isSplitBehaviorEnabled_; }
 
+    const Vector3& GetBaseScale() const { return baseScale_; }
+
 private:
     void DecideNextState();
     void UpdateAppear();
@@ -177,6 +184,7 @@ private:
     bool hasPartnerPosition_ = false;           // 相方位置が有効か
     bool forceMeleeMode_ = false;               // 片方撃破後に両方近距離化
     bool isSplitBehaviorEnabled_ = false;      // 10階層分裂ボス専用AIを使うか
+    Vector3 baseScale_{ 2.0f, 2.0f, 2.0f }; // この個体の基準サイズ
 
 };
 
