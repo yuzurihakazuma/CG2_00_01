@@ -217,6 +217,7 @@ void GamePlayScene::Initialize() {
 		mapManager_->ConsumeMapChanged();
 	}
 
+	//
 	// ★追加：カードシステムにミニマップを教える
 	if (playerCardSystem_ && minimap_) {
 		playerCardSystem_->SetMinimap(minimap_.get());
