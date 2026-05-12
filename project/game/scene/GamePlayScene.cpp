@@ -130,6 +130,8 @@ void GamePlayScene::Initialize() {
 
 	ModelManager::GetInstance()->LoadModel("Fist_model", "resources/Fist", "Fist.obj");
 
+	ModelManager::GetInstance()->LoadModel("sword_model", "resources/sword", "tomahawk.obj");
+
 	// CSVからカードデータベースを初期化
 	CardDatabase::Initialize("resources/card/CardData.csv");
 
@@ -1836,6 +1838,10 @@ void GamePlayScene::DrawDebugUI() {
 		handManager_.AddCard(CardDatabase::GetCardData(13));
 	}
 
+	if (ImGui::Button("剣(ID:14)")) {
+		handManager_.AddCard(CardDatabase::GetCardData(14));
+	}
+
 	ImGui::Separator();
 
 	ImGui::Separator();
@@ -2044,6 +2050,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		case 1:  // 拳
 		case 10: // クロー
 		case 13: // 蹴り
+		case 14: // 剣
 			return true;
 		default:
 			return false;
