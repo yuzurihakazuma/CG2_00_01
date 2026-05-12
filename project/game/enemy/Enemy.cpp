@@ -261,6 +261,12 @@ void Enemy::DecideNextState() {
         return;
     }
 
+    // 拾ったカードがない時は、初期カードの射程タイプに関係なくカードを拾いに行く
+    if (!HasUsablePickupCard() && hasTargetCard_) {
+        state_ = State::MoveToCard;
+        return;
+    }
+
     // 拾いカードを持っている時の分岐
     if (shouldKeepDistance) {
         if (state_ == State::UseCard) {
@@ -294,10 +300,8 @@ void Enemy::DecideNextState() {
         return;
     }
 
-    // 拾ったカードがない時の分岐
-    if (!HasUsablePickupCard() && hasTargetCard_) {
-        state_ = State::MoveToCard;
-    } else if (playerDist <= useRange) {
+    // プレイヤーとの距離に応じた分岐
+    if (playerDist <= useRange) {
         state_ = State::UseCard;
     } else if (playerDist <= activeChaseRange) {
         state_ = State::ChasePlayer;

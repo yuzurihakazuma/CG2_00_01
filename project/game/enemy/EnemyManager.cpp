@@ -307,6 +307,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		}
 		// 敵が「カードを使いたい！」と合図を出した時の処理
 		if (enemy->GetCardUseRequest()) {
+			bool usedPickupCard = enemy->HasUsablePickupCard() &&
+				enemy->GetCurrentUseCard().id == enemy->GetPickupCard().id;
+
 			if (enemyCardSystems_[i]) {
 				enemyCardSystems_[i]->UseCard(
 					enemy->GetCurrentUseCard(),
@@ -316,6 +319,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				);
 			}
 			// 合図を出したらリセットする
+			if (usedPickupCard) {
+				enemy->ClearPickupCard();
+			}
 			enemy->ClearCardUseRequest();
 		}
 
