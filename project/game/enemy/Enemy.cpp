@@ -74,6 +74,7 @@ void Enemy::Initialize() {
     cardCooldownTimer_ = 0; // カード使用クールダウン初期化
 
     hasTargetCard_ = false; // 目標カードなし
+    canSeePlayer_ = false;
     hasNavigationTarget_ = false;
     navigationTargetPos_ = pos_;
     prevPos_ = pos_;        // 前フレーム位置初期化
@@ -241,7 +242,7 @@ void Enemy::DecideNextState() {
     float retreatEnter = GetRetreatEnterRangeForCurrentCard(); // 近すぎる判定距離
 
     // プレイヤーが追跡範囲にいる間は、最後に見た位置を更新しておく
-    if (playerDist <= activeChaseRange) {
+    if (canSeePlayer_ && playerDist <= activeChaseRange) {
         lastKnownPlayerPos_ = playerPos_;
         investigateTimer_ = investigateFrames;
     } else if (investigateTimer_ > 0) {
@@ -274,6 +275,15 @@ void Enemy::DecideNextState() {
 
     // 拾いカードを持っている時の分岐
     if (shouldKeepDistance) {
+        if (!canSeePlayer_) {
+            if (state_ == State::UseCard || state_ == State::Retreat) {
+                isCasting_ = false;
+                castTimer_ = 0;
+            }
+            state_ = (investigateTimer_ > 0) ? State::Investigate : State::Patrol;
+            return;
+        }
+
         if (state_ == State::UseCard) {
             if (playerDist < retreatEnter) {
                 state_ = State::Retreat;
@@ -294,7 +304,7 @@ void Enemy::DecideNextState() {
             state_ = State::Retreat;
         } else if (playerDist <= useRange) {
             state_ = State::UseCard;
-        } else if (playerDist <= activeChaseRange) {
+        } else if (canSeePlayer_ && playerDist <= activeChaseRange) {
             state_ = State::ChasePlayer;
         } else if (investigateTimer_ > 0) {
             state_ = State::Investigate;
@@ -306,9 +316,9 @@ void Enemy::DecideNextState() {
     }
 
     // プレイヤーとの距離に応じた分岐
-    if (playerDist <= useRange) {
+    if (canSeePlayer_ && playerDist <= useRange) {
         state_ = State::UseCard;
-    } else if (playerDist <= activeChaseRange) {
+    } else if (canSeePlayer_ && playerDist <= activeChaseRange) {
         state_ = State::ChasePlayer;
     } else if (investigateTimer_ > 0) {
         state_ = State::Investigate;
@@ -429,6 +439,14 @@ void Enemy::UpdateUseCard() {
 
     float dist = Length(dir);                    // プレイヤーとの距離
     float useRange = GetUseRangeForCurrentCard(); // 現在カードの射程
+
+    if (!canSeePlayer_) {
+        state_ = (investigateTimer_ > 0) ? State::Investigate : State::Patrol;
+        thinkTimer_ = 0;
+        isCasting_ = false;
+        castTimer_ = 0;
+        return;
+    }
 
     // クールダウン中はカードを使わず、追跡または捜索へ戻る
     if (cardCooldownTimer_ > 0) {

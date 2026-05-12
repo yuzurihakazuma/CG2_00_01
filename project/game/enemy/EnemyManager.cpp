@@ -347,7 +347,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		enemy->SetBossRoomBehavior(mapManager->IsBossMap());
 		Vector3 navigationTarget{};
 		bool hasNavigationTarget = false;
-		if (!HasClearStraightPath(level, oldEnemyPos, targetPos)) {
+		bool canSeePlayer = HasClearStraightPath(level, oldEnemyPos, targetPos);
+		enemy->SetCanSeePlayer(canSeePlayer);
+		if (!canSeePlayer) {
 			hasNavigationTarget = FindNextPathTarget(level, oldEnemyPos, targetPos, navigationTarget);
 			if (!hasNavigationTarget) {
 				navigationTarget = oldEnemyPos;
