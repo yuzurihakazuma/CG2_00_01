@@ -156,21 +156,18 @@ void Player::Initialize() {
         LoadPoseFile();
         ApplyPoseByName(idlePoseNameBuffer_);
     }
-
     for (int i = 0; i < maxAfterimages_; i++) {
         Afterimage ai;
-        // プレイヤーと同じモデルの分身を作る
         ai.obj = SkinnedObj3d::Create("player", "resources/player", "player.gltf");
         if (ai.obj) {
-            ai.obj->SetLoopAnimation(false); // 分身はアニメーションさせない
+            ai.obj->SetLoopAnimation(false);
             if (camera_) {
                 ai.obj->SetCamera(camera_);
             }
         }
-        ai.isActive = false; // 最初は隠しておく
+        ai.isActive = false;
         afterimages_.push_back(std::move(ai));
     }
-
 }
 
 void Player::Update() {
@@ -308,22 +305,15 @@ void Player::Update() {
         if (afterimageSpawnTimer_ <= 0) {
             // スタンバイ中の分身を探す
             for (auto& ai : afterimages_) {
-                if (!ai.isActive) {
-                    ai.isActive = true; // 分身を表示！
+                if (ai.isActive) {
+                    ai.lifeTimer--; // 寿命を減らす
+                    if (ai.lifeTimer <= 0) {
+                        ai.isActive = false; // 寿命が尽きたら隠す
+                    }
 
-                    // 今のプレイヤーと全く同じ位置・向き・ポーズにする
-                    ai.obj->SetTranslation(pos_);
-                    ai.obj->SetRotation(rot_);
-                    ai.obj->SetScale(scale_);
-                    ai.obj->Update();
-
-                    // 分身の表示時間（寿命）をセット
-                    ai.lifeTimer = afterimageLife_;
-                    ai.maxLife = afterimageLife_;
-
-                    // 次の分身を置くまでの間隔をリセット
-                    afterimageSpawnTimer_ = afterimageSpawnInterval_;
-                    break; // 1体置いたらおしまい
+                    if (ai.obj) {
+                        ai.obj->Update();
+                    }
                 }
             }
         }
@@ -370,12 +360,13 @@ void Player::Update() {
                 ai.isActive = false; // 寿命が尽きたら隠す
             }
             else {
-                // 寿命に合わせて透明度（アルファ値）を計算
+                // 寿命に合わせて 1.0 から 0.0 へと減っていく割合を計算
                 float alpha = static_cast<float>(ai.lifeTimer) / static_cast<float>(ai.maxLife);
 
-                // 分身の色を青白く発光させつつ、だんだん透明にする
                 if (ai.obj) {
-                    ai.obj->SetColor({ 0.5f, 0.8f, 1.0f, alpha });
+                    // 🌟 本体の色はいじらず、代わりにサイズをだんだん小さくする！
+                    ai.obj->SetScale({ scale_.x * alpha, scale_.y * alpha, scale_.z * alpha });
+                    ai.obj->Update(); // 空間に留まらせるためにUpdate！
                 }
             }
         }
@@ -392,7 +383,9 @@ void Player::Draw() {
         return;
     }
 
+    // プレイヤー本体を描画
     model_->Draw();
+
     for (auto& ai : afterimages_) {
         if (ai.isActive && ai.obj) {
             ai.obj->Draw();
