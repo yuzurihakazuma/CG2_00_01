@@ -74,6 +74,8 @@ void Enemy::Initialize() {
     cardCooldownTimer_ = 0; // カード使用クールダウン初期化
 
     hasTargetCard_ = false; // 目標カードなし
+    hasNavigationTarget_ = false;
+    navigationTargetPos_ = pos_;
     prevPos_ = pos_;        // 前フレーム位置初期化
     stuckTimer_ = 0;        // 詰まりタイマー初期化
 
@@ -264,6 +266,12 @@ void Enemy::DecideNextState() {
         return;
     }
 
+    // 拾ったカードがない時は、初期カードの射程タイプに関係なくカードを拾いに行く
+    if (!HasUsablePickupCard() && hasTargetCard_) {
+        state_ = State::MoveToCard;
+        return;
+    }
+
     // 拾いカードを持っている時の分岐
     if (shouldKeepDistance) {
         if (state_ == State::UseCard) {
@@ -297,10 +305,8 @@ void Enemy::DecideNextState() {
         return;
     }
 
-    // 拾ったカードがない時の分岐
-    if (!HasUsablePickupCard() && hasTargetCard_) {
-        state_ = State::MoveToCard;
-    } else if (playerDist <= useRange) {
+    // プレイヤーとの距離に応じた分岐
+    if (playerDist <= useRange) {
         state_ = State::UseCard;
     } else if (playerDist <= activeChaseRange) {
         state_ = State::ChasePlayer;
@@ -372,7 +378,7 @@ void Enemy::UpdateMoveToCard() {
 }
 
 void Enemy::UpdateChasePlayer() {
-    Vector3 targetPos = playerPos_;
+    Vector3 targetPos = hasNavigationTarget_ ? navigationTargetPos_ : playerPos_;
     const float activeChaseRange = isBossRoom_ ? bossRoomChaseRange_ : chaseRange_;
 
     // 視界から外れた直後は、最後に見た位置の方へ寄る

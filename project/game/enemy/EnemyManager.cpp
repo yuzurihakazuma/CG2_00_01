@@ -12,8 +12,12 @@
 
 #include <cmath>
 #include <algorithm>
+#include <functional>
 #include <iterator>
+#include <limits>
+#include <queue>
 #include <random>
+#include <vector>
 #include "engine/particle/GPUParticleManager.h"
 
 using namespace VectorMath;
@@ -70,6 +74,148 @@ Enemy::Type GetRandomEnemyTypeForFloor(int floor) {
 	}
 
 	return Enemy::Type::Normal;
+}
+
+bool IsWalkableTile(const LevelData& level, int x, int z) {
+	if (x < 0 || x >= level.width || z < 0 || z >= level.height) {
+		return false;
+	}
+
+	int tile = level.tiles[z][x];
+	return tile == 0 || tile == 3;
+}
+
+bool HasClearStraightPath(const LevelData& level, const Vector3& from, const Vector3& to) {
+	if (level.tileSize <= 0.0f || level.tiles.empty()) {
+		return false;
+	}
+
+	float dx = to.x - from.x;
+	float dz = to.z - from.z;
+	float distance = std::sqrt(dx * dx + dz * dz);
+	int steps = (std::max)(1, static_cast<int>(std::ceil(distance / (level.tileSize * 0.25f))));
+
+	for (int i = 0; i <= steps; ++i) {
+		float t = static_cast<float>(i) / static_cast<float>(steps);
+		float x = from.x + dx * t;
+		float z = from.z + dz * t;
+		int tileX = static_cast<int>(std::round(x / level.tileSize));
+		int tileZ = static_cast<int>(std::round(z / level.tileSize));
+
+		if (!IsWalkableTile(level, tileX, tileZ)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int TileIndex(const LevelData& level, int x, int z) {
+	return z * level.width + x;
+}
+
+std::pair<int, int> WorldToTile(const LevelData& level, const Vector3& pos) {
+	return {
+		static_cast<int>(std::round(pos.x / level.tileSize)),
+		static_cast<int>(std::round(pos.z / level.tileSize))
+	};
+}
+
+Vector3 TileToWorld(const LevelData& level, int x, int z, float y) {
+	return {
+		static_cast<float>(x) * level.tileSize,
+		y,
+		static_cast<float>(z) * level.tileSize
+	};
+}
+
+bool FindNextPathTarget(const LevelData& level, const Vector3& from, const Vector3& to, Vector3& outTarget) {
+	if (level.tileSize <= 0.0f || level.width <= 0 || level.height <= 0 || level.tiles.empty()) {
+		return false;
+	}
+
+	auto [startX, startZ] = WorldToTile(level, from);
+	auto [goalX, goalZ] = WorldToTile(level, to);
+
+	if (!IsWalkableTile(level, startX, startZ) || !IsWalkableTile(level, goalX, goalZ)) {
+		return false;
+	}
+
+	const int tileCount = level.width * level.height;
+	const int unreachable = (std::numeric_limits<int>::max)();
+	std::vector<int> cost(tileCount, unreachable);
+	std::vector<int> parent(tileCount, -1);
+	std::priority_queue<
+		std::pair<int, int>,
+		std::vector<std::pair<int, int>>,
+		std::greater<std::pair<int, int>>
+	> open;
+
+	int startIndex = TileIndex(level, startX, startZ);
+	int goalIndex = TileIndex(level, goalX, goalZ);
+
+	auto Heuristic = [&](int x, int z) {
+		return (std::abs(goalX - x) + std::abs(goalZ - z)) * 10;
+	};
+
+	cost[startIndex] = 0;
+	open.push({ Heuristic(startX, startZ), startIndex });
+
+	const int dirs[4][2] = {
+		{ 1, 0 },
+		{ -1, 0 },
+		{ 0, 1 },
+		{ 0, -1 },
+	};
+
+	while (!open.empty()) {
+		int currentIndex = open.top().second;
+		open.pop();
+
+		if (currentIndex == goalIndex) {
+			break;
+		}
+
+		int currentX = currentIndex % level.width;
+		int currentZ = currentIndex / level.width;
+
+		for (const auto& dir : dirs) {
+			int nextX = currentX + dir[0];
+			int nextZ = currentZ + dir[1];
+			if (!IsWalkableTile(level, nextX, nextZ)) {
+				continue;
+			}
+
+			int nextIndex = TileIndex(level, nextX, nextZ);
+			int nextCost = cost[currentIndex] + 10;
+			if (nextCost >= cost[nextIndex]) {
+				continue;
+			}
+
+			cost[nextIndex] = nextCost;
+			parent[nextIndex] = currentIndex;
+			open.push({ nextCost + Heuristic(nextX, nextZ), nextIndex });
+		}
+	}
+
+	if (cost[goalIndex] == unreachable) {
+		return false;
+	}
+
+	int nextIndex = goalIndex;
+	while (parent[nextIndex] != -1 && parent[nextIndex] != startIndex) {
+		nextIndex = parent[nextIndex];
+	}
+
+	if (nextIndex == startIndex) {
+		outTarget = to;
+		return true;
+	}
+
+	int nextX = nextIndex % level.width;
+	int nextZ = nextIndex / level.width;
+	outTarget = TileToWorld(level, nextX, nextZ, from.y);
+	return true;
 }
 
 Vector4 GetEnemyDisplayColor(const Enemy& enemy) {
@@ -199,6 +345,16 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		// --- ② プレイヤーの位置を教える ---
 		enemy->SetPlayerPosition(targetPos);
 		enemy->SetBossRoomBehavior(mapManager->IsBossMap());
+		Vector3 navigationTarget{};
+		bool hasNavigationTarget = false;
+		if (!HasClearStraightPath(level, oldEnemyPos, targetPos)) {
+			hasNavigationTarget = FindNextPathTarget(level, oldEnemyPos, targetPos, navigationTarget);
+			if (!hasNavigationTarget) {
+				navigationTarget = oldEnemyPos;
+				hasNavigationTarget = true;
+			}
+		}
+		enemy->SetNavigationTarget(hasNavigationTarget, navigationTarget);
 
 		// --- ③ 近くに落ちているカードを探す（引数のcardPickupManagerを使う） ---
 		bool foundCard = false;
@@ -209,7 +365,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 			if (!pickup.isActive) continue;
 			Vector3 diff = { pickup.position.x - oldEnemyPos.x, 0.0f, pickup.position.z - oldEnemyPos.z };
 			float dist = Length(diff);
-			if (dist < 8.0f && dist < nearestCardDist) {
+			if (dist < 8.0f &&
+				dist < nearestCardDist &&
+				HasClearStraightPath(level, oldEnemyPos, pickup.position)) {
 				nearestCardDist = dist;
 				nearestCardPos = pickup.position;
 				foundCard = true;
@@ -308,6 +466,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		}
 		// 敵が「カードを使いたい！」と合図を出した時の処理
 		if (enemy->GetCardUseRequest()) {
+			bool usedPickupCard = enemy->HasUsablePickupCard() &&
+				enemy->GetCurrentUseCard().id == enemy->GetPickupCard().id;
+
 			if (enemyCardSystems_[i]) {
 				enemyCardSystems_[i]->UseCard(
 					enemy->GetCurrentUseCard(),
@@ -317,6 +478,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				);
 			}
 			// 合図を出したらリセットする
+			if (usedPickupCard) {
+				enemy->ClearPickupCard();
+			}
 			enemy->ClearCardUseRequest();
 		}
 
