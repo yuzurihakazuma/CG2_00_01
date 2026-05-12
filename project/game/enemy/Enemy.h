@@ -43,6 +43,10 @@ public:
 
     // 各種ターゲット設定
     void SetPlayerPosition(const Vector3& pos) { playerPos_ = pos; } // プレイヤー位置設定
+    void SetNavigationTarget(bool hasTarget, const Vector3& pos) {
+        hasNavigationTarget_ = hasTarget;
+        navigationTargetPos_ = pos;
+    }
     void SetCardTarget(bool hasTarget, const Vector3& pos) {
         hasTargetCard_ = hasTarget; // 目標カードの有無
         targetCardPos_ = pos;       // 目標カード位置
@@ -156,6 +160,8 @@ private:
     Type type_ = Type::Normal;
 
     Vector3 playerPos_{ 0.0f, 0.0f, 0.0f };          // プレイヤー位置
+    Vector3 navigationTargetPos_{ 0.0f, 0.0f, 0.0f };
+    bool hasNavigationTarget_ = false;
     Vector3 lastKnownPlayerPos_{ 0.0f, 0.0f, 0.0f }; // 最後に確認したプレイヤー位置
     Vector3 targetCardPos_{ 0.0f, 0.0f, 0.0f };      // 目標カード位置
     bool hasTargetCard_ = false;                     // 目標カードがあるか
