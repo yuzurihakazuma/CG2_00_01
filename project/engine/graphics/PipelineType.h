@@ -7,4 +7,5 @@ enum class PipelineType{
 	Particle, // パーティクル用
 	PostEffect, // ポストエフェクト用
 	SkinningObject3D, // スキニングアニメーション用
+	SkinningObject3D_Blend
 };

@@ -1505,6 +1505,17 @@ void GamePlayScene::Draw() {
 	if (playerManager_) {
 		playerManager_->Draw();
 	}
+
+	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::SkinningObject3D);
+	if (playerManager_) {
+		playerManager_->Draw();
+	}
+
+	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::SkinningObject3D_Blend);
+	if (playerManager_) {
+		playerManager_->DrawAfterimage();
+	}
+
 	// ボス描画
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);

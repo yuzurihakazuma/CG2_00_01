@@ -34,6 +34,7 @@ public:
     void Initialize();  // 初期化
     void Update();      // 更新
     void Draw();        // 描画
+	void DrawAfterimage(); // 残像の描画
     void DrawAnimationDebugUI(); // プレイヤーアニメGUIの描画
 
     void SetCamera(const Camera* camera); // カメラ設定

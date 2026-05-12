@@ -225,9 +225,24 @@ void SkinnedObj3d::Draw() {
     // [9] MatrixPalette（スキニング用・ここが Obj3d との違い）
     commandList->SetGraphicsRootDescriptorTable(9, skinCluster_.srvHandle);
 
-    // モデル描画（[0] マテリアル・[2] テクスチャ・DrawCall は内部でやってくれる）
+    // モデル描画
     if (model_) {
+        Vector4 originalColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        bool isColorOverridden = false;
+
+        if (useOverrideColor_ && model_->GetMaterial()) {
+            originalColor = model_->GetMaterial()->color;  // 今の（白い）色を退避
+            model_->GetMaterial()->color = overrideColor_; // 青くて透明な色をブチ込む！
+            isColorOverridden = true;
+        }
+
+        // モデル本来の描画関数を呼ぶ
+        // （この中で model_->GetMaterial()->color がGPUに送られます）
         model_->Draw();
+
+        if (isColorOverridden && model_->GetMaterial()) {
+            model_->GetMaterial()->color = originalColor; // これで本体は白いまま守られる！
+        }
     }
 }
 
@@ -310,9 +325,22 @@ Vector3 SkinnedObj3d::GetJointTranslationOffset(const std::string& jointName) co
     return { 0.0f, 0.0f, 0.0f };
 }
 
-void SkinnedObj3d::SetColor(const Vector4& color) {
-    // モデルの持っているマテリアルの色を上書きする
-    if (model_ && model_->GetMaterial()) {
-        model_->GetMaterial()->color = color;
+void SkinnedObj3d::CopyPoseFrom(const SkinnedObj3d& source) {
+    // 1. 相手の骨（Skeleton）のデータをそのままコピー
+    this->skeleton_ = source.skeleton_;
+
+    // 2. GPU側の骨データ（SkinCluster）も更新して、ポーズを確定させる
+    // （エンジンの仕様に合わせて、UpdateSkinCluster 関数を使用します）
+    if (model_) {
+        UpdateSkinCluster(this->skinCluster_, this->skeleton_, model_->GetBoneOrder());
     }
+
+    // 3. アニメーションを止めるフラグを立てる（isPause_ は不要なので削除）
+    this->isPoseFrozen_ = true;
+}
+
+void SkinnedObj3d::SetColor(const Vector4& color) {
+    // 複雑なバッファ作成はやめて、値を保存するだけにします
+    overrideColor_ = color;
+    useOverrideColor_ = true;
 }

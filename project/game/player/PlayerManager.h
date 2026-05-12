@@ -31,6 +31,9 @@ public:
     // プレイヤー描画
     void Draw();
 
+	// プレイヤー残像描画
+    void DrawAfterimage();
+
     // プレイヤー再配置
     void RespawnInRoom(MapManager* mapManager, Camera* camera);
 

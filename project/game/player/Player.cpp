@@ -132,6 +132,10 @@ void Player::Initialize() {
     isShieldActive_ = false;
     shieldHitCount_ = 0;
 
+    afterimageLife_ = 10;           //  寿命を20→10に短縮（回避が終わる前に消える）
+    afterimageSpawnInterval_ = 5;   //  発生間隔を少し広げて、重なりすぎを防
+
+
     // プレイヤーのアニメーションモデルを生成
     // ※ モデル名とファイル名は GamePlayScene 側の LoadModel と合わせる
     model_ = SkinnedObj3d::Create(
@@ -303,17 +307,33 @@ void Player::Update() {
         afterimageSpawnTimer_--;
 
         if (afterimageSpawnTimer_ <= 0) {
-            // スタンバイ中の分身を探す
+            // スタンバイ中の「未使用(!isActive)」の分身を探して、その場に置く
             for (auto& ai : afterimages_) {
-                if (ai.isActive) {
-                    ai.lifeTimer--; // 寿命を減らす
-                    if (ai.lifeTimer <= 0) {
-                        ai.isActive = false; // 寿命が尽きたら隠す
-                    }
+                if (!ai.isActive) {
+                    ai.isActive = true; // ここで「出動」させる
 
-                    if (ai.obj) {
+                    if (ai.obj && model_) {
+                        ai.obj->SetTranslation(pos_);
+                        ai.obj->SetRotation(rot_);
+                        ai.obj->SetScale(scale_);
+
+                        // エンジン改造の成果：今のポーズをコピー
+                        ai.obj->CopyPoseFrom(*model_);
+
+
+
+                        // 最初は少し濃いめの青
+                        ai.obj->SetColor({ 0.4f * 0.3f, 0.7f * 0.3f, 1.0f * 0.3f, 0.3f });
                         ai.obj->Update();
                     }
+
+                    // 寿命をセット（転がっている間に消えるよう短めに）
+                    ai.lifeTimer = afterimageLife_;
+                    ai.maxLife = afterimageLife_;
+
+                    // タイマーリセット
+                    afterimageSpawnTimer_ = afterimageSpawnInterval_;
+                    break;
                 }
             }
         }
@@ -355,18 +375,19 @@ void Player::Update() {
 
     for (auto& ai : afterimages_) {
         if (ai.isActive) {
-            ai.lifeTimer--; // 寿命を減らす
+            ai.lifeTimer--;
             if (ai.lifeTimer <= 0) {
-                ai.isActive = false; // 寿命が尽きたら隠す
+                ai.isActive = false;
             }
             else {
-                // 寿命に合わせて 1.0 から 0.0 へと減っていく割合を計算
+                // 寿命に合わせて透明度を下げる
                 float alpha = static_cast<float>(ai.lifeTimer) / static_cast<float>(ai.maxLife);
+                float a = alpha * 0.3f; // 最大の濃さを 0.3 にする
 
                 if (ai.obj) {
-                    // 🌟 本体の色はいじらず、代わりにサイズをだんだん小さくする！
-                    ai.obj->SetScale({ scale_.x * alpha, scale_.y * alpha, scale_.z * alpha });
-                    ai.obj->Update(); // 空間に留まらせるためにUpdate！
+                    // 🌟 色自体にも 'a' を掛けて、だんだん暗く(黒く)しながら消す！
+                    ai.obj->SetColor({ 0.4f * a, 0.7f * a, 1.0f * a, a });
+                    ai.obj->Update();
                 }
             }
         }
@@ -386,12 +407,17 @@ void Player::Draw() {
     // プレイヤー本体を描画
     model_->Draw();
 
+    
+
+}
+
+
+void Player::DrawAfterimage() {
     for (auto& ai : afterimages_) {
         if (ai.isActive && ai.obj) {
             ai.obj->Draw();
         }
     }
-
 }
 
 // プレイヤーアニメGUIの描画
