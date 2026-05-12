@@ -18,7 +18,8 @@
 #include <memory>
 #include <unordered_map>
 #include <string>
-
+#include "HitEffect.h" 
+#include <list>
 
 // 前方宣言
 class DebugCamera;
@@ -73,10 +74,10 @@ private: // メンバ変数
 	// デプスステンシル
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource_;
 
+	std::list<std::unique_ptr<HitEffect>> hitEffects_;
 
 	std::string bgmFile_ = "resources/BGMDon.mp3";
 
-	std::unique_ptr<Obj3d> hitEffectPlane_ = nullptr;
 	
 	std::unique_ptr<Obj3d> testObj_ = nullptr;
 
