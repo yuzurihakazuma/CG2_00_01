@@ -127,7 +127,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleDrawRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleDrawPipelineState_;
 
-
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> skinningObject3DPipelineStateBlend_;
 
 };
 

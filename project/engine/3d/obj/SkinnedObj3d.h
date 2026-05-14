@@ -11,9 +11,8 @@
 #include "engine/3d/animation/SkinCluster.h"
 #include "engine/3d/animation/Animation.h"
 #include "IAnimatable.h"
-
+#include "engine/3d/model/Model.h"
 class Obj3dCommon;
-class Model;
 class Camera;
 
 class SkinnedObj3d : public IAnimatable {
@@ -66,6 +65,7 @@ public:
     void SetScale(const Vector3& scale) override { scale_ = scale; }
     void SetLoopAnimation(bool loop) { isLoop_ = loop; }
     void SetNoiseTexture(uint32_t index) { noiseTextureIndex_ = index; }
+    void SetColor(const Vector4& color);
     void SetDissolveThreshold(float threshold);
 
     const Vector3& GetTranslation() const override { return translate_; }
@@ -88,6 +88,8 @@ public:
     Vector3 GetJointRotationOffset(const std::string& jointName) const;
     Vector3 GetJointTranslationOffset(const std::string& jointName) const;
 
+	// デバッグ用：現在のジョイントのローカル回転をオフセットとして保存する
+    void CopyPoseFrom(const SkinnedObj3d& source);
 private:
     // トランスフォーム
     Vector3 scale_ = { 1.0f, 1.0f, 1.0f };
@@ -129,4 +131,13 @@ private:
     std::vector<JointTransformOffset> jointOffsets_;
 
     std::string name_ = "SkinnedObj3d";
+    // 🌟 代わりに「上書き用の色」と「フラグ」を追加
+    Vector4 overrideColor_ = { 1.0f, 1.0f, 1.0f, 1.0f };
+    bool useOverrideColor_ = false;
+
+    // 🌟 これが「自分専用の絵の具（マテリアル）」を置く場所です
+    Microsoft::WRL::ComPtr<ID3D12Resource> materialOverrideResource_;
+    Model::Material* materialOverrideData_ = nullptr;
+
+    bool isPoseFrozen_ = false; // ポーズを固定するかどうかのフラグ
 };

@@ -128,6 +128,12 @@ void PlayerManager::Draw() {
     }
 }
 
+void PlayerManager::DrawAfterimage() {
+    if (player_ && player_->IsVisible()) {
+        player_->DrawAfterimage();
+    }
+}
+
 void PlayerManager::RespawnInRoom(MapManager* mapManager, Camera* camera) {
     // 必要なものが無ければ再配置しない
     if (!mapManager || !player_) {

@@ -34,6 +34,7 @@ public:
     void Initialize();  // 初期化
     void Update();      // 更新
     void Draw();        // 描画
+	void DrawAfterimage(); // 残像の描画
     void DrawAnimationDebugUI(); // プレイヤーアニメGUIの描画
 
     void SetCamera(const Camera* camera); // カメラ設定
@@ -225,4 +226,18 @@ private:
 
     float costRecoveryMultiplier_ = 1.0f; // コスト回復速度倍率
     bool isDebugInvincible_ = false; // デバッグ用無敵フラグ
+
+    struct Afterimage {
+        std::unique_ptr<SkinnedObj3d> obj; // 3Dオブジェクト本体
+        bool isActive = false;      // 現在使用中（表示中）か
+        int lifeTimer = 0;          // 生存残り時間（寿命）
+        int maxLife = 0;            // 生存初期時間（最大寿命）
+    };
+
+    std::vector<Afterimage> afterimages_; // 残像の配列
+    int maxAfterimages_ = 5;            // 同時に出せる残像の最大数
+    int afterimageSpawnInterval_ = 2;   // 残像を出す間隔（フレーム数）
+    int afterimageSpawnTimer_ = 0;      // 次に残像を出すまでのタイマー
+    int afterimageLife_ = 20;            // 残像1つあたりの寿命（フレーム数）
+
 };

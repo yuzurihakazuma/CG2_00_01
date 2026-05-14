@@ -225,9 +225,18 @@ void SkinnedObj3d::Draw() {
     // [9] MatrixPalette（スキニング用・ここが Obj3d との違い）
     commandList->SetGraphicsRootDescriptorTable(9, skinCluster_.srvHandle);
 
-    // モデル描画（[0] マテリアル・[2] テクスチャ・DrawCall は内部でやってくれる）
-    if (model_) {
-        model_->Draw();
+    // モデル描画
+    if ( model_ ) {
+        D3D12_GPU_VIRTUAL_ADDRESS overrideAddress = 0;
+
+        // もし「自分専用の絵の具」を持っていたら、そのアドレスをセット
+        if ( materialOverrideResource_ ) {
+            overrideAddress = materialOverrideResource_->GetGPUVirtualAddress();
+        }
+
+        // アドレスを渡して描画！
+        // (持っていればそれが使われ、持っていなければ 0 が渡されて白になる)
+        model_->Draw(1, overrideAddress);
     }
 }
 
@@ -308,4 +317,45 @@ Vector3 SkinnedObj3d::GetJointTranslationOffset(const std::string& jointName) co
     }
 
     return { 0.0f, 0.0f, 0.0f };
+}
+
+void SkinnedObj3d::CopyPoseFrom(const SkinnedObj3d& source) {
+    // 1. 相手の骨（Skeleton）のデータをそのままコピー
+    this->skeleton_ = source.skeleton_;
+
+    // 2. GPU側の骨データ（SkinCluster）も更新して、ポーズを確定させる
+    // （エンジンの仕様に合わせて、UpdateSkinCluster 関数を使用します）
+    if (model_) {
+        UpdateSkinCluster(this->skinCluster_, this->skeleton_, model_->GetBoneOrder());
+    }
+
+    // 3. アニメーションを止めるフラグを立てる（isPause_ は不要なので削除）
+    this->isPoseFrozen_ = true;
+}
+
+void SkinnedObj3d::SetColor(const Vector4& color){
+    if ( !model_ ) return;
+
+    // 1. まだ自分の絵の具（バッファ）を持っていなければ作る
+    if ( !materialOverrideResource_ ) {
+        // GPUにマテリアル用のメモリを確保
+        materialOverrideResource_ = obj3dCommon_->GetDxCommon()->GetResourceFactory()->CreateBufferResource(sizeof(Model::Material));
+        materialOverrideResource_->Map(0, nullptr, reinterpret_cast< void** >( &materialOverrideData_ ));
+
+        // 最初の1回だけ、元のモデルの色や明るさの設定をコピーしておく
+        if ( materialOverrideData_ ) {
+            if ( Model::Material* source = model_->GetMaterial() ) {
+                *materialOverrideData_ = *source;
+            } else {
+                materialOverrideData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                materialOverrideData_->enableLighting = true;
+                materialOverrideData_->uvTransform = MatrixMath::MakeIdentity4x4();
+            }
+        }
+    }
+
+    // 2. 自分の絵の具の色だけを書き換える
+    if ( materialOverrideData_ ) {
+        materialOverrideData_->color = color;
+    }
 }

@@ -5,7 +5,7 @@
 #include "engine/math/VectorMath.h"
 #include "externals/imgui/imgui.h"
 #include "externals/nlohmann/json.hpp"
-
+#include "engine/particle/GPUParticleManager.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -132,6 +132,10 @@ void Player::Initialize() {
     isShieldActive_ = false;
     shieldHitCount_ = 0;
 
+    afterimageLife_ = 10;           //  寿命を20→10に短縮（回避が終わる前に消える）
+    afterimageSpawnInterval_ = 5;   //  発生間隔を少し広げて、重なりすぎを防
+
+
     // プレイヤーのアニメーションモデルを生成
     // ※ モデル名とファイル名は GamePlayScene 側の LoadModel と合わせる
     model_ = SkinnedObj3d::Create(
@@ -155,6 +159,18 @@ void Player::Initialize() {
         RefreshJointList();
         LoadPoseFile();
         ApplyPoseByName(idlePoseNameBuffer_);
+    }
+    for (int i = 0; i < maxAfterimages_; i++) {
+        Afterimage ai;
+        ai.obj = SkinnedObj3d::Create("player", "resources/player", "player.gltf");
+        if (ai.obj) {
+            ai.obj->SetLoopAnimation(false);
+            if (camera_) {
+                ai.obj->SetCamera(camera_);
+            }
+        }
+        ai.isActive = false;
+        afterimages_.push_back(std::move(ai));
     }
 }
 
@@ -276,11 +292,16 @@ void Player::Update() {
         }
     }
 
-    if (isDodging_) {
-        // ダクソ系に寄せて、前半だけ強く進み後半は失速する回避にする
-        float progress = 1.0f - (static_cast<float>(dodgeTimer_) / static_cast<float>(dodgeDuration_));
+    if ( isDodging_ ) {
+        //  追加1：回避中はプレイヤー本体も少し青白く・半透明にする
+        if ( model_ ) {
+            model_->SetColor({ 0.5f, 0.8f, 1.0f, 0.8f });
+        }
+
+        // ダクソ系に寄せて、前半だけ強く進み後半は失速する回避にする (元のコード維持！)
+        float progress = 1.0f - ( static_cast< float >( dodgeTimer_ ) / static_cast< float >( dodgeDuration_ ) );
         progress = Clamp01(progress);
-        float dodgeSpeed = dodgeStartSpeed_ + (dodgeEndSpeed_ - dodgeStartSpeed_) * progress;
+        float dodgeSpeed = dodgeStartSpeed_ + ( dodgeEndSpeed_ - dodgeStartSpeed_ ) * progress;
         pos_ += dodgeDirection_ * dodgeSpeed;
 
         // 回避中の「くるっ」とした見た目だけは残す
@@ -288,21 +309,69 @@ void Player::Update() {
         // 体を少し丸めるように傾けて、転がっている感じを足す
         float curl = std::sinf(progress * 3.14159f);
         rot_.z = curl * 0.45f;
+        afterimageSpawnTimer_--;
+
+        if ( afterimageSpawnTimer_ <= 0 && progress < 0.7f ) {
+            // スタンバイ中の「未使用(!isActive)」の分身を探して、その場に置く
+            for ( auto& ai : afterimages_ ) {
+                if ( !ai.isActive ) {
+                    ai.isActive = true; // ここで「出動」させる
+
+                    if ( ai.obj && model_ ) {
+                        ai.obj->SetTranslation(pos_);
+                        ai.obj->SetRotation(rot_);
+                        ai.obj->SetScale(scale_);
+
+                        // エンジン改造の成果：今のポーズをコピー
+                        ai.obj->CopyPoseFrom(*model_);
+
+                        // 最初は少し濃いめの青
+                        ai.obj->SetColor({ 0.2f, 0.8f, 1.0f, 0.4f });
+                        ai.obj->Update();
+                    }
+
+                    // 寿命をセット（転がっている間に消えるよう短めに）
+                    ai.lifeTimer = afterimageLife_;
+                    ai.maxLife = afterimageLife_;
+
+                    // タイマーリセット
+                    afterimageSpawnTimer_ = afterimageSpawnInterval_;
+                    break;
+                }
+            }
+        }
 
         dodgeTimer_--;
-        if (dodgeTimer_ <= 0) {
+        if ( dodgeTimer_ <= 0 ) {
             isDodging_ = false;
             dodgeTimer_ = 0;
             rot_.x = 0.0f;
             rot_.z = 0.0f;
 
-            // 回避の終わり際に少しだけ後隙を作る
+            // 回避の終わり際に少しだけ後隙を作る (元のコード維持！)
             isActionLocked_ = true;
             actionLockTimer_ = dodgeRecoveryDuration_;
+
+          for (auto& ai : afterimages_) {
+                ai.isActive = false; 
+            }
+
+
+            //  追加2：終了時、回避が終わったら本体の色を完全に元に戻す！
+            if ( model_ ) {
+                model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+            }
         }
-    } else if (Length(move) > 0.0f) {
-        pos_ += move * (moveSpeed_ * speedMultiplier_);
-        rot_.y = std::atan2f(move.x, move.z);
+    } else {
+        //  追加3：回避していない時は常に白にする（念のため）
+        if ( model_ ) {
+            model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+        }
+
+        if ( Length(move) > 0.0f ) {
+            pos_ += move * ( moveSpeed_ * speedMultiplier_ );
+            rot_.y = std::atan2f(move.x, move.z);
+        }
     }
 
     // スピードバフの更新
@@ -323,6 +392,27 @@ void Player::Update() {
         model_->SetScale(scale_);
         model_->Update();
     }
+
+    for (auto& ai : afterimages_) {
+        if (ai.isActive) {
+            ai.lifeTimer--;
+            if (ai.lifeTimer <= 0) {
+                ai.isActive = false;
+            }
+            else {
+                // 寿命に合わせて透明度を下げる
+                float alpha = static_cast<float>(ai.lifeTimer) / static_cast<float>(ai.maxLife);
+                float a = alpha * 0.2f; // 最大の濃さを 0.3 にする
+
+                if (ai.obj) {
+                    // 🌟 色自体にも 'a' を掛けて、だんだん暗く(黒く)しながら消す！
+                    ai.obj->SetColor({ 0.2f, 0.8f, 1.0f, a });
+                    ai.obj->Update();
+                }
+            }
+        }
+    }
+
 }
 
 void Player::Draw() {
@@ -334,7 +424,20 @@ void Player::Draw() {
         return;
     }
 
+    // プレイヤー本体を描画
     model_->Draw();
+
+    
+
+}
+
+
+void Player::DrawAfterimage() {
+    for (auto& ai : afterimages_) {
+        if (ai.isActive && ai.obj) {
+            ai.obj->Draw();
+        }
+    }
 }
 
 // プレイヤーアニメGUIの描画
@@ -494,6 +597,13 @@ void Player::SetCamera(const Camera* camera) {
     if (model_) {
         model_->SetCamera(camera_);
     }
+    
+    for (auto& ai : afterimages_) {
+        if (ai.obj) {
+            ai.obj->SetCamera(camera_);
+        }
+    }
+
 }
 
 // 指定フレームの間プレイヤー操作をロック

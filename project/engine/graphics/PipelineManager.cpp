@@ -31,6 +31,7 @@ void PipelineManager::Finalize(){
 	// スキニングメッシュ用のリソースも忘れずに解放
 	skinningObject3DRootSignature_.Reset();
 	skinningObject3DPipelineState_.Reset();
+	skinningObject3DPipelineStateBlend_.Reset();
 	// GPUパーティクル用のリソースも忘れずに解放
 	gpuParticleComputeRootSignature_.Reset();
 	gpuParticleComputePipelineState_.Reset();
@@ -134,6 +135,11 @@ void PipelineManager::SetPipeline(
 	case PipelineType::SkinningObject3D:
 		commandList->SetGraphicsRootSignature(skinningObject3DRootSignature_.Get());
 		commandList->SetPipelineState(skinningObject3DPipelineState_.Get());
+		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		break;
+	case PipelineType::SkinningObject3D_Blend:
+		commandList->SetGraphicsRootSignature(skinningObject3DRootSignature_.Get());
+		commandList->SetPipelineState(skinningObject3DPipelineStateBlend_.Get());
 		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		break;
     }
@@ -402,7 +408,14 @@ void PipelineManager::CreateSkinningObject3DGraphicsPipeline() {
 		.SetRenderTargets({ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB });
 
 	builder.Build(dxCommon_->GetDevice(), skinningObject3DPipelineState_);
+
+	builder.SetBlendMode(BlendMode::kAdd)      // 加算ブレンドでオーラのように光らせる！
+		.SetDepthStencil(true, false);      // 深度書き込みOFF！
+
+	// 上書きした設定で、半透明用の変数にビルド！
+	builder.Build(dxCommon_->GetDevice(), skinningObject3DPipelineStateBlend_);
 }
+
 
 // ルートシグネチャの生成 GPUパーティクル用 Computeシェーダー用
 void PipelineManager::CreateGPUParticleComputeRootSignature(){
