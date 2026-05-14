@@ -180,6 +180,23 @@ void Player::Update() {
         return;
     }
 
+    // プレイヤーのスタン処理
+    if (isStunned_) {
+        stunTimer_--;
+        if (stunTimer_ <= 0) {
+            isStunned_ = false;
+        }
+
+        // スタン中はモデルの歩きアニメを止める
+        if (model_) {
+            model_->SetIsWalking(false);
+            model_->SetTranslation(pos_);
+            model_->SetRotation(rot_);
+            model_->Update();
+        }
+        return; // WASD入力や回避などの処理を全てスキップ
+    }
+
     Input* input = Input::GetInstance();
     Vector3 move{ 0.0f, 0.0f, 0.0f };
 
@@ -557,6 +574,11 @@ void Player::Heal(int amount) {
     if (hp_ > maxHp_) {
         hp_ = maxHp_;
     }
+}
+
+void Player::SetStun(int durationFrames) {
+    isStunned_ = true;
+    stunTimer_ = durationFrames;
 }
 
 void Player::LevelUp() {

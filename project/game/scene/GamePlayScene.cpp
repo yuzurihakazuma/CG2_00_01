@@ -44,7 +44,6 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
-#include "game/card/ClawEffect.h"
 
 
 using namespace VectorMath;
@@ -1842,13 +1841,9 @@ void GamePlayScene::DrawDebugUI() {
 		handManager_.AddCard(CardDatabase::GetCardData(14));
 	}
 
-	ImGui::Separator();
-
-	ImGui::Separator();
-	ImGui::Text("[ Damage Adjust ]");
-
-	// クローも同様に実装したら、以下のコメントアウトを外せばOKです！
-	ImGui::SliderInt("クローの基本ダメージ", &ClawEffect::debugBaseDamage, 1, 20);
+	if (ImGui::Button("ハンマー(ID:15)")) {
+		handManager_.AddCard(CardDatabase::GetCardData(15));
+	}
 
 	ImGui::Separator();
 
@@ -2051,6 +2046,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		case 10: // クロー
 		case 13: // 蹴り
 		case 14: // 剣
+		case 15: // ハンマー
 			return true;
 		default:
 			return false;

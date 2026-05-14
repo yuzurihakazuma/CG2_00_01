@@ -123,6 +123,9 @@ public:
         hitTimer_ = 10; // 吹き飛んでいる時間
     }
 
+    void SetStun(int durationFrames); // スタンさせる関数
+    bool IsStunned() const { return isStunned_; } // スタン中か確認
+
 private:
     void DecideNextState();                         // 次の状態を決める
     bool IsStuck() const;                          // 詰まり判定
@@ -220,4 +223,8 @@ private:
     const int castTime_ = 30;
     int strafeDirection_ = 1;
     float retreatStrafeStrength_ = 0.65f; // 離脱時に横へずれる強さ
+
+    bool isStunned_ = false; // スタン状態フラグ
+    int stunTimer_ = 0;      // スタン時間タイマー
+    int animationTimer_ = 0;
 };

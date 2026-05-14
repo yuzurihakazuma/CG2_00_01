@@ -90,6 +90,9 @@ void Enemy::Initialize() {
     lastKnownPlayerPos_ = pos_;
     isBossRoom_ = false;
     SetType(Type::Normal);
+
+    isStunned_ = false; // スタン状態リセット
+    stunTimer_ = 0;     // スタン時間リセット
 }
 
 void Enemy::SetType(Type type) {
@@ -107,7 +110,18 @@ void Enemy::SetType(Type type) {
 void Enemy::Update() {
     if (isDead_) return; // 死亡していたら何もしない
 
+    animationTimer_++; // 常にカウントアップ
+
     UpdateStatusEffects();
+
+    // ★ スタンタイマーの更新
+    if (isStunned_) {
+        stunTimer_--;
+        if (stunTimer_ <= 0) {
+            isStunned_ = false;
+        }
+        return; // スタン中は以下の AI 思考や移動を全て飛ばす
+    }
 
     // UseCard 以外へ遷移していたら詠唱は切る
     if (state_ != State::UseCard && isCasting_) {
@@ -217,6 +231,14 @@ void Enemy::Update() {
 void Enemy::Freeze(int durationFrames) {
     isFrozen_ = true;
     freezeTimer_ = durationFrames;
+}
+
+void Enemy::SetStun(int durationFrames) {
+    isStunned_ = true;
+    stunTimer_ = durationFrames;
+
+    isCasting_ = false;
+    castTimer_ = 0;
 }
 
 // 次の状態を決める
@@ -563,6 +585,28 @@ void Enemy::UpdateStatusEffects() {
         float scale = 0.4f + (rand() % 4) * 0.1f;
 
         GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.6f, scale, color);
+    }
+
+    if (isStunned_) {
+        // 回転の計算（animationTimer_ を使うことでぐるぐる回る）
+        float angle = static_cast<float>(animationTimer_) * 0.2f; // 回転速度
+        float radius = 0.3f; // 回転の半径
+
+        // 頭上(y + 1.8f)の円周上の座標を計算
+        Vector3 starPos = {
+            pos_.x + std::sinf(angle) * radius,
+            pos_.y + 1.8f,
+            pos_.z + std::cosf(angle) * radius
+        };
+
+        // 黄色いキラキラを出す
+        GPUParticleManager::GetInstance()->Emit(
+            starPos,               // 位置
+            { 0.0f, 0.01f, 0.0f },   // 速度（少しだけ浮き上がる）
+            0.15f,                 // サイズ
+            0.5f,                  // ライフ
+            { 1.0f, 1.0f, 0.0f, 1.0f } // 色（黄色）
+        );
     }
 }
 void Enemy::TakeDamage(int damage) {
