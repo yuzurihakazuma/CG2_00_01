@@ -135,5 +135,9 @@ private:
     Vector4 overrideColor_ = { 1.0f, 1.0f, 1.0f, 1.0f };
     bool useOverrideColor_ = false;
 
+    // 🌟 これが「自分専用の絵の具（マテリアル）」を置く場所です
+    Microsoft::WRL::ComPtr<ID3D12Resource> materialOverrideResource_;
+    Model::Material* materialOverrideData_ = nullptr;
+
     bool isPoseFrozen_ = false; // ポーズを固定するかどうかのフラグ
 };

@@ -292,11 +292,16 @@ void Player::Update() {
         }
     }
 
-    if (isDodging_) {
-        // ダクソ系に寄せて、前半だけ強く進み後半は失速する回避にする
-        float progress = 1.0f - (static_cast<float>(dodgeTimer_) / static_cast<float>(dodgeDuration_));
+    if ( isDodging_ ) {
+        //  追加1：回避中はプレイヤー本体も少し青白く・半透明にする
+        if ( model_ ) {
+            model_->SetColor({ 0.5f, 0.8f, 1.0f, 0.8f });
+        }
+
+        // ダクソ系に寄せて、前半だけ強く進み後半は失速する回避にする (元のコード維持！)
+        float progress = 1.0f - ( static_cast< float >( dodgeTimer_ ) / static_cast< float >( dodgeDuration_ ) );
         progress = Clamp01(progress);
-        float dodgeSpeed = dodgeStartSpeed_ + (dodgeEndSpeed_ - dodgeStartSpeed_) * progress;
+        float dodgeSpeed = dodgeStartSpeed_ + ( dodgeEndSpeed_ - dodgeStartSpeed_ ) * progress;
         pos_ += dodgeDirection_ * dodgeSpeed;
 
         // 回避中の「くるっ」とした見た目だけは残す
@@ -306,13 +311,13 @@ void Player::Update() {
         rot_.z = curl * 0.45f;
         afterimageSpawnTimer_--;
 
-        if (afterimageSpawnTimer_ <= 0) {
+        if ( afterimageSpawnTimer_ <= 0 && progress < 0.7f ) {
             // スタンバイ中の「未使用(!isActive)」の分身を探して、その場に置く
-            for (auto& ai : afterimages_) {
-                if (!ai.isActive) {
+            for ( auto& ai : afterimages_ ) {
+                if ( !ai.isActive ) {
                     ai.isActive = true; // ここで「出動」させる
 
-                    if (ai.obj && model_) {
+                    if ( ai.obj && model_ ) {
                         ai.obj->SetTranslation(pos_);
                         ai.obj->SetRotation(rot_);
                         ai.obj->SetScale(scale_);
@@ -320,10 +325,8 @@ void Player::Update() {
                         // エンジン改造の成果：今のポーズをコピー
                         ai.obj->CopyPoseFrom(*model_);
 
-
-
                         // 最初は少し濃いめの青
-                        ai.obj->SetColor({ 0.4f * 0.3f, 0.7f * 0.3f, 1.0f * 0.3f, 0.3f });
+                        ai.obj->SetColor({ 0.2f, 0.8f, 1.0f, 0.4f });
                         ai.obj->Update();
                     }
 
@@ -339,19 +342,36 @@ void Player::Update() {
         }
 
         dodgeTimer_--;
-        if (dodgeTimer_ <= 0) {
+        if ( dodgeTimer_ <= 0 ) {
             isDodging_ = false;
             dodgeTimer_ = 0;
             rot_.x = 0.0f;
             rot_.z = 0.0f;
 
-            // 回避の終わり際に少しだけ後隙を作る
+            // 回避の終わり際に少しだけ後隙を作る (元のコード維持！)
             isActionLocked_ = true;
             actionLockTimer_ = dodgeRecoveryDuration_;
+
+          for (auto& ai : afterimages_) {
+                ai.isActive = false; 
+            }
+
+
+            //  追加2：終了時、回避が終わったら本体の色を完全に元に戻す！
+            if ( model_ ) {
+                model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+            }
         }
-    } else if (Length(move) > 0.0f) {
-        pos_ += move * (moveSpeed_ * speedMultiplier_);
-        rot_.y = std::atan2f(move.x, move.z);
+    } else {
+        //  追加3：回避していない時は常に白にする（念のため）
+        if ( model_ ) {
+            model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+        }
+
+        if ( Length(move) > 0.0f ) {
+            pos_ += move * ( moveSpeed_ * speedMultiplier_ );
+            rot_.y = std::atan2f(move.x, move.z);
+        }
     }
 
     // スピードバフの更新
@@ -382,11 +402,11 @@ void Player::Update() {
             else {
                 // 寿命に合わせて透明度を下げる
                 float alpha = static_cast<float>(ai.lifeTimer) / static_cast<float>(ai.maxLife);
-                float a = alpha * 0.3f; // 最大の濃さを 0.3 にする
+                float a = alpha * 0.2f; // 最大の濃さを 0.3 にする
 
                 if (ai.obj) {
                     // 🌟 色自体にも 'a' を掛けて、だんだん暗く(黒く)しながら消す！
-                    ai.obj->SetColor({ 0.4f * a, 0.7f * a, 1.0f * a, a });
+                    ai.obj->SetColor({ 0.2f, 0.8f, 1.0f, a });
                     ai.obj->Update();
                 }
             }

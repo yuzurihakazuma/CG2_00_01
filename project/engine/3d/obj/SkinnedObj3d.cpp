@@ -226,23 +226,17 @@ void SkinnedObj3d::Draw() {
     commandList->SetGraphicsRootDescriptorTable(9, skinCluster_.srvHandle);
 
     // モデル描画
-    if (model_) {
-        Vector4 originalColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-        bool isColorOverridden = false;
+    if ( model_ ) {
+        D3D12_GPU_VIRTUAL_ADDRESS overrideAddress = 0;
 
-        if (useOverrideColor_ && model_->GetMaterial()) {
-            originalColor = model_->GetMaterial()->color;  // 今の（白い）色を退避
-            model_->GetMaterial()->color = overrideColor_; // 青くて透明な色をブチ込む！
-            isColorOverridden = true;
+        // もし「自分専用の絵の具」を持っていたら、そのアドレスをセット
+        if ( materialOverrideResource_ ) {
+            overrideAddress = materialOverrideResource_->GetGPUVirtualAddress();
         }
 
-        // モデル本来の描画関数を呼ぶ
-        // （この中で model_->GetMaterial()->color がGPUに送られます）
-        model_->Draw();
-
-        if (isColorOverridden && model_->GetMaterial()) {
-            model_->GetMaterial()->color = originalColor; // これで本体は白いまま守られる！
-        }
+        // アドレスを渡して描画！
+        // (持っていればそれが使われ、持っていなければ 0 が渡されて白になる)
+        model_->Draw(1, overrideAddress);
     }
 }
 
@@ -339,8 +333,29 @@ void SkinnedObj3d::CopyPoseFrom(const SkinnedObj3d& source) {
     this->isPoseFrozen_ = true;
 }
 
-void SkinnedObj3d::SetColor(const Vector4& color) {
-    // 複雑なバッファ作成はやめて、値を保存するだけにします
-    overrideColor_ = color;
-    useOverrideColor_ = true;
+void SkinnedObj3d::SetColor(const Vector4& color){
+    if ( !model_ ) return;
+
+    // 1. まだ自分の絵の具（バッファ）を持っていなければ作る
+    if ( !materialOverrideResource_ ) {
+        // GPUにマテリアル用のメモリを確保
+        materialOverrideResource_ = obj3dCommon_->GetDxCommon()->GetResourceFactory()->CreateBufferResource(sizeof(Model::Material));
+        materialOverrideResource_->Map(0, nullptr, reinterpret_cast< void** >( &materialOverrideData_ ));
+
+        // 最初の1回だけ、元のモデルの色や明るさの設定をコピーしておく
+        if ( materialOverrideData_ ) {
+            if ( Model::Material* source = model_->GetMaterial() ) {
+                *materialOverrideData_ = *source;
+            } else {
+                materialOverrideData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                materialOverrideData_->enableLighting = true;
+                materialOverrideData_->uvTransform = MatrixMath::MakeIdentity4x4();
+            }
+        }
+    }
+
+    // 2. 自分の絵の具の色だけを書き換える
+    if ( materialOverrideData_ ) {
+        materialOverrideData_->color = color;
+    }
 }
