@@ -27,6 +27,7 @@
 #include "game/card/CostBoostEffect.h"
 #include "game/card/KickEffect.h"
 #include "game/card/SwordEffect.h"
+#include "game/card/HammerEffect.h"
 
 
 using namespace VectorMath;
@@ -53,6 +54,7 @@ void CardUseSystem::Initialize(Camera* camera) {
 	effectFactory_[12]= [](const Card &c) { return std::make_unique<CostBoostEffect>(c.effectValue); };
 	effectFactory_[13] = [](const Card &c) { return std::make_unique<KickEffect>(c.effectValue); };
 	effectFactory_[14] = [](const Card &c) {return std::make_unique<SwordEffect>(c.effectValue); };
+	effectFactory_[15] = [](const Card &c) {return std::make_unique<HammerEffect>(c.effectValue); };
 
 	// ID:101 ボスクロー（前回作ったもの）
 	effectFactory_[101] = [](const Card &c) { return std::make_unique<BossClawEffect>(c.effectValue); };

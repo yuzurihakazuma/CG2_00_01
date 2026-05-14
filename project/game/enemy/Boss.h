@@ -118,6 +118,9 @@ public:
 
     const Vector3& GetBaseScale() const { return baseScale_; }
 
+    void SetStun(int durationFrames); // スタンさせる関数
+    bool IsStunned() const { return isStunned_; } // スタン中か確認
+
 private:
     void DecideNextState();
     void UpdateAppear();
@@ -193,5 +196,9 @@ private:
     bool isSplitBehaviorEnabled_ = false;      // 10階層分裂ボス専用AIを使うか
     Vector3 baseScale_{ 2.0f, 2.0f, 2.0f }; // この個体の基準サイズ
 
+
+    bool isStunned_ = false;       // スタン中か
+    int stunTimer_ = 0;            // スキャンの残り時間
+    int animationTimer_ = 0;       // ★ 演出計算用の汎用カウンター
 };
 

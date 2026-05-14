@@ -52,6 +52,9 @@ void Boss::Initialize() {
 	hasPartnerPosition_ = false;
 	forceMeleeMode_ = false;
 
+	isStunned_ = false; // スタン状態リセット
+	stunTimer_ = 0;     // スタン時間リセット
+
 }
 
 void Boss::InitializeBossCards() {
@@ -259,6 +262,27 @@ void Boss::Update() {
 		return;
 	}
 
+	animationTimer_++; // 常にカウントアップ
+
+	// スタン状態の更新
+	if (isStunned_) {
+		stunTimer_--;
+		if (stunTimer_ <= 0) {
+			isStunned_ = false;
+		}
+
+		// スタン中の「ピヨピヨ星」エフェクト（頭上に黄色い光）
+		float angle = static_cast<float>(animationTimer_) * 0.15f;
+		Vector3 starPos = {
+			pos_.x + std::sinf(angle) * 0.8f, // ボスなので半径を少し広く(0.8f)
+			pos_.y + 4.5f,                    // ボスなので高い位置に
+			pos_.z + std::cosf(angle) * 0.8f
+		};
+		GPUParticleManager::GetInstance()->Emit(starPos, { 0, 0.05f, 0 }, 0.3f, 0.5f, { 1.0f, 1.0f, 0.0f, 1.0f });
+
+		return; // スタン中は以下の AI 更新や移動を全てスキップ
+	}
+
 	cardUseRequest_ = false;
 
 	if (state_ == State::Appear) {
@@ -437,6 +461,13 @@ void Boss::UpdateAppear() {
 		state_ = State::Idle;
 		thinkTimer_ = 20;
 	}
+}
+void Boss::SetStun(int durationFrames) {
+	isStunned_ = true;
+	stunTimer_ = durationFrames;
+
+	isCasting_ = false;
+	castTimer_ = 0;
 }
 void Boss::DecideNextState() {
 	if (state_ == State::Appear) {
