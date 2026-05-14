@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "game/card/ICardEffect.h"
 
+
+
 class SpeedBuffEffect : public ICardEffect {
 public:
 
@@ -26,6 +28,7 @@ private:
 	float multiplier_ = 1.0f; // 速度倍率
 	bool isPlayerCaster_ = true;
 	bool isFinished_ = false;
+	int timer_ = 0; // バフの経過時間を管理するタイマー
 
 	int durationTimer_ = 300;   // バフの持続時間（例: 5秒間 = 60fps * 5）
 	Vector3 currentPos_ = { 0,0,0 };

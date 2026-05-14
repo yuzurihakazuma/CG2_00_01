@@ -1,6 +1,9 @@
 #pragma once
 #include "game/card/ICardEffect.h"
 
+#include "engine/particle/GPUParticleEmitter.h"
+#include "engine/particle/GPUParticleEmitterData.h"
+
 class CostBoostEffect : public ICardEffect {
 public:
 
@@ -19,5 +22,8 @@ private:
 
 	bool isPlayerCaster_ = true;
 	bool isFinished_ = false;
+
+
+	std::unique_ptr<GPUParticleEmitter> auraEmitter_ = nullptr;  // 継続中のモヤモヤ用
 };
 

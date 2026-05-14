@@ -44,7 +44,6 @@ void DodgeParticleEffect::Initialize(){
     coreData.lifeTimeMax = 0.3f;
     coreData.scaleMin = 2.0f;                //  最初からキャラより大きいサイズ。
     coreData.scaleMax = 4.0f;                //  さらに大きく広がる。
-    coreData.scaleSpread = 0.5f;
     coreData.velocity = { 0.0f, 0.0f, 0.0f };  // その場に留まる
     coreData.velocitySpread = 1.0f;          // ゆっくりと外側に広がる動き
     coreData.startColor = { 0.1f, 0.6f, 1.0f, 0.3f }; //  調整：薄い青（アルファ 0.3f）。
