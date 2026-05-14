@@ -290,6 +290,12 @@ void Player::Update() {
                 std::cosf(rot_.y)
             };
         }
+		// 回避開始時の位置を記録して、後で分身を出すときの基準にする（転がりエフェクトのため）
+        lastAfterimagePos_ = { 9999.0f, 9999.0f, 9999.0f };
+
+        if ( dodgeParticle_ ) {
+            dodgeParticle_->EmitBurst(pos_);
+        }
     }
 
     if ( isDodging_ ) {
@@ -311,33 +317,44 @@ void Player::Update() {
         rot_.z = curl * 0.45f;
         afterimageSpawnTimer_--;
 
+		// くるっと回る距離が一定になるように、回避開始からの移動距離を計測して、分身を出すタイミングを決める
+        float moveDist = Length(pos_ - lastAfterimagePos_);
+
         if ( afterimageSpawnTimer_ <= 0 && progress < 0.7f ) {
-            // スタンバイ中の「未使用(!isActive)」の分身を探して、その場に置く
-            for ( auto& ai : afterimages_ ) {
-                if ( !ai.isActive ) {
-                    ai.isActive = true; // ここで「出動」させる
+            // 「一定の距離（例：0.5f）以上動いている場合」だけ残像を置く！
+            if ( moveDist > 0.8f ) {
+                // スタンバイ中の「未使用(!isActive)」の分身を探して、その場に置く
+                for ( auto& ai : afterimages_ ) {
+                    if ( !ai.isActive ) {
+                        ai.isActive = true; // ここで「出動」させる
 
-                    if ( ai.obj && model_ ) {
-                        ai.obj->SetTranslation(pos_);
-                        ai.obj->SetRotation(rot_);
-                        ai.obj->SetScale(scale_);
+                        if ( ai.obj && model_ ) {
+                            ai.obj->SetTranslation(pos_);
+                            ai.obj->SetRotation(rot_);
+                            ai.obj->SetScale(scale_);
+                            ai.obj->CopyPoseFrom(*model_);
+                            ai.obj->SetColor({ 0.2f, 0.8f, 1.0f, 0.4f });
+                            ai.obj->Update();
+                        }
 
-                        // エンジン改造の成果：今のポーズをコピー
-                        ai.obj->CopyPoseFrom(*model_);
+                        // 次に備えて、今残像を置いた座標を記録しておく！
+                        lastAfterimagePos_ = pos_;
 
-                        // 最初は少し濃いめの青
-                        ai.obj->SetColor({ 0.2f, 0.8f, 1.0f, 0.4f });
-                        ai.obj->Update();
+
+                        // 呼ぶだけで後ろにキラキラが出る！
+                        if ( dodgeParticle_ ) {
+                            dodgeParticle_->EmitTrail(pos_, dodgeDirection_);
+                        }
+
+                        ai.lifeTimer = afterimageLife_;
+                        ai.maxLife = afterimageLife_;
+                        afterimageSpawnTimer_ = afterimageSpawnInterval_;
+                        break;
                     }
-
-                    // 寿命をセット（転がっている間に消えるよう短めに）
-                    ai.lifeTimer = afterimageLife_;
-                    ai.maxLife = afterimageLife_;
-
-                    // タイマーリセット
-                    afterimageSpawnTimer_ = afterimageSpawnInterval_;
-                    break;
                 }
+            } else {
+                // （壁からズルッと滑って動いた瞬間にすぐ出せるようにするため）
+                afterimageSpawnTimer_ = 0;
             }
         }
 
@@ -412,6 +429,11 @@ void Player::Update() {
             }
         }
     }
+
+
+    // パーティクル演出クラスの生成と初期化
+    dodgeParticle_ = std::make_unique<DodgeParticleEffect>();
+    dodgeParticle_->Initialize();
 
 }
 

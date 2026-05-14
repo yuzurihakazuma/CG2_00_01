@@ -6,6 +6,8 @@
 #include "engine/math/VectorMath.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 
+#include "game/particle/DodgeParticleEffect.h"
+
 class Camera;
 
 class Player {
@@ -239,5 +241,9 @@ private:
     int afterimageSpawnInterval_ = 2;   // 残像を出す間隔（フレーム数）
     int afterimageSpawnTimer_ = 0;      // 次に残像を出すまでのタイマー
     int afterimageLife_ = 20;            // 残像1つあたりの寿命（フレーム数）
+
+    Vector3 lastAfterimagePos_ = { 9999.0f, 9999.0f, 9999.0f };
+
+    std::unique_ptr<DodgeParticleEffect> dodgeParticle_;
 
 };

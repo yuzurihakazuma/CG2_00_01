@@ -27,6 +27,7 @@ struct GPUParticleEmitterData{
 
 
 	float scaleMin = 0.1f; // スケールの最小値
+	float scaleSpread = 0.0f; // スケールにランダム値を加えるときの最大値 (0ならランダムなし)
 	float scaleMax = 1.0f; // スケールの最大値
 
 	Vector4 startColor { 1.0f, 1.0f, 1.0f, 1.0f }; // 開始色
