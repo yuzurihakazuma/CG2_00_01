@@ -10,7 +10,9 @@
 
 using namespace VectorMath;
 
-void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
+void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	// 使用者情報を保存
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;

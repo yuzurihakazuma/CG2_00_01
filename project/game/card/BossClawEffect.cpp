@@ -8,10 +8,15 @@
 
 using namespace VectorMath;
 
-void BossClawEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void BossClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
 	isFinished_ = false;
 	timer_ = 0; // 例：24フレーム（約0.4秒）で攻撃の判定が消える
 	hasHit_ = false;
+
+
+	// この攻撃を発動したボス本人を保持する
+// 今は直接使っていないが、分裂ボス対応で発動元を失わないようにしておく
+	casterBoss_ = casterBoss;
 
 	// ボスの位置と向きを記憶
 	casterYaw_ = casterYaw;
@@ -118,7 +123,9 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 			// ★ ボスの巨大な爪に合わせて、当たり判定も広くする (4.0f)
 			if (Length(diff) < 4.0f) {
 				int finalDamage = damage_;
-				if (boss && boss->IsAttackDebuffed()) {
+
+				// 発動元のボスが攻撃デバフ中ならダメージを半減する
+				if (casterBoss_ && casterBoss_->IsAttackDebuffed()) {
 					finalDamage = finalDamage / 2;
 				}
 

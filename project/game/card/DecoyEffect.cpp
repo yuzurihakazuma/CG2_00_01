@@ -4,7 +4,9 @@
 
 using namespace VectorMath;
 
-void DecoyEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void DecoyEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	isFinished_ = false;
 	timer_ = duration_;
 

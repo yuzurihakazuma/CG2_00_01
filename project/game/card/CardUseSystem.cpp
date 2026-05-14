@@ -90,8 +90,18 @@ void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* bos
 
 		if (castTimer_ <= 0) {
 			isCasting_ = false;
-			ExecuteCard(castingCard_, castPos_, castYaw_, isPlayerCasting_, castingPlayer_);
+
+			// 詠唱開始時に保持していた発射元ボスも一緒に渡して実行する
+			ExecuteCard(
+				castingCard_,
+				castPos_,
+				castYaw_,
+				isPlayerCasting_,
+				castingPlayer_,
+				castingBoss_
+			);
 		}
+
 	}
 
 	
@@ -109,27 +119,40 @@ void CardUseSystem::Draw() {
 	
 }
 
-// カード使用（詠唱開始）
-void CardUseSystem::UseCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player) {
+// カード使用開始
+// ボス使用時は casterBoss に発動元ボス本人が入る
+void CardUseSystem::UseCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player, Boss* casterBoss) {
 
-	// 敵（isPlayerCaster が false）の場合は、詠唱を待たずに即発動！
+
+
+	// ボス使用時は詠唱待ちせず即実行する
+// この時に発動元ボスもそのまま effect 側へ渡す
 	if (!isPlayerCaster) {
-		ExecuteCard(card, casterPos, casterYaw, isPlayerCaster, player);
+		ExecuteCard(card, casterPos, casterYaw, isPlayerCaster, player, casterBoss);
 		return;
 	}
+
 
 	// すでに詠唱中なら新しく使わない
 	if (isCasting_) {
 		return;
 	}
 
+	// プレイヤー使用時は詠唱情報を保持し、完了後に ExecuteCard する
 	isCasting_ = true;
 	castingCard_ = card;
 	castPos_ = casterPos;
 	castYaw_ = casterYaw;
 	isPlayerCasting_ = isPlayerCaster;
 	castingPlayer_ = player;
+
+	// 発動元ボスも保持しておく
+	// 今は主にボス用だが、経路を統一するためここで保存する
+	castingBoss_ = casterBoss;
+
 	castTimer_ = GetCastTime(card);
+
+
 
 	// プレイヤーが使った場合のみ詠唱中ロック
 	if (isPlayerCaster && player) {
@@ -138,8 +161,8 @@ void CardUseSystem::UseCard(const Card& card, const Vector3& casterPos, float ca
 	}
 }
 
-// 実際の発動処理
-void CardUseSystem::ExecuteCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player) {
+// 実際のカード発動処理
+void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float casterYaw,bool isPlayerCaster,Player* player,Boss* casterBoss) {
 
 	// 1. 辞書の中に、使われたカードのIDが登録されているかチェック
 	if (effectFactory_.count(card.id)) {
@@ -147,11 +170,13 @@ void CardUseSystem::ExecuteCard(const Card& card, const Vector3& casterPos, floa
 		// 2. 辞書から魔法を生み出す！（switch文の代わり）
 		auto newEffect = effectFactory_[card.id](card);
 
-		// 3. 発生位置などの初期設定をして、リストに追加
 		if (newEffect) {
-			newEffect->Start(casterPos, casterYaw, isPlayerCaster, camera_);
+			// エフェクト開始時に発射元ボスも渡す
+			// 分裂ボス時に、どのボス本人が撃った攻撃かを各 effect が保持できるようにする
+			newEffect->Start(casterPos, casterYaw, isPlayerCaster, camera_, casterBoss);
 			activeEffects_.push_back(std::move(newEffect));
 		}
+
 	}
 
 	// プレイヤー発動後は通常姿勢へ戻す
@@ -178,6 +203,8 @@ void CardUseSystem::Reset() {
 	isPlayerCasting_ = true;
 	castTimer_ = 0;
 	castingPlayer_ = nullptr;
+	// 詠唱元ボスの保持もリセットする
+	castingBoss_ = nullptr;
 }
 
 void CardUseSystem::CancelCasting() {
@@ -188,6 +215,8 @@ void CardUseSystem::CancelCasting() {
 	castYaw_ = 0.0f;
 	isPlayerCasting_ = true;
 	castingPlayer_ = nullptr;
+	// キャンセル時も発射元ボス情報を破棄する
+	castingBoss_ = nullptr;
 }
 
 bool CardUseSystem::IsDecoyActive() const {

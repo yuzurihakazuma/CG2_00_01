@@ -587,7 +587,9 @@ void BossManager::Update(
 							useCard,
 							splitBoss->GetPosition(),
 							splitBoss->GetRotation().y,
-							false
+							false,
+							nullptr,
+							splitBoss
 						);
 					}
 
@@ -603,7 +605,9 @@ void BossManager::Update(
 						useCard,
 						boss_->GetPosition(),
 						boss_->GetRotation().y,
-						false
+						false,
+						nullptr,
+						boss_.get()
 					);
 				}
 

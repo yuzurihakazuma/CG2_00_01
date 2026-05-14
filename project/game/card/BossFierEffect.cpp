@@ -7,9 +7,13 @@
 
 using namespace VectorMath;
 
-void BossFierEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void BossFierEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
     isFinished_ = false;
     timer_ = 120; // 2秒
+
+    // この攻撃を発動したボス本人を保持する
+// 今は主に分裂ボス時の発動元追跡のために使う
+    casterBoss_ = casterBoss;
 
     pos_ = casterPos;
     pos_.y += 1.0f; // 少し浮かせる
@@ -81,9 +85,13 @@ void BossFierEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
         // スケールが大きいので当たり判定も広くする（2.0fくらい）
         if (Length(diff) < 2.0f) {
             int finalDamage = damage_;
-            if (boss && boss->IsAttackDebuffed()) {
+
+            // 発動元のボスが攻撃デバフ中ならダメージを半減する
+            // 分裂ボス時に boss 引数へ依存すると、別個体を参照する可能性がある
+            if (casterBoss_ && casterBoss_->IsAttackDebuffed()) {
                 finalDamage = finalDamage / 2;
             }
+
             // PlayerのTakeDamageは「ダメージ量」と「攻撃が飛んできた位置」を渡す
             player->TakeDamage(finalDamage, pos_);
             isFinished_ = true; // 当たったら消える

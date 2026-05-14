@@ -5,7 +5,9 @@
 #include "game/player/Player.h"
 #include <cmath> 
 
-void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) {
+void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	// この魔法はプレイヤー専用
 	isPlayerCaster_ = true;
 	isFinished_ = false;

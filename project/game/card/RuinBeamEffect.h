@@ -8,7 +8,10 @@ class RuinBeamEffect : public ICardEffect {
 public:
     RuinBeamEffect(int damage) : damage_(damage) {}
 
-    void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) override;
+    // 初期化
+// 分裂ボス時に、どの個体がビームを出したかを保持できるようにする
+    void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
+
     void Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) override;
     void Draw() override;
 
@@ -28,4 +31,9 @@ private:
     int hitInterval_ = 12;
     int hitTimer_ = 0;
     bool isFinished_ = false;
+
+    // このビームを発動したボス本人
+// 分裂ボス時に左右どちらのビームかを失わないように保持する
+    Boss* casterBoss_ = nullptr;
+
 };

@@ -9,7 +9,8 @@ public:
     BossFierEffect(int damage) : damage_(damage) {}
 
     // 初期化
-    void Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) override;
+// 分裂ボス時に、どの個体が発動した攻撃かを受け取れるようにする
+    void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
 
     // 更新
     void Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) override;
@@ -29,5 +30,10 @@ private:
     int damage_ = 10;
     int timer_ = 0;
     bool isFinished_ = false;
+
+    // この攻撃を発動したボス本人
+// 分裂ボス時に左右どちらの弾かを失わないように保持する
+    Boss* casterBoss_ = nullptr;
+
 };
 

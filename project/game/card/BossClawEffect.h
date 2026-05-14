@@ -10,7 +10,9 @@ public:
 	BossClawEffect(int damage) : damage_(damage) {}
 
 	// 初期化
-	void Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) override;
+// 分裂ボス時に、どの個体が発動した攻撃かを受け取れる形にしておく
+	void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
+
 
 	// 更新
 	void Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) override;
@@ -39,5 +41,10 @@ private:
 
 	float casterYaw_ = 0.0f;
 	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
+
+	// この攻撃を発動したボス本人
+// 今回の爪攻撃では未使用だが、全ボス攻撃クラスで受け口を統一するため保持する
+	Boss* casterBoss_ = nullptr;
+
 };
 

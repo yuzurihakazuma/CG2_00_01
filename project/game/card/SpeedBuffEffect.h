@@ -8,7 +8,7 @@ public:
 	SpeedBuffEffect(float multiplier) : multiplier_(multiplier) {}
 
 	// 初期化
-	void Start(const Vector3 &casterPos, float casterYaw, bool isPLayerCaster, Camera *camera)override;
+	void Start(const Vector3 &casterPos, float casterYaw, bool isPLayerCaster, Camera *camera, Boss* casterBoss)override;
 
 	// 更新
 	void Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level)override;

@@ -11,7 +11,9 @@ using namespace VectorMath;
 // デバッグ用変数の実体と初期値（例として1ダメージ）
 int ClawEffect::debugBaseDamage = 1;
 
-void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
+void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
 	timer_ = 0;

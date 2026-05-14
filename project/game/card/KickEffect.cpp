@@ -8,7 +8,9 @@
 
 using namespace VectorMath;
 
-void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
+    // この効果は発動元ボスを使わない
+    (void)casterBoss;
     pos_ = casterPos;
     casterYaw_ = casterYaw;
     isPlayerCaster_ = isPlayerCaster;

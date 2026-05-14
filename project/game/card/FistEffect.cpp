@@ -11,7 +11,9 @@
 
 using namespace VectorMath;
 
-void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
+void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
 	punchTimer_ = 10;

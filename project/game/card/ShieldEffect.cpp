@@ -6,7 +6,9 @@
 #include <cmath>
 
 
-void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	// 誰が使ったか（プレイヤーか敵か）を保存
 	isPlayerCaster_ = isPlayerCaster;
 
