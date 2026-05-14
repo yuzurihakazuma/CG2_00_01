@@ -296,6 +296,9 @@
     <ClCompile Include="game\card\SwordEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="game\card\HammerEffect.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="game\particle\DodgeParticleEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -734,6 +737,9 @@
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\card\SwordEffect.h">
+      <Filter>ソース ファイル\ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="game\card\HammerEffect.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\particle\DodgeParticleEffect.h">

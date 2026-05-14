@@ -106,6 +106,8 @@ public:
 
     void SetDebugInvincible(bool isInvincible) { isDebugInvincible_ = isInvincible; } //デバッグモード専用の完全無敵切り替え
 
+    void SetStun(int durationFrames); // スタンさせる関数
+
 private:
     void LevelUp();      // レベルアップ処理
     void UpdateCost();   // コスト自然回復
@@ -246,4 +248,7 @@ private:
 
     std::unique_ptr<DodgeParticleEffect> dodgeParticle_;
 
+
+    bool isStunned_ = false;  // スタン状態フラグ
+    int stunTimer_ = 0;   // スタン時間タイマー
 };
