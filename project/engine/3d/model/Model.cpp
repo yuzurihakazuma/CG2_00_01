@@ -223,22 +223,22 @@ void Model::InitializeRing(ModelCommon* modelCommon, int subdivision, float oute
 		VertexData v[4];
 
 		// ① 外側・現在の角度
-		v[0].position = { sin * outerRadius, cos * outerRadius, 0.0f, 1.0f };
+		v[0].position = { -sin * outerRadius, cos * outerRadius, 0.0f, 1.0f };
 		v[0].texcoord = { u, 0.0f }; // 外側を V=0 にする
 		v[0].normal = { 0.0f, 0.0f, -1.0f };
 
 		// ② 外側・次の角度
-		v[1].position = { sinNext * outerRadius, cosNext * outerRadius, 0.0f, 1.0f };
+		v[1].position = { -sinNext * outerRadius, cosNext * outerRadius, 0.0f, 1.0f };
 		v[1].texcoord = { uNext, 0.0f };
 		v[1].normal = { 0.0f, 0.0f, -1.0f };
 
 		// ③ 内側・現在の角度
-		v[2].position = { sin * innerRadius, cos * innerRadius, 0.0f, 1.0f };
+		v[2].position = { -sin * innerRadius, cos * innerRadius, 0.0f, 1.0f };
 		v[2].texcoord = { u, 1.0f }; // 内側を V=1 にする
 		v[2].normal = { 0.0f, 0.0f, -1.0f };
 
 		// ④ 内側・次の角度
-		v[3].position = { sinNext * innerRadius, cosNext * innerRadius, 0.0f, 1.0f };
+		v[3].position = { -sinNext * innerRadius, cosNext * innerRadius, 0.0f, 1.0f };
 		v[3].texcoord = { uNext, 1.0f };
 		v[3].normal = { 0.0f, 0.0f, -1.0f };
 
