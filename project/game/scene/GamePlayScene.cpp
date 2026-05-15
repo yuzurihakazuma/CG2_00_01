@@ -45,6 +45,9 @@ void GamePlayScene::Initialize(){
 	// コマンドリスト取得
 	auto commandList = dxCommon->GetCommandList();
 
+
+
+
 	// BGMロード (シングルトン)
 	AudioManager::GetInstance()->LoadWave(bgmFile_);
 	// モデル読み込み (シングルトン)
@@ -124,7 +127,32 @@ void GamePlayScene::Initialize(){
 		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
 	}
 
-	
+	ModelManager::GetInstance()->CreateRingModel("auraRing", 32, 1.0f, 0.2f);
+
+	// ★1. Ringモデルの生成
+	ModelManager::GetInstance()->CreateRingModel("auraRing", 32, 1.0f, 0.2f);
+
+	// ★2. オーラオブジェクトの生成
+	auraObj_ = Obj3d::Create("auraRing");
+	if ( auraObj_ ) {
+		auraObj_->SetCamera(camera_.get());
+
+		// 【修正ポイント1】 読み込み済みの "circle2" をセットする！
+		auraObj_->GetModel()->SetTexture(textures_["circle2"].srvIndex);
+
+		// 【修正ポイント2】 ディゾルブ用ノイズをセット！（これがないと透明になって消えます！）
+		auraObj_->SetNoiseTexture(textures_["noise0"].srvIndex);
+
+		// 【修正ポイント3】 影で黒くならないようにライティングを無効(0)にする！
+		auraObj_->GetModel()->GetMaterial()->enableLighting = 0;
+
+		// 【修正ポイント4】 地面に広がるようにX軸で90度(約1.57ラジアン)倒し、地面から少し浮かす！
+		auraObj_->SetTranslation({ 0.0f, 0.1f, 5.0f });
+		auraObj_->SetRotation({ 1.5708f, 0.0f, 0.0f });
+
+		// 加算合成で光らせる
+		auraObj_->SetPipelineType(PipelineType::Object3D_Additive);
+	}
 
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // スキニングも
@@ -233,6 +261,30 @@ void GamePlayScene::Update(){
 	ParticleManager::GetInstance()->Update(camera_.get());
 
 
+	if ( auraObj_ ) {
+		// 1. スクロール値を毎フレーム少しずつ増やす
+		float scrollSpeed = 1.0f * ( 1.0f / 60.0f ); // 1秒間に1.0スクロールする速さ
+		auraUvScrollOffset_ += scrollSpeed;
+
+		// 1.0を超えたら0に戻す（オーバーフロー防止）
+		if ( auraUvScrollOffset_ > 1.0f ) {
+			auraUvScrollOffset_ -= 1.0f;
+		}
+
+		// 2. UVをV方向(Y軸)に移動させる行列を作成
+		Matrix4x4 uvTransform = MakeTranslate({ 0.0f, auraUvScrollOffset_, 0.0f });
+
+		// （応用：スライドのようにU方向にScaleをかけて解像度を細かく見せたい場合は以下のように合成します）
+		// Matrix4x4 uvScale = MakeScaleMatrix({ 3.0f, 1.0f, 1.0f }); 
+		// uvTransform = Multiply(uvScale, uvTransform);
+
+		// 3. マテリアルにUVTransform行列をセット
+		auraObj_->GetModel()->GetMaterial()->uvTransform = uvTransform;
+
+		// 4. オブジェクトの更新
+		auraObj_->Update();
+	}
+
 	// 全オブジェクト更新
 	for ( auto& obj : object3ds_ ) {
 		obj->Update();
@@ -300,6 +352,9 @@ void GamePlayScene::Draw(){
 	// --- 3D描画の前準備 ---
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 
+	if ( auraObj_ ) {
+		auraObj_->Draw();
+	}
 	
 	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(9, textures_["skybox"].srvIndex);
 	

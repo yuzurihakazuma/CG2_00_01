@@ -46,7 +46,7 @@ void RootSignatureBuilder::AddDefaultSampler(UINT shaderRegister) {
 	D3D12_STATIC_SAMPLER_DESC sampler = {}; // サンプラーを初期化
 	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR; // バイナリアフィルタ
 	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP; // 0∼1の範囲側をリピート
-	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP; // 0∼1の範囲側をリピート
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP; // 0∼1の範囲側をリピート
 	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP; // 0∼1の範囲側をリピート
 	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER; // 比較しない
 	sampler.MaxLOD = D3D12_FLOAT32_MAX; // ありったけのMipmap

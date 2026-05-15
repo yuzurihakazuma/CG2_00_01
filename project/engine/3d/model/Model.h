@@ -88,6 +88,12 @@ public: // メンバ関数
 	/// 立方体モデルの初期化
 	void InitializePrimitive(ModelCommon* modelCommon, const ModelData& modelData);
 
+	// <summary>
+	/// リングモデルの初期化
+	/// </summary>
+	void InitializeRing(ModelCommon* modelCommon, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.2f);
+
+
 	/// <summary>
 	/// 描画
 	/// </summary>
