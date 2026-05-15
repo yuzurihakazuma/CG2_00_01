@@ -8,4 +8,5 @@ enum class PipelineType{
 	PostEffect, // ポストエフェクト用
 	SkinningObject3D, // スキニングアニメーション用
 	Skybox, // スカイボックス用
+	Object3D_Additive, // 3Dオブジェクト用（加算合成）
 };
