@@ -156,6 +156,7 @@ void PipelineManager::SetPipeline(
 		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		break;
 
+		//s
 	}
 }
 // ルートシグネチャの生成 Sprite用
