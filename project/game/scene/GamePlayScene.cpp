@@ -329,6 +329,7 @@ void GamePlayScene::Draw(){
 	}
 
 
+
 	for ( auto& effect : hitEffects_ ) {
 		effect->Draw();
 	}
