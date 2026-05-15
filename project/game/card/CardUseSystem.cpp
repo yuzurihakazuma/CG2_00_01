@@ -27,6 +27,8 @@
 #include "game/card/CostBoostEffect.h"
 #include "game/card/KickEffect.h"
 #include "game/card/SwordEffect.h"
+#include "game/card/BossChargeEffect.h"
+
 
 
 using namespace VectorMath;
@@ -63,6 +65,8 @@ void CardUseSystem::Initialize(Camera* camera) {
 
 	// ボス召喚エフェクトの引数（召喚数）もCSVから受け取る想定
 	effectFactory_[103] = [](const Card &c) { return std::make_unique<BossSummonEffect>(c.effectValue); };
+	// ID:105 ボス突進攻撃
+	effectFactory_[105] = [](const Card& c) { return std::make_unique<BossChargeEffect>(c.effectValue); };
 
 	Reset();
 }

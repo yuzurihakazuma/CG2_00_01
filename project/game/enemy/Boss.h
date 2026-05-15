@@ -118,6 +118,9 @@ public:
 
     const Vector3& GetBaseScale() const { return baseScale_; }
 
+    void SetRotation(const Vector3& rot) { rot_ = rot; }
+
+
 private:
     void DecideNextState();
     void UpdateAppear();
