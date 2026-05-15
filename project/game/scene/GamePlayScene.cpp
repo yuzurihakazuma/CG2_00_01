@@ -56,7 +56,9 @@ void GamePlayScene::Initialize(){
 	// 球モデル作成 (シングルトン)
 	ModelManager::GetInstance()->CreateSphereModel("sphere", 16);
 
-	ModelManager::GetInstance()->CreatePlaneModel("plane", 10.0f, 10.0f);
+	
+	ModelManager::GetInstance()->CreatePlaneModel("plane");
+
 
 	// パーティクルグループ作成 (シングルトン)
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
@@ -165,31 +167,15 @@ void GamePlayScene::Initialize(){
 	// エディタにエミッターを渡す（F1で開くエディタで操作できるようになる）
 	EditorManager::GetInstance()->SetParticleEmitter(&emitter_);
 
-
-	//// 1. すでに登録した "plane" モデルを使ってオブジェクトを作る
-	//hitEffectPlane_ = Obj3d::Create("plane");
-	//hitEffectPlane_->SetEnvironmentMap(textures_["skybox"].srvIndex);
-	//if ( hitEffectPlane_ ) {
-	//	
-	//	hitEffectPlane_->SetPipelineType(PipelineType::Object3D_CullNone);
-
-	//	hitEffectPlane_->SetCamera(camera_.get());
-
-	//	// 2. 目の前に配置する
-	//	hitEffectPlane_->SetTranslation({ -2.0f, 2.0f, 5.0f });
-
-	//	// 3. 【重要】資料にあった「縦に潰す」スケール設定！
-	//	// X(幅)を細く、Y(高さ)を長くして、ビームのような形にする
-	//	hitEffectPlane_->SetScale({ 0.1f, 5.0f, 1.0f });
-
-	//	// 4. Z軸（画面の奥・手前方向）に回転させて斜めにする
-	//	hitEffectPlane_->SetRotation({ 0.0f, 0.0f, 3.14159f / 4.0f }); // 45度回転
-
-	//	// 5. テクスチャを丸い画像（circle.png）に差し替える！
-	//	// ※これで四角い板ポリゴンが、細長い光の筋のようになります
-	//	hitEffectPlane_->GetModel()->SetTexture(textures_["circle2"].srvIndex);
-	//}
-
+	auto initialEffect = std::make_unique<HitEffect>();
+	initialEffect->Initialize(
+		{ 0.0f, 0.0f, 5.0f },           // 目の前に発生
+		camera_.get(),
+		textures_["circle2"].srvIndex,  // テクスチャ
+		textures_["skybox"].srvIndex
+	);
+	hitEffects_.push_back(std::move(initialEffect));
+	
 }
 
 void GamePlayScene::Update(){
@@ -326,9 +312,7 @@ void GamePlayScene::Draw(){
 		testObj_->Draw();
 	}
 
-	for (auto& effect : hitEffects_) {
-		effect->Draw();
-	}
+	
 
 	// --- インスタンシングの3D描画 ---
 	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
@@ -344,6 +328,11 @@ void GamePlayScene::Draw(){
 		skybox_->Draw(commandList, camera_.get());
 	}
 
+
+
+	for ( auto& effect : hitEffects_ ) {
+		effect->Draw();
+	}
 
 	// --- パーティクル描画 ---
 	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Particle);

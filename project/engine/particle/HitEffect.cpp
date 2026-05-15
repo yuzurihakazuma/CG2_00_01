@@ -7,7 +7,7 @@ void HitEffect::Initialize(const Vector3& position, Camera* camera, uint32_t tex
     std::random_device seed_gen;
     std::mt19937 engine(seed_gen());
     std::uniform_real_distribution<float> rotDist(0.0f, 3.141592f * 2.0f); // 0～360度
-    std::uniform_real_distribution<float> scaleYDist(0.2f, 0.8f);         // 長さのランダム幅（ガチ小さめ）
+    std::uniform_real_distribution<float> scaleYDist(2.0f, 5.0f);         // 長さのランダム幅（ガチ小さめ）
 
     for (int i = 0; i < 8; ++i) {
         Spark spark;
@@ -22,12 +22,12 @@ void HitEffect::Initialize(const Vector3& position, Camera* camera, uint32_t tex
 
             // 【画像再現ポイント②】ガチで細く、鋭いサイズ設定
             // X(幅)を極限まで細く(0.005)し、Y(長さ)にランダム性を持たせる
-            Vector3 initScale = { 0.005f, scaleYDist(engine), 1.0f };
+            Vector3 initScale = { 0.5f, scaleYDist(engine), 1.0f };
             spark.obj->SetScale(initScale);
             spark.baseScale = initScale;
 
             // オブジェクト自身に描画設定を持たせる
-            spark.obj->SetPipelineType(PipelineType::Object3D_CullNone);
+            spark.obj->SetPipelineType(PipelineType::Object3D_Additive);
             spark.obj->SetEnvironmentMap(envMapIndex);
             spark.obj->GetModel()->SetTexture(textureIndex);
 

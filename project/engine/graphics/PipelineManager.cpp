@@ -40,6 +40,8 @@ void PipelineManager::Finalize(){
 	skyboxRootSignature_.Reset();
 	skyboxPipelineState_.Reset();
 
+	object3DPipelineStateAdditive_.Reset();
+
 	// ポストエフェクトの種類ごとのパイプラインステートも忘れずに解放
 	for ( int i = 0; i < 10; ++i ) {
 		if ( postEffectPipelineStates_[i] != nullptr ) {
@@ -148,8 +150,13 @@ void PipelineManager::SetPipeline(
 		commandList->SetPipelineState(skyboxPipelineState_.Get());
 		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		break;
+	case PipelineType::Object3D_Additive:
+		commandList->SetGraphicsRootSignature(object3DRootSignature_.Get());
+		commandList->SetPipelineState(object3DPipelineStateAdditive_.Get());
+		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		break;
 
-
+		//s
 	}
 }
 // ルートシグネチャの生成 Sprite用
@@ -231,6 +238,17 @@ void PipelineManager::CreateObject3DGraphicsPipeline(){
 		true,
 		{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB }, // RTVフォーマットを指定
 		object3DPipelineStateNone_
+	);
+	// 加算合成用
+	CreateGraphicsPipelineCommon(
+		L"resources/shaders/Object3d/Object3d.VS.hlsl",
+		L"resources/shaders/Object3d/Object3d.PS.hlsl",
+		object3DRootSignature_.Get(),
+		BlendMode::kAdd,            // 加算合成（光る！）
+		D3D12_CULL_MODE_NONE,       // カリングなし（裏面も描画）
+		false,                      // 深度書き込みしない（フチが黒くならない！）
+		{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB },
+		object3DPipelineStateAdditive_
 	);
 
 }

@@ -137,6 +137,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> skyboxRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> skyboxPipelineState_;
 
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> object3DPipelineStateAdditive_; // 加算合成エフェクト用
 
 };
 
