@@ -3,6 +3,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/Enemy.h"
 #include "game/enemy/Boss.h"
+#include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/collision/Collision.h"
 #include "game/enemy/EnemyManager.h"
@@ -12,7 +13,9 @@
 
 using namespace VectorMath;
 
-void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
+void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	// 使用者情報を保存
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
@@ -57,7 +60,7 @@ void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
 	}
 }
 
-void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
+void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss,
 	const Vector3& bossPos, const LevelData& level){
 
 	// 終了済みなら何もしない
@@ -225,20 +228,12 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 			}
 		}
 
-		// ボスへの判定
-		if ( boss && !boss->IsDead() ) {
-			// ボスは大きいので少し広めに取る
-			Vector3 diff = {
-				bossPos.x - pos_.x,
-				0.0f,
-				bossPos.z - pos_.z
-			};
-
-			if ( Length(diff) < 2.8f ) {
-				boss->TakeDamage(randomDamage);
-				isFinished_ = true;
-				return;
-			}
+		// 分裂戦では近い個体だけに命中させる
+		Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 2.8f, boss, extraBoss);
+		if ( hitBoss ) {
+			hitBoss->TakeDamage(randomDamage);
+			isFinished_ = true;
+			return;
 		}
 
 		// 遠くまで飛んだら消す

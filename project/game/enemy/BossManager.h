@@ -77,6 +77,8 @@ public:
     // HPバーUI取得
     Sprite* GetBossHpBackSprite() const { return bossHpBackSprite_.get(); }
     Sprite* GetBossHpFillSprite() const { return bossHpFillSprite_.get(); }
+    Sprite* GetSplitBossHpBackSprite(int index) const { return splitBossHpBackSprites_[index].get(); }
+    Sprite* GetSplitBossHpFillSprite(int index) const { return splitBossHpFillSprites_[index].get(); }
 
     // 登場演出状態
     bool IsBossIntroPlaying() const { return isBossIntroPlaying_; }
@@ -129,6 +131,7 @@ public:
     Vector3 GetBossFocusPosition() const;
 	// HP割合取得（分裂ボスは平均）
     float GetBossHpRate() const;
+    float GetBossHpRateAt(int index) const;
 	// 分裂ボスの中心位置（演出用）
     Vector3 GetSplitBossCenterPosition() const { return splitBossCenterPosition_; }
 	// 分裂ボスのターゲット位置（攻撃エフェクトの中心など、演出用）
@@ -148,6 +151,8 @@ private:
     // HPバー
     std::unique_ptr<Sprite> bossHpBackSprite_ = nullptr;
     std::unique_ptr<Sprite> bossHpFillSprite_ = nullptr;
+    std::array<std::unique_ptr<Sprite>, 2> splitBossHpBackSprites_{};
+    std::array<std::unique_ptr<Sprite>, 2> splitBossHpFillSprites_{};
 
     // 登場演出
     IntroCameraState bossIntroCameraState_ = IntroCameraState::None;

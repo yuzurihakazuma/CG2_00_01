@@ -3,7 +3,9 @@
 #include "engine/particle/GPUParticleManager.h"
 
 
-void HealEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void HealEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
@@ -15,7 +17,7 @@ void HealEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerC
 
 }
 
-void HealEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) {
+void HealEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss,  const Vector3 &bossPos, const LevelData &level) {
 	if (isFinished_) {
 		return;
 	}

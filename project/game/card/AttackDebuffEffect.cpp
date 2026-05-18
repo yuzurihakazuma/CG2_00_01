@@ -3,9 +3,12 @@
 #include "game/enemy/Boss.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "game/player/Player.h"
+#include "game/card/BossTargetUtils.h"
 #include <cmath> 
 
-void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) {
+void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	// この魔法はプレイヤー専用
 	isPlayerCaster_ = true;
 	isFinished_ = false;
@@ -17,7 +20,7 @@ void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool i
 	
 }
 
-void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
+void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
 	if (isFinished_) return;
 
 	// 1フレーム目（発動した瞬間）に、敵全員にデバフを付与する
@@ -29,9 +32,8 @@ void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss
 				}
 			}
 		}
-		if (boss && !boss->IsDead()) {
-			boss->ApplyAttackDebuff(duration_);
-		}
+		// 分裂戦では生きている個体それぞれへデバフを入れる
+		BossTargetUtils::ApplyAttackDebuffToAliveBosses(duration_, boss, extraBoss);
 	}
 
 	// 継続エフェクト：処理を軽くするため、3フレームに1回のペースで敵の体から毒を発生させる
@@ -57,8 +59,13 @@ void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss
 		}
 
 		// --- ボスからはさらに巨大な毒の泡を出す ---
-		if (boss && !boss->IsDead() && boss->IsAttackDebuffed()) {
-			Vector3 bPos = boss->GetPosition();
+		Boss* debuffedBosses[2] = { boss, extraBoss };
+		for (Boss* debuffedBoss : debuffedBosses) {
+			if (!debuffedBoss || debuffedBoss->IsDead() || !debuffedBoss->IsAttackDebuffed()) {
+				continue;
+			}
+
+			Vector3 bPos = debuffedBoss->GetPosition();
 			Vector3 pPos = { bPos.x + (rand() % 21 - 10) * 0.15f, bPos.y + 1.0f, bPos.z + (rand() % 21 - 10) * 0.15f };
 			Vector3 pVel = { 0.0f, 0.04f + (rand() % 5) * 0.01f, 0.0f };
 			Vector4 color = (rand() % 2 == 0) ? poisonColor1 : poisonColor2;

@@ -8,7 +8,7 @@
 
 using namespace VectorMath;
 
-void HammerEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void HammerEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
     timer_ = 0;
@@ -33,7 +33,7 @@ void HammerEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlaye
     }
 }
 
-void HammerEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) {
+void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
     if (isFinished_) return;
     timer_++;
 

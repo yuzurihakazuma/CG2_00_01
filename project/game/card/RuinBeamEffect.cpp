@@ -8,12 +8,16 @@
 
 using namespace VectorMath;
 
-void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) {
+void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
+
     (void)isPlayerCaster;
 
     isFinished_ = false;
     hitTimer_ = 0;
     lifeTimer_ = 72;
+    // このビームを発動したボス本人を保持する
+// 分裂ボス時でも、発動元のデバフ状態を正しく参照できるようにする
+    casterBoss_ = casterBoss;
 
     Vector3 forward = {
         std::sinf(casterYaw),
@@ -55,7 +59,7 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     }
 }
 
-void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
+void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
     (void)enemyManager;
     (void)bossPos;
     (void)level;
@@ -207,7 +211,10 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
     if (player && !player->IsDead() && hitTimer_ <= 0) {
         if (IsPlayerInsideBeam(player->GetPosition())) {
             int finalDamage = damage_;
-            if (boss && boss->IsAttackDebuffed()) {
+
+            // 発動元のボスが攻撃デバフ中ならダメージを半減する
+            // 分裂ボス時に boss 引数へ依存すると、別個体を参照する可能性がある
+            if (casterBoss_ && casterBoss_->IsAttackDebuffed()) {
                 finalDamage /= 2;
             }
 

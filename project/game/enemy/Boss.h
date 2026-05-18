@@ -121,6 +121,9 @@ public:
     void SetStun(int durationFrames); // スタンさせる関数
     bool IsStunned() const { return isStunned_; } // スタン中か確認
 
+    void SetRotation(const Vector3& rot) { rot_ = rot; }
+
+
 private:
     void DecideNextState();
     void UpdateAppear();
