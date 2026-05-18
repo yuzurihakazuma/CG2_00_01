@@ -5,11 +5,10 @@
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <cmath>
-#include <algorithm>
 
 using namespace VectorMath;
 
-void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
+void SwordEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
     timer_ = 0;
@@ -17,174 +16,111 @@ void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
 
+    // 剣のモデル（※読み込んでいる剣のモデル名に合わせてください）
+    // もしまだモデルが無ければ、仮で "cube" 等にしてスケールを細長くしてもOKです
     obj_ = Obj3d::Create("sword_model");
-    if ( obj_ ) {
+    if (obj_) {
         obj_->SetCamera(camera);
-        obj_->SetScale(scale_);
-        obj_->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+        obj_->SetTranslation({ 0.0f, -1000.0f, 0.0f }); 
         obj_->Update();
 
-        Model* model = obj_->GetModel();
-        if ( model && model->GetMaterial() ) {
-            Model::Material* material = model->GetMaterial();
-            material->emissive = 2.0f; // 派手に発光させる
+        Model *model = obj_->GetModel();
+        if (model && model->GetMaterial()) {
+            Model::Material *mat = model->GetMaterial();
+            mat->emissive = 1.5f;
         }
-    }
-
-    afterimages_.clear();
-    for ( int index = 0; index < maxAfterimageCount_; index++ ) {
-        AfterimageData afterimage;
-        afterimage.object = Obj3d::Create("sword_model");
-        if ( afterimage.object ) {
-            afterimage.object->SetCamera(camera);
-            afterimage.object->SetScale(scale_);
-        }
-        afterimage.isActive = false;
-        afterimages_.push_back(std::move(afterimage));
     }
 }
 
-void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level){
-    if ( isFinished_ ) return;
+void SwordEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) {
+    if (isFinished_) return;
 
     timer_++;
 
-    if ( isPlayerCaster_ && player ) {
-        Vector3 playerPosition = player->GetPosition();
+    if (obj_) {
+        // 右から左へ大きく振り抜くアニメーション（15フレーム）
+        float progress = static_cast<float>(timer_) / 15.0f;
+        if (progress > 1.0f) progress = 1.0f;
 
-        if ( obj_ ) {
-            // アニメーション時間（15フレームで振り抜く）
-            float swingProgress = static_cast< float >( timer_ ) / 15.0f;
-            if ( swingProgress > 1.0f ) swingProgress = 1.0f;
+        // プレイヤーの向いている方向(casterYaw_)を基準にスイング
+        float slashYaw = -1.2f + (progress * 2.4f);
+        float currentYaw = casterYaw_ + slashYaw;
 
-            // イージング(EaseInOut)
-            float easeT = swingProgress < 0.5f ? 2.0f * swingProgress * swingProgress : 1.0f - std::powf(-2.0f * swingProgress + 2.0f, 2.0f) / 2.0f;
+        // ==========================================
+        // ★ 修正1：斧の「柄」をプレイヤーの手元に固定する！
+        // この数値を斧の長さの半分くらいにすると、柄が手元にピタッと固定されます。
+        // （長すぎる場合は 0.8f くらいに減らしてください）
+        // ==========================================
+        float radius = 1.2f;
 
-            // =========================================================================================
-            // 🌟 修正：あなたが作った「一番良かった横薙ぎ」の軌道に戻します！
-            // =========================================================================================
-            float startYawOffset = -1.2f;
-            float endYawOffset = 1.2f;
-            float currentRotationYaw = casterYaw_ + startYawOffset + ( endYawOffset - startYawOffset ) * easeT;
+        // プレイヤーの位置を支点にして、刃が外を回るように計算
+        pos_ = {
+            casterPos_.x + std::sinf(currentYaw) * radius,
+            casterPos_.y + 1.2f, // 手の高さ
+            casterPos_.z + std::cosf(currentYaw) * radius
+        };
 
-            // =========================================================================================
-            // 🌟 修正：スイングの支点を「胸の前」にズラす（体にめり込まないようにする）
-            // =========================================================================================
-            Vector3 forwardVec = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
-            float offsetForward = 0.6f; // プレイヤーの少し前を支点にする
+        // ==========================================
+        // ★ 修正2：360度対応の回転（ジンバルロック対策）
+        // Z軸で寝かせるとバグるので、必ず「X軸」で斧を前に倒します！
+        // ==========================================
+        float tiltX = 1.57f;  // X軸で前に倒す（柄が外を向く）
+        float offsetY = 0.0f; // 刃の向きの微調整（※後述）
+        float tiltZ = 0.0f;   // Z軸は絶対に「0.0f」に固定！
 
-            Vector3 pivotPos = {
-                playerPosition.x + forwardVec.x * offsetForward,
-                playerPosition.y + 1.2f, // 🌟 高さは一定（水平な横薙ぎ！）
-                playerPosition.z + forwardVec.z * offsetForward
-            };
+        // 回転と座標を適用
+        obj_->SetRotation({ tiltX, currentYaw + offsetY, tiltZ });
+        obj_->SetTranslation(pos_);
+        obj_->Update();
 
-            float swingRadius = 1.2f; // 剣の振る半径
-
-            pos_ = {
-                pivotPos.x + std::sinf(currentRotationYaw) * swingRadius,
-                pivotPos.y,
-                pivotPos.z + std::cosf(currentRotationYaw) * swingRadius
-            };
-
-            // =========================================================================================
-            // 🌟 回転の適用（Z軸は0固定で、刃筋がピシッと通った横薙ぎになる！）
-            // =========================================================================================
-            float rotationPitchX = 1.57f;
-            float rotationYawOffset = 0.0f;
-            float rotationRollZ = 0.0f;
-
-            obj_->SetRotation({ rotationPitchX, currentRotationYaw + rotationYawOffset, rotationRollZ });
-            obj_->SetTranslation(pos_);
-            obj_->Update();
-
-            // グレーの斬撃軌跡エフェクト
-            Vector3 zeroVelocity = { 0.0f, 0.0f, 0.0f };
-            Vector4 grayColor = { 0.4f, 0.4f, 0.4f, 0.1f };
-            GPUParticleManager::GetInstance()->Emit(pos_, zeroVelocity, 0.1f, 1.2f, grayColor);
-
-            // クロー風の残像の更新
-            if ( timer_ < 15 ) {
-                for ( auto& afterimage : afterimages_ ) {
-                    if ( !afterimage.isActive ) {
-                        afterimage.isActive = true;
-                        afterimage.lifeTimer = defaultAfterimageLife_;
-                        CopyTransform(obj_, afterimage.object);
-                        afterimage.object->Update();
-                        break;
-                    }
-                }
-            }
-        }
-
-        // 残像のフェードアウト処理
-        for ( auto& afterimage : afterimages_ ) {
-            if ( afterimage.isActive ) {
-                afterimage.lifeTimer--;
-                float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
-                Vector4 afterimageColor = { 0.2f, 0.9f, 1.0f, alphaRatio * 0.4f };
-                afterimage.object->SetColor(afterimageColor);
-                afterimage.object->Update();
-
-                if ( afterimage.lifeTimer <= 0 ) {
-                    afterimage.isActive = false;
-                }
-            }
-        }
-
-        // 水色の斬撃パーティクル
-        if ( timer_ < 15 ) {
-            int particleTraceCount = 4;
-            for ( int index = 0; index < particleTraceCount; index++ ) {
-                Vector3 particlePosition = {
-                    pos_.x + static_cast< float >(rand() % 11 - 5) * 0.05f,
-                    pos_.y + static_cast< float >(rand() % 11 - 5) * 0.05f,
-                    pos_.z + static_cast< float >(rand() % 11 - 5) * 0.05f
-                };
-                Vector3 zeroVelocity = { 0.0f, 0.0f, 0.0f };
-                Vector4 cyanColor = { 0.4f, 0.9f, 1.0f, 1.0f };
-                GPUParticleManager::GetInstance()->Emit(particlePosition, zeroVelocity, 0.25f, 0.4f, cyanColor);
-            }
-        }
+        // 斬撃の軌跡エフェクト
+       
+            GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.1f, 1.2f, { 0.4f, 0.4f, 0.4f, 0.1f });
+        
     }
 
-    // 当たり判定
-    bool isAttacking = ( timer_ >= 3 && timer_ <= 12 );
-    if ( isAttacking && !hasHit_ ) {
-        int randomDamage = damage_ + ( rand() % 2 );
+    // 当たり判定 (振り抜き中のフレームで判定)
+    bool isAttacking = (timer_ >= 3 && timer_ <= 12);
+    if (isAttacking && !hasHit_) {
 
-        if ( isPlayerCaster_ ) {
-            if ( enemyManager ) {
-                for ( auto& currentEnemy : enemyManager->GetEnemies() ) {
-                    if ( !currentEnemy || currentEnemy->IsDead() ) continue;
-                    Vector3 enemyPosition = currentEnemy->GetPosition();
-                    Vector3 distanceVector = { enemyPosition.x - pos_.x, 0.0f, enemyPosition.z - pos_.z };
+        if (isPlayerCaster_) {
+            // ① プレイヤーの攻撃（ImGuiの数値を使用）
+            int randomDamage = damage_ + (rand() % 2);
 
-                    if ( Length(distanceVector) < 2.5f ) {
-                        currentEnemy->TakeDamage(randomDamage);
-                        for ( int sparkIndex = 0; sparkIndex < 10; sparkIndex++ ) {
-                            Vector3 sparkVelocity = { ( rand() % 11 - 5 ) * 0.5f, ( rand() % 11 - 5 ) * 0.5f, ( rand() % 11 - 5 ) * 0.5f };
-                            Vector4 sparkColor = { 1.0f, 1.0f, 0.8f, 1.0f };
-                            GPUParticleManager::GetInstance()->Emit(pos_, sparkVelocity, 0.2f, 0.2f, sparkColor);
+            // 敵への判定（剣は複数の敵を巻き込めるように hasHit_ で break しない！）
+            if (enemyManager) {
+                for (auto &enemy : enemyManager->GetEnemies()) {
+                    if (!enemy || enemy->IsDead()) continue;
+                    Vector3 ePos = enemy->GetPosition();
+                    Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
+
+                    if (Length(diff) < 3.0f) { // 剣は範囲が広い
+                        enemy->TakeDamage(randomDamage);
+
+                        // ヒット時の火花
+                        for (int i = 0; i < 10; i++) {
+                            Vector3 sparkVel = { (rand() % 11 - 5) * 0.5f, (rand() % 11 - 5) * 0.5f, (rand() % 11 - 5) * 0.5f };
+                            GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 1.0f, 0.8f, 1.0f });
                         }
-                        hasHit_ = true;
-                        break;
                     }
                 }
             }
-            if ( boss && !boss->IsDead() ) {
-                Vector3 distanceVector = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                if ( Length(distanceVector) < 4.0f ) {
+
+            // ボスへの判定
+            if (boss && !boss->IsDead()) {
+                Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
+                if (Length(diff) < 4.0f) {
                     boss->TakeDamage(randomDamage);
-                    hasHit_ = true;
+                    hasHit_ = true; // ボスに当たったら複数ヒットを防ぐ
                 }
             }
         } else {
-            int enemyRandomDamage = damage_ + ( rand() % 2 );
-            if ( player && !player->IsDead() ) {
-                Vector3 playerPosition = player->GetPosition();
-                Vector3 distanceVector = { playerPosition.x - pos_.x, 0.0f, playerPosition.z - pos_.z };
-                if ( Length(distanceVector) < 2.5f ) {
+            // ② 敵の攻撃（プレイヤーへの判定。元の damage_ を使用）
+            int enemyRandomDamage = damage_ + (rand() % 2);
+            if (player && !player->IsDead()) {
+                Vector3 pPos = player->GetPosition();
+                Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
+                if (Length(diff) < 2.5f) {
                     player->TakeDamage(enemyRandomDamage, pos_);
                     hasHit_ = true;
                 }
@@ -192,24 +128,14 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
         }
     }
 
-    if ( timer_ >= effectDuration_ ) {
+    // 演出終了
+    if (timer_ >= 20) {
         isFinished_ = true;
     }
 }
 
-void SwordEffect::Draw(){
-    if ( isFinished_ ) return;
-    if ( obj_ ) obj_->Draw();
-    for ( auto& afterimage : afterimages_ ) {
-        if ( afterimage.isActive && afterimage.object ) {
-            afterimage.object->Draw();
-        }
+void SwordEffect::Draw() {
+    if (!isFinished_ && obj_) {
+        obj_->Draw();
     }
-}
-
-void SwordEffect::CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj){
-    if ( !sourceObj || !destinationObj ) return;
-    destinationObj->SetTranslation(sourceObj->GetTranslation());
-    destinationObj->SetRotation(sourceObj->GetRotation());
-    destinationObj->SetScale(sourceObj->GetScale());
 }
