@@ -24,21 +24,27 @@ void Minimap::Initialize() {
 	playerSprite_->Update();
 }
 
-void Minimap::SetLevelData(const LevelData* levelData) {
-	// 再構築前の探索状態を退避する
+void Minimap::SetLevelData(const LevelData* levelData, bool keepDiscovery) {
 	std::vector<bool> discoveredStates;
-	discoveredStates.reserve(chunks_.size());
-	for (const Chunk& chunk : chunks_) {
-		discoveredStates.push_back(chunk.discovered);
+
+	// 同じ階層内の再構築時だけ開示状態を保持する
+	if (keepDiscovery) {
+		discoveredStates.reserve(chunks_.size());
+		for (const Chunk& chunk : chunks_) {
+			discoveredStates.push_back(chunk.discovered);
+		}
 	}
 
+	// 新しいマップ情報でミニマップを作り直す
 	levelData_ = levelData;
 	RebuildMapSprites();
 
-	// 再構築後に探索状態を戻す
-	const size_t restoreCount = (std::min)(discoveredStates.size(), chunks_.size());
-	for (size_t i = 0; i < restoreCount; ++i) {
-		chunks_[i].discovered = discoveredStates[i];
+	// 保持指定のときだけ開示状態を戻す
+	if (keepDiscovery) {
+		const size_t restoreCount = (std::min)(discoveredStates.size(), chunks_.size());
+		for (size_t i = 0; i < restoreCount; ++i) {
+			chunks_[i].discovered = discoveredStates[i];
+		}
 	}
 }
 

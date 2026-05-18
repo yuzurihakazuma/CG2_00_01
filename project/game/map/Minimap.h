@@ -11,7 +11,7 @@ class Sprite;
 class Minimap {
 public:
 	void Initialize();
-	void SetLevelData(const LevelData* levelData);
+	void SetLevelData(const LevelData* levelData, bool keepDiscovery = true);
 
 	void SetPlayerPosition(const Vector3& worldPos);
 	void SetEnemyPositions(const std::vector<Vector3>& worldPositions);
