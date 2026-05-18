@@ -694,7 +694,6 @@ void GamePlayScene::Update() {
 		);
 	}
 
-
 	// ボスを倒していたらゲームクリアへ遷移
 	//if (bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
 	//	SceneManager::GetInstance()->ChangeScene("GAMECLEAR");
