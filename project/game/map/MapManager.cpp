@@ -620,7 +620,7 @@ void MapManager::AdvanceFloor(
     }
 
     if (minimap) {
-        minimap->SetLevelData(&GetLevelData());
+        minimap->SetLevelData(&GetLevelData(), false);
     }
 }
 
