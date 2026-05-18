@@ -8,6 +8,11 @@ class GPUParticleEmitter;
 class SkinnedObj3d;
 
 
+enum class EngineMode{
+    Edit, // 時間が止まっていてコースを作れる状態
+    Play  // 時間が動き、ゲームとして遊べる状態
+};
+
 class EditorManager{
 public:
 
@@ -48,6 +53,7 @@ public:
 
 	void SetTargetSkinnedObj(SkinnedObj3d* obj){ targetSkinnedObj_ = obj; }
 
+    EngineMode GetMode() const{ return currentMode_; }
 
 private:
 
@@ -76,4 +82,5 @@ private:
 
     SkinnedObj3d* targetSkinnedObj_ = nullptr;
 
+    EngineMode currentMode_ = EngineMode::Edit;
 };

@@ -16,6 +16,8 @@ public:
 	virtual void Update() = 0;
 	// 描画
 	virtual void Draw() = 0;
+
+	virtual void Reload(){}
 	// デバッグ用UIの描画
 	virtual void DrawDebugUI() {}
 

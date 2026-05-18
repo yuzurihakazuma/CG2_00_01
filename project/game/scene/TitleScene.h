@@ -33,6 +33,9 @@ public:
 	void Update() override;
 	// 描画
 	void Draw() override;
+
+	void Reload() override;
+
 	// デバッグ用UIの描画
 	void DrawDebugUI() override;
 

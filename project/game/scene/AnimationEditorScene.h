@@ -18,6 +18,7 @@ public:
     void Update()     override;
     void Draw()       override;
     void DrawDebugUI() override;
+    void Reload() override;
 
 private:
     std::unique_ptr<Camera>          camera_;      // メインカメラ

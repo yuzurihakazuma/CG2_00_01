@@ -471,6 +471,8 @@ void GamePlayScene::DrawDebugUI(){
 
 }
 
+void GamePlayScene::ReloadMap(){}
+
 GamePlayScene::GamePlayScene(){}
 
 GamePlayScene::~GamePlayScene(){}

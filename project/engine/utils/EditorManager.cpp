@@ -77,6 +77,26 @@ void EditorManager::Update(){
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
     ImGui::End();
 
+#ifdef USE_IMGUI
+    ImGui::Begin("コントロール (Play / Stop)");
+
+    if ( currentMode_ == EngineMode::Edit ) {
+        // エディットモード時の表示
+        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "状態：エディットモード (停止中)");
+        if ( ImGui::Button("▶ プレイ開始 (Play)", ImVec2(150, 40)) ) {
+            currentMode_ = EngineMode::Play; // モードを切り替え！
+        }
+    } else {
+        // プレイモード時の表示
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "状態：プレイモード (実行中)");
+        if ( ImGui::Button("■ 停止 (Stop)", ImVec2(150, 40)) ) {
+            currentMode_ = EngineMode::Edit; // モードを切り替え！
+        }
+    }
+
+    ImGui::End();
+#endif
+
     // 2. メインメニューバー
     if ( ImGui::BeginMainMenuBar() ) {
         if ( ImGui::BeginMenu("ファイル (File)") ) {

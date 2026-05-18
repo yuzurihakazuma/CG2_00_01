@@ -11,6 +11,8 @@
 #include "engine/3d/animation/CustomAnimation.h"
 #include "engine/particle/GPUParticleEmitter.h"
 
+#include "engine/utils/EditorManager.h"
+
 #include "engine/3d/SplineRail.h"
 #include "game/player/Player.h"
 
@@ -49,7 +51,7 @@ public:
 
 	// デバッグ用UIの描画
 	void DrawDebugUI() override;
-
+	void ReloadMap();
 
 	GamePlayScene();
 
@@ -104,6 +106,9 @@ private: // メンバ変数
 	
 	// GPUパーティクルエミッター
 	GPUParticleEmitter emitter_;
+	
+
+	EngineMode prevMode_ = EngineMode::Edit;
 
 	std::unique_ptr<Player> player_ = nullptr;
 	SplineRail splineRail_; // スプラインレール本体
