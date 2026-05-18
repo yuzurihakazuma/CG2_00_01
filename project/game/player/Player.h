@@ -34,4 +34,7 @@ private: // メンバ変数
 
     float moveSpeed_ = 5.0f;
 	float currentT_ = 0.0f; // レール上の現在の進行度
+
+    float jumpVelocity_ = 0.0f; // ジャンプの初速・落下速度
+    float heightOffset_ = 0.0f; // レールからの「浮き具合」
 };

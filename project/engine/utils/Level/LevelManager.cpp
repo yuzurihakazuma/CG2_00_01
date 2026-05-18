@@ -21,6 +21,16 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
 
         objectsArray.push_back(jsonObj);
     }
+
+	// レールノードのリストも同様に配列に変換する
+    json railArray = json::array();
+    for ( const auto& nodePos : levelData.railNodes ) {
+        // [x, y, z] の配列形式で保存
+        railArray.push_back({ nodePos.x, nodePos.y, nodePos.z });
+    }
+    j["railNodes"] = railArray;
+
+
     j["objects"] = objectsArray;
 
     // ファイルに書き込み
@@ -71,6 +81,16 @@ LevelData LevelManager::Load(const std::string& fileName){
             }
             // 読み込んだオブジェクトをリストに追加
             levelData.objects.push_back(obj);
+        }
+
+    }
+
+    // レールノードの配列も同様に読み込む
+    if ( j.contains("railNodes") && j["railNodes"].is_array() ) {
+        for ( const auto& posObj : j["railNodes"] ) {
+            Vector3 pos;
+            pos.x = posObj[0]; pos.y = posObj[1]; pos.z = posObj[2];
+            levelData.railNodes.push_back(pos);
         }
     }
 

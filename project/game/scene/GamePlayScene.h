@@ -107,8 +107,6 @@ private: // メンバ変数
 	SplineRail splineRail_; // スプラインレール本体
 
 
-	// デバッグ用の球オブジェクトのリスト（ノードの位置を可視化するため）
-	std::vector<std::unique_ptr<Obj3d>> debugRailSpheres_;
-
+	
 	
 };

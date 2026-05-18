@@ -31,6 +31,10 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
+#include "game/player/Player.h"
+#include "engine/3d/SplineRail.h"
+#include "engine/utils/Level/LevelManager.h"
+#include "engine/utils/Level/LevelEditor.h"
 
 
 using namespace VectorMath;
@@ -131,9 +135,9 @@ void GamePlayScene::Initialize(){
 	
 
 	
-	//blockGroup_ = std::make_unique<InstancedGroup>();
-	//blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
-	//blockGroup_->SetNoiseTexture(textures_["noise0"].srvIndex);
+	blockGroup_ = std::make_unique<InstancedGroup>();
+	blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
+	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
 
 	
 	  // GPUパーティクル初期化 (テクスチャを指定する)
@@ -151,30 +155,22 @@ void GamePlayScene::Initialize(){
 	EditorManager::GetInstance()->SetParticleEmitter(&emitter_);
 
 
-	// --- レールの初期化（テスト用のノードを4つ配置） ---
-	splineRail_.nodes.clear();
-	splineRail_.nodes.push_back({ {  0.0f, 0.0f,  0.0f }, 60.0f }); // ノード0
-	splineRail_.nodes.push_back({ { 10.0f, 0.0f, 10.0f }, 60.0f }); // ノード1
-	splineRail_.nodes.push_back({ { 20.0f, 2.0f,  0.0f }, 60.0f }); // ノード2（少し上にカーブ）
-	splineRail_.nodes.push_back({ { 30.0f, 0.0f, 10.0f }, 60.0f }); // ノード3
-
-	debugRailSpheres_.clear();
-
-	for ( size_t i = 0; i < splineRail_.nodes.size(); ++i ) {
-
-		auto sphere = Obj3d::Create("sphere");
-
-		sphere->SetCamera(camera_.get());
-
-		sphere->SetScale({ 0.5f, 0.5f, 0.5f });
-		
-		debugRailSpheres_.push_back(std::move(sphere));
-	}
 
 
 	// --- プレイヤーの初期化 ---
 	player_ = std::make_unique<Player>();
 	player_->Initialize();
+
+
+	// 1. JSONからマップデータを読み込む
+	LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
+
+	// 2. 読み込んだレールの座標を、SplineRailにセットする
+	splineRail_.nodes.clear();
+	for ( const auto& pos : mapData.railNodes ) {
+		// 読み込んだ座標(pos)と、とりあえずのFOV(60.0f)をセット
+		splineRail_.nodes.push_back({ pos, 60.0f });
+	}
 
 }
 
@@ -223,12 +219,7 @@ void GamePlayScene::Update(){
 		testObj_->SetRotation(player_->GetRotation());
 	}
 
-	for ( size_t  i = 0; i < splineRail_.nodes.size(); ++i ){
 
-		debugRailSpheres_[i]->SetTranslation(splineRail_.nodes[i].position);
-
-		debugRailSpheres_[i]->Update();
-	}
 
 
 	if (skinnedObj_) {
@@ -267,10 +258,10 @@ void GamePlayScene::Update(){
 
 	emitter_.Update(1.0f / 60.0f);
 
-	//// InstancedGroup に「最新のデータをお願い！」と渡すだけ
-	//if (blockGroup_) {
-	//	blockGroup_->Update(blocks_);
-	//}
+	// InstancedGroup に「最新のデータをお願い！」と渡すだけ
+	if (blockGroup_) {
+		blockGroup_->Update(blocks_);
+	}
 
 }
 
@@ -292,7 +283,6 @@ void GamePlayScene::Draw(){
 	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D);
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	
-	for ( auto& sphere : debugRailSpheres_ ) { sphere->Draw(); }
 	
 	EditorManager::GetInstance()->Draw();
 
@@ -301,7 +291,7 @@ void GamePlayScene::Draw(){
 	if ( testObj_ ){ testObj_->Draw(); }
 
 	// --- インスタンシングの3D描画 ---
-	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
+	if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
 
 	// 
 	if (skinnedObj_) { skinnedObj_->Draw(); }
@@ -399,18 +389,7 @@ void GamePlayScene::DrawDebugUI(){
 	}
 	ImGui::End();
 
-	ImGui::Begin("Rail Editor");
 
-	// レールの各ノードの座標をImGuiで操作できるようにする
-	for ( size_t i = 0; i < splineRail_.nodes.size(); ++i ) {
-		// ラベル（例: "Node 0", "Node 1"...）
-		std::string label = "Node " + std::to_string(i);
-
-		// DragFloat3を使うと、XYZの座標をスライダーで弄れるようになる
-		ImGui::DragFloat3(label.c_str(), &splineRail_.nodes[i].position.x, 0.1f);
-	}
-
-	ImGui::End();
 
 #endif
 

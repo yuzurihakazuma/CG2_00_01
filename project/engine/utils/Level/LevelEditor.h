@@ -47,4 +47,8 @@ private:
 
 	//bool isEditorActive = true; // エディタのアクティブ状態
 
+	// デバッグ用のレール確認オブジェクト
+    std::vector<std::unique_ptr<Obj3d>> railSpheres_; // レール確認用の球体
+
+
 };
