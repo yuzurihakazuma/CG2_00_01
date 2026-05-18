@@ -134,10 +134,18 @@ void SkinnedObj3d::Update() {
             auto armLIt = skeleton_.jointMap.find("UpperArm.L");
             auto armRIt = skeleton_.jointMap.find("UpperArm.R");
             if (armLIt != skeleton_.jointMap.end()) {
-                skeleton_.joints[armLIt->second].transform.rotate.x = -swingL * armAmplitude;
+                int32_t jointIndex = armLIt->second;
+                if (static_cast<size_t>(jointIndex) < baseJointTransforms_.size()) {
+                    Quaternion offsetRotation = MakeQuaternionFromEulerXYZ({ -swingL * armAmplitude, 0.0f, 0.0f });
+                    skeleton_.joints[jointIndex].transform.rotate = Normalize(Multiply(baseJointTransforms_[jointIndex].rotate, offsetRotation));
+                }
             }
             if (armRIt != skeleton_.jointMap.end()) {
-                skeleton_.joints[armRIt->second].transform.rotate.x = -swingR * armAmplitude;
+                int32_t jointIndex = armRIt->second;
+                if (static_cast<size_t>(jointIndex) < baseJointTransforms_.size()) {
+                    Quaternion offsetRotation = MakeQuaternionFromEulerXYZ({ -swingR * armAmplitude, 0.0f, 0.0f });
+                    skeleton_.joints[jointIndex].transform.rotate = Normalize(Multiply(baseJointTransforms_[jointIndex].rotate, offsetRotation));
+                }
             }
 
             // 足
@@ -146,10 +154,18 @@ void SkinnedObj3d::Update() {
             float legL = (swingL > 0.0f) ? (swingL * legAmplitude) : (swingL * legAmplitude * legBackScale);
             float legR = (swingR > 0.0f) ? (swingR * legAmplitude) : (swingR * legAmplitude * legBackScale);
             if (legLIt != skeleton_.jointMap.end()) {
-                skeleton_.joints[legLIt->second].transform.rotate.z = legL;
+                int32_t jointIndex = legLIt->second;
+                if (static_cast<size_t>(jointIndex) < baseJointTransforms_.size()) {
+                    Quaternion offsetRotation = MakeQuaternionFromEulerXYZ({ 0.0f, 0.0f, legL });
+                    skeleton_.joints[jointIndex].transform.rotate = Normalize(Multiply(baseJointTransforms_[jointIndex].rotate, offsetRotation));
+                }
             }
             if (legRIt != skeleton_.jointMap.end()) {
-                skeleton_.joints[legRIt->second].transform.rotate.z = -legR;
+                int32_t jointIndex = legRIt->second;
+                if (static_cast<size_t>(jointIndex) < baseJointTransforms_.size()) {
+                    Quaternion offsetRotation = MakeQuaternionFromEulerXYZ({ 0.0f, 0.0f, -legR });
+                    skeleton_.joints[jointIndex].transform.rotate = Normalize(Multiply(baseJointTransforms_[jointIndex].rotate, offsetRotation));
+                }
             }
         }
     }

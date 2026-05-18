@@ -256,13 +256,26 @@ Vector4 GetEnemyDisplayColor(const Enemy& enemy) {
 
 	return baseColor;
 }
+
+const char* GetEnemyModelName(Enemy::Type type) {
+	switch (type) {
+	case Enemy::Type::Ranged:
+		return "wallEnemy";
+	case Enemy::Type::Fast:
+	case Enemy::Type::Heavy:
+		return "cornerEnemy";
+	case Enemy::Type::Normal:
+	default:
+		return "normalEnemy";
+	}
+}
 }
 
 
 void EnemyManager::Initialize() {
 	// 敵関連のデータをすべて初期化
 	enemies_.clear();
-	enemyObjs_.clear();
+	enemyVisuals_.clear();
 	enemyDeadHandled_.clear();
 	enemyCardSystems_.clear();
 
@@ -272,6 +285,57 @@ void EnemyManager::Initialize() {
 	castCardObjs_[2] = std::unique_ptr<Obj3d>(Obj3d::Create("cardFire"));
 	castCardObjs_[7] = std::unique_ptr<Obj3d>(Obj3d::Create("CardFang"));
 	castCardObjs_[10] = std::unique_ptr<Obj3d>(Obj3d::Create("CardClaw"));
+}
+
+EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera* camera) const {
+	EnemyVisual visual;
+
+	if (type == Enemy::Type::Normal) {
+		visual.skinned = SkinnedObj3d::Create("normalEnemy", "resources/enemy", "normalEnemy.gltf");
+		if (visual.skinned) {
+			visual.skinned->SetCamera(camera);
+			visual.skinned->SetLoopAnimation(true);
+			visual.skinned->SetWalkAnimation(5.0f, 1.35f);
+			visual.skinned->SetIsWalking(false);
+			return visual;
+		}
+	}
+
+	visual.obj = Obj3d::Create(GetEnemyModelName(type));
+	if (visual.obj) {
+		visual.obj->SetCamera(camera);
+	}
+	return visual;
+}
+
+void EnemyManager::UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const {
+	if (visual.skinned) {
+		visual.skinned->SetTranslation(enemy.GetPosition());
+		visual.skinned->SetRotation(enemy.GetRotation());
+		visual.skinned->SetScale(enemy.GetScale());
+		visual.skinned->SetIsWalking(Length(enemy.GetPosition() - previousPosition) > 0.001f);
+		visual.skinned->Update();
+		return;
+	}
+
+	if (visual.obj) {
+		visual.obj->SetTranslation(enemy.GetPosition());
+		visual.obj->SetRotation(enemy.GetRotation());
+		visual.obj->SetScale(enemy.GetScale());
+		visual.obj->SetColor(GetEnemyDisplayColor(enemy));
+		visual.obj->Update();
+	}
+}
+
+void EnemyManager::DrawEnemyVisual(const EnemyVisual& visual) const {
+	if (visual.skinned) {
+		visual.skinned->Draw();
+		return;
+	}
+
+	if (visual.obj) {
+		visual.obj->Draw();
+	}
 }
 
 void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, MapManager* mapManager,Boss *boss, const Vector3 &targetPos) {
@@ -459,12 +523,8 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 			}
 		}
 
-		if (enemyObjs_[i]) {
-			enemyObjs_[i]->SetTranslation(enemy->GetPosition());
-			enemyObjs_[i]->SetRotation(enemy->GetRotation());
-			enemyObjs_[i]->SetScale(enemy->GetScale());
-			enemyObjs_[i]->SetColor(GetEnemyDisplayColor(*enemy));
-			enemyObjs_[i]->Update();
+		if (i < enemyVisuals_.size()) {
+			UpdateEnemyVisual(enemyVisuals_[i], *enemy, oldEnemyPos);
 		}
 		// 敵が「カードを使いたい！」と合図を出した時の処理
 		if (enemy->GetCardUseRequest()) {
@@ -609,8 +669,8 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
 		if (enemies_[i] && !enemies_[i]->IsDead()) {
 
 			// 点滅中は表示するフレームだけ描画
-			if (enemyObjs_[i] && enemies_[i]->IsVisible()) {
-				enemyObjs_[i]->Draw();
+			if (i < enemyVisuals_.size() && enemies_[i]->IsVisible()) {
+				DrawEnemyVisual(enemyVisuals_[i]);
 			}
 
 			enemyPositions.push_back(enemies_[i]->GetPosition());
@@ -761,12 +821,9 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 		newEnemy->SetBossRoomBehavior(true);
 
 		// 敵の見た目（3Dモデル）を生成
-		auto enemyObj = std::unique_ptr<Obj3d>(Obj3d::Create("enemy"));
-		if (enemyObj) {
-			enemyObj->SetCamera(camera);
-			enemyObj->SetTranslation(spawnPos);
-			enemyObj->SetScale(newEnemy->GetScale());
-			enemyObj->Update();
+		auto enemyVisual = CreateEnemyVisual(newEnemy->GetType(), camera);
+		if (enemyVisual.obj || enemyVisual.skinned) {
+			UpdateEnemyVisual(enemyVisual, *newEnemy, spawnPos);
 		}
 
 		// 敵の魔法システムを生成
@@ -775,7 +832,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 
 		// リストに追加
 		enemies_.push_back(std::move(newEnemy));
-		enemyObjs_.push_back(std::move(enemyObj));
+		enemyVisuals_.push_back(std::move(enemyVisual));
 		enemyCardSystems_.push_back(std::move(enemyCardSystem));
 		enemyDeadHandled_.push_back(false);
 	}
@@ -867,19 +924,16 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		enemy->SetType(GetRandomEnemyTypeForFloor(mapManager->GetCurrentFloor()));
 		enemy->SetPosition(worldPos);
 
-		auto enemyObj = std::unique_ptr<Obj3d>(Obj3d::Create("enemy"));
-		if (enemyObj) {
-			enemyObj->SetCamera(camera); // camera_.get() から camera に変更
-			enemyObj->SetTranslation(worldPos);
-			enemyObj->SetScale(enemy->GetScale());
-			enemyObj->Update();
+		auto enemyVisual = CreateEnemyVisual(enemy->GetType(), camera);
+		if (enemyVisual.obj || enemyVisual.skinned) {
+			UpdateEnemyVisual(enemyVisual, *enemy, worldPos);
 		}
 
 		auto enemyCardSystem = std::make_unique<CardUseSystem>();
 		enemyCardSystem->Initialize(camera); // 同上
 
 		enemies_.push_back(std::move(enemy));
-		enemyObjs_.push_back(std::move(enemyObj));
+		enemyVisuals_.push_back(std::move(enemyVisual));
 		enemyDeadHandled_.push_back(false);
 		enemyCardSystems_.push_back(std::move(enemyCardSystem));
 	}
@@ -887,7 +941,7 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 
 void EnemyManager::Clear() {
 	enemies_.clear();
-	enemyObjs_.clear();
+	enemyVisuals_.clear();
 	enemyCardSystems_.clear(); 
 	enemyDeadHandled_.clear();
 }
@@ -1090,12 +1144,9 @@ void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int flo
 	enemy->SetPosition(worldPos);
 
 	// 敵の見た目（3Dモデル）を生成
-	auto enemyObj = std::unique_ptr<Obj3d>(Obj3d::Create("enemy"));
-	if (enemyObj) {
-		enemyObj->SetCamera(camera);
-		enemyObj->SetTranslation(worldPos);
-		enemyObj->SetScale(enemy->GetScale());
-		enemyObj->Update();
+	auto enemyVisual = CreateEnemyVisual(enemy->GetType(), camera);
+	if (enemyVisual.obj || enemyVisual.skinned) {
+		UpdateEnemyVisual(enemyVisual, *enemy, worldPos);
 	}
 
 	// 敵の魔法システムを生成
@@ -1104,7 +1155,7 @@ void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int flo
 
 	// リストに追加
 	enemies_.push_back(std::move(enemy));
-	enemyObjs_.push_back(std::move(enemyObj));
+	enemyVisuals_.push_back(std::move(enemyVisual));
 	enemyDeadHandled_.push_back(false);
 	enemyCardSystems_.push_back(std::move(enemyCardSystem));
 }
