@@ -5,7 +5,7 @@
 #include "engine/scene/IScene.h"
 #include "engine/scene/AbstractSceneFactory.h"
 #include "engine/base/DirectXCommon.h"
-
+#include "engine/base/Input.h"
 
 
 
@@ -26,6 +26,15 @@ SceneManager::~SceneManager(){
 }
 // シーンマネージャーの更新
 void SceneManager::Update(){
+
+#ifdef _DEBUG
+	if ( Input::GetInstance()->Triggerkey(DIK_R) ) {
+		if ( currentScene_ ) {
+			currentScene_->Reload(); // 現在のシーンが何であれリロードを叩く！
+		}
+	}
+#endif
+
 	// 次のシーンへの切り替え処理
 	if ( nextScene_ ) {
 		// 現在のシーンを終了

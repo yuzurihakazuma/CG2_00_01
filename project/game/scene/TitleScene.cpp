@@ -203,6 +203,8 @@ void TitleScene::Draw(){
 
 }
 
+void TitleScene::Reload(){}
+
 void TitleScene::Finalize(){
 	object3ds_.clear();
 

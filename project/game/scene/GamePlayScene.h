@@ -11,6 +11,8 @@
 #include "engine/3d/animation/CustomAnimation.h"
 #include "engine/particle/GPUParticleEmitter.h"
 
+#include "engine/utils/EditorManager.h"
+
 #include "Skybox.h"
 
 // --- 標準ライブラリ ---
@@ -46,7 +48,7 @@ public:
 
 	// デバッグ用UIの描画
 	void DrawDebugUI() override;
-
+	void ReloadMap();
 
 	GamePlayScene();
 
@@ -102,4 +104,6 @@ private: // メンバ変数
 	// GPUパーティクルエミッター
 	GPUParticleEmitter emitter_;
 	
+
+	EngineMode prevMode_ = EngineMode::Edit;
 };
