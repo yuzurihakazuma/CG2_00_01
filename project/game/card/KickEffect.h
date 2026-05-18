@@ -4,8 +4,8 @@ class KickEffect : public ICardEffect {
 public:
     KickEffect(int damage) : damage_(damage) {}
 
-    void Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) override;
-    void Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) override;
+    void Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) override;
+    void Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) override;
     void Draw() override;
     bool IsFinished() const override { return isFinished_; }
 

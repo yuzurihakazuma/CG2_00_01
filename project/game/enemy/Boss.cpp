@@ -63,6 +63,8 @@ void Boss::InitializeBossCards() {
 	heldCards_.push_back(CardDatabase::GetCardData(102));
 	heldCards_.push_back(CardDatabase::GetCardData(103));
 	heldCards_.push_back(CardDatabase::GetCardData(104));
+	heldCards_.push_back(CardDatabase::GetCardData(105));
+
 }
 
 Card Boss::SelectCardForDistance(float dist, bool isEnraged) {
@@ -155,6 +157,9 @@ int Boss::GetCastTimeForCard(int cardId, bool isEnraged) const {
 	if (cardId == 102) {
 		return isEnraged ? 34 : 46;
 	}
+	if (cardId == 105) {
+		return isEnraged ? 18 : 26;
+	}
 
 	return isEnraged ? 40 : castTime_;
 }
@@ -175,6 +180,10 @@ int Boss::GetRecoveryTimeForCard(int cardId, bool isEnraged) const {
 	if (cardId == 101) {
 		return isEnraged ? 18 : 26;
 	}
+	if (cardId == 105) {
+		return isEnraged ? 16 : 24;
+	}
+
 
 	return isEnraged ? 18 : 26;
 }
@@ -638,37 +647,29 @@ void Boss::UpdateUseCard() {
 			// 10階の分裂ボスだけ役割付き重み付け
 			if (dist < 5.5f) {
 				if (useMeleeRole) {
-					addWeightedCard(101, 7);
-					addWeightedCard(102, 1);
-					addWeightedCard(104, isEnraged ? 2 : 1);
-					addWeightedCard(103, 1);
+					addWeightedCard(101, 2);
+					addWeightedCard(105, isEnraged ? 2 : 1);
 				} else {
 					addWeightedCard(101, 2);
 					addWeightedCard(102, 4);
 					addWeightedCard(104, isEnraged ? 4 : 3);
-					addWeightedCard(103, 1);
 				}
 			} else if (dist < 14.0f) {
 				if (useMeleeRole) {
-					addWeightedCard(101, 5);
-					addWeightedCard(102, 3);
-					addWeightedCard(104, isEnraged ? 2 : 1);
-					addWeightedCard(103, 1);
+					addWeightedCard(101, 2);
+					addWeightedCard(105, isEnraged ? 5 : 4);
 				} else {
 					addWeightedCard(101, 1);
 					addWeightedCard(102, isEnraged ? 7 : 6);
 					addWeightedCard(104, isEnraged ? 6 : 5);
-					addWeightedCard(103, 2);
 				}
 			} else {
 				if (useMeleeRole) {
-					addWeightedCard(102, 3);
-					addWeightedCard(104, 2);
-					addWeightedCard(103, 1);
+					addWeightedCard(101, 2);
+					addWeightedCard(105, 1);
 				} else {
 					addWeightedCard(102, isEnraged ? 8 : 7);
 					addWeightedCard(104, isEnraged ? 7 : 6);
-					addWeightedCard(103, 3);
 				}
 			}
 		}

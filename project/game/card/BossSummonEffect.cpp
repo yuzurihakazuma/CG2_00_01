@@ -4,10 +4,14 @@
 #include "game/enemy/EnemyManager.h"
 #include "engine/particle/GPUParticleManager.h"
 
-void BossSummonEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) {
+void BossSummonEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
+
 
     isFinished_ = false;
     timer_ = 60;
+    // この効果を発動したボス本人を保持する
+// 分裂ボス時に summon 要求を正しい個体へ返すために必要
+    casterBoss_ = casterBoss;
 
     // ボスの足元にエフェクトを出す
     pos_ = casterPos;
@@ -34,7 +38,7 @@ void BossSummonEffect::Start(const Vector3& casterPos, float casterYaw, bool isP
     }
 }
 
-void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
+void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
     if (isFinished_) {
         return;
     }
@@ -93,9 +97,12 @@ void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
             GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.5f, 0.15f, { 1.0f, 0.2f, 0.0f, 1.0f });
         }
 
-        if (boss && !boss->IsDead()) {
-            boss->RequestSummon(spawnCount_);
+        // 発動元のボス本人へ召喚要求を返す
+// 分裂ボス時に boss 引数へ依存すると、左右どちらの個体か分からなくなる
+        if (casterBoss_ && !casterBoss_->IsDead()) {
+            casterBoss_->RequestSummon(spawnCount_);
         }
+
         isFinished_ = true;
     }
 }

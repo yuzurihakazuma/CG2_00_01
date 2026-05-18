@@ -6,10 +6,10 @@
 class IceBulletEffect : public ICardEffect {
 public:
 	// 効果開始
-	void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) override;
+	void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
 
 	// 毎フレーム更新
-	void Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) override;
+	void Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) override;
 
 	// 描画
 	void Draw() override;

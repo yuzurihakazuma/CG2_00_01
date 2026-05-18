@@ -26,7 +26,7 @@ public:
 	void Initialize(Camera* camera);
 
 	// 更新
-	void Update(Player* player, EnemyManager *enemyManager, Boss* boss,
+	void Update(Player* player, EnemyManager *enemyManager, Boss* boss, Boss* extraBoss,
 		const Vector3& playerPos,
 		const Vector3& enemyPos,
 		const Vector3& bossPos,
@@ -36,7 +36,7 @@ public:
 	void Draw();
 
 	// カード使用（ここでは即発動ではなく詠唱開始）
-	void UseCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player = nullptr);
+	void UseCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player = nullptr, Boss* casterBoss = nullptr);
 
 	// ★追加：ミニマップを外部（Scene）から受け取るための関数
 	void SetMinimap(Minimap *minimap) { minimap_ = minimap; }
@@ -52,7 +52,7 @@ public:
 
 private:
 	// 実際のカード発動処理
-	void ExecuteCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player);
+	void ExecuteCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player, Boss* casterBoss);
 
 	// カードごとの詠唱時間
 	int GetCastTime(const Card& card) const;
@@ -73,6 +73,9 @@ private:
 	bool isPlayerCasting_ = true;
 	int castTimer_ = 0;
 	Player* castingPlayer_ = nullptr;
+	// 詠唱中の発動元ボスを保持する
+	// 分裂ボス時に左右どちらが使った攻撃かを失わないようにする
+	Boss* castingBoss_ = nullptr;
 	static constexpr int kCommonCastTime_ = 20;
 
 	
@@ -84,4 +87,7 @@ private:
 
 	// 現在進行中の魔法リスト
 	std::vector<std::unique_ptr<ICardEffect>> activeEffects_;
+
+	// 詠唱中の発射元ボスを保持する
+	// 分裂ボス時に左右どちらが使った攻撃かを失わないようにする
 };

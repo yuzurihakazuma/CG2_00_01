@@ -4,6 +4,7 @@
 #include "game/enemy/Enemy.h"
 #include "game/enemy/Boss.h"
 #include "game/enemy/EnemyManager.h"
+#include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <memory>
@@ -11,7 +12,9 @@
 
 using namespace VectorMath;
 
-void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera){
+void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
 	punchTimer_ = 10;
@@ -50,7 +53,7 @@ void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	}
 }
 
-void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
+void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss,
 	const Vector3& bossPos, const LevelData& level){
 
 	if ( isFinished_ ) {
@@ -116,11 +119,10 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
 				}
 			}
 		}
-		// ボスへの判定
-		if ( boss && !boss->IsDead() ) {
-			Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-			if ( Length(diff) < 3.0f ) {
-				boss->TakeDamage(randomDamage);
+		// 分裂戦では近い個体だけにダメージを入れる
+		Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 3.0f, boss, extraBoss);
+		if ( hitBoss ) {
+				hitBoss->TakeDamage(randomDamage);
 
 				// 💥 ボスヒット時の火花
 				for ( int i = 0; i < 20; i++ ) {
@@ -133,7 +135,6 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
 
 				isFinished_ = true;
 				return;
-			}
 		}
 	} else {
 		// 敵・ボスの攻撃

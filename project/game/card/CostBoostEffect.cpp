@@ -2,7 +2,9 @@
 #include "game/player/Player.h"
 #include "engine/particle/GPUParticleManager.h"
 
-void CostBoostEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera) {
+void CostBoostEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
+    // この効果は発動元ボスを使わない
+    (void)casterBoss;
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
     timer_ = 0;
@@ -27,7 +29,7 @@ void CostBoostEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPl
     auraEmitter_->SetData(auraData);
 }
 
-void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) {
+void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) {
     if (isFinished_) return;
 
     if (isPlayerCaster_ && player && !player->IsDead()) {

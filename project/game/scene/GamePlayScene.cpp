@@ -1127,7 +1127,61 @@ void GamePlayScene::Update() {
 	}
 
 	// ボス頭上HPバー更新
-	if (boss && !boss->IsDead() && mapManager_ && mapManager_->IsBossMap() &&
+	if (bossManager_ && bossManager_->IsSplitBossBattle() && mapManager_ && mapManager_->IsBossMap() && camera_) {
+		const float splitBackWidth = 120.0f;
+		const float splitBackHeight = 14.0f;
+		const float splitFillMaxWidth = 112.0f;
+		const float splitFillHeight = 8.0f;
+
+		for (int i = 0; i < 2; ++i) {
+			Boss* splitBoss = bossManager_->GetBossAt(i);
+			Sprite* splitBackSprite = bossManager_->GetSplitBossHpBackSprite(i);
+			Sprite* splitFillSprite = bossManager_->GetSplitBossHpFillSprite(i);
+			if (!splitBoss || splitBoss->IsDead() || !splitBackSprite || !splitFillSprite) {
+				continue;
+			}
+
+			Vector3 bossHeadPos = splitBoss->GetPosition();
+			bossHeadPos.y += 2.6f;
+			Vector2 screenPos = WorldToScreen(bossHeadPos);
+
+			float hpRate = bossManager_->GetBossHpRateAt(i);
+			if (hpRate < 0.0f) hpRate = 0.0f;
+			if (hpRate > 1.0f) hpRate = 1.0f;
+
+			splitBackSprite->SetPosition(screenPos);
+			splitBackSprite->SetSize({ splitBackWidth, splitBackHeight });
+			splitBackSprite->Update();
+
+			Vector4 hpColor{};
+			if (hpRate > 0.6f) {
+				hpColor = { 0.2f, 1.0f, 0.2f, 1.0f };
+			}
+			else if (hpRate > 0.3f) {
+				hpColor = { 1.0f, 0.9f, 0.2f, 1.0f };
+			}
+			else {
+				hpColor = { 1.0f, 0.2f, 0.2f, 1.0f };
+			}
+
+			float fillWidth = splitFillMaxWidth * hpRate;
+			float backLeft = screenPos.x - splitBackWidth * 0.5f;
+			float fillLeft = backLeft + 4.0f;
+			float fillCenterX = fillLeft + fillWidth * 0.5f;
+			Vector2 fillPos = {
+				fillCenterX,
+				screenPos.y + 1.0f
+			};
+
+			splitFillSprite->SetPosition(fillPos);
+			splitFillSprite->SetSize({ fillWidth, splitFillHeight });
+			splitFillSprite->SetColor(hpColor);
+			splitFillSprite->Update();
+		}
+	}
+
+	if (bossManager_ && !bossManager_->IsSplitBossBattle() &&
+		boss && !boss->IsDead() && mapManager_ && mapManager_->IsBossMap() &&
 		bossHpBackSprite && bossHpFillSprite && camera_) {
 
 		// 分裂ボス時は2体の中心位置にHPバーを出す
@@ -1322,9 +1376,16 @@ void GamePlayScene::Update() {
 
 
 	Boss* targetBoss = nullptr;
+	Boss* extraTargetBoss = nullptr;
 	Vector3 bossPos{};
 
-	if (boss && !boss->IsDead()) {
+	if (bossManager_ && bossManager_->IsSplitBossBattle()) {
+		// 分裂戦では左右の個体をそのままカード側へ渡す
+		targetBoss = bossManager_->GetBossAt(0);
+		extraTargetBoss = bossManager_->GetBossAt(1);
+		bossPos = bossManager_->GetBossFocusPosition();
+	}
+	else if (boss && !boss->IsDead()) {
 		targetBoss = boss;
 		bossPos = boss->GetPosition();
 	}
@@ -1402,6 +1463,7 @@ void GamePlayScene::Update() {
 			player,
 			enemyManager_.get(),
 			targetBoss,
+			extraTargetBoss,
 			playerPos_,
 			{ 0.0f, 0.0f, 0.0f },
 			bossPos,

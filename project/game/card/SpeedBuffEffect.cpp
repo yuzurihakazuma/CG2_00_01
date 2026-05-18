@@ -2,7 +2,9 @@
 #include "game/player/Player.h"
 #include "engine/particle/GPUParticleManager.h"
 
-void SpeedBuffEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPLayerCaster, Camera *camera) {
+void SpeedBuffEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPLayerCaster, Camera *camera, Boss* casterBoss) {
+	// この効果は発動元ボスを使わない
+	(void)casterBoss;
 	isPlayerCaster_ = isPLayerCaster;
 	isFinished_ = false;
 	currentPos_ = casterPos;
@@ -10,7 +12,7 @@ void SpeedBuffEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPL
 
 }
 
-void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) {
+void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss,  const Vector3 &bossPos, const LevelData &level) {
 
 	if (isFinished_) {
 		return;
