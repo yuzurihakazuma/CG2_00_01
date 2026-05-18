@@ -46,6 +46,8 @@
 #include "engine/particle/GPUParticleEmitter.h"
 #include "game/card/ClawEffect.h"
 
+#include <array>
+
 
 using namespace VectorMath;
 using namespace MatrixMath;
@@ -365,6 +367,12 @@ void GamePlayScene::Update() {
 	}
 #else
 	isInfiniteMode_ = false;
+#endif
+
+#ifdef USE_IMGUI
+	if (!isEditingDebugText && input->Triggerkey(DIK_F2)) {
+		showCharacterHitboxes_ = !showCharacterHitboxes_;
+	}
 #endif
 
 	if (playerManager_) {
@@ -1652,6 +1660,7 @@ void GamePlayScene::Draw() {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
+	DrawCharacterHitboxesDebug();
 	DrawBossIntroLetterbox();
 }
 
@@ -1677,7 +1686,6 @@ void GamePlayScene::DrawDebugUI() {
 	if (mapManager_) {
 		mapManager_->DrawDebugUI();
 	}
-
 
 	ImGui::Begin("Block Dissolve Test");
 
@@ -2264,10 +2272,14 @@ void GamePlayScene::Finalize() {
 }
 
 Vector2 GamePlayScene::WorldToScreen(const Vector3& worldPos) const {
-	if (!camera_) {
-		return { -10000.0f, -10000.0f };
-	}
+	Vector2 screen{};
+	return ProjectWorldToScreen(worldPos, screen) ? screen : Vector2{ -10000.0f, -10000.0f };
+}
 
+bool GamePlayScene::ProjectWorldToScreen(const Vector3& worldPos, Vector2& screenPos) const {
+	if (!camera_) {
+		return false;
+	}
 	Matrix4x4 viewProjection = camera_->GetViewProjectionMatrix();
 
 	Vector4 clip{};
@@ -2276,18 +2288,90 @@ Vector2 GamePlayScene::WorldToScreen(const Vector3& worldPos) const {
 	clip.z = worldPos.x * viewProjection.m[0][2] + worldPos.y * viewProjection.m[1][2] + worldPos.z * viewProjection.m[2][2] + 1.0f * viewProjection.m[3][2];
 	clip.w = worldPos.x * viewProjection.m[0][3] + worldPos.y * viewProjection.m[1][3] + worldPos.z * viewProjection.m[2][3] + 1.0f * viewProjection.m[3][3];
 
-	if (clip.w == 0.0f) {
-		return { -10000.0f, -10000.0f };
+	if (clip.w <= 0.001f) {
+		return false;
 	}
 
 	float invW = 1.0f / clip.w;
 	float ndcX = clip.x * invW;
 	float ndcY = clip.y * invW;
 
-	Vector2 screen{};
-	screen.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
-	screen.y = (-ndcY * 0.5f + 0.5f) * static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
-	return screen;
+	screenPos.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+	screenPos.y = (-ndcY * 0.5f + 0.5f) * static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+	return true;
+}
+
+void GamePlayScene::DrawCharacterHitboxesDebug() const {
+	if (!showCharacterHitboxes_) {
+		return;
+	}
+
+	if (playerManager_) {
+		if (Player* player = playerManager_->GetPlayer(); player && !player->IsDead() && player->IsVisible()) {
+			DrawDebugAABB(player->GetPosition(), { 0.5f, 0.5f, 0.5f }, IM_COL32(80, 255, 120, 230), 2.0f);
+		}
+	}
+
+	if (enemyManager_) {
+		for (const auto& enemy : enemyManager_->GetEnemies()) {
+			if (enemy && !enemy->IsDead() && enemy->IsVisible()) {
+				DrawDebugAABB(enemy->GetPosition(), { 0.5f, 0.5f, 0.5f }, IM_COL32(255, 80, 80, 220), 1.7f);
+			}
+		}
+	}
+
+	if (bossManager_) {
+		for (int i = 0; i < 2; ++i) {
+			if (Boss* boss = bossManager_->GetBossAt(i); boss && !boss->IsDead() && boss->IsVisible()) {
+				DrawDebugAABB(boss->GetPosition(), { 1.0f, 1.0f, 1.0f }, IM_COL32(190, 110, 255, 230), 2.2f);
+			}
+		}
+	}
+}
+
+void GamePlayScene::DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const {
+	ImDrawList* drawList = ImGui::GetForegroundDrawList();
+	if (!drawList) {
+		return;
+	}
+
+	const std::array<Vector3, 8> corners = {
+		Vector3{ center.x - halfSize.x, center.y - halfSize.y, center.z - halfSize.z },
+		Vector3{ center.x + halfSize.x, center.y - halfSize.y, center.z - halfSize.z },
+		Vector3{ center.x + halfSize.x, center.y + halfSize.y, center.z - halfSize.z },
+		Vector3{ center.x - halfSize.x, center.y + halfSize.y, center.z - halfSize.z },
+		Vector3{ center.x - halfSize.x, center.y - halfSize.y, center.z + halfSize.z },
+		Vector3{ center.x + halfSize.x, center.y - halfSize.y, center.z + halfSize.z },
+		Vector3{ center.x + halfSize.x, center.y + halfSize.y, center.z + halfSize.z },
+		Vector3{ center.x - halfSize.x, center.y + halfSize.y, center.z + halfSize.z },
+	};
+
+	std::array<Vector2, 8> screenCorners{};
+	std::array<bool, 8> visible{};
+	for (size_t i = 0; i < corners.size(); ++i) {
+		visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+	}
+
+	constexpr std::array<std::array<int, 2>, 12> edges = {
+		std::array<int, 2>{0, 1}, {1, 2}, {2, 3}, {3, 0},
+		{4, 5}, {5, 6}, {6, 7}, {7, 4},
+		{0, 4}, {1, 5}, {2, 6}, {3, 7},
+	};
+
+	for (const auto& edge : edges) {
+		const int a = edge[0];
+		const int b = edge[1];
+		if (!visible[a] || !visible[b]) {
+			continue;
+		}
+
+		drawList->AddLine(
+			ImVec2(screenCorners[a].x, screenCorners[a].y),
+			ImVec2(screenCorners[b].x, screenCorners[b].y),
+			color,
+			thickness
+		);
+	}
 }
 
 void GamePlayScene::RegenerateDungeonAndRespawnPlayer(int roomCount) {

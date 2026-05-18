@@ -138,6 +138,9 @@ private: // メンバ変数
 	void ResetBattleDebug(); // デバッグ用バトルリセット
 
 	Vector2 WorldToScreen(const Vector3& worldPos) const; // ワールド座標をスクリーン座標に変換する関数
+	bool ProjectWorldToScreen(const Vector3& worldPos, Vector2& screenPos) const;
+	void DrawCharacterHitboxesDebug() const;
+	void DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const;
 
 	//UI専用カメラ
 	std::unique_ptr<Camera> uiCamera_ = nullptr;
@@ -198,6 +201,7 @@ private: // メンバ変数
 
 	// ステータス無限モード(デバッグ用)
 	bool isInfiniteMode_ = false;
+	bool showCharacterHitboxes_ = false;
 	// --- フェード演出用の状態 ---
 	enum class TransitionState {
 		None,       // 通常時
