@@ -201,123 +201,111 @@ void GamePlayScene::Initialize(){
 }
 
 void GamePlayScene::Update(){
-	
-	// デバッグカメラ更新
-	if (debugCamera_) {
-		debugCamera_->Update(camera_.get());
-	}
-	// カメラ更新
+
+	// ========================================================
+	// ▼ 0. 常に実行する処理（カメラの更新）
+	// ========================================================
+	if ( debugCamera_ ) { debugCamera_->Update(camera_.get()); }
 	camera_->Update();
 
 	Input* input = Input::GetInstance();
 
-	// 1. スペースキーなどでエフェクトを発生させる
-	if (input->Triggerkey(DIK_SPACE)) {
-		// 新しいエフェクトを生成
-		auto newEffect = std::make_unique<HitEffect>();
+	// ========================================================
+	// ▼ 1. モードの切り替わりを監視する（ここでリロード！）
+	// ========================================================
+	EngineMode currentMode = EditorManager::GetInstance()->GetMode();
 
-		// 発生場所（例：目の前）、カメラ、テクスチャ、環境マップを渡して初期化
-		newEffect->Initialize(
-			{ 5.0f, 0.0f, 5.0f },            // 発生位置
-			camera_.get(),                 // カメラ
-			textures_["circle2"].srvIndex,  // 鋭い光用の丸いテクスチャ
-			textures_["skybox"].srvIndex   // 反射用の環境マップ
-		);
+	// もし「エディット(停止)」から「プレイ(再生)」に切り替わった瞬間なら、リセット処理を行う
+	if ( prevMode_ == EngineMode::Edit && currentMode == EngineMode::Play ) {
+		// ① 最新のマップデータをJSONから読み込み直す（保存したてのデータを反映）
+		LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
+		splineRail_.nodes.clear();
+		for ( const auto& pos : mapData.railNodes ) {
+			splineRail_.nodes.push_back({ pos, 60.0f });
+		}
 
-		// リストに追加して、あとは任せる！
-		hitEffects_.push_back(std::move(newEffect));
+		// ② プレイヤーをスタート地点に戻す
+		if ( player_ ) { player_->Initialize(); }
+
+		// ③ エフェクトなども綺麗に消す
+		hitEffects_.clear();
+	}
+	prevMode_ = currentMode; // 現在のモードを記憶して次に備える
+
+
+	// ========================================================
+	// ▼ 2. プレイモード中（時間が動いている時）だけ実行する処理
+	// ========================================================
+	if ( currentMode == EngineMode::Play ) {
+
+		// プレイヤーのレール移動計算
+		if ( player_ && testObj_ ) {
+			player_->Update(splineRail_);
+			testObj_->SetTranslation(player_->GetPosition());
+			testObj_->SetRotation(player_->GetRotation());
+		}
+
+		// スペースキー入力（エフェクト発生とBGM再生）
+		if ( input->Triggerkey(DIK_SPACE) ) {
+			AudioManager::GetInstance()->PlayWave(bgmFile_);
+			auto newEffect = std::make_unique<HitEffect>();
+			newEffect->Initialize({ 5.0f, 0.0f, 5.0f }, camera_.get(), textures_["circle2"].srvIndex, textures_["skybox"].srvIndex);
+			hitEffects_.push_back(std::move(newEffect));
+		}
+
+		// パーティクル発生
+		if ( input->Triggerkey(DIK_P) ) {
+			ParticleManager::GetInstance()->Emit("Circle", { 0.0f, 0.0f, 0.0f }, 10);
+		}
+
+		// アニメーションの進行（時間を進める）
+		if ( skinnedObj_ && skinnedAnimTrack_.duration > 0.0f ) {
+			skinnedAnimTime_ += 1.0f / 60.0f;
+			if ( skinnedAnimTime_ > skinnedAnimTrack_.duration ) { skinnedAnimTime_ = 0.0f; }
+		}
+
+		// エフェクトの更新と死んだエフェクトの削除
+		for ( auto& effect : hitEffects_ ) { effect->Update(); }
+		hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e){ return e->IsDead(); });
 	}
 
-	// 2. リストに載っている全エフェクトを更新
-	for (auto& effect : hitEffects_) {
-		effect->Update();
-	}
-
-	// 3. 寿命が尽きて「死んだ」エフェクトをリストから自動削除
-	hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e) {
-		return e->IsDead();
-		});
-
-
-	// BGM再生 (シングルトン)
-	if ( input->Triggerkey(DIK_SPACE) ) {
-		AudioManager::GetInstance()->PlayWave(bgmFile_);
-	}
-	// タイトルシーンへ移動
+	// ========================================================
+	// ▼ 3. モードに関わらず常に実行する処理（描画のための更新）
+	// ========================================================
+	// タイトルへ戻る処理はいつでも効くようにしておく
 	if ( input->Triggerkey(DIK_T) ) {
 		SceneManager::GetInstance()->ChangeScene(std::make_unique<TitleScene>());
 	}
-	// パーティクル発生 (シングルトン)
-	if ( input->Triggerkey(DIK_P) ) {
-		ParticleManager::GetInstance()->Emit("Circle", { 0.0f, 0.0f, 0.0f }, 10);
-	}
-	// パーティクル更新
-	ParticleManager::GetInstance()->Update(camera_.get());
 
+	// 3Dオブジェクトの行列更新（※これをしないとエディタで動かしても画面に反映されない）
+	for ( auto& obj : object3ds_ ) { obj->Update(); }
+	if ( testObj_ ){ testObj_->Update(); }
 
-	// 全オブジェクト更新
-	for ( auto& obj : object3ds_ ) {
-		obj->Update();
-		
-	}
-	if ( testObj_ ){
-		testObj_->Update();
-	}
-
-	if ( player_ && testObj_ ) {
-		// 1. プレイヤーの座標・回転をレールに沿って計算する
-		player_->Update(splineRail_);
-
-		// 2. 計算結果を3Dモデル(testObj_)に渡す
-		testObj_->SetTranslation(player_->GetPosition());
-		testObj_->SetRotation(player_->GetRotation());
-	}
-
-
-
-
-	if (skinnedObj_) {
-		// 再生するだけ（編集UIなし）
-		if (skinnedAnimTrack_.duration > 0.0f) {
-			skinnedAnimTime_ += 1.0f / 60.0f;
-			if (skinnedAnimTime_ > skinnedAnimTrack_.duration) {
-				skinnedAnimTime_ = 0.0f;
-			}
-			Vector3 pos, rot, scale;
-			skinnedAnimTrack_.UpdateTransformAtTime(skinnedAnimTime_, pos, rot, scale);
-			skinnedObj_->SetTranslation(pos);
-			skinnedObj_->SetRotation(rot);
-			skinnedObj_->SetScale(scale);
-		}
+	// スキニングアニメーションの行列更新
+	if ( skinnedObj_ ) {
+		Vector3 pos, rot, scale;
+		skinnedAnimTrack_.UpdateTransformAtTime(skinnedAnimTime_, pos, rot, scale);
+		skinnedObj_->SetTranslation(pos);
+		skinnedObj_->SetRotation(rot);
+		skinnedObj_->SetScale(scale);
 		skinnedObj_->Update();
 	}
 
-	if ( sprite_ ) {
-		sprite_->Update();
-	}
-
+	if ( sprite_ ) { sprite_->Update(); }
 	PostEffect::GetInstance()->Update();
+	for ( auto& block : blocks_ ) { block->Update(); }
 
-	
-	for (auto& block : blocks_) {
-		block->Update();
-	}
-
+	// パーティクルの更新
+	ParticleManager::GetInstance()->Update(camera_.get());
 	if ( input->Triggerkey(DIK_G) ){
-		// GPUパーティクル更新
 		GPUParticleManager::GetInstance()->Update(1.0f / 60.0f, camera_.get());
-
 	}
-	
-
 	emitter_.Update(1.0f / 60.0f);
 
-	// InstancedGroup に「最新のデータをお願い！」と渡すだけ
-	if (blockGroup_) {
-		blockGroup_->Update(blocks_);
-	}
-
+	if ( blockGroup_ ) { blockGroup_->Update(blocks_); }
 }
+
+
 
 void GamePlayScene::Draw(){
 	auto dxCommon = DirectXCommon::GetInstance();
