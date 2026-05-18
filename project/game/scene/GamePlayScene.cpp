@@ -31,6 +31,10 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
+#include "game/player/Player.h"
+#include "engine/3d/SplineRail.h"
+#include "engine/utils/Level/LevelManager.h"
+#include "engine/utils/Level/LevelEditor.h"
 
 
 using namespace VectorMath;
@@ -148,9 +152,9 @@ void GamePlayScene::Initialize(){
 	
 
 	
-	//blockGroup_ = std::make_unique<InstancedGroup>();
-	//blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
-	//blockGroup_->SetNoiseTexture(textures_["noise0"].srvIndex);
+	blockGroup_ = std::make_unique<InstancedGroup>();
+	blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
+	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
 
 	
 	  // GPUパーティクル初期化 (テクスチャを指定する)
@@ -166,6 +170,24 @@ void GamePlayScene::Initialize(){
 
 	// エディタにエミッターを渡す（F1で開くエディタで操作できるようになる）
 	EditorManager::GetInstance()->SetParticleEmitter(&emitter_);
+
+
+
+
+	// --- プレイヤーの初期化 ---
+	player_ = std::make_unique<Player>();
+	player_->Initialize();
+
+
+	// 1. JSONからマップデータを読み込む
+	LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
+
+	// 2. 読み込んだレールの座標を、SplineRailにセットする
+	splineRail_.nodes.clear();
+	for ( const auto& pos : mapData.railNodes ) {
+		// 読み込んだ座標(pos)と、とりあえずのFOV(60.0f)をセット
+		splineRail_.nodes.push_back({ pos, 60.0f });
+	}
 
 	auto initialEffect = std::make_unique<HitEffect>();
 	initialEffect->Initialize(
@@ -241,7 +263,18 @@ void GamePlayScene::Update(){
 	if ( testObj_ ){
 		testObj_->Update();
 	}
-	
+
+	if ( player_ && testObj_ ) {
+		// 1. プレイヤーの座標・回転をレールに沿って計算する
+		player_->Update(splineRail_);
+
+		// 2. 計算結果を3Dモデル(testObj_)に渡す
+		testObj_->SetTranslation(player_->GetPosition());
+		testObj_->SetRotation(player_->GetRotation());
+	}
+
+
+
 
 	if (skinnedObj_) {
 		// 再生するだけ（編集UIなし）
@@ -279,10 +312,10 @@ void GamePlayScene::Update(){
 
 	emitter_.Update(1.0f / 60.0f);
 
-	//// InstancedGroup に「最新のデータをお願い！」と渡すだけ
-	//if (blockGroup_) {
-	//	blockGroup_->Update(blocks_);
-	//}
+	// InstancedGroup に「最新のデータをお願い！」と渡すだけ
+	if (blockGroup_) {
+		blockGroup_->Update(blocks_);
+	}
 
 }
 
@@ -315,7 +348,7 @@ void GamePlayScene::Draw(){
 	
 
 	// --- インスタンシングの3D描画 ---
-	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
+	if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
 
 	// 
 	if (skinnedObj_) { 
@@ -324,9 +357,9 @@ void GamePlayScene::Draw(){
 
 	
 
-	if ( skybox_ ) {
+	/*if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
-	}
+	}*/
 
 
 
@@ -430,8 +463,9 @@ void GamePlayScene::DrawDebugUI(){
 			testObj_->SetDissolveThreshold(1.0f);
 		}
 	}
-
 	ImGui::End();
+
+
 
 #endif
 

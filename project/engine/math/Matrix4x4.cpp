@@ -1,5 +1,6 @@
 #include "Matrix4x4.h"
 #include "engine/math/QuaternionMath.h"
+#include "VectorMath.h"
 
 #include <cmath>
 #include <cassert>
@@ -154,6 +155,33 @@ namespace MatrixMath {
         result.m[1][0] = -std::sin(radian);
         result.m[1][1] = std::cos(radian);
         return result;
+    }
+
+	// forwardとupから回転行列を作る関数
+    Matrix4x4 MakeDirectionRotation(const Vector3& forward, const Vector3& up){
+
+		// forwardをz軸、upをy軸とする回転行列を作る
+		Vector3 z = VectorMath::Normalize(forward);
+		// upをy軸とするために、upとzの外積を取ってx軸を求める
+		Vector3 x = VectorMath::Normalize(VectorMath::Cross(up, z));
+		
+		// zとxの外積を取ってy軸を求める
+        Vector3 y = VectorMath::Normalize(VectorMath::Cross(z, x));
+        
+		// x、y、zを回転行列の列ベクトルとして配置する
+		Matrix4x4 result = MakeIdentity4x4();
+      
+
+		// 注意：行列の配置は列ベクトル形式で行うため、x、y、zをそれぞれの列に配置する
+		result.m[0][0] = x.x; result.m[0][1] = x.y; result.m[0][2] = x.z;
+		result.m[1][0] = y.x; result.m[1][1] = y.y; result.m[1][2] = y.z;
+		result.m[2][0] = z.x; result.m[2][1] = z.y; result.m[2][2] = z.z;
+        
+		// 最後に、回転行列を転置して、行ベクトル形式に変換する
+		return result;
+
+
+
     }
 
     // 3次元アフィン変換行列

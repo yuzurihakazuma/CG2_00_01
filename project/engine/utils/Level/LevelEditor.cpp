@@ -38,6 +38,22 @@ void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 		object3ds_.push_back(std::move(newObj));
 	}
 	selectedObjectIndex_ = -1;
+
+	railSpheres_.clear();
+	for ( const auto& pos : levelData_.railNodes ) {
+		// "sphere" モデルを探してきて球体を生成する
+		Model* sphereModel = ModelManager::GetInstance()->FindModel("sphere");
+		if ( sphereModel ) {
+			std::unique_ptr<Obj3d> sphere = std::make_unique<Obj3d>();
+			sphere->Initialize(sphereModel);
+			sphere->SetCamera(camera_);
+			sphere->SetScale({ 0.5f, 0.5f, 0.5f }); // 邪魔にならないように半分のサイズに
+			sphere->SetTranslation(pos);
+			sphere->Update();
+			railSpheres_.push_back(std::move(sphere));
+		}
+	}
+
 }
 
 
@@ -46,11 +62,25 @@ void LevelEditor::Update(){
 	for ( auto& obj : object3ds_ ) {
 		obj->Update();
 	}
+
+	// レールのノード数と球体の数が同じなら、球体の位置を最新のノード座標に合わせる
+	if ( railSpheres_.size() == levelData_.railNodes.size() ) {
+		for ( size_t i = 0; i < railSpheres_.size(); ++i ) {
+			railSpheres_[i]->SetTranslation(levelData_.railNodes[i]);
+			railSpheres_[i]->Update();
+		}
+	}
+
 }
 void LevelEditor::Draw(){
 	for ( auto& obj : object3ds_ ) {
 		obj->Draw();
 	}
+
+	for ( auto& sphere : railSpheres_ ) {
+		sphere->Draw();
+	}
+
 }
 
 
@@ -241,8 +271,58 @@ void LevelEditor::DrawDebugUI(){
 	}
 
 	ImGui::End();
+	// =========================================================
+	//  5. レールエディタ ウィンドウ
+	// =========================================================
+	ImGui::Begin("レールエディタ");
 
+	// ★ 改善1：「押し出し追加」ボタン
+	if ( ImGui::Button("末尾にノードを追加 (押し出し)") ) {
+		Vector3 newPos = { 0.0f, 0.0f, 0.0f };
 
+		// もし既にノードがあれば、最後のノードの「5.0m奥」に新しいノードを配置する！
+		if ( !levelData_.railNodes.empty() ) {
+			newPos = levelData_.railNodes.back();
+			newPos.z += 5.0f; // 奥(Z方向)に伸ばす
+		}
+		levelData_.railNodes.push_back(newPos);
+
+		Model* sphereModel = ModelManager::GetInstance()->FindModel("sphere");
+		if ( sphereModel ) {
+			std::unique_ptr<Obj3d> sphere = std::make_unique<Obj3d>();
+			sphere->Initialize(sphereModel);
+			sphere->SetCamera(camera_);
+			sphere->SetScale({ 0.5f, 0.5f, 0.5f });
+			sphere->SetTranslation(newPos); // 新しい位置にセット
+			sphere->Update();
+			railSpheres_.push_back(std::move(sphere));
+		}
+	}
+
+	ImGui::Separator();
+
+	// ★ 改善2：全部表示すると邪魔なので、スクロールバーの中に閉じ込める
+	ImGui::BeginChild("RailNodeList", ImVec2(0, 200), true);
+	for ( size_t i = 0; i < levelData_.railNodes.size(); ++i ) {
+		ImGui::PushID(static_cast< int >(i));
+		std::string label = "Node " + std::to_string(i);
+
+		// スライダーの感度を良くする (1.0f刻みなど)
+		ImGui::DragFloat3(label.c_str(), &levelData_.railNodes[i].x, 1.0f);
+
+		ImGui::SameLine();
+		if ( ImGui::Button("削除") ) {
+			levelData_.railNodes.erase(levelData_.railNodes.begin() + i);
+			railSpheres_.erase(railSpheres_.begin() + i);
+			ImGui::PopID();
+			break;
+		}
+		ImGui::PopID();
+	}
+	ImGui::EndChild(); // リスト終了
+	ImGui::End();
+
+	ImGui::Separator();
 #endif
 }
 
@@ -252,5 +332,8 @@ void LevelEditor::SetCamera(const Camera* camera){
 	// 既にロード済みのオブジェクトにもカメラを反映する
 	for ( auto& obj : object3ds_ ) {
 		obj->SetCamera(camera_);
+	}
+	for ( auto& sphere : railSpheres_ ) {
+		sphere->SetCamera(camera_);
 	}
 }
