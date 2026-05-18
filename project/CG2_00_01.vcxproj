@@ -264,6 +264,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClCompile Include="game\card\KickEffect.cpp" />
     <ClCompile Include="game\card\SwordEffect.cpp" />
     <ClCompile Include="game\card\HammerEffect.cpp" />
+    <ClCompile Include="game\card\SpearEffect.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="engine\base\resources\shaders\Object3d.PS.hlsl">
@@ -410,6 +411,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="game\card\KickEffect.h" />
     <ClInclude Include="game\card\SwordEffect.h" />
     <ClInclude Include="game\card\HammerEffect.h" />
+    <ClInclude Include="game\card\SpearEffect.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\imgui\LICENSE.txt" />

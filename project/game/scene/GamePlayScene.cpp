@@ -131,6 +131,8 @@ void GamePlayScene::Initialize() {
 
 	ModelManager::GetInstance()->LoadModel("sword_model", "resources/sword", "tomahawk.obj");
 
+	ModelManager::GetInstance()->LoadModel("spear_model", "resources/spear", "ransu.obj");
+
 	// CSVからカードデータベースを初期化
 	CardDatabase::Initialize("resources/card/CardData.csv");
 
@@ -1857,6 +1859,10 @@ void GamePlayScene::DrawDebugUI() {
 		handManager_.AddCard(CardDatabase::GetCardData(15));
 	}
 
+	if (ImGui::Button("槍(ID:16)")) {
+		handManager_.AddCard(CardDatabase::GetCardData(16));
+	}
+
 	ImGui::Separator();
 
 	ImGui::Text("[Player Hand] : %d/10", handManager_.GetHandSize());
@@ -2059,6 +2065,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		case 13: // 蹴り
 		case 14: // 剣
 		case 15: // ハンマー
+		case 16: // 槍
 			return true;
 		default:
 			return false;
