@@ -2,6 +2,7 @@
 #define NOMINMAX
 #include "game/enemy/Enemy.h"
 #include "engine/3d/obj/Obj3d.h"
+#include "engine/3d/obj/SkinnedObj3d.h"
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -46,10 +47,18 @@ public:
 	void SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int floor = 1);
 
 private:
+	struct EnemyVisual {
+		std::unique_ptr<Obj3d> obj;
+		std::unique_ptr<SkinnedObj3d> skinned;
+	};
+
+	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera) const;
+	void UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const;
+	void DrawEnemyVisual(const EnemyVisual& visual) const;
 
 	// 敵のリスト
 	std::vector<std::unique_ptr<Enemy>> enemies_;
-	std::vector<std::unique_ptr<Obj3d>> enemyObjs_;
+	std::vector<EnemyVisual> enemyVisuals_;
 	std::vector<bool> enemyDeadHandled_;
 
 

@@ -65,6 +65,10 @@ public:
     void SetRotation(const Vector3& rotation) override { rotation_ = rotation; }
     void SetScale(const Vector3& scale) override { scale_ = scale; }
     void SetLoopAnimation(bool loop) { isLoop_ = loop; }
+    void SetWalkAnimation(float speed, float amplitude) {
+        walkSpeed_ = speed;
+        walkAmplitude_ = amplitude;
+    }
     void SetNoiseTexture(uint32_t index) { noiseTextureIndex_ = index; }
     void SetDissolveThreshold(float threshold);
 

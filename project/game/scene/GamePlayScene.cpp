@@ -74,6 +74,9 @@ void GamePlayScene::Initialize() {
 
 	// 敵モデル読み込み
 	ModelManager::GetInstance()->LoadModel("enemy", "resources/enemy", "enemy.obj");
+	ModelManager::GetInstance()->LoadModel("normalEnemy", "resources/enemy", "normalEnemy.gltf");
+	ModelManager::GetInstance()->LoadModel("wallEnemy", "resources/enemy", "wallEnemy.obj");
+	ModelManager::GetInstance()->LoadModel("cornerEnemy", "resources/enemy", "cornerEnemy.obj");
 
 	// ボスモデル読み込み
 	ModelManager::GetInstance()->LoadModel("boss", "resources/boss", "boss.obj");
@@ -1603,7 +1606,9 @@ void GamePlayScene::Draw() {
 
 	if (!isBossIntroPlaying) {
 
-		handManager_.DrawCooldownOverlays();
+		if (!isCardSwapMode_) {
+			handManager_.DrawCooldownOverlays();
+		}
 
 		if (handManager_.GetHandSize() > 0 && descBgSprite_) {
 			descBgSprite_->Draw();
