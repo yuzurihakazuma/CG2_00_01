@@ -59,7 +59,7 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     }
 }
 
-void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
+void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
     (void)enemyManager;
     (void)bossPos;
     (void)level;

@@ -18,7 +18,7 @@ public:
 
 	// 毎フレームの更新処理
 	// 分裂ボス時は boss と extraBoss に左右の個体が入る
-	virtual void Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) = 0;
+	virtual void Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) = 0;
 
 	// 描画処理
 	virtual void Draw() = 0;

@@ -80,6 +80,16 @@ void BossManager::Initialize(Camera* camera) {
     bossHpFillSprite_->SetSize({ 152.0f, 10.0f });
     bossHpFillSprite_->SetColor({ 0.2f, 1.0f, 0.2f, 1.0f });
 
+    for (int i = 0; i < 2; ++i) {
+        splitBossHpBackSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+        splitBossHpBackSprites_[i]->SetSize({ 120.0f, 14.0f });
+        splitBossHpBackSprites_[i]->SetColor({ 0.0f, 0.0f, 0.0f, 0.75f });
+
+        splitBossHpFillSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+        splitBossHpFillSprites_[i]->SetSize({ 112.0f, 8.0f });
+        splitBossHpFillSprites_[i]->SetColor({ 0.2f, 1.0f, 0.2f, 1.0f });
+    }
+
     bossDeadHandled_ = false;
     bossIntroCameraState_ = IntroCameraState::None;
     bossIntroTimer_ = 0;
@@ -94,6 +104,10 @@ void BossManager::Finalize() {
     beamWarningObj_.reset();
     bossHpBackSprite_.reset();
     bossHpFillSprite_.reset();
+    for (int i = 0; i < 2; ++i) {
+        splitBossHpBackSprites_[i].reset();
+        splitBossHpFillSprites_[i].reset();
+    }
     bossObj_.reset();
     boss_.reset();
 	for (int i = 0; i < 2; ++i) {
@@ -699,6 +713,7 @@ void BossManager::Update(
 			player,
 			nullptr,
 			boss_.get(),
+			nullptr,
 			playerPos,
 			Vector3{ 0.0f, 0.0f, 0.0f },
 			boss_->GetPosition(),
@@ -759,11 +774,26 @@ void BossManager::DrawHpBar(MapManager* mapManager) {
 	}
 
 	if (shouldDrawHpBar && mapManager->IsBossMap()) {
-		if (bossHpBackSprite_) {
-			bossHpBackSprite_->Draw();
-		}
-		if (bossHpFillSprite_) {
-			bossHpFillSprite_->Draw();
+		if (bossType_ == BossType::Split) {
+			for (int i = 0; i < 2; ++i) {
+				if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
+					continue;
+				}
+
+				if (splitBossHpBackSprites_[i]) {
+					splitBossHpBackSprites_[i]->Draw();
+				}
+				if (splitBossHpFillSprites_[i]) {
+					splitBossHpFillSprites_[i]->Draw();
+				}
+			}
+		} else {
+			if (bossHpBackSprite_) {
+				bossHpBackSprite_->Draw();
+			}
+			if (bossHpFillSprite_) {
+				bossHpFillSprite_->Draw();
+			}
 		}
 	}
 }
@@ -816,5 +846,18 @@ float BossManager::GetBossHpRate() const {
 		return 0.0f;
 	}
 
-	return static_cast<float>(boss_->GetHP()) / static_cast<float>(boss_->GetMaxHP());
+return static_cast<float>(boss_->GetHP()) / static_cast<float>(boss_->GetMaxHP());
+}
+
+float BossManager::GetBossHpRateAt(int index) const {
+	if (index < 0 || index >= static_cast<int>(splitBosses_.size())) {
+		return 0.0f;
+	}
+
+	Boss* splitBoss = splitBosses_[index].get();
+	if (!splitBoss || splitBoss->GetMaxHP() <= 0) {
+		return 0.0f;
+	}
+
+	return static_cast<float>(splitBoss->GetHP()) / static_cast<float>(splitBoss->GetMaxHP());
 }

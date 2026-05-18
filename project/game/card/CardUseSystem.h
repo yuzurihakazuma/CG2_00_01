@@ -26,7 +26,7 @@ public:
 	void Initialize(Camera* camera);
 
 	// 更新
-	void Update(Player* player, EnemyManager *enemyManager, Boss* boss,
+	void Update(Player* player, EnemyManager *enemyManager, Boss* boss, Boss* extraBoss,
 		const Vector3& playerPos,
 		const Vector3& enemyPos,
 		const Vector3& bossPos,

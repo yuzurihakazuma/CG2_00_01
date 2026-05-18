@@ -493,6 +493,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				player,
 				this,      // EnemyManager 自身を渡す
 				nullptr,   // ボスのポインタ（雑魚同士やボスに当たらないなら nullptr でOK）
+				nullptr,   // 分裂ボス用の追加ターゲットは不要
 				player->GetPosition(),
 				enemy->GetPosition(),
 				{ 0.0f, 0.0f, 0.0f }, // bossPos

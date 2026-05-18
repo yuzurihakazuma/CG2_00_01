@@ -3,6 +3,7 @@
 #include "game/enemy/Enemy.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
+#include "game/card/BossTargetUtils.h"
 #include "engine/collision/Collision.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
@@ -63,7 +64,7 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	}
 }
 
-void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
+void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss,
 	const Vector3& bossPos, const LevelData& level){
 
 	// 終了済みなら何もしない
@@ -209,25 +210,24 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
 						}
 					}
 
-					// ボスへの判定
-					if ( !fang.hasHit && boss && !boss->IsDead() ) {
-						Vector3 diff = { bossPos.x - fang.pos.x, 0.0f, bossPos.z - fang.pos.z };
-						if ( Length(diff) < 2.5f ) {
-							Vector3 toBoss = { bossPos.x - playerPos.x, 0.0f, bossPos.z - playerPos.z };
-							float distanceToPlayer = Length(toBoss);
-							int finalDamage = damage_;
+					// 分裂戦では近い個体だけにダメージを入れる
+					Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(fang.pos, 2.5f, boss, extraBoss);
+					if ( !fang.hasHit && hitBoss ) {
+						Vector3 targetBossPos = hitBoss->GetPosition();
+						Vector3 toBoss = { targetBossPos.x - playerPos.x, 0.0f, targetBossPos.z - playerPos.z };
+						float distanceToPlayer = Length(toBoss);
+						int finalDamage = damage_;
 
-							if ( distanceToPlayer <= 3.0f ) {
-								finalDamage += 2;
-							} else if ( distanceToPlayer >= 8.0f ) {
-								finalDamage -= 2;
-							}
-							finalDamage += ( rand() % 3 ) - 1;
-							if ( finalDamage < 1 ) finalDamage = 1;
-
-							boss->TakeDamage(finalDamage);
-							fang.hasHit = true;
+						if ( distanceToPlayer <= 3.0f ) {
+							finalDamage += 2;
+						} else if ( distanceToPlayer >= 8.0f ) {
+							finalDamage -= 2;
 						}
+						finalDamage += ( rand() % 3 ) - 1;
+						if ( finalDamage < 1 ) finalDamage = 1;
+
+						hitBoss->TakeDamage(finalDamage);
+						fang.hasHit = true;
 					}
 				}
 				// 敵またはボスが使った場合

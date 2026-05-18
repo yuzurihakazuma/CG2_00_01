@@ -72,13 +72,13 @@ void CardUseSystem::Initialize(Camera* camera) {
 }
 
 // 更新
-void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
+void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss,
 	const Vector3& playerPos, const Vector3& enemyPos, const Vector3& bossPos, const LevelData& level) {
 
 	// システム（クラス化した魔法）の更新・お掃除処理
 	for (auto it = activeEffects_.begin(); it != activeEffects_.end(); ) {
 		// リストの中の魔法を更新
-		(*it)->Update(player, enemyManager, boss,  bossPos, level);
+		(*it)->Update(player, enemyManager, boss, extraBoss, bossPos, level);
 
 		// もし終わっていたらリストから削除
 		if ((*it)->IsFinished()) {

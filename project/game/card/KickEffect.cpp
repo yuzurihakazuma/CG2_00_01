@@ -2,6 +2,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
+#include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <cmath>
@@ -50,7 +51,7 @@ void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerC
     }
 }
 
-void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) {
+void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) {
     if (isFinished_) return;
     timer_++;
 

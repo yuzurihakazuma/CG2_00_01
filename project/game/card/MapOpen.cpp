@@ -11,7 +11,7 @@ void MapOpen::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCast
 	isFinished_ = true;
 }
 
-void MapOpen::Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) {
+void MapOpen::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) {
 }
 
 void MapOpen::Draw() {

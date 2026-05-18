@@ -10,7 +10,7 @@ void CostBoostEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPl
     timer_ = 0;
 }
 
-void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, const Vector3 &bossPos, const LevelData &level) {
+void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) {
     if (isFinished_) return;
 
     if (isPlayerCaster_ && player && !player->IsDead()) {

@@ -37,7 +37,7 @@ void DecoyEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayer
 
 }
 
-void DecoyEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) {
+void DecoyEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss,  const Vector3 &bossPos, const LevelData &level) {
 	(void)player;
 	(void)enemyManager;
 	(void)boss;

@@ -11,7 +11,7 @@ void SpeedBuffEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPL
 
 }
 
-void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss,  const Vector3 &bossPos, const LevelData &level) {
+void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss,  const Vector3 &bossPos, const LevelData &level) {
 
 	if (isFinished_) {
 		return;

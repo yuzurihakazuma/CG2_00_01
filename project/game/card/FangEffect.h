@@ -25,7 +25,7 @@ public:
 	void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
 
 	// 毎フレーム更新
-	void Update(Player* player, EnemyManager *enemyManager, Boss* boss,
+	void Update(Player* player, EnemyManager *enemyManager, Boss* boss, Boss* extraBoss,
 		 const Vector3& bossPos, const LevelData& level) override;
 
 	// 描画

@@ -3,6 +3,7 @@
 #include "game/enemy/Enemy.h"
 #include "game/enemy/Boss.h"
 #include "game/enemy/EnemyManager.h"
+#include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/collision/Collision.h"
 #include "engine/particle/GPUParticleManager.h" 
@@ -48,7 +49,7 @@ void IceBulletEffect::Start(const Vector3& casterPos, float casterYaw, bool isPl
 	}
 }
 
-void IceBulletEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level) {
+void IceBulletEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
 
 	if (isFinished_) return;
 
@@ -138,12 +139,10 @@ void IceBulletEffect::Update(Player* player, EnemyManager* enemyManager, Boss* b
 				}
 			}
 			// --- ボスへの判定 ---
-			if (boss && !boss->IsDead()) {
-				Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-				if (Length(diff) < range_) {
-					boss->TakeDamage(damage_); // ダメージ1
-					boss->Freeze(60); // 凍結
-				}
+			Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, range_, boss, extraBoss);
+			if (hitBoss) {
+				hitBoss->TakeDamage(damage_); // ダメージ1
+				hitBoss->Freeze(60); // 凍結
 			}
 		}
 		// --- 敵が使った場合（プレイヤーへの判定） ---

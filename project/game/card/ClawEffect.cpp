@@ -2,6 +2,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
+#include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <cmath>
@@ -44,7 +45,7 @@ void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	}
 }
 
-void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, const Vector3& bossPos, const LevelData& level){
+void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level){
 	if ( isFinished_ ) return;
 
 	timer_++;
@@ -126,13 +127,11 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 					}
 				}
 			}
-			// ボスへの判定
-			if ( boss && !boss->IsDead() ) {
-				Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-				if ( Length(diff) < 3.5f ) {
-					boss->TakeDamage(randomDamage);
-					hasHit_ = true;
-				}
+			// 分裂戦では近い個体だけにダメージを入れる
+			Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 3.5f, boss, extraBoss);
+			if ( hitBoss ) {
+				hitBoss->TakeDamage(randomDamage);
+				hasHit_ = true;
 			}
 		} else {
 			// プレイヤーへの判定
