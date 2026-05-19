@@ -2395,7 +2395,8 @@ void GamePlayScene::DrawCharacterHitboxesDebug() const {
 	if (enemyManager_) {
 		for (const auto& enemy : enemyManager_->GetEnemies()) {
 			if (enemy && !enemy->IsDead() && enemy->IsVisible()) {
-				DrawDebugCircleXZ(enemy->GetPosition(), 0.6f, IM_COL32(255, 80, 80, 220), 1.7f);
+				const float enemyRadius = 0.9f * (std::max)(enemy->GetScale().x, enemy->GetScale().z);
+				DrawDebugCircleXZ(enemy->GetPosition(), enemyRadius, IM_COL32(255, 80, 80, 220), 1.7f);
 			}
 		}
 	}
