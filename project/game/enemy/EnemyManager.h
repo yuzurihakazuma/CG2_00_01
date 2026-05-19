@@ -50,6 +50,8 @@ private:
 	struct EnemyVisual {
 		std::unique_ptr<Obj3d> obj;
 		std::unique_ptr<SkinnedObj3d> skinned;
+		std::unique_ptr<Obj3d> cardRing;
+		std::unique_ptr<Obj3d> cardRingFill;
 	};
 
 	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera) const;

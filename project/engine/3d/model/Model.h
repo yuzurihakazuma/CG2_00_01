@@ -73,6 +73,7 @@ public: // メンバ関数
 	/// 球モデルの初期化
 	/// </summary>
 	void InitializeSphere(ModelCommon* modelCommon, int subdivision);
+	void InitializeRing(ModelCommon* modelCommon, int subdivision);
 
 
 	/// <summary>
