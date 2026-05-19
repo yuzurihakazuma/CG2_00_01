@@ -13,11 +13,10 @@ void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
     timer_ = 0;
-    hasHit_ = false;
+    hitTargets_.clear(); // 🌟 攻撃のたびにヒット履歴をリセット
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
 
-    // 🌟 本体モデルの生成
     obj_ = Obj3d::Create("sword_model");
     if ( obj_ ) {
         obj_->SetCamera(camera);
@@ -27,22 +26,21 @@ void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
 
         Model* model = obj_->GetModel();
         if ( model && model->GetMaterial() ) {
-            Model::Material* mat = model->GetMaterial();
-            mat->emissive = 1.5f;
+            Model::Material* material = model->GetMaterial();
+            material->emissive = 2.0f;
         }
     }
 
-    // 🌟 残像用モデルの初期化
     afterimages_.clear();
-    for ( int i = 0; i < kAfterimageCount; i++ ) {
-        Afterimage ai;
-        ai.obj = Obj3d::Create("sword_model");
-        if ( ai.obj ) {
-            ai.obj->SetCamera(camera);
-            ai.obj->SetScale(scale_);
+    for ( int index = 0; index < maxAfterimageCount_; index++ ) {
+        AfterimageData afterimage;
+        afterimage.object = Obj3d::Create("sword_model");
+        if ( afterimage.object ) {
+            afterimage.object->SetCamera(camera);
+            afterimage.object->SetScale(scale_);
         }
-        ai.isActive = false;
-        afterimages_.push_back(std::move(ai));
+        afterimage.isActive = false;
+        afterimages_.push_back(std::move(afterimage));
     }
 }
 
@@ -52,135 +50,155 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
     timer_++;
 
     if ( isPlayerCaster_ && player ) {
-        Vector3 playerPos = player->GetPosition();
-
-        // ==========================================
-        // 🌟 横薙ぎモーションの計算
-        // ==========================================
-        float swingDuration = 15.0f;
-        float t = std::clamp(static_cast< float >( timer_ ) / swingDuration, 0.0f, 1.0f);
-
-        float baseTilt = 0.5f; // 前傾
-        float startYawOffset = -1.5f; // 右へ振りかぶる角度
-        float endYawOffset = 1.5f; // 左へ振り抜く角度
-
-        // イージング(EaseInOut)で滑らかに振る
-        float easeT = t < 0.5f ? 2.0f * t * t : 1.0f - std::powf(-2.0f * t + 2.0f, 2.0f) / 2.0f;
-        float currentYaw = casterYaw_ + startYawOffset + ( endYawOffset - startYawOffset ) * easeT;
-
-        // スイング軌道（少し下がりながら上がる）
-        float tiltX = baseTilt + 0.4f * std::sinf(t * 3.14159f);
-
-        // ==========================================
-        // 🌟 修正：剣の位置をプレイヤーの「前方」にする！
-        // プレイヤーの中心から radius 分だけ離れた円周上を移動させます
-        // ==========================================
-        float radius = 1.5f; // プレイヤーから剣を離す距離（剣の長さに合わせて微調整してください）
-        float height = 1.0f; // 剣を振る高さ（腰〜胸のあたり）
-
-        pos_ = {
-            playerPos.x + std::sinf(currentYaw) * radius,
-            playerPos.y + height,
-            playerPos.z + std::cosf(currentYaw) * radius
-        };
+        Vector3 playerPosition = player->GetPosition();
 
         if ( obj_ ) {
+            // アニメーション時間（15フレームで一気に回転）
+            float swingProgress = static_cast< float >( timer_ ) / 15.0f;
+            if ( swingProgress > 1.0f ) swingProgress = 1.0f;
+
+            // イージングで少し溜めてからシュバッ！と回る
+            float easeT = swingProgress < 0.5f ? 2.0f * swingProgress * swingProgress : 1.0f - std::powf(-2.0f * swingProgress + 2.0f, 2.0f) / 2.0f;
+
+            // =========================================================================================
+            // 水平な「360度 回転斬り」の計算
+            // =========================================================================================
+
+            // プレイヤーの後ろ（-180度）から始まり、ぐるっと1周（+180度）回る！
+            float startYawOffset = -3.14159f; // -PI
+            float endYawOffset = 3.14159f;  // +PI
+            float currentRotationYaw = casterYaw_ + startYawOffset + ( endYawOffset - startYawOffset ) * easeT;
+
+            // 支点は完全にプレイヤーの中心（回転の軸になる）
+            Vector3 pivotPos = {
+                playerPosition.x,
+                playerPosition.y + 1.2f, // 高さは一定（水平な横斬り）
+                playerPosition.z
+            };
+
+            // プレイヤーの周囲を回る半径
+            float swingRadius = 1.5f;
+
+            pos_ = {
+                pivotPos.x + std::sinf(currentRotationYaw) * swingRadius,
+                pivotPos.y,
+                pivotPos.z + std::cosf(currentRotationYaw) * swingRadius
+            };
+
+            //  剣の傾き：Z軸は0、X軸を90度(1.57f)にして「完全に水平（横）」にする
+            float rotationPitchX = 1.57f;
+            float rotationRollZ = 0.0f;
+
             // 回転と座標を適用
-            // もし剣の向きが90度ズレている場合は、currentYaw + 1.57f などを試してください
-            obj_->SetRotation({ tiltX, currentYaw, 0.0f });
+            obj_->SetRotation({ rotationPitchX, currentRotationYaw, rotationRollZ });
             obj_->SetTranslation(pos_);
             obj_->Update();
-        }
 
-        // ==========================================
-        // 🌟 残像の更新（ポーズをコピー）
-        // ==========================================
-        if ( timer_ < 15 && obj_ ) {
-            for ( auto& ai : afterimages_ ) {
-                if ( !ai.isActive ) {
-                    ai.isActive = true;
-                    ai.lifeTimer = kAfterimageLife;
-                    CopyPRS(obj_, ai.obj);
-                    ai.obj->Update();
-                    break;
+            // グレーの斬撃軌跡エフェクト
+            Vector3 zeroVelocity = { 0.0f, 0.0f, 0.0f };
+            Vector4 grayColor = { 0.4f, 0.4f, 0.4f, 0.1f };
+            GPUParticleManager::GetInstance()->Emit(pos_, zeroVelocity, 0.1f, 1.2f, grayColor);
+
+            // クロー風の残像の更新
+            if ( timer_ < 15 ) {
+                for ( auto& afterimage : afterimages_ ) {
+                    if ( !afterimage.isActive ) {
+                        afterimage.isActive = true;
+                        afterimage.lifeTimer = defaultAfterimageLife_;
+                        CopyTransform(obj_, afterimage.object);
+                        afterimage.object->Update();
+                        break;
+                    }
                 }
             }
         }
 
         // 残像のフェードアウト処理
-        for ( auto& ai : afterimages_ ) {
-            if ( ai.isActive ) {
-                ai.lifeTimer--;
-                float alpha = static_cast< float >( ai.lifeTimer ) / static_cast< float >( kAfterimageLife );
-                Vector4 color = { 0.2f, 0.9f, 1.0f, alpha * 0.4f }; // 水色の残像
-                ai.obj->SetColor(color);
-                ai.obj->Update();
+        for ( auto& afterimage : afterimages_ ) {
+            if ( afterimage.isActive ) {
+                afterimage.lifeTimer--;
+                float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
+                Vector4 afterimageColor = { 0.2f, 0.9f, 1.0f, alphaRatio * 0.4f };
+                afterimage.object->SetColor(afterimageColor);
+                afterimage.object->Update();
 
-                if ( ai.lifeTimer <= 0 ) {
-                    ai.isActive = false;
+                if ( afterimage.lifeTimer <= 0 ) {
+                    afterimage.isActive = false;
                 }
             }
         }
 
-        // ==========================================
-        // 🌟 斬撃パーティクル（剣の刃に沿って発生）
-        // ==========================================
+        // 水色の斬撃パーティクル
         if ( timer_ < 15 ) {
-            int traceCount = 5;
-            for ( int i = 0; i < traceCount; i++ ) {
-                // 剣の先端の方（さらに外側）にパーティクルを散らす
-                Vector3 tracePos = {
-                    pos_.x + std::sinf(currentYaw) * ( static_cast< float >(rand() % 15) * 0.1f ),
-                    pos_.y + static_cast< float >(rand() % 10 - 5) * 0.1f, // 上下に広く
-                    pos_.z + std::cosf(currentYaw) * ( static_cast< float >(rand() % 15) * 0.1f )
+            int particleTraceCount = 5; // 円を描くように多めに散らす
+            for ( int index = 0; index < particleTraceCount; index++ ) {
+                Vector3 particlePosition = {
+                    pos_.x + static_cast< float >(rand() % 11 - 5) * 0.08f,
+                    pos_.y + static_cast< float >(rand() % 11 - 5) * 0.08f,
+                    pos_.z + static_cast< float >(rand() % 11 - 5) * 0.08f
                 };
-                Vector4 color = { 0.4f, 0.9f, 1.0f, 1.0f }; // 鮮やかな水色
-                GPUParticleManager::GetInstance()->Emit(tracePos, { 0.0f, 0.0f, 0.0f }, 0.25f, 0.4f, color);
+                Vector3 zeroVelocity = { 0.0f, 0.0f, 0.0f };
+                Vector4 cyanColor = { 0.4f, 0.9f, 1.0f, 1.0f };
+                GPUParticleManager::GetInstance()->Emit(particlePosition, zeroVelocity, 0.25f, 0.4f, cyanColor);
             }
         }
     }
 
-    // ==========================================
-    // 🌟 当たり判定（剣の位置 pos_ を基準にするので薙ぎ払いに応じて動く！）
-    // ==========================================
-    bool isAttacking = ( timer_ >= 3 && timer_ <= 12 );
-    if ( isAttacking && !hasHit_ ) {
+    // =========================================================================================
+    // 周囲の敵「全員」にヒットするように改修！
+    // =========================================================================================
+    bool isAttacking = ( timer_ >= 2 && timer_ <= 15 );
+    if ( isAttacking ) { // 🌟 hasHit_ の判定を消し、毎回チェックする
+
         int randomDamage = damage_ + ( rand() % 2 );
 
         if ( isPlayerCaster_ ) {
             if ( enemyManager ) {
-                for ( auto& enemy : enemyManager->GetEnemies() ) {
-                    if ( !enemy || enemy->IsDead() ) continue;
-                    Vector3 ePos = enemy->GetPosition();
-                    Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
+                for ( auto& currentEnemy : enemyManager->GetEnemies() ) {
+                    if ( !currentEnemy || currentEnemy->IsDead() ) continue;
 
-                    // 剣の位置から半径2.5f以内ならヒット
-                    if ( Length(diff) < 2.5f ) {
-                        enemy->TakeDamage(randomDamage);
-                        for ( int i = 0; i < 10; i++ ) {
-                            Vector3 sparkVel = { ( rand() % 11 - 5 ) * 0.5f, ( rand() % 11 - 5 ) * 0.5f, ( rand() % 11 - 5 ) * 0.5f };
-                            GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 1.0f, 0.8f, 1.0f });
+                    // 🌟 既にこの回転斬りでダメージを与えた敵はスルーする
+                    auto it = std::find(hitTargets_.begin(), hitTargets_.end(), currentEnemy.get());
+                    if ( it != hitTargets_.end() ) continue;
+
+                    Vector3 enemyPosition = currentEnemy->GetPosition();
+                    Vector3 distanceVector = { enemyPosition.x - pos_.x, 0.0f, enemyPosition.z - pos_.z };
+
+                    // 剣の位置から一定範囲内ならヒット
+                    if ( Length(distanceVector) < 3.0f ) { // 巻き込みやすく範囲を広めに
+                        currentEnemy->TakeDamage(randomDamage);
+                        hitTargets_.push_back(currentEnemy.get()); // 🌟 ヒットした敵を記憶
+
+                        for ( int sparkIndex = 0; sparkIndex < 10; sparkIndex++ ) {
+                            Vector3 sparkVelocity = { ( rand() % 11 - 5 ) * 0.5f, ( rand() % 11 - 5 ) * 0.5f, ( rand() % 11 - 5 ) * 0.5f };
+                            Vector4 sparkColor = { 1.0f, 1.0f, 0.8f, 1.0f };
+                            GPUParticleManager::GetInstance()->Emit(pos_, sparkVelocity, 0.2f, 0.2f, sparkColor);
                         }
-                        hasHit_ = true;
-                        break;
                     }
                 }
             }
             if ( boss && !boss->IsDead() ) {
-                Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                if ( Length(diff) < 4.0f ) {
-                    boss->TakeDamage(randomDamage);
-                    hasHit_ = true;
+                auto it = std::find(hitTargets_.begin(), hitTargets_.end(), boss);
+                if ( it == hitTargets_.end() ) {
+                    Vector3 distanceVector = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
+                    if ( Length(distanceVector) < 5.0f ) {
+                        boss->TakeDamage(randomDamage);
+                        hitTargets_.push_back(boss);
+                    }
                 }
             }
         } else {
-            int enemyRandomDamage = damage_ + ( rand() % 2 );
+            // 敵が回転斬りを使った場合
             if ( player && !player->IsDead() ) {
-                Vector3 pPos = player->GetPosition();
-                Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
-                if ( Length(diff) < 2.5f ) {
-                    player->TakeDamage(enemyRandomDamage, pos_);
-                    hasHit_ = true;
+                auto it = std::find(hitTargets_.begin(), hitTargets_.end(), player);
+                if ( it == hitTargets_.end() ) {
+                    Vector3 playerPosition = player->GetPosition();
+                    Vector3 distanceVector = { playerPosition.x - pos_.x, 0.0f, playerPosition.z - pos_.z };
+                    if ( Length(distanceVector) < 3.0f ) {
+                        int enemyRandomDamage = damage_ + ( rand() % 2 );
+                        player->TakeDamage(enemyRandomDamage, pos_);
+                        hitTargets_.push_back(player);
+                    }
                 }
             }
         }
@@ -194,14 +212,16 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
 void SwordEffect::Draw(){
     if ( isFinished_ ) return;
     if ( obj_ ) obj_->Draw();
-    for ( auto& ai : afterimages_ ) {
-        if ( ai.isActive && ai.obj ) ai.obj->Draw();
+    for ( auto& afterimage : afterimages_ ) {
+        if ( afterimage.isActive && afterimage.object ) {
+            afterimage.object->Draw();
+        }
     }
 }
 
-void SwordEffect::CopyPRS(const std::unique_ptr<Obj3d>& source, const std::unique_ptr<Obj3d>& dest){
-    if ( !source || !dest ) return;
-    dest->SetTranslation(source->GetTranslation());
-    dest->SetRotation(source->GetRotation());
-    dest->SetScale(source->GetScale());
+void SwordEffect::CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj){
+    if ( !sourceObj || !destinationObj ) return;
+    destinationObj->SetTranslation(sourceObj->GetTranslation());
+    destinationObj->SetRotation(sourceObj->GetRotation());
+    destinationObj->SetScale(sourceObj->GetScale());
 }

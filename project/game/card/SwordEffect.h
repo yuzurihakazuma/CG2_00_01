@@ -7,7 +7,6 @@
 
 class SwordEffect : public ICardEffect{
 public:
-    // 🌟 復活：あなたの元のコンストラクタ
     SwordEffect(int damage) : damage_(damage){}
 
     void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera) override;
@@ -16,12 +15,10 @@ public:
     bool IsFinished() const override{ return isFinished_; }
 
 private:
-    // PRS (Position, Rotation, Scale) をコピーするヘルパー関数
-    void CopyPRS(const std::unique_ptr<Obj3d>& source, const std::unique_ptr<Obj3d>& dest);
+    void CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj);
 
-    // 残像のデータを覚える構造体
-    struct Afterimage{
-        std::unique_ptr<Obj3d> obj = nullptr;
+    struct AfterimageData{
+        std::unique_ptr<Obj3d> object = nullptr;
         int lifeTimer = 0;
         bool isActive = false;
     };
@@ -31,23 +28,19 @@ private:
     Vector3 pos_ = { 0.0f, 0.0f, 0.0f };
     Vector3 scale_ = { 1.5f, 1.5f, 1.5f };
 
-    // 🌟 復活：消えてしまっていた変数たち
     int damage_ = 1;
     int timer_ = 0;
-    bool hasHit_ = false;
     bool isPlayerCaster_ = true;
     bool isFinished_ = false;
 
     float casterYaw_ = 0.0f;
     Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
-    Vector3 playerPos_ = { 0.0f, 0.0f, 0.0f };
 
-    int effectDuration_ = 20; // エフェクト全体の時間
+    const int effectDuration_ = 20;
 
-    // ==========================================
-    // 🌟 追加：剣の残像システム
-    // ==========================================
-    static const int kAfterimageCount = 6;
-    static const int kAfterimageLife = 10;
-    std::vector<Afterimage> afterimages_;
+    static const int maxAfterimageCount_ = 8;
+    static const int defaultAfterimageLife_ = 12;
+    std::vector<AfterimageData> afterimages_;
+
+    std::vector<void*> hitTargets_;
 };
