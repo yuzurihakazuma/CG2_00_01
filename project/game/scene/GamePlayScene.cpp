@@ -261,6 +261,32 @@ void GamePlayScene::Initialize() {
 	playerStatusBgSprite_ = Sprite::Create("resources/white1x1.png", { 170.0f, 625.0f });
 	playerStatusBgSprite_->SetSize({ 340.0f, 190.0f });
 	playerStatusBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.65f });
+	playerHpGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerHpGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerHpGaugeFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	if (playerHpGaugeFrameSprite_) {
+		playerHpGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
+	}
+	if (playerHpGaugeBackSprite_) {
+		playerHpGaugeBackSprite_->SetColor({ 0.08f, 0.03f, 0.03f, 0.85f });
+	}
+	if (playerHpGaugeFillSprite_) {
+		playerHpGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerHpGaugeFillSprite_->SetColor({ 0.95f, 0.12f, 0.13f, 0.95f });
+	}
+	if (playerCostGaugeFrameSprite_) {
+		playerCostGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
+	}
+	if (playerCostGaugeBackSprite_) {
+		playerCostGaugeBackSprite_->SetColor({ 0.03f, 0.05f, 0.09f, 0.85f });
+	}
+	if (playerCostGaugeFillSprite_) {
+		playerCostGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerCostGaugeFillSprite_->SetColor({ 0.18f, 0.68f, 1.0f, 0.95f });
+	}
 
 	// スプライト作成（座標 X:100, Y:500）
 	descBgSprite_ = Sprite::Create("resources/white1x1.png", { 100.0f, 500.0f });
@@ -1340,7 +1366,7 @@ void GamePlayScene::Update() {
 		// 1. サイズの決定
 	// 横幅を 800px、高さを 50px に変更する例
 		float bgW = 900.0f;
-		float bgH = 50.0f;
+		float bgH = 76.0f;
 		playerStatusBgSprite_->SetSize({ bgW, bgH });
 
 		// 2. 位置の決定 (アンカーポイントが中心 0.5 の場合)
@@ -1351,6 +1377,7 @@ void GamePlayScene::Update() {
 		playerStatusBgSprite_->SetPosition({ posX, posY });
 		playerStatusBgSprite_->Update();
 	}
+	UpdatePlayerStatusGaugeUI();
 
 	// テストオブジェクトの更新
 	if (testObj_) {
@@ -1389,10 +1416,10 @@ void GamePlayScene::Update() {
 	// プレイヤーステータス表示更新
 	if (playerManager_) {
 		std::string hpText =
-			"HP : " + std::to_string(playerManager_->GetHP()) + " / " + std::to_string(playerManager_->GetMaxHP());
+			"HP:" + std::to_string(playerManager_->GetHP()) + "/" + std::to_string(playerManager_->GetMaxHP());
 
 		std::string costText =
-			"COST : " + std::to_string(playerManager_->GetCost()) + " / " + std::to_string(playerManager_->GetMaxCost());
+			"COST:" + std::to_string(playerManager_->GetCost()) + "/" + std::to_string(playerManager_->GetMaxCost());
 
 		std::string levelText =
 			"LV : " + std::to_string(playerManager_->GetLevel());
@@ -1407,15 +1434,18 @@ void GamePlayScene::Update() {
 		textMgr->SetText("PlayerEXP", expText);
 
 		// ★ 横並びに配置するための計算
-		float topY = 20.0f;     // 上端からのY座標
+		float topY = 28.0f;
 		float startX = 260.0f;   // 左端からのX座標
-		float spacing = 200.0f; // ウィンドウ幅に合わせて項目間のスペースを自動計算
 
 		// テキストの座標を最新のウィンドウ幅に合わせて更新
 		textMgr->SetPosition("PlayerHP", startX, topY);
-		textMgr->SetPosition("PlayerCost", startX + spacing, topY);
-		textMgr->SetPosition("PlayerLevel", startX + spacing * 2+100, topY);
-		textMgr->SetPosition("PlayerEXP", startX + spacing * 3, topY);
+		textMgr->SetScale("PlayerHP", 0.68f);
+		textMgr->SetScale("PlayerCost", 0.68f);
+		textMgr->SetScale("PlayerLevel", 0.9f);
+		textMgr->SetScale("PlayerEXP", 0.9f);
+		textMgr->SetPosition("PlayerCost", startX, 58.0f);
+		textMgr->SetPosition("PlayerLevel", 770.0f, 30.0f);
+		textMgr->SetPosition("PlayerEXP", 870.0f, 30.0f);
 	}
 
 	if (tutorial_ && tutorial_->IsActive()) {
@@ -1775,6 +1805,7 @@ void GamePlayScene::Draw() {
 		if (playerStatusBgSprite_) {
 			playerStatusBgSprite_->Draw();
 		}
+		DrawPlayerStatusGaugeUI();
 
 		if (minimap_) {
 			minimap_->Draw();
@@ -2231,6 +2262,78 @@ void GamePlayScene::UpdateCardUseFlash() {
 void GamePlayScene::DrawCardUseFlash() {
 	if (cardUseFlashObj_) {
 		cardUseFlashObj_->Draw();
+	}
+}
+
+void GamePlayScene::UpdatePlayerStatusGaugeUI() {
+	if (!playerManager_) {
+		return;
+	}
+
+	const float panelLeft = 250.0f;
+	const float labelWidth = 170.0f;
+	const float gaugeLeft = panelLeft + labelWidth + 18.0f;
+	const float gaugeWidth = 300.0f;
+	const float gaugeHeight = 16.0f;
+	const float hpY = 42.0f;
+	const float costY = 72.0f;
+
+	auto updateGauge = [gaugeLeft, gaugeWidth, gaugeHeight](Sprite* frame, Sprite* back, Sprite* fill, float y, float ratio, const Vector4& fillColor) {
+		const float safeRatio = std::clamp(ratio, 0.0f, 1.0f);
+
+		if (frame) {
+			frame->SetPosition({ gaugeLeft + gaugeWidth * 0.5f, y });
+			frame->SetSize({ gaugeWidth + 4.0f, gaugeHeight + 4.0f });
+			frame->Update();
+		}
+		if (back) {
+			back->SetPosition({ gaugeLeft + gaugeWidth * 0.5f, y });
+			back->SetSize({ gaugeWidth, gaugeHeight });
+			back->Update();
+		}
+		if (fill) {
+			fill->SetPosition({ gaugeLeft, y });
+			fill->SetSize({ gaugeWidth * safeRatio, gaugeHeight });
+			fill->SetColor(fillColor);
+			fill->Update();
+		}
+	};
+
+	const float hpRatio = playerManager_->GetMaxHP() > 0
+		? static_cast<float>(playerManager_->GetHP()) / static_cast<float>(playerManager_->GetMaxHP())
+		: 0.0f;
+	const float costRatio = playerManager_->GetMaxCost() > 0
+		? static_cast<float>(playerManager_->GetCost()) / static_cast<float>(playerManager_->GetMaxCost())
+		: 0.0f;
+	Vector4 hpColor = { 0.95f, 0.12f, 0.13f, 0.95f };
+	if (hpRatio > 0.5f) {
+		hpColor = { 0.15f, 0.9f, 0.25f, 0.95f };
+	} else if (hpRatio > 0.25f) {
+		hpColor = { 1.0f, 0.82f, 0.12f, 0.95f };
+	}
+
+	updateGauge(playerHpGaugeFrameSprite_.get(), playerHpGaugeBackSprite_.get(), playerHpGaugeFillSprite_.get(), hpY, hpRatio, hpColor);
+	updateGauge(playerCostGaugeFrameSprite_.get(), playerCostGaugeBackSprite_.get(), playerCostGaugeFillSprite_.get(), costY, costRatio, { 0.18f, 0.68f, 1.0f, 0.95f });
+}
+
+void GamePlayScene::DrawPlayerStatusGaugeUI() {
+	if (playerHpGaugeFrameSprite_) {
+		playerHpGaugeFrameSprite_->Draw();
+	}
+	if (playerHpGaugeBackSprite_) {
+		playerHpGaugeBackSprite_->Draw();
+	}
+	if (playerHpGaugeFillSprite_) {
+		playerHpGaugeFillSprite_->Draw();
+	}
+	if (playerCostGaugeFrameSprite_) {
+		playerCostGaugeFrameSprite_->Draw();
+	}
+	if (playerCostGaugeBackSprite_) {
+		playerCostGaugeBackSprite_->Draw();
+	}
+	if (playerCostGaugeFillSprite_) {
+		playerCostGaugeFillSprite_->Draw();
 	}
 }
 

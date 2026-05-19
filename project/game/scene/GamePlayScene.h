@@ -160,6 +160,8 @@ private: // メンバ変数
 	void StartCardUseFlash(const Card& card);
 	void UpdateCardUseFlash();
 	void DrawCardUseFlash();
+	void UpdatePlayerStatusGaugeUI();
+	void DrawPlayerStatusGaugeUI();
 
 	// ポーズ画面の更新
 	void UpdatePause(Input* input);
@@ -228,6 +230,12 @@ private: // メンバ変数
 
 	// プレイヤーステータスの背景
 	std::unique_ptr<Sprite> playerStatusBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeFrameSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeBackSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeFillSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeFrameSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeBackSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeFillSprite_ = nullptr;
 
 	// コスト不足メッセージ表示用
 	int costLackMessageTimer_ = 0;
