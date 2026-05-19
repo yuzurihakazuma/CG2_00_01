@@ -103,6 +103,12 @@ private: // メンバ変数
 	
 	// GPUパーティクルエミッター
 	GPUParticleEmitter emitter_;
+
+	// オーラ用のテクスチャやモデルを管理するオブジェクト
+	std::unique_ptr<Obj3d> auraObj_ = nullptr;
+
+	// UVスクロール用のタイマー変数
+	float auraUvScrollOffset_ = 0.0f;
 	
 
 	EngineMode prevMode_ = EngineMode::Edit;

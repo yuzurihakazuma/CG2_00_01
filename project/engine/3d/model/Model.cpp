@@ -204,6 +204,65 @@ void Model::InitializePrimitive(ModelCommon* modelCommon, const ModelData& model
 	CreateBuffers();
 }
 
+void Model::InitializeRing(ModelCommon* modelCommon, int subdivision, float outerRadius, float innerRadius){
+	this->modelCommon_ = modelCommon;
+	modelData_ = {};
+
+	const float radianPerDivide = 2.0f * std::numbers::pi_v<float> / float(subdivision);
+
+	for ( int index = 0; index < subdivision; ++index ) {
+		float sin = std::sin(index * radianPerDivide);
+		float cos = std::cos(index * radianPerDivide);
+		float sinNext = std::sin(( index + 1 ) * radianPerDivide);
+		float cosNext = std::cos(( index + 1 ) * radianPerDivide);
+
+		// U成分 (横方向のUV) は円周に沿って 0.0 ～ 1.0 へ変化
+		float u = float(index) / float(subdivision);
+		float uNext = float(index + 1) / float(subdivision);
+
+		VertexData v[4];
+
+		// ① 外側・現在の角度
+		v[0].position = { -sin * outerRadius, cos * outerRadius, 0.0f, 1.0f };
+		v[0].texcoord = { u, 0.0f }; // 外側を V=0 にする
+		v[0].normal = { 0.0f, 0.0f, -1.0f };
+
+		// ② 外側・次の角度
+		v[1].position = { -sinNext * outerRadius, cosNext * outerRadius, 0.0f, 1.0f };
+		v[1].texcoord = { uNext, 0.0f };
+		v[1].normal = { 0.0f, 0.0f, -1.0f };
+
+		// ③ 内側・現在の角度
+		v[2].position = { -sin * innerRadius, cos * innerRadius, 0.0f, 1.0f };
+		v[2].texcoord = { u, 1.0f }; // 内側を V=1 にする
+		v[2].normal = { 0.0f, 0.0f, -1.0f };
+
+		// ④ 内側・次の角度
+		v[3].position = { -sinNext * innerRadius, cosNext * innerRadius, 0.0f, 1.0f };
+		v[3].texcoord = { uNext, 1.0f };
+		v[3].normal = { 0.0f, 0.0f, -1.0f };
+
+		// 頂点をバッファに追加し、基準となるインデックス番号を記憶
+		uint32_t baseIndex = static_cast< uint32_t >( modelData_.vertices.size() );
+		for ( int i = 0; i < 4; ++i ) {
+			modelData_.vertices.push_back(v[i]);
+		}
+
+		// インデックスデータを追加 (時計回りで三角形を2つ作る)
+		// 1つ目の三角形: ① -> ② -> ③
+		modelData_.indices.push_back(baseIndex + 0);
+		modelData_.indices.push_back(baseIndex + 1);
+		modelData_.indices.push_back(baseIndex + 2);
+		// 2つ目の三角形: ③ -> ② -> ④
+		modelData_.indices.push_back(baseIndex + 2);
+		modelData_.indices.push_back(baseIndex + 1);
+		modelData_.indices.push_back(baseIndex + 3);
+	}
+
+	// デフォルトのテクスチャ（適当なもの）を指定してバッファ作成
+	modelData_.material.textureFilePath = "resources/uvChecker.png";
+	CreateBuffers();
+}
 
 void Model::Draw(uint32_t instanceCount) {
 	// 1. コマンドリストを取得する

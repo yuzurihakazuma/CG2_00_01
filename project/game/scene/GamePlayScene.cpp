@@ -45,6 +45,9 @@ void GamePlayScene::Initialize(){
 	// コマンドリスト取得
 	auto commandList = dxCommon->GetCommandList();
 
+
+
+
 	// BGMロード (シングルトン)
 	AudioManager::GetInstance()->LoadWave(bgmFile_);
 	// モデル読み込み (シングルトン)
@@ -71,6 +74,7 @@ void GamePlayScene::Initialize(){
 	textures_["circle2"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/circle2.png", commandList);
 	textures_["noise0"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/noise0.png", commandList) };
 	textures_["noise1"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/noise1.png", commandList) };
+	textures_["gradationLine"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/gradationLine.png", commandList) };
 	
 
 	textures_["skybox"] = TextureManager::GetInstance()->LoadTextureAndCreateSRVCube("resources/StandardCubeMap.dds", commandList);
@@ -124,7 +128,31 @@ void GamePlayScene::Initialize(){
 		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
 	}
 
-	
+	// ★1. Ringモデルの生成
+	ModelManager::GetInstance()->CreateRingModel("auraRing", 32, 1.0f, 0.2f);
+
+	// ★2. 画像のリングを単体として出す
+	auraObj_ = Obj3d::Create("auraRing");
+	if ( auraObj_ ) {
+		auraObj_->SetCamera(camera_.get());
+
+		// テクスチャをセット
+		auraObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
+
+		// ★ザラザラの原因を潰す！ノイズ枠にダミーとして同じ画像をセットしてディゾルブを無効化
+		auraObj_->SetNoiseTexture(textures_["gradationLine"].srvIndex);
+
+		// ライティングで真っ黒になるのを防ぐ
+		auraObj_->GetModel()->GetMaterial()->enableLighting = 0;
+
+		// ★地面に魔法陣のように広がるように、X軸で90度(1.57ラジアン)倒す
+		auraObj_->SetRotation({ 1.5708f, 0.0f, 0.0f });
+		// 床に埋まらないように少しだけ上に浮かす
+		auraObj_->SetTranslation({ 0.0f, 0.1f, 5.0f });
+
+		// 加算合成で綺麗に光らせる
+		auraObj_->SetPipelineType(PipelineType::Object3D_Additive);
+	}
 
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // スキニングも
@@ -198,7 +226,7 @@ void GamePlayScene::Update(){
 		newEffect->Initialize(
 			{ 5.0f, 0.0f, 5.0f },            // 発生位置
 			camera_.get(),                 // カメラ
-			textures_["circle2"].srvIndex,  // 鋭い光用の丸いテクスチャ
+			textures_["gradationLine"].srvIndex,  // 鋭い光用の丸いテクスチャ
 			textures_["skybox"].srvIndex   // 反射用の環境マップ
 		);
 
@@ -232,6 +260,32 @@ void GamePlayScene::Update(){
 	// パーティクル更新
 	ParticleManager::GetInstance()->Update(camera_.get());
 
+
+	if ( auraObj_ ) {
+		// 1. スクロール値を毎フレーム少しずつ増やす
+		float scrollSpeed = 1.0f * ( 1.0f / 60.0f ); // 1秒間に1.0スクロールする速さ
+		auraUvScrollOffset_ += scrollSpeed;
+
+		// 1.0を超えたら0に戻す（オーバーフロー防止）
+		if ( auraUvScrollOffset_ > 1.0f ) {
+			auraUvScrollOffset_ -= 1.0f;
+		}
+
+		// 2. UVをV方向(Y軸)に移動させる行列を作成
+		Matrix4x4 uvTransform = MakeTranslate({ 0.0f, auraUvScrollOffset_, 0.0f });
+
+		// （応用：スライドのようにU方向にScaleをかけて解像度を細かく見せたい場合は以下のように合成します）
+		// Matrix4x4 uvScale = MakeScaleMatrix({ 3.0f, 1.0f, 1.0f }); 
+		// uvTransform = Multiply(uvScale, uvTransform);
+
+		//auraObj_->SetRotation({ 1.5708f, 0.0f, 0.0f });
+
+		// 3. マテリアルにUVTransform行列をセット
+		auraObj_->GetModel()->GetMaterial()->uvTransform = uvTransform;
+
+		// 4. オブジェクトの更新
+		auraObj_->Update();
+	}
 
 	// 全オブジェクト更新
 	for ( auto& obj : object3ds_ ) {
@@ -300,29 +354,19 @@ void GamePlayScene::Draw(){
 	// --- 3D描画の前準備 ---
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 
-	
-	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(9, textures_["skybox"].srvIndex);
-	
+	// 1. 先に「不透明」なものを全部描き切る！！！
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
-	
-	
-	EditorManager::GetInstance()->Draw();
+	if ( testObj_ ){ testObj_->Draw(); }
+	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 
-	if ( testObj_ ){ 
-		testObj_->Draw();
-	}
+	// 2. 最後に「透明・加算合成」のものを描く！！！（順番大事）
+	if ( auraObj_ ) { auraObj_->Draw(); }
 
-	
 
 	// --- インスタンシングの3D描画 ---
 	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
 
-	// 
-	if (skinnedObj_) { 
-			skinnedObj_->Draw();
-	}
 
-	
 
 	if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
