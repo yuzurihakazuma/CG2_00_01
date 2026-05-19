@@ -1083,13 +1083,15 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 	const LevelData& level = mapManager->GetLevelData();
 
 	const float playerRadius = 0.6f;
-	const float enemyRadius = 0.6f;
+	const float enemyBaseRadius = 0.9f;
+	const float enemyWallBaseHalfSize = 0.7f;
 
 	// 指定位置の敵が壁に当たるか
-	auto IsEnemyHitWall = [&](const Vector3& pos) -> bool {
+	auto IsEnemyHitWall = [&](const Vector3& pos, float radiusScale) -> bool {
+		const float enemyWallHalfSize = enemyWallBaseHalfSize * radiusScale;
 		AABB enemyAABB;
-		enemyAABB.min = { pos.x - 0.5f, pos.y - 0.5f, pos.z - 0.5f };
-		enemyAABB.max = { pos.x + 0.5f, pos.y + 0.5f, pos.z + 0.5f };
+		enemyAABB.min = { pos.x - enemyWallHalfSize, pos.y - 0.5f, pos.z - enemyWallHalfSize };
+		enemyAABB.max = { pos.x + enemyWallHalfSize, pos.y + 0.5f, pos.z + enemyWallHalfSize };
 
 		int gridX = static_cast<int>(std::round(pos.x / level.tileSize));
 		int gridZ = static_cast<int>(std::round(pos.z / level.tileSize));
@@ -1164,6 +1166,7 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 		}
 
 		Vector3 enemyPos = enemy->GetPosition();
+		const float enemyRadius = enemyBaseRadius * (std::max)(enemy->GetScale().x, enemy->GetScale().z);
 
 		Vector3 diff = {
 			enemyPos.x - playerPos.x,
@@ -1188,7 +1191,7 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 			newEnemyPos.z += pushDir.z * (pushAmount * 0.5f);
 
 			bool playerHitWall = IsPlayerHitWall(newPlayerPos);
-			bool enemyHitWall = IsEnemyHitWall(newEnemyPos);
+			bool enemyHitWall = IsEnemyHitWall(newEnemyPos, (std::max)(enemy->GetScale().x, enemy->GetScale().z));
 
 			// 両方とも壁に当たらない時だけ反映
 			if (!playerHitWall && !enemyHitWall) {
@@ -1221,6 +1224,8 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 
 			Vector3 posA = enemies_[i]->GetPosition();
 			Vector3 posB = enemies_[j]->GetPosition();
+			const float radiusA = enemyBaseRadius * (std::max)(enemies_[i]->GetScale().x, enemies_[i]->GetScale().z);
+			const float radiusB = enemyBaseRadius * (std::max)(enemies_[j]->GetScale().x, enemies_[j]->GetScale().z);
 
 			Vector3 diff = {
 				posB.x - posA.x,
@@ -1229,7 +1234,7 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 			};
 
 			float dist = Length(diff);
-			float pushRange = enemyRadius + enemyRadius;
+			float pushRange = radiusA + radiusB;
 
 			if (dist > 0.001f && dist < pushRange) {
 				Vector3 pushDir = Normalize(diff);
@@ -1244,8 +1249,8 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 				newPosB.x += pushDir.x * (pushAmount * 0.5f);
 				newPosB.z += pushDir.z * (pushAmount * 0.5f);
 
-				bool aHitWall = IsEnemyHitWall(newPosA);
-				bool bHitWall = IsEnemyHitWall(newPosB);
+				bool aHitWall = IsEnemyHitWall(newPosA, (std::max)(enemies_[i]->GetScale().x, enemies_[i]->GetScale().z));
+				bool bHitWall = IsEnemyHitWall(newPosB, (std::max)(enemies_[j]->GetScale().x, enemies_[j]->GetScale().z));
 
 				// 両方とも安全な時だけ両方反映
 				if (!aHitWall && !bHitWall) {

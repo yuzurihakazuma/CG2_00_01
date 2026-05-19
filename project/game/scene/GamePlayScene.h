@@ -157,6 +157,9 @@ private: // メンバ変数
 
 	//カード使用の処理
 	void UpdateCardUse(Input *input);
+	void StartCardUseFlash(const Card& card);
+	void UpdateCardUseFlash();
+	void DrawCardUseFlash();
 
 	// ポーズ画面の更新
 	void UpdatePause(Input* input);
@@ -241,6 +244,9 @@ private: // メンバ変数
 	int cardReadyTimer_ = 0;         // 構えていられる残り時間
 	int fistCooldownTimer_ = 0;
 	const int fistCooldownDuration_ = 60;
+	std::unique_ptr<Obj3d> cardUseFlashObj_ = nullptr;
+	int cardUseFlashTimer_ = 0;
+	static constexpr int kCardUseFlashDuration = 18;
 
 	// ポーズ画面関連
 	bool isPaused_ = false;                  // ポーズ中かどうか
