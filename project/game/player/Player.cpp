@@ -748,7 +748,7 @@ void Player::UpdateCost() {
 }
 
 // ダメージ処理
-void Player::TakeDamage(int damage, const Vector3& attackFrom) {
+void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale) {
     if (isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_) {
         return;
     }
@@ -789,7 +789,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom) {
 
     if (Length(hitDir) > 0.01f) {
         hitDir = Normalize(hitDir);
-        knockbackVelocity_ = hitDir * 0.35f;
+        knockbackVelocity_ = hitDir * (0.55f * knockbackScale);
         isKnockback_ = true;
         knockbackTimer_ = knockbackDuration_;
     }

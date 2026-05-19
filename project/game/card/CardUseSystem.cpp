@@ -30,7 +30,7 @@
 #include "game/card/HammerEffect.h"
 #include "game/card/SpearEffect.h"
 #include "game/card/BossChargeEffect.h"
-
+#include "game/card/BossKickEffect.h"
 
 
 using namespace VectorMath;
@@ -71,7 +71,8 @@ void CardUseSystem::Initialize(Camera* camera) {
 	effectFactory_[103] = [](const Card &c) { return std::make_unique<BossSummonEffect>(c.effectValue); };
 	// ID:105 ボス突進攻撃
 	effectFactory_[105] = [](const Card& c) { return std::make_unique<BossChargeEffect>(c.effectValue); };
-
+	// ID:106 ボス蹴り攻撃
+	effectFactory_[106] = [](const Card& c) { return std::make_unique<BossKickEffect>(c.effectValue); };
 	Reset();
 }
 
