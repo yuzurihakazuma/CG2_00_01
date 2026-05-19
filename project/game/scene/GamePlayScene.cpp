@@ -135,13 +135,23 @@ void GamePlayScene::Initialize(){
 	auraObj_ = Obj3d::Create("auraRing");
 	if ( auraObj_ ) {
 		auraObj_->SetCamera(camera_.get());
+
+		// テクスチャをセット
 		auraObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
-		auraObj_->GetModel()->GetMaterial()->enableLighting = 0; // ライティングで真っ黒になるのを防ぐ
 
-		auraObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
+		// ★ザラザラの原因を潰す！ノイズ枠にダミーとして同じ画像をセットしてディゾルブを無効化
+		auraObj_->SetNoiseTexture(textures_["gradationLine"].srvIndex);
 
-		// ★ ここを普通のパイプライン（またはカリングなし）に戻す
-		auraObj_->SetPipelineType(PipelineType::Object3D_CullNone); 
+		// ライティングで真っ黒になるのを防ぐ
+		auraObj_->GetModel()->GetMaterial()->enableLighting = 0;
+
+		// ★地面に魔法陣のように広がるように、X軸で90度(1.57ラジアン)倒す
+		auraObj_->SetRotation({ 1.5708f, 0.0f, 0.0f });
+		// 床に埋まらないように少しだけ上に浮かす
+		auraObj_->SetTranslation({ 0.0f, 0.1f, 5.0f });
+
+		// 加算合成で綺麗に光らせる
+		auraObj_->SetPipelineType(PipelineType::Object3D_Additive);
 	}
 
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
