@@ -9,6 +9,9 @@
 #include "engine/math/VectorMath.h"
 #include "game/map/Minimap.h"
 #include "game/map/MapManager.h"
+#include "engine/base/DirectXCommon.h"
+#include "engine/3d/obj/Obj3dCommon.h"
+#include "engine/graphics/PipelineManager.h"
 
 #include <cmath>
 #include <algorithm>
@@ -29,31 +32,38 @@ struct EnemyTypeWeight {
 };
 
 Enemy::Type GetRandomEnemyTypeForFloor(int floor) {
-	static const EnemyTypeWeight floor1[] = {
+	static const EnemyTypeWeight floor1To2[] = {
+		{ Enemy::Type::Normal, 100 },
+	};
+	static const EnemyTypeWeight floor3To5[] = {
 		{ Enemy::Type::Normal, 70 },
 		{ Enemy::Type::Fast, 30 },
 	};
-	static const EnemyTypeWeight floor2[] = {
+	static const EnemyTypeWeight floor6To8[] = {
 		{ Enemy::Type::Normal, 45 },
 		{ Enemy::Type::Fast, 30 },
 		{ Enemy::Type::Ranged, 25 },
 	};
-	static const EnemyTypeWeight floor3Plus[] = {
+	static const EnemyTypeWeight floor9Plus[] = {
 		{ Enemy::Type::Normal, 35 },
 		{ Enemy::Type::Fast, 25 },
 		{ Enemy::Type::Ranged, 25 },
 		{ Enemy::Type::Heavy, 15 },
 	};
 
-	const EnemyTypeWeight* weights = floor1;
-	int weightCount = static_cast<int>(std::size(floor1));
-	if (floor >= 3) {
-		weights = floor3Plus;
-		weightCount = static_cast<int>(std::size(floor3Plus));
+	const EnemyTypeWeight* weights = floor1To2;
+	int weightCount = static_cast<int>(std::size(floor1To2));
+	if (floor >= 9) {
+		weights = floor9Plus;
+		weightCount = static_cast<int>(std::size(floor9Plus));
 	}
-	else if (floor == 2) {
-		weights = floor2;
-		weightCount = static_cast<int>(std::size(floor2));
+	else if (floor >= 6) {
+		weights = floor6To8;
+		weightCount = static_cast<int>(std::size(floor6To8));
+	}
+	else if (floor >= 3) {
+		weights = floor3To5;
+		weightCount = static_cast<int>(std::size(floor3To5));
 	}
 
 	int totalWeight = 0;
@@ -220,16 +230,17 @@ bool FindNextPathTarget(const LevelData& level, const Vector3& from, const Vecto
 
 Vector4 GetEnemyDisplayColor(const Enemy& enemy) {
 	Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-	switch (enemy.GetCurrentAttackRangeType()) {
-	case CardAttackRangeType::Melee:
-		baseColor = { 1.0f, 0.45f, 0.35f, 1.0f };
+	switch (enemy.GetType()) {
+	case Enemy::Type::Fast:
+		baseColor = { 0.85f, 1.0f, 0.7f, 1.0f };
 		break;
-	case CardAttackRangeType::Mid:
-		baseColor = { 0.95f, 0.9f, 0.35f, 1.0f };
+	case Enemy::Type::Ranged:
+		baseColor = { 0.75f, 0.9f, 1.0f, 1.0f };
 		break;
-	case CardAttackRangeType::Long:
-		baseColor = { 0.35f, 0.75f, 1.0f, 1.0f };
+	case Enemy::Type::Heavy:
+		baseColor = { 1.0f, 0.78f, 0.58f, 1.0f };
 		break;
+	case Enemy::Type::Normal:
 	default:
 		break;
 	}
@@ -257,12 +268,71 @@ Vector4 GetEnemyDisplayColor(const Enemy& enemy) {
 	return baseColor;
 }
 
+bool ShouldShowEnemyCardRing(const Enemy& enemy) {
+	return enemy.GetBaseCard().id != -1 || enemy.HasPickupCard() || enemy.IsCasting();
+}
+
+Vector4 GetEnemyCardRingColor(const Enemy& enemy, bool useReadyFlash = false) {
+	CardAttackRangeType rangeType = enemy.GetCurrentAttackRangeType();
+	if (enemy.IsCasting() && enemy.GetCurrentUseCard().id != -1) {
+		rangeType = enemy.GetCurrentUseCard().attackRangeType;
+	}
+
+	Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	switch (rangeType) {
+	case CardAttackRangeType::Melee:
+		color = { 1.0f, 0.18f, 0.12f, 1.0f };
+		break;
+	case CardAttackRangeType::Mid:
+		color = { 1.0f, 0.9f, 0.12f, 1.0f };
+		break;
+	case CardAttackRangeType::Long:
+		color = { 0.18f, 0.62f, 1.0f, 1.0f };
+		break;
+	default:
+		break;
+	}
+
+	if (useReadyFlash && enemy.GetCastProgress() >= 0.85f) {
+		const float flash = 1.0f + (enemy.GetCastProgress() - 0.85f) / 0.15f * 0.45f;
+		color.x = (std::min)(color.x * flash, 1.45f);
+		color.y = (std::min)(color.y * flash, 1.45f);
+		color.z = (std::min)(color.z * flash, 1.45f);
+	}
+
+	return color;
+}
+
+void HideEnemyCardRingPart(Obj3d* obj) {
+	if (!obj) {
+		return;
+	}
+
+	obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+	obj->SetScale({ 0.01f, 0.01f, 0.01f });
+	obj->Update();
+}
+
+void SetEnemyObjectPipeline() {
+	auto* dxCommon = Obj3dCommon::GetInstance()->GetDxCommon();
+	if (!dxCommon) {
+		return;
+	}
+
+	auto* commandList = dxCommon->GetCommandList();
+	if (!commandList) {
+		return;
+	}
+
+	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
+}
+
 const char* GetEnemyModelName(Enemy::Type type) {
 	switch (type) {
+	case Enemy::Type::Heavy:
 	case Enemy::Type::Ranged:
 		return "wallEnemy";
 	case Enemy::Type::Fast:
-	case Enemy::Type::Heavy:
 		return "cornerEnemy";
 	case Enemy::Type::Normal:
 	default:
@@ -285,6 +355,7 @@ void EnemyManager::Initialize() {
 	castCardObjs_[2] = std::unique_ptr<Obj3d>(Obj3d::Create("cardFire"));
 	castCardObjs_[7] = std::unique_ptr<Obj3d>(Obj3d::Create("CardFang"));
 	castCardObjs_[10] = std::unique_ptr<Obj3d>(Obj3d::Create("CardClaw"));
+	castCardObjs_[15] = std::unique_ptr<Obj3d>(Obj3d::Create("CardFang"));
 }
 
 EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera* camera) const {
@@ -297,22 +368,70 @@ EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Came
 			visual.skinned->SetLoopAnimation(true);
 			visual.skinned->SetWalkAnimation(5.0f, 1.35f);
 			visual.skinned->SetIsWalking(false);
-			return visual;
 		}
 	}
 
-	visual.obj = Obj3d::Create(GetEnemyModelName(type));
-	if (visual.obj) {
-		visual.obj->SetCamera(camera);
+	if (!visual.skinned) {
+		visual.obj = Obj3d::Create(GetEnemyModelName(type));
+		if (visual.obj) {
+			visual.obj->SetCamera(camera);
+		}
+	}
+
+	visual.cardRing = Obj3d::Create("cardRing");
+	if (visual.cardRing) {
+		visual.cardRing->SetCamera(camera);
+	}
+	visual.cardRingFill = Obj3d::Create("sphere");
+	if (visual.cardRingFill) {
+		visual.cardRingFill->SetCamera(camera);
 	}
 	return visual;
 }
 
 void EnemyManager::UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const {
+	if (ShouldShowEnemyCardRing(enemy)) {
+		Vector3 ringPosition = enemy.GetPosition();
+		ringPosition.y -= enemy.GetScale().y;
+		ringPosition.y += 0.02f;
+		const float baseRadius = (std::max)(enemy.GetScale().x, enemy.GetScale().z) * 0.95f;
+		const float outerRadius = baseRadius + 0.3f;
+		const float innerRadius = outerRadius * 0.88f;
+		const float ringHeight = 0.018f;
+		const Vector4 cardColor = GetEnemyCardRingColor(enemy, true);
+
+		if (visual.cardRing) {
+			visual.cardRing->SetTranslation(ringPosition);
+			visual.cardRing->SetRotation({ 0.0f, 0.0f, 0.0f });
+			visual.cardRing->SetScale({ outerRadius, 1.0f, outerRadius });
+			visual.cardRing->SetColor(cardColor);
+			visual.cardRing->Update();
+		}
+
+		if (visual.cardRingFill) {
+			if (enemy.IsCasting()) {
+				Vector3 fillPosition = ringPosition;
+				fillPosition.y += 0.008f;
+				const float fillRadius = (std::max)(innerRadius * enemy.GetCastProgress(), 0.04f);
+				visual.cardRingFill->SetTranslation(fillPosition);
+				visual.cardRingFill->SetRotation({ 0.0f, 0.0f, 0.0f });
+				visual.cardRingFill->SetScale({ fillRadius, ringHeight, fillRadius });
+				visual.cardRingFill->SetColor(cardColor);
+				visual.cardRingFill->Update();
+			} else {
+				HideEnemyCardRingPart(visual.cardRingFill.get());
+			}
+		}
+	} else {
+		HideEnemyCardRingPart(visual.cardRing.get());
+		HideEnemyCardRingPart(visual.cardRingFill.get());
+	}
+
 	if (visual.skinned) {
 		visual.skinned->SetTranslation(enemy.GetPosition());
 		visual.skinned->SetRotation(enemy.GetRotation());
 		visual.skinned->SetScale(enemy.GetScale());
+		visual.skinned->SetColor(GetEnemyDisplayColor(enemy));
 		visual.skinned->SetIsWalking(Length(enemy.GetPosition() - previousPosition) > 0.001f);
 		visual.skinned->Update();
 		return;
@@ -328,12 +447,22 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, co
 }
 
 void EnemyManager::DrawEnemyVisual(const EnemyVisual& visual) const {
+	if (visual.cardRing) {
+		SetEnemyObjectPipeline();
+		visual.cardRing->Draw();
+	}
+	if (visual.cardRingFill) {
+		SetEnemyObjectPipeline();
+		visual.cardRingFill->Draw();
+	}
+
 	if (visual.skinned) {
 		visual.skinned->Draw();
 		return;
 	}
 
 	if (visual.obj) {
+		SetEnemyObjectPipeline();
 		visual.obj->Draw();
 	}
 }

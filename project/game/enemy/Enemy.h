@@ -116,6 +116,20 @@ public:
     // 詠唱状態
     bool IsCasting() const { return isCasting_; }
     int GetCastTimer() const { return castTimer_; }
+    float GetCastProgress() const {
+        if (!isCasting_ || castTime_ <= 0) {
+            return 0.0f;
+        }
+
+        float progress = 1.0f - static_cast<float>(castTimer_) / static_cast<float>(castTime_);
+        if (progress < 0.0f) {
+            return 0.0f;
+        }
+        if (progress > 1.0f) {
+            return 1.0f;
+        }
+        return progress;
+    }
 
     // 強制的に吹き飛ばす力を与える関数
     void ApplyKnockback(const Vector3 &velocity) {

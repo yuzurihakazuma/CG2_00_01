@@ -105,6 +105,52 @@ void Model::InitializeSphere(ModelCommon* modelCommon, int subdivision){
 	CreateBuffers(); // バッファの作成
 }
 
+void Model::InitializeRing(ModelCommon* modelCommon, int subdivision) {
+	this->modelCommon_ = modelCommon;
+	modelData_ = {};
+
+	const int segmentCount = (std::max)(subdivision, 8);
+	const float outerRadius = 1.0f;
+	const float innerRadius = 0.88f;
+	const float angleStep = std::numbers::pi_v<float> * 2.0f / static_cast<float>(segmentCount);
+
+	for (int index = 0; index <= segmentCount; ++index) {
+		const float angle = angleStep * static_cast<float>(index);
+		const float cosAngle = std::cos(angle);
+		const float sinAngle = std::sin(angle);
+
+		VertexData outerVertex{};
+		outerVertex.position = { cosAngle * outerRadius, 0.0f, sinAngle * outerRadius, 1.0f };
+		outerVertex.texcoord = { 1.0f, static_cast<float>(index) / static_cast<float>(segmentCount) };
+		outerVertex.normal = { 0.0f, 1.0f, 0.0f };
+		modelData_.vertices.push_back(outerVertex);
+
+		VertexData innerVertex{};
+		innerVertex.position = { cosAngle * innerRadius, 0.0f, sinAngle * innerRadius, 1.0f };
+		innerVertex.texcoord = { 0.0f, static_cast<float>(index) / static_cast<float>(segmentCount) };
+		innerVertex.normal = { 0.0f, 1.0f, 0.0f };
+		modelData_.vertices.push_back(innerVertex);
+	}
+
+	for (int index = 0; index < segmentCount; ++index) {
+		const uint32_t outerCurrent = static_cast<uint32_t>(index * 2);
+		const uint32_t innerCurrent = outerCurrent + 1;
+		const uint32_t outerNext = outerCurrent + 2;
+		const uint32_t innerNext = outerCurrent + 3;
+
+		modelData_.indices.push_back(outerCurrent);
+		modelData_.indices.push_back(innerCurrent);
+		modelData_.indices.push_back(outerNext);
+
+		modelData_.indices.push_back(outerNext);
+		modelData_.indices.push_back(innerCurrent);
+		modelData_.indices.push_back(innerNext);
+	}
+
+	modelData_.material.textureFilePath = "resources/white1x1.png";
+
+	CreateBuffers();
+}
 
 void Model::Draw(uint32_t instanceCount, D3D12_GPU_VIRTUAL_ADDRESS materialAddress) {
 	// 1. コマンドリストを取得する
