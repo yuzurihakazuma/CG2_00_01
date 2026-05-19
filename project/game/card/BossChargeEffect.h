@@ -1,6 +1,7 @@
 #pragma once
 #include "game/card/ICardEffect.h"
 #include "engine/3d/obj/Obj3d.h"
+#include "engine/collision/Collision.h" // 突進先の壁判定に使う
 #include <memory>
 
 // ボス用の突進攻撃エフェクト

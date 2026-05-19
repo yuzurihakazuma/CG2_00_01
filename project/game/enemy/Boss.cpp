@@ -44,6 +44,9 @@ void Boss::Initialize() {
 	cardCooldownTimer_ = 0;
 	castDurationCurrent_ = castTime_;
 
+	attackIntervalTimer_ = 0;  // 共通攻撃クールタイムをリセット
+	canStartAttack_ = true;    // 通常は攻撃開始を許可
+
 	SetSpawnPosition({ 10.0f, 2.0f, 10.0f });
 	InitializeBossCards();
 
@@ -301,6 +304,10 @@ void Boss::Update() {
 
 	if (cardCooldownTimer_ > 0) {
 		cardCooldownTimer_--;
+	}
+
+	if (attackIntervalTimer_ > 0) {
+		attackIntervalTimer_--; // 共通攻撃待ち時間を減らす
 	}
 
 	for (auto& [cardId, timer] : cardCooldownTimers_) {
@@ -581,7 +588,7 @@ void Boss::UpdateChase() {
 	}
 
 	// 中距離から技に入れるようにして、追いかけるだけの時間を短くする。
-	if (cardCooldownTimer_ <= 0 && dist <= cardStartRange) {
+	if (canStartAttack_ && attackIntervalTimer_ <= 0 && cardCooldownTimer_ <= 0 && dist <= cardStartRange) {
 		state_ = State::UseCard;
 		thinkTimer_ = 0;
 		return;
@@ -797,9 +804,10 @@ void Boss::UpdateUseCard() {
 		rot_.y = std::atan2f(dir.x, dir.z);
 	}
 
-	// 発動の合図を送る
+	// 使用したカードを記録する
 	lastUsedCardId_ = selectedCard_.id;
 	cardUseRequest_ = true;
+	attackIntervalTimer_ = attackIntervalFrames_; // 次の攻撃開始まで共通待ち時間を入れる
 
 	// クールダウン設定
 	if (selectedCard_.id == 101) {
@@ -818,6 +826,10 @@ void Boss::UpdateUseCard() {
 	else if (selectedCard_.id == 103) {
 		cardCooldownTimer_ = isEnraged ? 48 : 64;
 		StartCardCooldown(103, isEnraged ? 90 : 120);
+	}
+	else if (selectedCard_.id == 105) {
+		cardCooldownTimer_ = isEnraged ? 20 : 30; // 10階近接カードの個別待ち時間
+		StartCardCooldown(105, isEnraged ? 35 : 50); // 同じカードの連打を防ぐ
 	}
 
 	// 発動後の硬直とチェイスへの復帰

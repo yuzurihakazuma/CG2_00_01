@@ -55,7 +55,6 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 	(void)enemyManager;
 	(void)boss;
 	(void)bossPos;
-	(void)level;
 
 	if (isFinished_) {
 		return;
@@ -67,9 +66,18 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 		return;
 	}
 
-	// ボス本体を突進方向へ前進させる
-	Vector3 nextPos = casterBoss_->GetPosition();
-	nextPos += direction_ * speed_;
+	// ボス本体を突進方向へ進める
+	Vector3 currentPos = casterBoss_->GetPosition();
+	Vector3 nextPos = currentPos + direction_ * speed_;
+
+	// 突進先が壁に当たるなら、その場で突進を終了する
+	// 半径は BossManager 側の当たり判定サイズに合わせて 1.0f を使う
+	if (Collision::CheckBlockCollision(nextPos, 1.0f, level)) {
+		isFinished_ = true;
+		return;
+	}
+
+	// 壁に当たっていない時だけ位置を更新する
 	casterBoss_->SetPosition(nextPos);
 	pos_ = nextPos;
 
