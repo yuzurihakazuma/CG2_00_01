@@ -9,159 +9,214 @@
 
 using namespace VectorMath;
 
-void SpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
+void SpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
     timer_ = 0;
-    hitTargets_.clear(); // ヒット履歴をリセット
+    hitTargets_.clear();
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
 
-    // ※"spear_model" は適宜読み込んだ槍のモデル名に変更してください
     obj_ = Obj3d::Create("spear_model");
-    if (obj_) {
+    if ( obj_ ) {
         obj_->SetCamera(camera);
         obj_->SetScale(scale_);
-
-        // 原点フラッシュ防止
         obj_->SetTranslation({ 0.0f, -1000.0f, 0.0f });
         obj_->Update();
 
-        Model *model = obj_->GetModel();
-        if (model && model->GetMaterial()) {
-            Model::Material *mat = model->GetMaterial();
-            mat->emissive = 1.0f;
+        Model* model = obj_->GetModel();
+        if ( model && model->GetMaterial() ) {
+            Model::Material* mat = model->GetMaterial();
+            mat->emissive = 2.0f;
         }
+    }
+
+    afterimages_.clear();
+    for ( int index = 0; index < maxAfterimageCount_; index++ ) {
+        AfterimageData afterimage;
+        afterimage.object = Obj3d::Create("spear_model");
+        if ( afterimage.object ) {
+            afterimage.object->SetCamera(camera);
+            afterimage.object->SetScale(scale_);
+        }
+        afterimage.isActive = false;
+        afterimages_.push_back(std::move(afterimage));
     }
 }
 
-void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
-    if (isFinished_) return;
+void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level){
+    if ( isFinished_ ) return;
     timer_++;
 
-    // ==========================================
-    // ★ 3連続突きの管理（10フレーム × 3回 ＝ 計30フレーム）
-    // ==========================================
-    int cycle = (timer_ - 1) / 10;      // 現在何回目の突きか（0, 1, 2）
-    int localTimer = (timer_ - 1) % 10; // 1回の突きの中でのフレーム（0〜9）
+    // 🌟 修正：1回の突きサイクルを「10フレーム」から「15フレーム」に延ばし、タメを作ります
+    int cycle = ( timer_ - 1 ) / 15;
+    int localTimer = ( timer_ - 1 ) % 15;
 
-    // 3回の突きが終わったら終了
-    if (cycle >= 3) {
+    if ( cycle >= 3 ) {
         isFinished_ = true;
         return;
     }
 
-    if (obj_) {
-        // ★新しい突きが始まった瞬間に、ヒット履歴をリセットして再度当たるようにする！
-        if (localTimer == 0) {
-            hitTargets_.clear();
-        }
+    Vector3 forwardVec = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
+    Vector3 rightVec = { std::cosf(casterYaw_), 0.0f, -std::sinf(casterYaw_) };
+
+    if ( obj_ ) {
+        if ( localTimer == 0 ) { hitTargets_.clear(); }
+
+        float offsetX = 0.0f; float offsetY = 0.0f;
+        if ( cycle == 0 ) { offsetX = -0.4f; offsetY = 0.2f; } else if ( cycle == 1 ) { offsetX = 0.4f; offsetY = -0.2f; } else if ( cycle == 2 ) { offsetX = 0.0f; offsetY = 0.0f; }
 
         // ==========================================
-        // ★ 乱れ突き感を出すために、突く位置を少しズラす
-        // ==========================================
-        float offsetX = 0.0f;
-        float offsetY = 0.0f;
-        if (cycle == 0) { offsetX = -0.4f; offsetY = 0.2f; }      // 1発目：左上
-        else if (cycle == 1) { offsetX = 0.4f; offsetY = -0.2f; } // 2発目：右下
-        else if (cycle == 2) { offsetX = 0.0f; offsetY = 0.0f; }  // 3発目：ど真ん中（フィニッシュ！）
-
-        // ==========================================
-        // ★ 前後（Z軸）の動き計算
+        // 🌟 修正：発生を遅らせる（タメる）計算
         // ==========================================
         float zOffset = 0.0f;
-        if (localTimer <= 3) {
-            // 手前に引き絞る
-            zOffset = -0.5f * (static_cast<float>(localTimer) / 3.0f);
-        } else if (localTimer <= 6) {
-            // 一気に突き出す
-            float t = static_cast<float>(localTimer - 3) / 3.0f;
-            zOffset = -0.5f + (6.0f * t);
-            if (cycle == 2) zOffset += 1.5f; // 3発目はさらに深く刺さる！
+        if ( localTimer <= 6 ) {
+            // 0〜6フレーム：槍を手前にグッと引き絞る（タメ）
+            zOffset = -0.8f * ( static_cast< float >( localTimer ) / 6.0f );
+        } else if ( localTimer <= 9 ) {
+            // 7〜9フレーム：一気に突き出す！（発生が遅くなった分、速度が上がります）
+            float t = static_cast< float >( localTimer - 6 ) / 3.0f;
+            zOffset = -0.8f + ( 6.8f * t );
+            if ( cycle == 2 ) zOffset += 2.0f;
         } else {
-            // 戻す
-            float t = static_cast<float>(localTimer - 6) / 3.0f;
-            zOffset = 5.5f - (5.5f * t);
+            // 10〜14フレーム：元の位置にスッと戻る
+            float t = static_cast< float >( localTimer - 9 ) / 5.0f;
+            float maxZ = ( cycle == 2 ) ? 8.0f : 6.0f;
+            zOffset = maxZ - ( maxZ * t );
         }
 
-        // プレイヤーの向いている方向(Yaw)から、前方向と右方向のベクトルを作る
-        Vector3 forwardVec = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
-        Vector3 rightVec = { std::cosf(casterYaw_), 0.0f, -std::sinf(casterYaw_) };
-
-        // 最終的な槍の位置
         pos_ = {
             casterPos_.x + forwardVec.x * zOffset + rightVec.x * offsetX,
             casterPos_.y + 1.2f + offsetY,
             casterPos_.z + forwardVec.z * zOffset + rightVec.z * offsetX
         };
 
-        // 槍を前に倒す (モデルによって tiltX は微調整してください)
-        float tiltX = 1.57f;
-        float rotY = casterYaw_;
-        float rotZ = 0.0f;
-
-        obj_->SetRotation({ tiltX, rotY, rotZ });
+        obj_->SetRotation({ 1.5f, casterYaw_, 0.0f });
         obj_->SetTranslation(pos_);
         obj_->Update();
 
-        // 突き出し時の風パーティクル（3発目は色を変えて派手に！）
-        if (localTimer >= 4 && localTimer <= 7) {
-            Vector3 windVel = { forwardVec.x * 0.8f, 0.0f, forwardVec.z * 0.8f };
-            Vector4 pColor = (cycle == 2) ? Vector4{ 1.0f, 0.8f, 0.2f, 0.4f } : Vector4{ 0.8f, 1.0f, 1.0f, 0.3f };
-            float pSize = (cycle == 2) ? 0.15f : 0.08f;
-            GPUParticleManager::GetInstance()->Emit(pos_, windVel, pSize, 0.5f, pColor);
+        // 🌟 残像の発生タイミングも突きの瞬間に合わせる
+        if ( localTimer >= 7 && localTimer <= 9 ) {
+            for ( auto& afterimage : afterimages_ ) {
+                if ( !afterimage.isActive ) {
+                    afterimage.isActive = true;
+                    afterimage.lifeTimer = defaultAfterimageLife_;
+                    CopyTransform(obj_, afterimage.object);
+                    afterimage.object->Update();
+                    break;
+                }
+            }
+        }
+
+        // 🌟 風の刃エフェクトも発生を遅らせる
+        if ( localTimer >= 7 && localTimer <= 9 ) {
+            int windCount = 8;
+            for ( int i = 0; i < windCount; i++ ) {
+                Vector3 startPos = {
+                    pos_.x + rightVec.x * ( ( rand() % 11 - 5 ) * 0.05f ) - forwardVec.x * 0.5f,
+                    pos_.y + ( ( rand() % 11 - 5 ) * 0.05f ),
+                    pos_.z + rightVec.z * ( ( rand() % 11 - 5 ) * 0.05f ) - forwardVec.z * 0.5f
+                };
+
+                float speed = 3.0f + ( rand() % 10 ) * 0.2f;
+                Vector3 windVel = forwardVec * speed;
+                Vector4 windColor = { 0.8f, 1.0f, 1.0f, 0.5f };
+
+                GPUParticleManager::GetInstance()->Emit(startPos, windVel, 0.1f, 0.5f, windColor);
+            }
+        }
+
+        // 🌟 3段目のソニックブームエフェクト
+        if ( cycle == 2 && localTimer == 8 ) {
+            int burstCount = 40;
+            for ( int i = 0; i < burstCount; i++ ) {
+                float spreadX = ( rand() % 21 - 10 ) * 0.04f;
+                float spreadY = ( rand() % 21 - 10 ) * 0.04f;
+
+                Vector3 dir = {
+                    forwardVec.x * 1.5f + rightVec.x * spreadX,
+                    spreadY,
+                    forwardVec.z * 1.5f + rightVec.z * spreadX
+                };
+
+                float speed = 1.5f + ( rand() % 10 ) * 0.2f;
+                Vector4 windColor = { 0.9f, 1.0f, 1.0f, 0.7f };
+                GPUParticleManager::GetInstance()->Emit(pos_, dir * speed, 0.2f, 0.8f, windColor);
+            }
+            GPUParticleManager::GetInstance()->Emit(pos_, forwardVec * 1.0f, 0.1f, 2.0f, { 1.0f, 1.0f, 1.0f, 0.8f });
         }
     }
 
-    // ==========================================
-    // ★ 当たり判定（各突きの 4~7フレーム目）
-    // ==========================================
-    if (localTimer >= 4 && localTimer <= 7) {
+    for ( auto& afterimage : afterimages_ ) {
+        if ( afterimage.isActive ) {
+            afterimage.lifeTimer--;
+            float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
+            Vector4 afterimageColor = { 0.3f, 0.8f, 1.0f, alphaRatio * 0.4f };
+            afterimage.object->SetColor(afterimageColor);
+            afterimage.object->Update();
 
-        // 3発目だけダメージにボーナス（+1）をつける！
-        int currentDamage = damage_ + (rand() % 2) + (cycle == 2 ? 1 : 0);
+            if ( afterimage.lifeTimer <= 0 ) {
+                afterimage.isActive = false;
+            }
+        }
+    }
 
-        if (isPlayerCaster_) {
-            if (enemyManager) {
-                for (auto &enemy : enemyManager->GetEnemies()) {
-                    if (!enemy || enemy->IsDead()) continue;
+    // 🌟 当たり判定も突きの発生（7フレーム目以降）に合わせる
+    if ( localTimer >= 7 && localTimer <= 11 ) {
 
-                    // 今回の突きで既にヒットしていたら無視
+        int currentDamage = damage_ + ( rand() % 2 ) + ( cycle == 2 ? 1 : 0 );
+
+        if ( isPlayerCaster_ ) {
+            if ( enemyManager ) {
+                for ( auto& enemy : enemyManager->GetEnemies() ) {
+                    if ( !enemy || enemy->IsDead() ) continue;
+
                     auto it = std::find(hitTargets_.begin(), hitTargets_.end(), enemy.get());
-                    if (it != hitTargets_.end()) continue;
+                    if ( it != hitTargets_.end() ) continue;
 
                     Vector3 ePos = enemy->GetPosition();
                     Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 
-                    if (Length(diff) < 1.5f) {
+                    if ( Length(diff) < 1.5f ) {
                         enemy->TakeDamage(currentDamage);
-                        hitTargets_.push_back(enemy.get()); // ヒット記録に追加
+                        hitTargets_.push_back(enemy.get());
 
-                        for (int i = 0; i < 5; i++) {
-                            Vector3 sparkVel = { (rand() % 11 - 5) * 0.1f, (rand() % 11 - 5) * 0.1f, (rand() % 11 - 5) * 0.1f };
-                            GPUParticleManager::GetInstance()->Emit(ePos, sparkVel, 0.15f, 0.5f, { 1.0f, 0.2f, 0.2f, 1.0f });
+                        for ( int i = 0; i < 8; i++ ) {
+                            Vector3 sparkDir = forwardVec * 1.5f + rightVec * ( ( rand() % 11 - 5 ) * 0.1f );
+                            sparkDir.y += ( rand() % 11 - 5 ) * 0.1f;
+                            Vector4 sparkColor = { 1.0f, 0.8f, 0.2f, 1.0f };
+                            GPUParticleManager::GetInstance()->Emit(ePos, sparkDir, 0.15f, 0.4f, sparkColor);
                         }
                     }
                 }
             }
-            if (boss && !boss->IsDead()) {
+            if ( boss && !boss->IsDead() ) {
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), boss);
-                if (it == hitTargets_.end()) {
+                if ( it == hitTargets_.end() ) {
                     Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                    if (Length(diff) < 2.5f) {
+                    if ( Length(diff) < 2.5f ) {
                         boss->TakeDamage(currentDamage);
                         hitTargets_.push_back(boss);
                     }
                 }
             }
+            if ( extraBoss && !extraBoss->IsDead() ) {
+                auto it = std::find(hitTargets_.begin(), hitTargets_.end(), extraBoss);
+                if ( it == hitTargets_.end() ) {
+                    Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
+                    if ( Length(diff) < 2.5f ) {
+                        extraBoss->TakeDamage(currentDamage);
+                        hitTargets_.push_back(extraBoss);
+                    }
+                }
+            }
         } else {
-            // 敵が使った場合
-            if (player && !player->IsDead()) {
+            if ( player && !player->IsDead() ) {
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), player);
-                if (it == hitTargets_.end()) {
+                if ( it == hitTargets_.end() ) {
                     Vector3 pPos = player->GetPosition();
                     Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
-                    if (Length(diff) < 1.5f) {
+                    if ( Length(diff) < 1.5f ) {
                         player->TakeDamage(currentDamage, pos_);
                         hitTargets_.push_back(player);
                     }
@@ -171,8 +226,20 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
     }
 }
 
-void SpearEffect::Draw() {
-    if (!isFinished_ && obj_) {
+void SpearEffect::Draw(){
+    if ( !isFinished_ && obj_ ) {
         obj_->Draw();
     }
+    for ( auto& afterimage : afterimages_ ) {
+        if ( afterimage.isActive && afterimage.object ) {
+            afterimage.object->Draw();
+        }
+    }
+}
+
+void SpearEffect::CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj){
+    if ( !sourceObj || !destinationObj ) return;
+    destinationObj->SetTranslation(sourceObj->GetTranslation());
+    destinationObj->SetRotation(sourceObj->GetRotation());
+    destinationObj->SetScale(sourceObj->GetScale());
 }
