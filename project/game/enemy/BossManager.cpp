@@ -458,6 +458,46 @@ void BossManager::Update(
 				// カットイン中はAppearだけ進める
 				if (!isBossIntroPlaying_ || splitBosses_[i]->IsAppearing()) {
 					splitBosses_[i]->Update();
+					// 10階の分裂ボスも、更新後に壁へめり込んでいたら元の位置へ戻す
+					Vector3 bossPos = splitBosses_[i]->GetPosition();
+
+					AABB bossAABB;
+					bossAABB.min = { bossPos.x - 1.0f, bossPos.y - 1.0f, bossPos.z - 1.0f };
+					bossAABB.max = { bossPos.x + 1.0f, bossPos.y + 1.0f, bossPos.z + 1.0f };
+
+					const LevelData& level = mapManager->GetLevelData();
+
+					int bossGridX = static_cast<int>(std::round(bossPos.x / level.tileSize));
+					int bossGridZ = static_cast<int>(std::round(bossPos.z / level.tileSize));
+
+					int bStartX = std::max(0, bossGridX - 1);
+					int bEndX = std::min(level.width - 1, bossGridX + 1);
+					int bStartZ = std::max(0, bossGridZ - 1);
+					int bEndZ = std::min(level.height - 1, bossGridZ + 1);
+
+					bool isBossHit = false;
+
+					for (int z = bStartZ; z <= bEndZ && !isBossHit; z++) {
+						for (int x = bStartX; x <= bEndX; x++) {
+							if (level.tiles[z][x] != 1 && level.tiles[z][x] != 2) {
+								continue;
+							}
+
+							float worldX = x * level.tileSize;
+							float worldZ = z * level.tileSize;
+
+							AABB blockAABB;
+							blockAABB.min = { worldX - 1.0f, level.baseY, worldZ - 1.0f };
+							blockAABB.max = { worldX + 1.0f, level.baseY + 2.0f, worldZ + 1.0f };
+
+							// 壁に当たったら更新前の位置に戻す
+							if (Collision::IsCollision(bossAABB, blockAABB)) {
+								splitBosses_[i]->SetPosition(oldBossPos);
+								isBossHit = true;
+								break;
+							}
+						}
+					}
 				}
 
 				if (splitBossObjs_[i]) {
