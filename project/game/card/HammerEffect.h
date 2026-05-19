@@ -2,14 +2,25 @@
 #include "game/card/ICardEffect.h"
 #include "engine/3d/obj/Obj3d.h"
 #include <memory>
-class HammerEffect : public ICardEffect {
+#include <vector>
+
+class HammerEffect : public ICardEffect{
 public:
-    HammerEffect(int damage) : damage_(damage) {}
+    HammerEffect(int damage) : damage_(damage){}
 
     void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
     void Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) override;
     void Draw() override;
-    bool IsFinished() const override { return isFinished_; }
+    bool IsFinished() const override{ return isFinished_; }
+
+private:
+    void CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj);
+
+    struct AfterimageData{
+        std::unique_ptr<Obj3d> object = nullptr;
+        int lifeTimer = 0;
+        bool isActive = false;
+    };
 
 private:
     std::unique_ptr<Obj3d> obj_ = nullptr;
@@ -25,5 +36,8 @@ private:
     float casterYaw_ = 0.0f;
     Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
 
+    // 🌟 ハンマーの残像設定（剣よりも少なく、短くして「ブラー（ブレ）」を表現）
+    static const int maxAfterimageCount_ = 4;
+    static const int defaultAfterimageLife_ = 6;
+    std::vector<AfterimageData> afterimages_;
 };
-
