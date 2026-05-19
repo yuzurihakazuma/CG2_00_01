@@ -136,8 +136,18 @@ public:
     Vector3 GetSplitBossCenterPosition() const { return splitBossCenterPosition_; }
 	// 分裂ボスのターゲット位置（攻撃エフェクトの中心など、演出用）
     const Vector3& GetSplitBossTargetPosition(int index) const { return splitBossTargetPositions_[index]; }
-    void SetBossAttackIntervalFrames(int frames) { bossAttackIntervalFrames_ = frames; } // 全ボス共通の攻撃間隔変更
-    void SetSplitAttackRelayFrames(int frames) { splitAttackRelayFrames_ = frames; } // 10階の交互攻撃切替間隔変更
+    void SetBossAttackIntervalRangeFrames(int minFrames, int maxFrames) { // 通常ボス用
+        bossAttackIntervalMinFrames_ = minFrames;
+        bossAttackIntervalMaxFrames_ = maxFrames;
+    }
+
+    void SetSplitBossAttackIntervalRangeFrames(int index, int minFrames, int maxFrames) { // 10階の各ボス用
+        if (index < 0 || index >= 2) {
+            return;
+        }
+        splitBossAttackIntervalMinFrames_[index] = minFrames;
+        splitBossAttackIntervalMaxFrames_[index] = maxFrames;
+    }
 
 private:
     void UpdateBeamWarning(MapManager* mapManager);
@@ -181,9 +191,10 @@ private:
     Vector3 splitBossScale_{ 1.45f, 1.45f, 1.45f };
     float splitBossOffset_ = 3.2f;
 
-    int splitAttackActiveIndex_ = 0;  // 今回攻撃してよい10階ボス番号
-    int splitAttackRelayFrames_ = 30; // 次のボスへ切り替えるまでの待ち時間
-    int splitAttackRelayTimer_ = 0;   // 切り替え待ち時間の残り
-    int bossAttackIntervalFrames_ = 180; // 全ボス共通の攻撃間隔。60fpsで3秒
+    int bossAttackIntervalMinFrames_ = 120; // 通常ボス用の最小攻撃間隔。2秒
+    int bossAttackIntervalMaxFrames_ = 240; // 通常ボス用の最大攻撃間隔。4秒
+
+    std::array<int, 2> splitBossAttackIntervalMinFrames_{ 120, 120 }; // 10階左・右ボスの最小攻撃間隔
+    std::array<int, 2> splitBossAttackIntervalMaxFrames_{ 240, 240 }; // 10階左・右ボスの最大攻撃間隔
 
 };

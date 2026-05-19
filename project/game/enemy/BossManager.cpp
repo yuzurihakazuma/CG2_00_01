@@ -98,10 +98,13 @@ void BossManager::Initialize(Camera* camera) {
     bossCardRainTimer_ = 0;
     isBossCardRainEnabled_ = true;
 
-	splitAttackActiveIndex_ = 0;      // 10階は左から開始
-	splitAttackRelayFrames_ = 30;     // 交互攻撃の切替待ち時間
-	splitAttackRelayTimer_ = 0;       // 開始時はすぐ攻撃可能
-	bossAttackIntervalFrames_ = 180;  // 全ボス共通の攻撃間隔
+	bossAttackIntervalMinFrames_ = 120; // 通常ボスの最小攻撃間隔。2秒
+	bossAttackIntervalMaxFrames_ = 240; // 通常ボスの最大攻撃間隔。4秒
+
+	splitBossAttackIntervalMinFrames_[0] = 120; // 10階左ボスの最小攻撃間隔。2秒
+	splitBossAttackIntervalMaxFrames_[0] = 240; // 10階左ボスの最大攻撃間隔。4秒
+	splitBossAttackIntervalMinFrames_[1] = 120; // 10階右ボスの最小攻撃間隔。2秒
+	splitBossAttackIntervalMaxFrames_[1] = 240; // 10階右ボスの最大攻撃間隔。4秒
 }
 
 void BossManager::Finalize() {
@@ -127,8 +130,7 @@ void BossManager::Reset() {
         boss_->Initialize();
         boss_->SetScale({ 2.0f, 2.0f, 2.0f });
     }
-
-	boss_->SetAttackIntervalFrames(bossAttackIntervalFrames_); // 通常ボスの攻撃間隔を設定
+	boss_->SetAttackIntervalRangeFrames(bossAttackIntervalMinFrames_, bossAttackIntervalMaxFrames_); // 通常ボス用の攻撃間隔範囲を設定
 
     if (bossCardSystem_) {
         bossCardSystem_->Reset();
@@ -191,7 +193,10 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 
 			splitBosses_[i]->Initialize();
 
-			splitBosses_[i]->SetAttackIntervalFrames(bossAttackIntervalFrames_); // 分裂ボスの攻撃間隔を設定
+			splitBosses_[i]->SetAttackIntervalRangeFrames(
+				splitBossAttackIntervalMinFrames_[i],
+				splitBossAttackIntervalMaxFrames_[i]
+			); // 10階の各ボスに個別の攻撃間隔範囲を設定
 
 			// 最初は中央に重ねて出して、着地後に左右へ分裂させる
 splitBosses_[i]->SetSpawnPosition(spawnPos);
@@ -373,7 +378,6 @@ void BossManager::Update(
 		// 衝突で戻すために更新前の位置を保存
 		Vector3 oldBossPos = boss_->GetPosition();
 
-		boss_->SetAttackStartEnabled(true); // 通常ボスは常に攻撃開始を許可
 
 		// プレイヤー位置を教えてAI更新
 		boss_->SetPlayerPosition(targetPos);
@@ -438,29 +442,6 @@ void BossManager::Update(
 			bool leftAlive = splitBosses_[0] && !splitBosses_[0]->IsDead();
 			bool rightAlive = splitBosses_[1] && !splitBosses_[1]->IsDead();
 			bool oneDefeated = (leftAlive != rightAlive);
-
-			if (splitAttackRelayTimer_ > 0) {
-				splitAttackRelayTimer_--; // 次の担当へ渡すまでの待ち時間を減らす
-			}
-
-			if (oneDefeated) {
-				// 片方だけ生きているなら、その1体は普通に攻撃してよい
-				for (int i = 0; i < 2; ++i) {
-					if (splitBosses_[i] && !splitBosses_[i]->IsDead()) {
-						splitBosses_[i]->SetAttackStartEnabled(true);
-					}
-				}
-			} else {
-				// 2体とも生きている間は、担当の1体だけ攻撃開始を許可する
-				for (int i = 0; i < 2; ++i) {
-					if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
-						continue;
-					}
-
-					bool canStartAttack = (i == splitAttackActiveIndex_) && (splitAttackRelayTimer_ <= 0);
-					splitBosses_[i]->SetAttackStartEnabled(canStartAttack);
-				}
-			}
 
 			for (int i = 0; i < 2; ++i) {
 				if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
@@ -686,11 +667,7 @@ void BossManager::Update(
 					bool leftAlive = splitBosses_[0] && !splitBosses_[0]->IsDead();
 					bool rightAlive = splitBosses_[1] && !splitBosses_[1]->IsDead();
 
-					// 2体とも生きている間だけ、攻撃後に次の担当へ切り替える
-					if (leftAlive && rightAlive) {
-						splitAttackActiveIndex_ = (i == 0) ? 1 : 0; // 次は反対側のボス
-						splitAttackRelayTimer_ = splitAttackRelayFrames_; // 切替待ち時間を入れる
-					}
+				
 				}
 			}
 		} else if (!boss_->IsDead() && !boss_->IsAppearing()) {

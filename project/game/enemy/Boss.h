@@ -74,8 +74,10 @@ public:
     bool IsAttackDebuffed() const { return isAttackDebuffed_; }
     bool IsCasting() const { return isCasting_; }
 
-    void SetAttackStartEnabled(bool enabled) { canStartAttack_ = enabled; } // 攻撃開始の許可切り替え
-    void SetAttackIntervalFrames(int frames) { attackIntervalFrames_ = frames; } // 共通攻撃間隔を変更
+    void SetAttackIntervalRangeFrames(int minFrames, int maxFrames) { // 攻撃間隔の範囲を設定
+        attackIntervalMinFrames_ = minFrames;
+        attackIntervalMaxFrames_ = maxFrames;
+    }
     void RequestSummon(int count) {
         summonRequest_ = true;
         summonCount_ = count;
@@ -206,8 +208,8 @@ private:
     int stunTimer_ = 0;            // スキャンの残り時間
     int animationTimer_ = 0;       // ★ 演出計算用の汎用カウンター
 
-    int attackIntervalFrames_ = 180; // 共通攻撃間隔。60fpsで3秒
-    int attackIntervalTimer_ = 0;    // 次に攻撃開始できるまでの残り時間
-    bool canStartAttack_ = true;     // 攻撃開始を許可するか
+    int attackIntervalMinFrames_ = 120; // 攻撃間隔の最小値。60fpsで2秒
+    int attackIntervalMaxFrames_ = 240; // 攻撃間隔の最大値。60fpsで4秒
+    int attackIntervalTimer_ = 0;       // 次に攻撃開始できるまでの残り時間
 };
 

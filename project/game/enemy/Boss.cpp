@@ -45,7 +45,6 @@ void Boss::Initialize() {
 	castDurationCurrent_ = castTime_;
 
 	attackIntervalTimer_ = 0;  // 共通攻撃クールタイムをリセット
-	canStartAttack_ = true;    // 通常は攻撃開始を許可
 
 	SetSpawnPosition({ 10.0f, 2.0f, 10.0f });
 	InitializeBossCards();
@@ -588,7 +587,7 @@ void Boss::UpdateChase() {
 	}
 
 	// 中距離から技に入れるようにして、追いかけるだけの時間を短くする。
-	if (canStartAttack_ && attackIntervalTimer_ <= 0 && cardCooldownTimer_ <= 0 && dist <= cardStartRange) {
+	if (attackIntervalTimer_ <= 0 && cardCooldownTimer_ <= 0 && dist <= cardStartRange) {
 		state_ = State::UseCard;
 		thinkTimer_ = 0;
 		return;
@@ -804,10 +803,17 @@ void Boss::UpdateUseCard() {
 		rot_.y = std::atan2f(dir.x, dir.z);
 	}
 
-	// 使用したカードを記録する
 	lastUsedCardId_ = selectedCard_.id;
 	cardUseRequest_ = true;
-	attackIntervalTimer_ = attackIntervalFrames_; // 次の攻撃開始まで共通待ち時間を入れる
+
+	// ボスごとに持っている最小〜最大の範囲で次の攻撃待ち時間を決める
+	static std::random_device rd;
+	static std::mt19937 mt(rd());
+	std::uniform_int_distribution<int> attackIntervalDist(
+		attackIntervalMinFrames_,
+		attackIntervalMaxFrames_
+	);
+	attackIntervalTimer_ = attackIntervalDist(mt);
 
 	// クールダウン設定
 	if (selectedCard_.id == 101) {
