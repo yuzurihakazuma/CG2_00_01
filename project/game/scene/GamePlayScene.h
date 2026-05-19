@@ -141,6 +141,7 @@ private: // メンバ変数
 	bool ProjectWorldToScreen(const Vector3& worldPos, Vector2& screenPos) const;
 	void DrawCharacterHitboxesDebug() const;
 	void DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const;
+	void DrawDebugCircleXZ(const Vector3& center, float radius, unsigned int color, float thickness) const;
 
 	//UI専用カメラ
 	std::unique_ptr<Camera> uiCamera_ = nullptr;

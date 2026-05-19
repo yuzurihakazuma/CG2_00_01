@@ -26,9 +26,9 @@ struct EnemyTypeSetting {
 
 const EnemyTypeSetting& GetEnemyTypeSetting(Enemy::Type type) {
     static const EnemyTypeSetting normal{ 1, 3, 1, 0.07f, 0.12f, { 1.0f, 1.0f, 1.0f } };
-    static const EnemyTypeSetting fast{ 7, 2, 1, 0.09f, 0.15f, { 0.85f, 0.85f, 0.85f } };
+    static const EnemyTypeSetting fast{ 10, 2, 1, 0.09f, 0.15f, { 0.85f, 0.85f, 0.85f } };
     static const EnemyTypeSetting ranged{ 2, 2, 1, 0.06f, 0.10f, { 0.95f, 0.95f, 0.95f } };
-    static const EnemyTypeSetting heavy{ 10, 5, 2, 0.045f, 0.085f, { 1.22f, 1.22f, 1.22f } };
+    static const EnemyTypeSetting heavy{ 15, 5, 2, 0.045f, 0.085f, { 1.22f, 1.22f, 1.22f } };
 
     switch (type) {
     case Enemy::Type::Fast:

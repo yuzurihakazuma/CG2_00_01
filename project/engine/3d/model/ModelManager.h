@@ -16,6 +16,7 @@ public:
 	void Initialize(DirectXCommon* dxCommon);
 	// 球モデルの作成
 	void CreateSphereModel(const std::string& modelName, int subdivision);
+	void CreateRingModel(const std::string& modelName, int subdivision);
 
 
 	// シングルストーンのインスタンスを取得

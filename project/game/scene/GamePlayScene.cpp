@@ -46,6 +46,7 @@
 #include "engine/particle/GPUParticleEmitter.h"
 
 #include <array>
+#include <cmath>
 
 
 using namespace VectorMath;
@@ -84,6 +85,7 @@ void GamePlayScene::Initialize() {
 
 	// 球モデル作成 (シングルトン) カード用テクスチャモデル
 	ModelManager::GetInstance()->CreateSphereModel("sphere", 16);
+	ModelManager::GetInstance()->CreateRingModel("cardRing", 64);
 
 	ModelManager::GetInstance()->CreateSphereModel("shield_sphere", 16);
 	ModelManager::GetInstance()->CreateSphereModel("fireball_sphere", 8);
@@ -2386,14 +2388,14 @@ void GamePlayScene::DrawCharacterHitboxesDebug() const {
 
 	if (playerManager_) {
 		if (Player* player = playerManager_->GetPlayer(); player && !player->IsDead() && player->IsVisible()) {
-			DrawDebugAABB(player->GetPosition(), { 0.5f, 0.5f, 0.5f }, IM_COL32(80, 255, 120, 230), 2.0f);
+			DrawDebugCircleXZ(player->GetPosition(), 0.6f, IM_COL32(80, 255, 120, 230), 2.0f);
 		}
 	}
 
 	if (enemyManager_) {
 		for (const auto& enemy : enemyManager_->GetEnemies()) {
 			if (enemy && !enemy->IsDead() && enemy->IsVisible()) {
-				DrawDebugAABB(enemy->GetPosition(), { 0.5f, 0.5f, 0.5f }, IM_COL32(255, 80, 80, 220), 1.7f);
+				DrawDebugCircleXZ(enemy->GetPosition(), 0.6f, IM_COL32(255, 80, 80, 220), 1.7f);
 			}
 		}
 	}
@@ -2401,7 +2403,7 @@ void GamePlayScene::DrawCharacterHitboxesDebug() const {
 	if (bossManager_) {
 		for (int i = 0; i < 2; ++i) {
 			if (Boss* boss = bossManager_->GetBossAt(i); boss && !boss->IsDead() && boss->IsVisible()) {
-				DrawDebugAABB(boss->GetPosition(), { 1.0f, 1.0f, 1.0f }, IM_COL32(190, 110, 255, 230), 2.2f);
+				DrawDebugCircleXZ(boss->GetPosition(), 2.2f, IM_COL32(190, 110, 255, 230), 2.2f);
 			}
 		}
 	}
@@ -2449,6 +2451,40 @@ void GamePlayScene::DrawDebugAABB(const Vector3& center, const Vector3& halfSize
 			color,
 			thickness
 		);
+	}
+}
+
+void GamePlayScene::DrawDebugCircleXZ(const Vector3& center, float radius, unsigned int color, float thickness) const {
+	ImDrawList* drawList = ImGui::GetForegroundDrawList();
+	if (!drawList) {
+		return;
+	}
+
+	constexpr int segmentCount = 48;
+	Vector2 previous{};
+	bool hasPrevious = false;
+	for (int i = 0; i <= segmentCount; ++i) {
+		float t = static_cast<float>(i) / static_cast<float>(segmentCount);
+		float angle = t * 6.28318530718f;
+		Vector3 worldPos{
+			center.x + std::cos(angle) * radius,
+			center.y + 0.05f,
+			center.z + std::sin(angle) * radius
+		};
+
+		Vector2 current{};
+		bool visible = ProjectWorldToScreen(worldPos, current);
+		if (hasPrevious && visible) {
+			drawList->AddLine(
+				ImVec2(previous.x, previous.y),
+				ImVec2(current.x, current.y),
+				color,
+				thickness
+			);
+		}
+
+		previous = current;
+		hasPrevious = visible;
 	}
 }
 
