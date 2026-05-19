@@ -713,36 +713,101 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// プレイヤーとボスの接触押し出し
 	// ==========================================
-	if (playerManager_ && boss && !boss->IsDead() && !isBossIntroPlaying) {
+	if (playerManager_ && bossManager_ && mapManager_ && !isBossIntroPlaying) {
 		Vector3 playerPos = playerManager_->GetPosition();
-		// 分裂ボス時は2体の中心、通常時は通常ボス位置を使う
-		Vector3 bossPos = bossManager_->GetBossFocusPosition();
+		Vector3 oldPlayerPos = playerPos; // 押し出し前の位置を保存して壁補正に使う
+		const LevelData& level = mapManager_->GetLevelData();
 
+		// プレイヤーが壁に当たるかを調べる
+		auto isPlayerHitWall = [&](const Vector3& checkPos) -> bool {
+			AABB playerAABB;
+			playerAABB.min = { checkPos.x - 0.5f, checkPos.y - 0.5f, checkPos.z - 0.5f };
+			playerAABB.max = { checkPos.x + 0.5f, checkPos.y + 0.5f, checkPos.z + 0.5f };
 
-		Vector3 diff = {
-			playerPos.x - bossPos.x,
-			0.0f,
-			playerPos.z - bossPos.z
-		};
+			int centerGridX = static_cast<int>(std::round(checkPos.x / level.tileSize));
+			int centerGridZ = static_cast<int>(std::round(checkPos.z / level.tileSize));
 
-		float dist = Length(diff);
+			int startX = std::max(0, centerGridX - 1);
+			int endX = std::min(level.width - 1, centerGridX + 1);
+			int startZ = std::max(0, centerGridZ - 1);
+			int endZ = std::min(level.height - 1, centerGridZ + 1);
 
-		// 半径は見た目に応じて調整
-		const float playerRadius = 0.8f;
-		const float bossRadius = 2.2f;
-		const float pushRange = playerRadius + bossRadius;
+			for (int z = startZ; z <= endZ; z++) {
+				for (int x = startX; x <= endX; x++) {
+					if (level.tiles[z][x] != 1 && level.tiles[z][x] != 2) {
+						continue;
+					}
 
-		if (dist < pushRange && dist > 0.001f) {
-			Vector3 pushDir = Normalize(diff);
-			float pushAmount = pushRange - dist;
+					float worldX = x * level.tileSize;
+					float worldZ = z * level.tileSize;
 
-			playerPos += pushDir * pushAmount;
+					AABB blockAABB;
+					blockAABB.min = { worldX - 1.0f, level.baseY, worldZ - 1.0f };
+					blockAABB.max = { worldX + 1.0f, level.baseY + 2.0f, worldZ + 1.0f };
 
-			playerManager_->SetPosition(playerPos);
-			playerPos_ = playerPos;
+					if (Collision::IsCollision(playerAABB, blockAABB)) {
+						return true;
+					}
+				}
+			}
+
+			return false;
+			};
+
+		// プレイヤーとボスの重なりを押し戻す
+		auto resolveBossPush = [&](const Vector3& bossPos, float bossRadius) {
+			Vector3 diff = {
+				playerPos.x - bossPos.x,
+				0.0f,
+				playerPos.z - bossPos.z
+			};
+
+			float dist = Length(diff);
+			const float playerRadius = 0.8f;
+			const float pushRange = playerRadius + bossRadius;
+
+			if (dist < pushRange && dist > 0.001f) {
+				Vector3 pushDir = Normalize(diff);
+				float pushAmount = pushRange - dist;
+				playerPos += pushDir * pushAmount; // まず押し出し候補位置を作る
+			}
+			};
+
+		if (bossManager_->IsSplitBossBattle()) {
+			// 10階は左右それぞれのボスで個別に押し出す
+			for (int i = 0; i < 2; ++i) {
+				Boss* splitBoss = bossManager_->GetBossAt(i);
+				if (!splitBoss || splitBoss->IsDead() || !splitBoss->IsVisible()) {
+					continue;
+				}
+
+				resolveBossPush(splitBoss->GetPosition(), 2.2f);
+			}
+		} else {
+			// 通常ボスは単体で押し出す
+			Boss* normalBoss = bossManager_->GetBoss();
+			if (normalBoss && !normalBoss->IsDead() && normalBoss->IsVisible()) {
+				resolveBossPush(normalBoss->GetPosition(), 2.2f);
+			}
 		}
-	}
 
+		// 押し出し後の位置を、そのまま確定せず壁に入らない形で補正する
+		Vector3 moveDelta = playerPos - oldPlayerPos;
+		Vector3 resolvedPos = oldPlayerPos;
+
+		// X方向だけ先に試す
+		if (!isPlayerHitWall({ oldPlayerPos.x + moveDelta.x, oldPlayerPos.y, oldPlayerPos.z })) {
+			resolvedPos.x = oldPlayerPos.x + moveDelta.x;
+		}
+
+		// 次にZ方向を試す
+		if (!isPlayerHitWall({ resolvedPos.x, oldPlayerPos.y, oldPlayerPos.z + moveDelta.z })) {
+			resolvedPos.z = oldPlayerPos.z + moveDelta.z;
+		}
+
+		playerManager_->SetPosition(resolvedPos);
+		playerPos_ = resolvedPos;
+	}
 	// ==========================================
 	// カメラ・各種オブジェクトの更新
 	// ==========================================
