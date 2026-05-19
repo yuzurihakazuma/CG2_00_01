@@ -1407,6 +1407,7 @@ void GamePlayScene::Update() {
 	if (!isBossIntroPlaying) {
 		UpdateCardUse(input);
 	}
+	UpdateCardUseFlash();
 
 	// ==========================================
 	// 攻撃カードの「撃ち放題」タイマーと発動処理
@@ -1452,6 +1453,7 @@ void GamePlayScene::Update() {
 		// Eキーで構え中の攻撃カードを発動
 		if (input->Triggerkey(DIK_E)) {
 			if (playerCardSystem_ && playerManager_ && !playerManager_->IsDodging()) {
+				StartCardUseFlash(readiedCard_);
 				playerCardSystem_->UseCard(
 					readiedCard_,
 					playerPos_,
@@ -1612,6 +1614,7 @@ void GamePlayScene::Draw() {
 	if (playerCardSystem_) {
 		playerCardSystem_->Draw();
 	}
+	DrawCardUseFlash();
 
 	cardPickupManager_.Draw();
 
@@ -2096,6 +2099,76 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 	
 }
 
+void GamePlayScene::StartCardUseFlash(const Card& card) {
+	if (!camera_ || card.modelName.empty()) {
+		return;
+	}
+
+	auto flashObj = Obj3d::Create(card.modelName);
+	if (!flashObj) {
+		return;
+	}
+
+	flashObj->SetCamera(camera_.get());
+	if (auto it = textures_.find("noise0"); it != textures_.end()) {
+		flashObj->SetNoiseTexture(it->second.srvIndex);
+	}
+
+	Vector3 dissolveColor = { 1.0f, 0.65f, 0.12f };
+	if (card.effectType == CardEffectType::Heal) {
+		dissolveColor = { 0.1f, 1.0f, 0.25f };
+	} else if (card.effectType == CardEffectType::Defense) {
+		dissolveColor = { 0.15f, 0.55f, 1.0f };
+	} else if (card.effectType == CardEffectType::Special) {
+		dissolveColor = { 0.75f, 0.25f, 1.0f };
+	}
+	flashObj->SetDissolveColor(dissolveColor);
+	flashObj->SetDissolveThreshold(0.0f);
+	flashObj->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+
+	cardUseFlashObj_ = std::move(flashObj);
+	cardUseFlashTimer_ = kCardUseFlashDuration;
+	UpdateCardUseFlash();
+}
+
+void GamePlayScene::UpdateCardUseFlash() {
+	if (!cardUseFlashObj_) {
+		return;
+	}
+
+	if (cardUseFlashTimer_ <= 0) {
+		cardUseFlashObj_.reset();
+		return;
+	}
+
+	const float progress = 1.0f - static_cast<float>(cardUseFlashTimer_) / static_cast<float>(kCardUseFlashDuration);
+	const float yaw = playerManager_ ? playerManager_->GetRotationY() : 0.0f;
+	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+	const Vector3 position = {
+		playerPos_.x + forward.x * (0.8f + progress * 0.18f),
+		playerPos_.y + 1.18f + std::sinf(progress * 3.141592f) * 0.12f,
+		playerPos_.z + forward.z * (0.8f + progress * 0.18f)
+	};
+	const float scale = 0.42f + std::sinf(progress * 3.141592f) * 0.12f;
+	const float dissolve = std::clamp((progress - 0.42f) / 0.58f, 0.0f, 1.0f);
+	const float flash = 0.75f + std::sinf(progress * 3.141592f) * 0.45f;
+
+	cardUseFlashObj_->SetTranslation(position);
+	cardUseFlashObj_->SetRotation({ 0.0f, yaw, 0.0f });
+	cardUseFlashObj_->SetScale({ scale, scale, scale });
+	cardUseFlashObj_->SetDissolveThreshold(dissolve);
+	cardUseFlashObj_->SetColor({ flash, flash, flash, 1.0f });
+	cardUseFlashObj_->Update();
+
+	cardUseFlashTimer_--;
+}
+
+void GamePlayScene::DrawCardUseFlash() {
+	if (cardUseFlashObj_) {
+		cardUseFlashObj_->Draw();
+	}
+}
+
 void GamePlayScene::UpdateCardUse(Input* input) {
 
 	// PlayerManager が無ければ何もしない
@@ -2163,6 +2236,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 
 	// コストを消費
 	playerManager_->UseCost(selectedCard.cost);
+	StartCardUseFlash(selectedCard);
 
 	// 攻撃カードなら構え状態にする
 	if (!isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
