@@ -67,6 +67,7 @@ void Boss::InitializeBossCards() {
 	heldCards_.push_back(CardDatabase::GetCardData(104));
 	heldCards_.push_back(CardDatabase::GetCardData(105));
 	heldCards_.push_back(CardDatabase::GetCardData(106));
+	heldCards_.push_back(CardDatabase::GetCardData(107)); // ボス専用の槍カードを追加
 }
 
 Card Boss::SelectCardForDistance(float dist, bool isEnraged) {
@@ -166,6 +167,10 @@ int Boss::GetCastTimeForCard(int cardId, bool isEnraged) const {
 	if (cardId == 106) {
 		return isEnraged ? 20 : 28; // ボス蹴りは短めの溜め
 	}
+	if (cardId == 107) {
+		return isEnraged ? 26 : 36; // ボス槍は中くらいの溜め時間
+	}
+
 
 	return isEnraged ? 40 : castTime_;
 }
@@ -192,6 +197,9 @@ int Boss::GetRecoveryTimeForCard(int cardId, bool isEnraged) const {
 
 	if (cardId == 106) {
 		return isEnraged ? 14 : 22; // ボス蹴りは後隙も短め
+	}
+	if (cardId == 107) {
+		return isEnraged ? 18 : 26; // ボス槍はやや短めの後隙
 	}
 	return isEnraged ? 18 : 26;
 }
@@ -659,14 +667,14 @@ void Boss::UpdateUseCard() {
 			// 10階の分裂ボスだけ役割付き重み付け
 			if (dist < 5.5f) {
 				if (useMeleeRole) {
-					addWeightedCard(101, 2);
+					addWeightedCard(107, isEnraged ? 2 : 1);
 					addWeightedCard(105, isEnraged ? 2 : 1);
 				} else {
 					addWeightedCard(106, isEnraged ? 2 : 1);
 				}
 			} else if (dist < 14.0f) {
 				if (useMeleeRole) {
-					addWeightedCard(101, 2);
+					addWeightedCard(107, isEnraged ? 2 : 1);
 					addWeightedCard(105, isEnraged ? 5 : 4);
 				} else {
 					addWeightedCard(101, 1);
@@ -675,7 +683,7 @@ void Boss::UpdateUseCard() {
 				}
 			} else {
 				if (useMeleeRole) {
-					addWeightedCard(101, 2);
+					addWeightedCard(107, isEnraged ? 2 : 1);
 					addWeightedCard(105, 1);
 				} else {
 					addWeightedCard(102, isEnraged ? 8 : 7);
@@ -844,6 +852,10 @@ void Boss::UpdateUseCard() {
 	else if (selectedCard_.id == 106) {
 		cardCooldownTimer_ = isEnraged ? 18 : 28; // ボス蹴りの個別待ち時間
 		StartCardCooldown(106, isEnraged ? 35 : 50); // 同じ蹴りの連打を防ぐ
+	}
+	else if (selectedCard_.id == 107) {
+		cardCooldownTimer_ = isEnraged ? 24 : 34; // ボス槍の個別待ち時間
+		StartCardCooldown(107, isEnraged ? 45 : 60); // 同じ槍の連打を防ぐ
 	}
 	// 発動後の硬直とチェイスへの復帰
 	state_ = State::Chase;
