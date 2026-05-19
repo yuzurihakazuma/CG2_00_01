@@ -118,8 +118,48 @@ void Enemy::Update() {
     // ★ スタンタイマーの更新
     if (isStunned_) {
         stunTimer_--;
+
+        // ① 敵のモデルをガクッと前に傾ける（うなだれる姿勢）
+        rot_.x = 0.5f; // 前かがみになる角度。足りなければ 0.8f などに調整してください
+
+        // ② 頭の上をクルクル回る「ピヨり星」
+        float angle = static_cast< float >( stunTimer_ ) * 0.15f;
+        float radius = 0.8f; // 星が回る半径
+        float headHeight = 2.0f; // 敵の頭の高さ
+
+        Vector3 starPos1 = {
+            pos_.x + std::cosf(angle) * radius,
+            pos_.y + headHeight,
+            pos_.z + std::sinf(angle) * radius
+        };
+        Vector3 starPos2 = {
+            pos_.x + std::cosf(angle + 3.14159f) * radius,
+            pos_.y + headHeight,
+            pos_.z + std::sinf(angle + 3.14159f) * radius
+        };
+
+        Vector4 starColor = { 1.0f, 0.9f, 0.2f, 1.0f }; // 黄色
+        GPUParticleManager::GetInstance()->Emit(starPos1, { 0,0,0 }, 0.15f, 0.3f, starColor);
+        GPUParticleManager::GetInstance()->Emit(starPos2, { 0,0,0 }, 0.15f, 0.3f, starColor);
+
+        // ③ 体の周囲の「ビリビリ（放電）」
+        if ( stunTimer_ % 2 == 0 ) {
+            Vector3 sparkPos = {
+                pos_.x + ( rand() % 11 - 5 ) * 0.15f,
+                pos_.y + 0.5f + ( rand() % 11 - 5 ) * 0.15f, // 体の中心あたり
+                pos_.z + ( rand() % 11 - 5 ) * 0.15f
+            };
+            Vector3 sparkVel = {
+                ( rand() % 11 - 5 ) * 0.08f,
+                ( rand() % 11 - 5 ) * 0.08f,
+                ( rand() % 11 - 5 ) * 0.08f
+            };
+            GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.1f, 0.5f, { 1.0f, 1.0f, 0.5f, 1.0f });
+        }
+
         if (stunTimer_ <= 0) {
             isStunned_ = false;
+            rot_.x = 0.0f;
         }
         return; // スタン中は以下の AI 思考や移動を全て飛ばす
     }
@@ -605,26 +645,60 @@ void Enemy::UpdateStatusEffects() {
         GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.6f, scale, color);
     }
 
-    if (isStunned_) {
-        // 回転の計算（animationTimer_ を使うことでぐるぐる回る）
-        float angle = static_cast<float>(animationTimer_) * 0.2f; // 回転速度
-        float radius = 0.3f; // 回転の半径
+    // ★ スタンタイマーの更新
+    if ( isStunned_ ) {
+        stunTimer_--;
 
-        // 頭上(y + 1.8f)の円周上の座標を計算
-        Vector3 starPos = {
-            pos_.x + std::sinf(angle) * radius,
-            pos_.y + 1.8f,
-            pos_.z + std::cosf(angle) * radius
+        // ==========================================
+        // 🌟 追加：スタン中のエフェクトと「うなだれる」姿勢
+        // ==========================================
+
+        // ① 敵のモデルをガクッと前に傾ける（うなだれる姿勢）
+        rot_.x = 0.5f;
+
+        // ② 頭の上をクルクル回る「ピヨり星」
+        // ※ isActionLocked_ の代わりに stunTimer_ を使います
+        float angle = static_cast< float >( stunTimer_ ) * 0.15f;
+        float radius = 0.8f;
+        float headHeight = 2.0f;
+
+        Vector3 starPos1 = {
+            pos_.x + std::cosf(angle) * radius,
+            pos_.y + headHeight,
+            pos_.z + std::sinf(angle) * radius
+        };
+        Vector3 starPos2 = {
+            pos_.x + std::cosf(angle + 3.14159f) * radius,
+            pos_.y + headHeight,
+            pos_.z + std::sinf(angle + 3.14159f) * radius
         };
 
-        // 黄色いキラキラを出す
-        GPUParticleManager::GetInstance()->Emit(
-            starPos,               // 位置
-            { 0.0f, 0.01f, 0.0f },   // 速度（少しだけ浮き上がる）
-            0.15f,                 // サイズ
-            0.5f,                  // ライフ
-            { 1.0f, 1.0f, 0.0f, 1.0f } // 色（黄色）
-        );
+        Vector4 starColor = { 1.0f, 0.9f, 0.2f, 1.0f };
+        GPUParticleManager::GetInstance()->Emit(starPos1, { 0,0,0 }, 0.15f, 0.3f, starColor);
+        GPUParticleManager::GetInstance()->Emit(starPos2, { 0,0,0 }, 0.15f, 0.3f, starColor);
+
+        // ③ 体の周囲の「ビリビリ（放電）」
+        if ( stunTimer_ % 2 == 0 ) {
+            Vector3 sparkPos = {
+                pos_.x + ( rand() % 11 - 5 ) * 0.15f,
+                pos_.y + 0.5f + ( rand() % 11 - 5 ) * 0.15f,
+                pos_.z + ( rand() % 11 - 5 ) * 0.15f
+            };
+            Vector3 sparkVel = {
+                ( rand() % 11 - 5 ) * 0.08f,
+                ( rand() % 11 - 5 ) * 0.08f,
+                ( rand() % 11 - 5 ) * 0.08f
+            };
+            GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.1f, 0.5f, { 1.0f, 1.0f, 0.5f, 1.0f });
+        }
+        // ==========================================
+
+        if ( stunTimer_ <= 0 ) {
+            isStunned_ = false;
+            // 🌟 姿勢（回転）を真っ直ぐに戻す
+            rot_.x = 0.0f;
+        }
+        return; // スタン中は以下の AI 思考や移動を全て飛ばす
     }
 }
 void Enemy::TakeDamage(int damage) {
