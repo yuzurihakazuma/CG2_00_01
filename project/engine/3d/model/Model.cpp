@@ -264,6 +264,64 @@ void Model::InitializeRing(ModelCommon* modelCommon, int subdivision, float oute
 	CreateBuffers();
 }
 
+void Model::InitializeCylinder(ModelCommon* modelCommon, int subdivision, float radius, float height){
+	this->modelCommon_ = modelCommon;
+	modelData_ = {};
+
+	const float radianPerDivide = 2.0f * std::numbers::pi_v<float> / float(subdivision);
+	const float halfHeight = height / 2.0f;
+
+	// 頂点とインデックスの生成
+	for ( int index = 0; index < subdivision; ++index ) {
+		float sin = std::sin(index * radianPerDivide);
+		float cos = std::cos(index * radianPerDivide);
+		float sinNext = std::sin(( index + 1 ) * radianPerDivide);
+		float cosNext = std::cos(( index + 1 ) * radianPerDivide);
+
+		float u = float(index) / float(subdivision);
+		float uNext = float(index + 1) / float(subdivision);
+
+		VertexData v[4];
+
+		// ① 下面・現在の角度
+		v[0].position = { sin * radius, -halfHeight, cos * radius, 1.0f };
+		v[0].texcoord = { u, 1.0f };
+		v[0].normal = { sin, 0.0f, cos }; // 外側を向く法線
+
+		// ② 下面・次の角度
+		v[1].position = { sinNext * radius, -halfHeight, cosNext * radius, 1.0f };
+		v[1].texcoord = { uNext, 1.0f };
+		v[1].normal = { sinNext, 0.0f, cosNext };
+
+		// ③ 上面・現在の角度
+		v[2].position = { sin * radius, halfHeight, cos * radius, 1.0f };
+		v[2].texcoord = { u, 0.0f };
+		v[2].normal = { sin, 0.0f, cos };
+
+		// ④ 上面・次の角度
+		v[3].position = { sinNext * radius, halfHeight, cosNext * radius, 1.0f };
+		v[3].texcoord = { uNext, 0.0f };
+		v[3].normal = { sinNext, 0.0f, cosNext };
+
+		uint32_t baseIndex = static_cast< uint32_t >( modelData_.vertices.size() );
+		for ( int i = 0; i < 4; ++i ) {
+			modelData_.vertices.push_back(v[i]);
+		}
+
+		// 側面を構成する2つの三角形（時計回り）
+		// 三角形1: ① -> ③ -> ②
+		modelData_.indices.push_back(baseIndex + 0);
+		modelData_.indices.push_back(baseIndex + 2);
+		modelData_.indices.push_back(baseIndex + 1);
+		// 三角形2: ② -> ③ -> ④
+		modelData_.indices.push_back(baseIndex + 1);
+		modelData_.indices.push_back(baseIndex + 2);
+		modelData_.indices.push_back(baseIndex + 3);
+	}
+
+	modelData_.material.textureFilePath = "resources/uvChecker.png";
+	CreateBuffers();
+}
 void Model::Draw(uint32_t instanceCount) {
 	// 1. コマンドリストを取得する
 	// ModelCommon経由でDirectXCommonから取得

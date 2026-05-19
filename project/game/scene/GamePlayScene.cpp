@@ -154,6 +154,31 @@ void GamePlayScene::Initialize(){
 		auraObj_->SetPipelineType(PipelineType::Object3D_Additive);
 	}
 
+	// 1. 円柱（Cylinder）モデルを生成（名前: "auraCylinderModel"、分割数32、半径1.5、高さ4.0）
+	ModelManager::GetInstance()->CreateCylinderModel("auraCylinderModel", 32, 1.5f, 4.0f);
+
+	auraCylinderObj_ = Obj3d::Create("auraCylinderModel");
+	if ( auraCylinderObj_ ) {
+		auraCylinderObj_->SetCamera(camera_.get());
+
+		// ⭕️ 画像は .png のままでOK！
+		auraCylinderObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
+
+	
+		// ⭕️ 絶対にディゾルブ（透明化）させないように、閾値をマイナスにしておく
+		auraCylinderObj_->SetDissolveThreshold(-1.0f);
+
+		// 影で真っ黒になるのを防ぐ
+		auraCylinderObj_->GetModel()->GetMaterial()->enableLighting = 0;
+
+		// テストObjと被らないように横にズラす
+		auraCylinderObj_->SetTranslation({ -5.0f, 2.0f, 5.0f });
+
+		// 加算合成
+		auraCylinderObj_->SetPipelineType(PipelineType::Object3D_Additive);
+	}
+	
+	
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // スキニングも
 	skinnedObj_->SetCamera(camera_.get());
@@ -243,6 +268,24 @@ void GamePlayScene::Update(){
 	hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e) {
 		return e->IsDead();
 		});
+
+	// ★ 新しい円柱オーラの更新処理
+	if ( auraCylinderObj_ ) {
+		// スクロール速度の計算（1秒間で1周するペース）
+		auraCylinderScroll_ += 1.0f * ( 1.0f / 60.0f );
+		if ( auraCylinderScroll_ > 1.0f ) {
+			auraCylinderScroll_ -= 1.0f;
+		}
+
+		// V方向（縦方向）にUVをずらす行列を作成
+		Matrix4x4 uvTransform = MakeTranslate({ 0.0f, auraCylinderScroll_, 0.0f });
+
+		// マテリアルに行列を適用
+		auraCylinderObj_->GetModel()->GetMaterial()->uvTransform = uvTransform;
+
+		// オブジェクトの行列更新
+		auraCylinderObj_->Update();
+	}
 
 
 	// BGM再生 (シングルトン)
@@ -359,18 +402,27 @@ void GamePlayScene::Draw(){
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 
-	// 2. 最後に「透明・加算合成」のものを描く！！！（順番大事）
-	if ( auraObj_ ) { auraObj_->Draw(); }
 
-
-	// --- インスタンシングの3D描画 ---
-	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
-
-
-
+	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+		// ⭕️ 2. ここで背景（スカイボックス）を描く！！！
+		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 	if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
 	}
+
+	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+	// ⭕️ 3. 最後に「透明・加算合成」のものを描く！！！（順番超大事）
+	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
+	if ( auraCylinderObj_ ) {
+		auraCylinderObj_->Draw();
+	}
+
+	if ( auraObj_ ) {
+		auraObj_->Draw();
+	}
+
+	// --- インスタンシングの3D描画 ---
+	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
 
 
 

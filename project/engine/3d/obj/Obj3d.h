@@ -94,6 +94,9 @@ public:
 	const std::string& GetName() const override { return name_; }
 	void SetName(const std::string& name) override { name_ = name; }
 
+	void SetIsBillboard(bool isBillboard){ isBillboard_ = isBillboard; }
+	void SetIsBillboardY(bool isBillboardY){ isBillboardY_ = isBillboardY; }
+
 private:
 
 	// -------------------------------------------------
@@ -104,6 +107,9 @@ private:
 	Vector3 scale_ = { 1.0f, 1.0f, 1.0f };       
 	Vector3 rotation_ = { 0.0f, 0.0f, 0.0f };    // 回転なし
 	Vector3 translate_ = { 0.0f, 0.0f, 0.0f };   // 原点
+
+	bool isBillboard_ = false;  // 全方位ビルボード
+	bool isBillboardY_ = false; // Y軸ビルボード
 
 	// 行列計算用（計算を楽にするために保持）
 	Transform transform { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f} };

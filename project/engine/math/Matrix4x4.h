@@ -25,6 +25,10 @@ namespace MatrixMath {
 	// Quaternion を使ったアフィン変換行列（スキニング・アニメーション用）
 	Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Quaternion& rotate, const Vector3& translate);
 
+	// ビルボード行列を作る関数（カメラの位置と向きに応じて、常にカメラの方を向く行列を作る）
+	Matrix4x4 MakeBillboardMatrix(const Vector3& cameraPos, const Vector3& objectPos, const Vector3& cameraUp = { 0.0f, 1.0f, 0.0f });
+	Matrix4x4 MakeBillboardYMatrix(const Vector3& cameraPos, const Vector3& objectPos);
+
 	// ---------------------------------------------
 	// 座標変換 (ベクトル × 行列)
 	// ---------------------------------------------

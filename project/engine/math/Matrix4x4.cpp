@@ -1,6 +1,6 @@
 #include "Matrix4x4.h"
 #include "engine/math/QuaternionMath.h"
-
+#include "engine/math/VectorMath.h"
 #include <cmath>
 #include <cassert>
 
@@ -173,6 +173,49 @@ namespace MatrixMath {
         Matrix4x4 rotateMatrix = QuaternionMath::MakeRotateMatrix(rotate); // Quaternion → 回転行列
         Matrix4x4 translateMatrix = MakeTranslate(translate);
         return Multiply(Multiply(scaleMatrix, rotateMatrix), translateMatrix);
+    }
+
+    // 全方位ビルボード（常にカメラに真正面を向く）
+    Matrix4x4 MakeBillboardMatrix(const Vector3& cameraPos, const Vector3& objectPos, const Vector3& cameraUp){
+        // 1. 正面（Z軸）のベクトルを求める (カメラ座標 - オブジェクト座標)
+        Vector3 back = VectorMath::Subtract(cameraPos, objectPos);
+        back = VectorMath::Normalize(back);
+
+        // 2. 右（X軸）のベクトルを求める (上ベクトル × 正面ベクトル)
+        Vector3 right = VectorMath::Cross(cameraUp, back);
+        right = VectorMath::Normalize(right);
+
+        // 3. 真の（Y軸）のベクトルを求める (正面ベクトル × 右ベクトル)
+        Vector3 up = VectorMath::Cross(back, right);
+        // (正規化された直交ベクトルの外積なので Normalize は省略可ですが念のため)
+        up = VectorMath::Normalize(up);
+
+        // 4. 回転行列として組み立てる
+        Matrix4x4 result = MakeIdentity4x4();
+        result.m[0][0] = right.x; result.m[0][1] = right.y; result.m[0][2] = right.z;
+        result.m[1][0] = up.x;    result.m[1][1] = up.y;    result.m[1][2] = up.z;
+        result.m[2][0] = back.x;  result.m[2][1] = back.y;  result.m[2][2] = back.z;
+
+        return result;
+    }
+
+    // Y軸ビルボード（Y軸は固定し、横方向だけカメラを向く。草や木などに使う）
+    Matrix4x4 MakeBillboardYMatrix(const Vector3& cameraPos, const Vector3& objectPos){
+        Vector3 back = VectorMath::Subtract(cameraPos, objectPos);
+        back.y = 0.0f; // ★Y軸の差分を無視する（高さを考慮しない）
+        back = VectorMath::Normalize(back);
+
+        Vector3 up = { 0.0f, 1.0f, 0.0f }; // 上は常にY軸プラス方向
+
+        Vector3 right = VectorMath::Cross(up, back);
+        right = VectorMath::Normalize(right);
+
+        Matrix4x4 result = MakeIdentity4x4();
+        result.m[0][0] = right.x; result.m[0][1] = right.y; result.m[0][2] = right.z;
+        result.m[1][0] = up.x;    result.m[1][1] = up.y;    result.m[1][2] = up.z;
+        result.m[2][0] = back.x;  result.m[2][1] = back.y;  result.m[2][2] = back.z;
+
+        return result;
     }
 
     // 座標変換

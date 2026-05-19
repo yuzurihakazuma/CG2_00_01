@@ -137,7 +137,22 @@ void Obj3d::Update(){
 		transform.translate = translate_;
 		transform.rotate = rotation_;
 		transform.scale = scale_;
-		worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
+		if ( isBillboard_ && camera_ ) {
+			// 全方位ビルボード
+			Matrix4x4 scaleMat = MakeScale(transform.scale);
+			Matrix4x4 billboardMat = MakeBillboardMatrix(camera_->GetWorldPosition(), transform.translate);
+			Matrix4x4 transMat = MakeTranslate(transform.translate);
+			worldMatrix = Multiply(Multiply(scaleMat, billboardMat), transMat);
+		} else if ( isBillboardY_ && camera_ ) {
+			// Y軸ビルボード
+			Matrix4x4 scaleMat = MakeScale(transform.scale);
+			Matrix4x4 billboardMat = MakeBillboardYMatrix(camera_->GetWorldPosition(), transform.translate);
+			Matrix4x4 transMat = MakeTranslate(transform.translate);
+			worldMatrix = Multiply(Multiply(scaleMat, billboardMat), transMat);
+		} else {
+			// 通常の計算
+			worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
+		}
 	}
 
 	// ワールド × ビュー × プロジェクション行列

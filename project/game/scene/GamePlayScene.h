@@ -112,4 +112,11 @@ private: // メンバ変数
 	
 
 	EngineMode prevMode_ = EngineMode::Edit;
+
+	// 一旦新しく作る円柱オーラ用オブジェクト
+	std::unique_ptr<Obj3d> auraCylinderObj_ = nullptr;
+
+	// 円柱オーラ用のUVスクロールタイマー
+	float auraCylinderScroll_ = 0.0f;
+
 };

@@ -22,8 +22,10 @@ public:
 
 	// 立方体モデルの作成
 	void CreateCubeModel(const std::string& modelName, float size = 1.0f);
-
+	// プリミティブモデルの作成
 	void CreateRingModel(const std::string& modelName, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.2f);
+	// 円柱（チューブ型）モデルの作成
+	void CreateCylinderModel(const std::string& modelName, int subdivision = 32, float radius = 1.0f, float height = 2.0f);
 
 	// シングルストーンのインスタンスを取得
 	static ModelManager* GetInstance();

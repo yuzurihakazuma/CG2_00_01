@@ -93,6 +93,10 @@ public: // メンバ関数
 	/// </summary>
 	void InitializeRing(ModelCommon* modelCommon, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.2f);
 
+	/// <summary>
+	/// 円柱（チューブ型）モデルの初期化
+	/// </summary>
+	void InitializeCylinder(ModelCommon* modelCommon, int subdivision = 32, float radius = 1.0f, float height = 2.0f);
 
 	/// <summary>
 	/// 描画
