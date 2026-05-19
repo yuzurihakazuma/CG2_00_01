@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <particle/StunEffectManager.h>
 
 using namespace VectorMath;
 using json = nlohmann::json;
@@ -199,8 +200,11 @@ void Player::Update() {
     // プレイヤーのスタン処理
     if (isStunned_) {
         stunTimer_--;
+
+        StunEffectManager::Update(pos_, rot_, stunTimer_);
         if (stunTimer_ <= 0) {
             isStunned_ = false;
+            rot_.x = 0.0f;
         }
 
         // スタン中はモデルの歩きアニメを止める

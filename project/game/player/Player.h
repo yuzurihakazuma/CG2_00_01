@@ -108,6 +108,8 @@ public:
 
     void SetStun(int durationFrames); // スタンさせる関数
 
+    bool IsStunned() const{ return isStunned_; }
+
 private:
     void LevelUp();      // レベルアップ処理
     void UpdateCost();   // コスト自然回復
@@ -206,6 +208,7 @@ private:
     bool isEnemyAtkDebuffed_ = false;
     bool isTutorialNoDeath_ = false; // チュートリアル中だけ死亡を防ぐ
 
+   
     // ここから下がアニメGUI用の状態
     std::string poseFilePath_ = "resources/player/player_pose.json";
     std::vector<NamedPoseData> savedPoses_;
