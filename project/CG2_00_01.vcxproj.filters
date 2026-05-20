@@ -258,7 +258,7 @@
     <ClCompile Include="engine\particle\HitEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="engine\3d\SplineRail.cpp">
+    <ClCompile Include="engine\rail\SplineRail.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
@@ -501,7 +501,7 @@
     <ClInclude Include="engine\particle\HitEffect.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="engine\3d\SplineRail.h">
+    <ClInclude Include="engine\rail\SplineRail.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

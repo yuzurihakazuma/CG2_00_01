@@ -77,25 +77,7 @@ void EditorManager::Update(){
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
     ImGui::End();
 
-#ifdef USE_IMGUI
-    ImGui::Begin("コントロール (Play / Stop)");
 
-    if ( currentMode_ == EngineMode::Edit ) {
-        // エディットモード時の表示
-        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "状態：エディットモード (停止中)");
-        if ( ImGui::Button("▶ プレイ開始 (Play)", ImVec2(150, 40)) ) {
-            currentMode_ = EngineMode::Play; // モードを切り替え！
-        }
-    } else {
-        // プレイモード時の表示
-        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "状態：プレイモード (実行中)");
-        if ( ImGui::Button("■ 停止 (Stop)", ImVec2(150, 40)) ) {
-            currentMode_ = EngineMode::Edit; // モードを切り替え！
-        }
-    }
-
-    ImGui::End();
-#endif
 
     // 2. メインメニューバー
     if ( ImGui::BeginMainMenuBar() ) {
@@ -122,6 +104,34 @@ void EditorManager::Update(){
             }
             ImGui::EndMenu();
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if ( currentMode_ == EngineMode::Edit ) {
+            // エディットモード時の表示（緑色）
+            ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), " [ Edit Mode ] ");
+
+            // 背景色を少し緑っぽくして目立たせる
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+            if ( ImGui::Button(" ▶ Play ") ) {
+                currentMode_ = EngineMode::Play;
+            }
+            ImGui::PopStyleColor();
+
+        } else {
+            // プレイモード時の表示（赤色）
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), " [ Play Mode ] ");
+
+            // 背景色を赤っぽくして目立たせる
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            if ( ImGui::Button(" ■ Stop ") ) {
+                currentMode_ = EngineMode::Edit;
+            }
+            ImGui::PopStyleColor();
+        }
+
         ImGui::EndMainMenuBar();
     }
 

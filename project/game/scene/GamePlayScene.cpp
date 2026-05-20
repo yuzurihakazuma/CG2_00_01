@@ -32,7 +32,7 @@
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
 #include "game/player/Player.h"
-#include "engine/3d/SplineRail.h"
+#include "engine/rail/SplineRail.h"
 #include "engine/utils/Level/LevelManager.h"
 #include "engine/utils/Level/LevelEditor.h"
 
@@ -44,8 +44,8 @@ void GamePlayScene::Initialize(){
 	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
 	WindowProc* windowProc = WindowProc::GetInstance();
 
-	
-	
+
+
 	// コマンドリスト取得
 	auto commandList = dxCommon->GetCommandList();
 
@@ -53,14 +53,14 @@ void GamePlayScene::Initialize(){
 	AudioManager::GetInstance()->LoadWave(bgmFile_);
 	// モデル読み込み (シングルトン)
 	ModelManager::GetInstance()->LoadModel("fence", "resources", "fence.obj");
-	
+
 	ModelManager::GetInstance()->LoadModel("grass", "resources", "terrain.obj");
-	ModelManager::GetInstance()->LoadModel("block", "resources/block","block.obj");
+	ModelManager::GetInstance()->LoadModel("block", "resources/block", "block.obj");
 
 	// 球モデル作成 (シングルトン)
 	ModelManager::GetInstance()->CreateSphereModel("sphere", 16);
 
-	
+
 	ModelManager::GetInstance()->CreatePlaneModel("plane");
 
 
@@ -75,7 +75,7 @@ void GamePlayScene::Initialize(){
 	textures_["circle2"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/circle2.png", commandList);
 	textures_["noise0"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/noise0.png", commandList) };
 	textures_["noise1"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/noise1.png", commandList) };
-	
+
 
 	textures_["skybox"] = TextureManager::GetInstance()->LoadTextureAndCreateSRVCube("resources/StandardCubeMap.dds", commandList);
 
@@ -103,7 +103,7 @@ void GamePlayScene::Initialize(){
 	camera_ = std::make_unique<Camera>(windowProc->GetClientWidth(), windowProc->GetClientHeight(), dxCommon);
 	camera_->SetTranslation({ 0.0f, 2.0f, -15.0f });
 
-	
+
 	// デバッグカメラ生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 	debugCamera_->Initialize();
@@ -128,7 +128,7 @@ void GamePlayScene::Initialize(){
 		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
 	}
 
-	
+
 
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // スキニングも
@@ -144,20 +144,20 @@ void GamePlayScene::Initialize(){
 		windowProc->GetClientWidth(), windowProc->GetClientHeight()
 	);
 
-	
+
 
 	EditorManager::GetInstance()->SetCamera(camera_.get());
 
 	sprite_ = Sprite::Create(textures_["uvChecker"].srvIndex, spritePos_);
-	
 
-	
+
+
 	blockGroup_ = std::make_unique<InstancedGroup>();
 	blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
 	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
 
-	
-	  // GPUパーティクル初期化 (テクスチャを指定する)
+
+	// GPUパーティクル初期化 (テクスチャを指定する)
 	GPUParticleManager::GetInstance()->Initialize(
 		dxCommon, SrvManager::GetInstance(), "resources/uvChecker.png");
 
@@ -182,22 +182,16 @@ void GamePlayScene::Initialize(){
 	// 1. JSONからマップデータを読み込む
 	LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
 
-	// 2. 読み込んだレールの座標を、SplineRailにセットする
-	splineRail_.nodes.clear();
-	for ( const auto& pos : mapData.railNodes ) {
-		// 読み込んだ座標(pos)と、とりあえずのFOV(60.0f)をセット
-		splineRail_.nodes.push_back({ pos, 60.0f });
+	// 2. 読み込んだ複数のレールの座標を、SplineRailにセットする
+	splineRails_.clear();
+	for ( const auto& line : mapData.railLines ) {
+		SplineRail newRail;
+		// 読み込んだ座標の配列をそのままセット
+		newRail.nodes = line;
+		newRail.BuildDistanceTable();
+		splineRails_.push_back(newRail);
 	}
 
-	auto initialEffect = std::make_unique<HitEffect>();
-	initialEffect->Initialize(
-		{ 0.0f, 0.0f, 5.0f },           // 目の前に発生
-		camera_.get(),
-		textures_["circle2"].srvIndex,  // テクスチャ
-		textures_["skybox"].srvIndex
-	);
-	hitEffects_.push_back(std::move(initialEffect));
-	
 }
 
 void GamePlayScene::Update(){
@@ -217,11 +211,15 @@ void GamePlayScene::Update(){
 
 	// もし「エディット(停止)」から「プレイ(再生)」に切り替わった瞬間なら、リセット処理を行う
 	if ( prevMode_ == EngineMode::Edit && currentMode == EngineMode::Play ) {
-		// ① 最新のマップデータをJSONから読み込み直す（保存したてのデータを反映）
+
+		// ★追加：最新のマップデータをJSONから読み込み直す（保存したてのデータを反映）
 		LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
-		splineRail_.nodes.clear();
-		for ( const auto& pos : mapData.railNodes ) {
-			splineRail_.nodes.push_back({ pos, 60.0f });
+		splineRails_.clear();
+		for ( const auto& line : mapData.railLines ) {
+			SplineRail newRail;
+			newRail.nodes = line;
+			newRail.BuildDistanceTable();
+			splineRails_.push_back(newRail);
 		}
 
 		// ② プレイヤーをスタート地点に戻す
@@ -240,7 +238,8 @@ void GamePlayScene::Update(){
 
 		// プレイヤーのレール移動計算
 		if ( player_ && testObj_ ) {
-			player_->Update(splineRail_);
+			// ★修正：splineRail_ を splineRails_ (配列)に変更
+			player_->Update(splineRails_);
 			testObj_->SetTranslation(player_->GetPosition());
 			testObj_->SetRotation(player_->GetRotation());
 		}
@@ -321,29 +320,29 @@ void GamePlayScene::Draw(){
 	// --- 3D描画の前準備 ---
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 
-	
+
 	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(9, textures_["skybox"].srvIndex);
-	
+
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
-	
-	
+
+
 	EditorManager::GetInstance()->Draw();
 
-	if ( testObj_ ){ 
+	if ( testObj_ ){
 		testObj_->Draw();
 	}
 
-	
+
 
 	// --- インスタンシングの3D描画 ---
 	if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
 
 	// 
-	if (skinnedObj_) { 
-			skinnedObj_->Draw();
+	if ( skinnedObj_ ) {
+		skinnedObj_->Draw();
 	}
 
-	
+
 
 	/*if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
@@ -368,7 +367,7 @@ void GamePlayScene::Draw(){
 
 
 	// 3. いつものPostEffect（色用のキャンバスだけに処理がかかります）
-	 PostEffect::GetInstance()->Draw(commandList); // ※もしこの関数を作っていれば
+	PostEffect::GetInstance()->Draw(commandList); // ※もしこの関数を作っていれば
 
 	// 4. エフェクト後の「色画像」と「マスク画像」の番号(SRV)をもらう
 	uint32_t colorSrv = PostEffect::GetInstance()->GetSrvIndex();
@@ -376,7 +375,7 @@ void GamePlayScene::Draw(){
 
 	// 5. Bloomに「色」と「マスク」を両方渡す！
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
-	
+
 	// 5-2. Bloomの最終結果のSRV番号をもらう
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
 	// エディタマネージャーに「これが最終的なゲーム画面のSRVだよ！」と教えてあげる
@@ -397,9 +396,9 @@ void GamePlayScene::Draw(){
 
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
-	if (sprite_) { sprite_->Draw(); }
+	if ( sprite_ ) { sprite_->Draw(); }
 	TextManager::GetInstance()->Draw();
-	
+
 
 }
 
@@ -415,46 +414,6 @@ void GamePlayScene::DrawDebugUI(){
 
 	TextManager::GetInstance()->DrawDebugUI();
 
-	ImGui::Begin("Environment Map Control");
-
-	// 例：テスト用のキューブ (testObj_) だけ反射をいじれるようにする
-	if ( testObj_ ) {
-		// GetModel() でモデルを取得し、そのマテリアルの数値をスライダーで直接操作する
-		ImGui::SliderFloat("Cube Reflect", &testObj_->GetModel()->GetMaterial()->environmentCoefficient, 0.0f, 1.0f);
-	}	
-	ImGui::End();
-
-
-	ImGui::Begin("Block Dissolve Test");
-
-	// スライダーで 0.0(通常) 〜 1.0(消滅) を操作
-	if ( ImGui::SliderFloat("ブロックの消滅度", &dissolveThreshold_, 0.0f, 1.0f) ) {
-		if ( testObj_ ) {
-			// スライダーを動かすと、このブロックの閾値だけが書き換わる
-			testObj_->SetDissolveThreshold(dissolveThreshold_);
-		}
-	}
-
-	// 便利なリセットボタン
-	if ( ImGui::Button("元に戻す") ) {
-		dissolveThreshold_ = 0.0f;
-		if ( testObj_ ){
-
-			testObj_->SetDissolveThreshold(0.0f);
-		}
-			
-	}
-	ImGui::SameLine();
-	if ( ImGui::Button("完全に消す") ) {
-		dissolveThreshold_ = 1.0f;
-		if ( testObj_ ){
-			testObj_->SetDissolveThreshold(1.0f);
-		}
-	}
-	ImGui::End();
-
-
-
 #endif
 
 }
@@ -466,7 +425,7 @@ GamePlayScene::GamePlayScene(){}
 GamePlayScene::~GamePlayScene(){}
 // 終了
 void GamePlayScene::Finalize(){
-	
+
 
 	object3ds_.clear();
 	GPUParticleManager::GetInstance()->Finalize();

@@ -13,7 +13,7 @@
 
 #include "engine/utils/EditorManager.h"
 
-#include "engine/3d/SplineRail.h"
+#include "engine/rail/SplineRail.h"
 #include "game/player/Player.h"
 
 #include "Skybox.h"
@@ -111,7 +111,7 @@ private: // メンバ変数
 	EngineMode prevMode_ = EngineMode::Edit;
 
 	std::unique_ptr<Player> player_ = nullptr;
-	SplineRail splineRail_; // スプラインレール本体
+	std::vector<SplineRail> splineRails_; // スプラインレール本体
 
 
 	

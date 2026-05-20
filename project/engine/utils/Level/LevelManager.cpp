@@ -22,14 +22,17 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         objectsArray.push_back(jsonObj);
     }
 
-	// レールノードのリストも同様に配列に変換する
-    json railArray = json::array();
-    for ( const auto& nodePos : levelData.railNodes ) {
-        // [x, y, z] の配列形式で保存
-        railArray.push_back({ nodePos.x, nodePos.y, nodePos.z });
+    // レールノードのリストも同様に配列に変換する（★複数レール対応）
+    json linesArray = json::array();
+    for ( const auto& line : levelData.railLines ) {
+        json railArray = json::array();
+        for ( const auto& nodePos : line ) {
+            // [x, y, z] の配列形式で保存
+            railArray.push_back({ nodePos.x, nodePos.y, nodePos.z });
+        }
+        linesArray.push_back(railArray);
     }
-    j["railNodes"] = railArray;
-
+    j["railLines"] = linesArray;
 
     j["objects"] = objectsArray;
 
@@ -85,13 +88,32 @@ LevelData LevelManager::Load(const std::string& fileName){
 
     }
 
-    // レールノードの配列も同様に読み込む
-    if ( j.contains("railNodes") && j["railNodes"].is_array() ) {
+    // ★複数レールの配列を読み込む
+    if ( j.contains("railLines") && j["railLines"].is_array() ) {
+        for ( const auto& lineObj : j["railLines"] ) {
+            std::vector<Vector3> line;
+            for ( const auto& posObj : lineObj ) {
+                Vector3 pos;
+                pos.x = posObj[0]; pos.y = posObj[1]; pos.z = posObj[2];
+                line.push_back(pos);
+            }
+            levelData.railLines.push_back(line);
+        }
+    }
+    // ★古いセーブデータ互換用（昔の railNodes があった場合）
+    else if ( j.contains("railNodes") && j["railNodes"].is_array() ) {
+        std::vector<Vector3> line;
         for ( const auto& posObj : j["railNodes"] ) {
             Vector3 pos;
             pos.x = posObj[0]; pos.y = posObj[1]; pos.z = posObj[2];
-            levelData.railNodes.push_back(pos);
+            line.push_back(pos);
         }
+        levelData.railLines.push_back(line);
+    }
+
+    // 万が一レールが1本もない場合は、空のレールを1つ追加しておく
+    if ( levelData.railLines.empty() ) {
+        levelData.railLines.push_back(std::vector<Vector3>());
     }
 
     return levelData;
