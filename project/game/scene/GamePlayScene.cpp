@@ -422,6 +422,9 @@ void GamePlayScene::Update() {
 
 	UpdateBossIntroLetterbox();
 
+	UpdatePostEffects();
+
+
 	// ポーズ切り替え
 	if (!isEditingDebugText && input->Triggerkey(DIK_ESCAPE)) {
 		isPaused_ = !isPaused_;
@@ -3050,3 +3053,6 @@ bool GamePlayScene::ConsumeTutorialStartRequest() {
 	pendingTutorialStart_ = false;
 	return requested;
 }
+
+
+void GamePlayScene::UpdatePostEffects(){}

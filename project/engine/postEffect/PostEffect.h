@@ -19,6 +19,7 @@ enum class PostEffectType{
     RadialBlur,
     Outline,
     RandomNoise,
+    ColorTint,      // 全面カラーティント（死亡フラッシュ等）
     Count
 };
 
@@ -101,6 +102,11 @@ public:
     void SetRadialBlurStrength(float strength){
         if ( !effectParamsData_ ) return;
         effectParamsData_->param0 = strength;
+    }
+
+    // 全面カラーティントを設定（ボス死亡フラッシュなど）
+    void SetColorTint(float alpha, float r, float g, float b){
+        SetVignetteParams(alpha, r, g, b); // 同じパラメータ構造を流用
     }
 
 private:

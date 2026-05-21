@@ -48,6 +48,8 @@ public:
     int GetMaxHP() const { return maxHP_; }
     bool IsDead() const { return isDead_; }
 
+    bool IsEnraged() const{ return !isDead_ && hasEnrageTriggered_; }
+
     bool IsHit() const { return isHit_; }
     bool IsVisible() const;
 

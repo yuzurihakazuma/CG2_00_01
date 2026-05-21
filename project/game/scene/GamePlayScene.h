@@ -58,6 +58,9 @@ public:
 	void Finalize() override;
 	// 更新
 	void Update() override;
+
+	void UpdatePostEffects(); 
+
 	// 描画
 	void Draw() override;
 
@@ -305,4 +308,10 @@ public:
 	static void RequestTutorialStart(bool enable);
 
 	
+	// ポストエフェクト用ステート追跡
+	int  bossDeathFlashTimer_ = 0;
+	int  enrageFlashTimer_ = 0;
+	bool wasBossDead_ = false;
+	bool wasEnraged_ = false;
+
 };

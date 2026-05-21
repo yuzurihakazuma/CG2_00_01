@@ -259,7 +259,9 @@ void PostEffect::DrawDebugUI(){
 			"綺麗にぼかす (Gaussian Filter)",
 			"アウトライン・輪郭抽出 (Outline)",
 			"放射状ブラー (Radial Blur)",
-			"ノイズ・砂嵐 (Random Noise)"
+			"ノイズ・砂嵐 (Random Noise)",
+			"カラーティント (ColorTint)"
+
 		};
 		// --- ポストエフェクトのON/OFF設定 ---
 		if ( ImGui::CollapsingHeader("ポストエフェクト設定 (Post Effect)", ImGuiTreeNodeFlags_DefaultOpen) ) {
