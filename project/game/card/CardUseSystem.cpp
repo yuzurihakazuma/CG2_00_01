@@ -121,13 +121,10 @@ void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* bos
 // 描画
 void CardUseSystem::Draw() {
 
-	// システムの描画
-	for (const auto &effect : activeEffects_) {
+	// 呼び出し元で3D用パイプラインが設定されている前提で各エフェクトを描画する
+	for (const auto& effect : activeEffects_) {
 		effect->Draw();
 	}
-
-
-	
 }
 
 // カード使用開始
