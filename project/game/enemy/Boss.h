@@ -211,5 +211,8 @@ private:
     int attackIntervalMinFrames_ = 120; // 攻撃間隔の最小値。60fpsで2秒
     int attackIntervalMaxFrames_ = 240; // 攻撃間隔の最大値。60fpsで4秒
     int attackIntervalTimer_ = 0;       // 次に攻撃開始できるまでの残り時間
+
+    bool hasEnrageTriggered_ = false;
+
 };
 

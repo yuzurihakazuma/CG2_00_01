@@ -861,29 +861,92 @@ void Boss::UpdateUseCard() {
 	isCasting_ = false;
 }
 
-void Boss::UpdateEnrageEffect() {
+void Boss::UpdateEnrageEffect(){
 	// 死んでいる時、登場中、またはHPが半分より多い場合はエフェクトを出さない
-	if (isDead_ || state_ == State::Appear || hp_ > (maxHP_ / 2)) {
+	if ( isDead_ || state_ == State::Appear || hp_ > ( maxHP_ / 2 ) ) {
 		return;
 	}
 
-	// 毎フレーム、全身から赤いオーラを立ち昇らせる
-	for (int i = 0; i < 4; i++) {
+	// 激怒突入の瞬間（1回だけ）
+	if ( !hasEnrageTriggered_ ) {
+		hasEnrageTriggered_ = true;
+
+		// ① 真上に吹き上がる炎の柱
+		for ( int i = 0; i < 60; i++ ) {
+			Vector3 pillarPos = {
+				pos_.x + ( rand() % 9 - 4 ) * 0.2f,
+				pos_.y + ( rand() % 5 ) * 0.3f,
+				pos_.z + ( rand() % 9 - 4 ) * 0.2f
+			};
+			Vector3 pillarVel = {
+				( rand() % 7 - 3 ) * 0.04f,
+				0.5f + ( rand() % 20 ) * 0.08f,
+				( rand() % 7 - 3 ) * 0.04f
+			};
+			Vector4 color = ( rand() % 2 == 0 )
+				? Vector4 { 1.0f, 0.15f, 0.0f, 1.0f }
+			: Vector4 { 1.0f, 0.55f, 0.0f, 1.0f };
+			float scale = 1.0f + ( rand() % 8 ) * 0.2f;
+			GPUParticleManager::GetInstance()->Emit(pillarPos, pillarVel, 0.8f, scale, color);
+		}
+
+		// ② 衝撃波リング 3段（高さを変えて重なる）
+		for ( int ring = 0; ring < 3; ring++ ) {
+			float height = 0.3f + ring * 1.2f;
+			float speed = 0.7f + ring * 0.15f;
+			float size = 2.2f - ring * 0.3f;
+			for ( int i = 0; i < 24; i++ ) {
+				float ringAngle = ( 3.14159f * 2.0f / 24.0f ) * i;
+				Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
+				GPUParticleManager::GetInstance()->Emit(
+					{ pos_.x, pos_.y + height, pos_.z },
+					ringVel, 0.45f, size, { 1.0f, 0.08f, 0.0f, 1.0f }
+				);
+			}
+		}
+
+		// ③ 超大フラッシュ（白→赤の2連）
+		GPUParticleManager::GetInstance()->Emit(
+			{ pos_.x, pos_.y + 2.5f, pos_.z },
+			{ 0, 0, 0 }, 0.12f, 8.0f, { 1.0f, 1.0f, 1.0f, 1.0f }
+		);
+		GPUParticleManager::GetInstance()->Emit(
+			{ pos_.x, pos_.y + 2.5f, pos_.z },
+			{ 0, 0, 0 }, 0.5f, 6.0f, { 1.0f, 0.05f, 0.0f, 0.75f }
+		);
+
+		// ④ 足元から這い上がる黒煙（余韻）
+		for ( int i = 0; i < 25; i++ ) {
+			Vector3 smokePos = {
+				pos_.x + ( rand() % 21 - 10 ) * 0.18f,
+				pos_.y,
+				pos_.z + ( rand() % 21 - 10 ) * 0.18f
+			};
+			Vector3 smokeVel = {
+				( rand() % 11 - 5 ) * 0.04f,
+				0.12f + ( rand() % 10 ) * 0.04f,
+				( rand() % 11 - 5 ) * 0.04f
+			};
+			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.5f, 1.4f, { 0.1f, 0.0f, 0.0f, 0.85f });
+		}
+	}
+
+	// 毎フレーム、全身から赤いオーラを立ち昇らせる（激怒中は8個に増量）
+	for ( int i = 0; i < 8; i++ ) {
 		Vector3 auraPos = {
-			pos_.x + (rand() % 31 - 15) * 0.1f,
-			pos_.y + (rand() % 21) * 0.1f,
-			pos_.z + (rand() % 31 - 15) * 0.1f
+			pos_.x + ( rand() % 31 - 15 ) * 0.1f,
+			pos_.y + ( rand() % 21 ) * 0.1f,
+			pos_.z + ( rand() % 31 - 15 ) * 0.1f
 		};
-
 		Vector3 auraVel = {
-			(rand() % 11 - 5) * 0.01f,
-			0.05f + (rand() % 10) * 0.01f,
-			(rand() % 11 - 5) * 0.01f
+			( rand() % 11 - 5 ) * 0.01f,
+			0.05f + ( rand() % 10 ) * 0.01f,
+			( rand() % 11 - 5 ) * 0.01f
 		};
-
-		Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.0f, 0.0f, 0.6f } : Vector4{ 1.0f, 0.2f, 0.0f, 0.4f };
-		float scale = 0.8f + (rand() % 5) * 0.1f;
-
+		Vector4 color = ( rand() % 2 == 0 )
+			? Vector4 { 0.8f, 0.0f, 0.0f, 0.6f }
+		: Vector4 { 1.0f, 0.2f, 0.0f, 0.4f };
+		float scale = 0.8f + ( rand() % 5 ) * 0.1f;
 		GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
 	}
 }
