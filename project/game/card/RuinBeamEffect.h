@@ -16,18 +16,31 @@ public:
     void Draw() override;
 
     bool IsFinished() const override { return isFinished_; }
+    const Vector3& GetDebugCenter() const { return pos_; }
+    float GetDebugYaw() const { return rot_.y; }
+    float GetDebugHalfWidth() const { return GetHitHalfWidth() + kPlayerHitRadius; }
+    float GetDebugHalfLength() const { return GetHitHalfLength() + kPlayerHitRadius; }
 
 private:
     bool IsPlayerInsideBeam(const Vector3& playerPos) const;
+    float GetHitHalfWidth() const { return baseScale_.x * kHitHalfWidthScale; }
+    float GetHitHalfLength() const { return baseScale_.z * kHitHalfLengthScale; }
 
 private:
+    static constexpr float kHitHalfWidthScale = 1.0f;
+    static constexpr float kHitHalfLengthScale = 1.0f;
+    static constexpr float kPlayerHitRadius = 0.6f;
+    static constexpr int kLifeDuration = 90;
+    static constexpr float kBeamTurnSpeed = 0.010f;
+
     std::unique_ptr<Obj3d> obj_ = nullptr;
     Vector3 pos_ = { 0.0f, 0.0f, 0.0f };
     Vector3 rot_ = { 0.0f, 0.0f, 0.0f };
-    Vector3 baseScale_ = { 2.4f, 1.2f, 16.0f };
+    Vector3 originPos_ = { 0.0f, 0.0f, 0.0f };
+    Vector3 baseScale_ = { 1.4f, 1.2f, 14.0f };
 
     int damage_ = 6;
-    int lifeTimer_ = 72;
+    int lifeTimer_ = kLifeDuration;
     int hitInterval_ = 12;
     int hitTimer_ = 0;
     bool isFinished_ = false;

@@ -32,7 +32,7 @@ public:
 	void SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera);
 
 	// 通常の敵をランダムに配置する
-	void SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera);
+	void SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera, int maxAliveEnemies = 5);
 
 	// 全ての敵を消す
 	void Clear();

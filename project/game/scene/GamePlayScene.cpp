@@ -36,6 +36,8 @@
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/BossManager.h"
 #include "game/card/CardUseSystem.h"
+#include "game/card/CardDatabase.h"
+#include "game/card/RuinBeamEffect.h"
 #include "game/map/Minimap.h"
 #include "game/map/MapManager.h"
 #include "Bloom.h"
@@ -230,7 +232,7 @@ void GamePlayScene::Initialize() {
 		mapManager_->ConsumeMapChanged();
 	}
 
-	
+
 	// ★追加：カードシステムにミニマップを教える
 	if (playerCardSystem_ && minimap_) {
 		playerCardSystem_->SetMinimap(minimap_.get());
@@ -277,7 +279,7 @@ void GamePlayScene::Initialize() {
 	}
 	if (playerHpGaugeFillSprite_) {
 		playerHpGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
-		playerHpGaugeFillSprite_->SetColor({ 0.95f, 0.12f, 0.13f, 0.95f });
+		playerHpGaugeFillSprite_->SetColor({ 0.15f, 0.9f, 0.25f, 0.95f });
 	}
 	if (playerCostGaugeFrameSprite_) {
 		playerCostGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
@@ -728,6 +730,7 @@ void GamePlayScene::Update() {
 
 
 	// ボスを倒していたらゲームクリアへ遷移
+	UpdateTimedSpawns();
 	if (bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
 		// 10階ボス撃破後にゲームクリアへ遷移する
 		SceneManager::GetInstance()->ChangeScene("GAMECLEAR");
@@ -1419,7 +1422,7 @@ void GamePlayScene::Update() {
 	// プレイヤーステータス表示更新
 	if (playerManager_) {
 		std::string hpText =
-			"HP:" + std::to_string(playerManager_->GetHP()) + "/" + std::to_string(playerManager_->GetMaxHP());
+			"HP  " + std::to_string(playerManager_->GetHP()) + "/" + std::to_string(playerManager_->GetMaxHP());
 
 		std::string costText =
 			"COST:" + std::to_string(playerManager_->GetCost()) + "/" + std::to_string(playerManager_->GetMaxCost());
@@ -1442,7 +1445,8 @@ void GamePlayScene::Update() {
 
 		// テキストの座標を最新のウィンドウ幅に合わせて更新
 		textMgr->SetPosition("PlayerHP", startX, topY);
-		textMgr->SetScale("PlayerHP", 0.68f);
+		textMgr->SetScale("PlayerHP", 0.72f);
+		textMgr->SetColor("PlayerHP", 0.86f, 1.0f, 1.0f, 1.0f);
 		textMgr->SetScale("PlayerCost", 0.68f);
 		textMgr->SetScale("PlayerLevel", 0.9f);
 		textMgr->SetScale("PlayerEXP", 0.9f);
@@ -2278,10 +2282,10 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 	}
 
 	const float panelLeft = 250.0f;
-	const float labelWidth = 170.0f;
+	const float labelWidth = 150.0f;
 	const float gaugeLeft = panelLeft + labelWidth + 18.0f;
-	const float gaugeWidth = 300.0f;
-	const float gaugeHeight = 16.0f;
+	const float gaugeWidth = 330.0f;
+	const float gaugeHeight = 14.0f;
 	const float hpY = 42.0f;
 	const float costY = 72.0f;
 
@@ -2312,14 +2316,27 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 	const float costRatio = playerManager_->GetMaxCost() > 0
 		? static_cast<float>(playerManager_->GetCost()) / static_cast<float>(playerManager_->GetMaxCost())
 		: 0.0f;
-	Vector4 hpColor = { 0.95f, 0.12f, 0.13f, 0.95f };
-	if (hpRatio > 0.5f) {
-		hpColor = { 0.15f, 0.9f, 0.25f, 0.95f };
-	} else if (hpRatio > 0.25f) {
-		hpColor = { 1.0f, 0.82f, 0.12f, 0.95f };
+	const float targetHpRatio = std::clamp(hpRatio, 0.0f, 1.0f);
+	if (displayedHpRatio_ < 0.0f) {
+		displayedHpRatio_ = targetHpRatio;
+	}
+	const float hpDelta = targetHpRatio - displayedHpRatio_;
+	const float hpFollowSpeed = hpDelta >= 0.0f ? 0.075f : 0.025f;
+	if (std::fabs(hpDelta) <= hpFollowSpeed) {
+		displayedHpRatio_ = targetHpRatio;
+	} else {
+		displayedHpRatio_ += (hpDelta > 0.0f ? hpFollowSpeed : -hpFollowSpeed);
+	}
+	displayedHpRatio_ = std::clamp(displayedHpRatio_, 0.0f, 1.0f);
+
+	Vector4 hpColor = { 0.95f, 0.10f, 0.10f, 0.96f };
+	if (targetHpRatio > 0.5f) {
+		hpColor = { 0.20f, 0.96f, 0.38f, 0.96f };
+	} else if (targetHpRatio > 0.25f) {
+		hpColor = { 1.0f, 0.78f, 0.12f, 0.96f };
 	}
 
-	updateGauge(playerHpGaugeFrameSprite_.get(), playerHpGaugeBackSprite_.get(), playerHpGaugeFillSprite_.get(), hpY, hpRatio, hpColor);
+	updateGauge(playerHpGaugeFrameSprite_.get(), playerHpGaugeBackSprite_.get(), playerHpGaugeFillSprite_.get(), hpY, displayedHpRatio_, hpColor);
 	updateGauge(playerCostGaugeFrameSprite_.get(), playerCostGaugeBackSprite_.get(), playerCostGaugeFillSprite_.get(), costY, costRatio, { 0.18f, 0.68f, 1.0f, 0.95f });
 }
 
@@ -2662,6 +2679,74 @@ void GamePlayScene::DrawCharacterHitboxesDebug() const {
 			}
 		}
 	}
+
+	DrawBossBeamHitboxesDebug();
+}
+
+void GamePlayScene::DrawBossBeamHitboxesDebug() const {
+	if (!bossManager_ || !mapManager_ || !mapManager_->IsBossMap()) {
+		return;
+	}
+
+	for (int i = 0; i < 2; ++i) {
+		Boss* boss = bossManager_->GetBossAt(i);
+		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsCasting() || boss->GetSelectedCard().id != 104) {
+			continue;
+		}
+
+		const Vector3& bossPos = boss->GetPosition();
+		const float bossYaw = boss->GetRotation().y;
+		const Vector3 forward = {
+			std::sinf(bossYaw),
+			0.0f,
+			std::cosf(bossYaw)
+		};
+
+		const float beamBaseLength = 14.0f;
+		const float playerHitRadius = 0.6f;
+		const float warningHalfWidth = 1.4f + playerHitRadius;
+		const float warningHalfLength = beamBaseLength + playerHitRadius;
+		const Vector3 warningCenter = {
+			bossPos.x + forward.x * (beamBaseLength * 0.90f),
+			mapManager_->GetFloorSurfaceY(0.05f),
+			bossPos.z + forward.z * (beamBaseLength * 0.90f)
+		};
+
+		float chargeRatio = 0.0f;
+		const int castDuration = boss->GetCastDurationCurrent();
+		if (castDuration > 0) {
+			chargeRatio = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(castDuration);
+			chargeRatio = std::clamp(chargeRatio, 0.0f, 1.0f);
+		}
+		const unsigned int warningColor = IM_COL32(
+			255,
+			static_cast<int>(230.0f - 225.0f * chargeRatio),
+			0,
+			static_cast<int>(190.0f + 45.0f * chargeRatio)
+		);
+		DrawDebugOrientedRectXZ(warningCenter, bossYaw, warningHalfWidth, warningHalfLength, warningColor, 2.0f);
+	}
+
+	CardUseSystem* bossCardSystem = bossManager_->GetBossCardSystem();
+	if (!bossCardSystem) {
+		return;
+	}
+
+	for (const auto& effect : bossCardSystem->GetActiveEffects()) {
+		const auto* beamEffect = dynamic_cast<const RuinBeamEffect*>(effect.get());
+		if (!beamEffect || beamEffect->IsFinished()) {
+			continue;
+		}
+
+		DrawDebugOrientedRectXZ(
+			beamEffect->GetDebugCenter(),
+			beamEffect->GetDebugYaw(),
+			beamEffect->GetDebugHalfWidth(),
+			beamEffect->GetDebugHalfLength(),
+			IM_COL32(255, 80, 220, 235),
+			2.5f
+		);
+	}
 }
 
 void GamePlayScene::DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const {
@@ -2743,6 +2828,50 @@ void GamePlayScene::DrawDebugCircleXZ(const Vector3& center, float radius, unsig
 	}
 }
 
+void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, float halfWidth, float halfLength, unsigned int color, float thickness) const {
+	ImDrawList* drawList = ImGui::GetForegroundDrawList();
+	if (!drawList) {
+		return;
+	}
+
+	const Vector3 right = {
+		std::cosf(yaw),
+		0.0f,
+		-std::sinf(yaw)
+	};
+	const Vector3 forward = {
+		std::sinf(yaw),
+		0.0f,
+		std::cosf(yaw)
+	};
+
+	const std::array<Vector3, 4> corners = {
+		center - right * halfWidth - forward * halfLength,
+		center + right * halfWidth - forward * halfLength,
+		center + right * halfWidth + forward * halfLength,
+		center - right * halfWidth + forward * halfLength,
+	};
+
+	std::array<Vector2, 4> screenCorners{};
+	std::array<bool, 4> visible{};
+	for (size_t i = 0; i < corners.size(); ++i) {
+		visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+	}
+
+	for (int i = 0; i < 4; ++i) {
+		const int next = (i + 1) % 4;
+		if (!visible[i] || !visible[next]) {
+			continue;
+		}
+		drawList->AddLine(
+			ImVec2(screenCorners[i].x, screenCorners[i].y),
+			ImVec2(screenCorners[next].x, screenCorners[next].y),
+			color,
+			thickness
+		);
+	}
+}
+
 void GamePlayScene::RegenerateDungeonAndRespawnPlayer(int roomCount) {
 	if (!mapManager_) {
 		return;
@@ -2763,6 +2892,152 @@ void GamePlayScene::RegenerateDungeonAndRespawnPlayer(int roomCount) {
 		cardSpawnCount_,
 		cardSpawnMargin_
 	);
+
+	timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+	timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+}
+
+void GamePlayScene::UpdateTimedSpawns() {
+	if (!mapManager_ || !enemyManager_ || !camera_ || !spawnManager_.HasLevelData()) {
+		return;
+	}
+	if (transitionState_ != TransitionState::None || isCardSwapMode_) {
+		return;
+	}
+	if (tutorial_ && tutorial_->IsActive()) {
+		return;
+	}
+
+	if (mapManager_->IsBossMap()) {
+		timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+		timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+		return;
+	}
+
+	timedEnemySpawnTimer_--;
+	if (timedEnemySpawnTimer_ <= 0) {
+		if (CountAliveEnemies() < normalTimedEnemyMax_) {
+			enemyManager_->SpawnEnemiesRandom(
+				1,
+				enemySpawnMargin_,
+				&spawnManager_,
+				mapManager_.get(),
+				playerPos_,
+				camera_.get(),
+				normalTimedEnemyMax_
+			);
+		}
+		timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+	}
+
+	timedCardSpawnTimer_--;
+	if (timedCardSpawnTimer_ <= 0) {
+		if (CountActiveCardPickups() < normalTimedCardMax_) {
+			SpawnTimedCardPickup();
+		}
+		timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+	}
+}
+
+bool GamePlayScene::SpawnTimedCardPickup() {
+	if (!mapManager_ || !spawnManager_.HasLevelData()) {
+		return false;
+	}
+
+	const LevelData& level = mapManager_->GetLevelData();
+	std::vector<std::pair<int, int>> candidates = spawnManager_.FindCardSpawnCandidates(cardSpawnMargin_);
+	if (candidates.empty()) {
+		return false;
+	}
+
+	std::vector<std::pair<int, int>> filtered;
+	for (const auto& candidate : candidates) {
+		const int x = candidate.first;
+		const int z = candidate.second;
+
+		if (mapManager_->IsNearStairsTile(x, z)) {
+			continue;
+		}
+		if (x < 0 || x >= level.width || z < 0 || z >= level.height || level.tiles[z][x] != 0) {
+			continue;
+		}
+
+		Vector3 worldPos = spawnManager_.TileToWorldPosition(x, z, -0.99f);
+		Vector3 playerDiff = { worldPos.x - playerPos_.x, 0.0f, worldPos.z - playerPos_.z };
+		if (Length(playerDiff) < 5.0f) {
+			continue;
+		}
+
+		bool tooClose = false;
+		for (const auto& pickup : cardPickupManager_.GetPickups()) {
+			if (!pickup.isActive) {
+				continue;
+			}
+			Vector3 pickupDiff = { worldPos.x - pickup.position.x, 0.0f, worldPos.z - pickup.position.z };
+			if (Length(pickupDiff) < 4.0f) {
+				tooClose = true;
+				break;
+			}
+		}
+		if (tooClose) {
+			continue;
+		}
+
+		if (enemyManager_) {
+			for (const auto& enemy : enemyManager_->GetEnemies()) {
+				if (!enemy || enemy->IsDead()) {
+					continue;
+				}
+				Vector3 enemyDiff = { worldPos.x - enemy->GetPosition().x, 0.0f, worldPos.z - enemy->GetPosition().z };
+				if (Length(enemyDiff) < 3.0f) {
+					tooClose = true;
+					break;
+				}
+			}
+		}
+		if (tooClose) {
+			continue;
+		}
+
+		filtered.push_back(candidate);
+	}
+
+	if (filtered.empty()) {
+		return false;
+	}
+
+	std::random_device rd;
+	std::mt19937 mt(rd());
+	std::shuffle(filtered.begin(), filtered.end(), mt);
+
+	const auto& selected = filtered.front();
+	Vector3 worldPos = spawnManager_.TileToWorldPosition(selected.first, selected.second, -0.99f);
+	cardPickupManager_.AddPickup(worldPos, CardDatabase::GetRandomPlayerCard());
+	return true;
+}
+
+int GamePlayScene::CountActiveCardPickups() const {
+	int count = 0;
+	for (const auto& pickup : cardPickupManager_.GetPickups()) {
+		if (pickup.isActive) {
+			count++;
+		}
+	}
+	return count;
+}
+
+int GamePlayScene::CountAliveEnemies() const {
+	if (!enemyManager_) {
+		return 0;
+	}
+
+	int count = 0;
+	for (const auto& enemy : enemyManager_->GetEnemies()) {
+		if (enemy && !enemy->IsDead()) {
+			count++;
+		}
+	}
+	return count;
 }
 
 bool GamePlayScene::pendingTutorialStart_ = false;

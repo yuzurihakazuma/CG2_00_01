@@ -8,21 +8,41 @@
 
 using namespace VectorMath;
 
+namespace {
+
+float NormalizeAngle(float angle) {
+    constexpr float pi = 3.14159265f;
+    constexpr float twoPi = pi * 2.0f;
+
+    while (angle > pi) {
+        angle -= twoPi;
+    }
+    while (angle < -pi) {
+        angle += twoPi;
+    }
+    return angle;
+}
+
+}
+
 void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
 
     (void)isPlayerCaster;
 
     isFinished_ = false;
     hitTimer_ = 0;
-    lifeTimer_ = 72;
+    lifeTimer_ = kLifeDuration;
     // このビームを発動したボス本人を保持する
 // 分裂ボス時でも、発動元のデバフ状態を正しく参照できるようにする
     casterBoss_ = casterBoss;
 
+    originPos_ = casterPos;
+    rot_ = { 0.0f, casterYaw, 0.0f };
+
     Vector3 forward = {
-        std::sinf(casterYaw),
+        std::sinf(rot_.y),
         0.0f,
-        std::cosf(casterYaw)
+        std::cosf(rot_.y)
     };
 
     // 発射直後から前方を大きく塞ぐように、中心を少し前へ置く
@@ -31,8 +51,6 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
         casterPos.y - 0.8f,
         casterPos.z + forward.z * (baseScale_.z * 0.90f)
     };
-    rot_ = { 0.0f, casterYaw, 0.0f };
-
     obj_ = Obj3d::Create("sphere");
     if (obj_) {
         obj_->SetCamera(camera);
@@ -68,11 +86,39 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         return;
     }
 
+    if (player && !player->IsDead()) {
+        Vector3 toPlayer = {
+            player->GetPosition().x - originPos_.x,
+            0.0f,
+            player->GetPosition().z - originPos_.z
+        };
+        if (Length(toPlayer) > 0.01f) {
+            const float targetYaw = std::atan2f(toPlayer.x, toPlayer.z);
+            const float yawDiff = std::clamp(
+                NormalizeAngle(targetYaw - rot_.y),
+                -kBeamTurnSpeed,
+                kBeamTurnSpeed
+            );
+            rot_.y += yawDiff;
+        }
+    }
+
     Vector3 forward = { std::sinf(rot_.y), 0.0f, std::cosf(rot_.y) };
-    Vector3 endPos = {
-        pos_.x + forward.x * baseScale_.z,
+    pos_ = {
+        originPos_.x + forward.x * (baseScale_.z * 0.90f),
+        originPos_.y - 0.8f,
+        originPos_.z + forward.z * (baseScale_.z * 0.90f)
+    };
+    const float hitHalfLength = GetHitHalfLength();
+    Vector3 startPos = {
+        pos_.x - forward.x * hitHalfLength,
         pos_.y,
-        pos_.z + forward.z * baseScale_.z
+        pos_.z - forward.z * hitHalfLength
+    };
+    Vector3 endPos = {
+        pos_.x + forward.x * hitHalfLength,
+        pos_.y,
+        pos_.z + forward.z * hitHalfLength
     };
 
     if (lifeTimer_ > 0) {
@@ -98,9 +144,9 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         for (int i = 0; i < 200; ++i) {
             float t = static_cast<float>(i) / 199.0f;
             Vector3 particlePos = {
-                pos_.x + (endPos.x - pos_.x) * t,
-                pos_.y + (endPos.y - pos_.y) * t,
-                pos_.z + (endPos.z - pos_.z) * t
+                startPos.x + (endPos.x - startPos.x) * t,
+                startPos.y + (endPos.y - startPos.y) * t,
+                startPos.z + (endPos.z - startPos.z) * t
             };
 
             // ビームの中心軸に固まらせるオフセット
@@ -129,9 +175,9 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         for (int i = 0; i < 50; ++i) {
             float t = static_cast<float>(rand()) / RAND_MAX; // 線上のランダムな位置
             Vector3 particlePos = {
-                pos_.x + (endPos.x - pos_.x) * t,
-                pos_.y + (endPos.y - pos_.y) * t,
-                pos_.z + (endPos.z - pos_.z) * t
+                startPos.x + (endPos.x - startPos.x) * t,
+                startPos.y + (endPos.y - startPos.y) * t,
+                startPos.z + (endPos.z - startPos.z) * t
             };
 
             // ビームの中心軸から、外側に向かって不規則に散らす
@@ -183,7 +229,7 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
     }
 
     if (obj_) {
-        float t = 1.0f - (static_cast<float>(lifeTimer_) / 72.0f);
+        float t = 1.0f - (static_cast<float>(lifeTimer_) / static_cast<float>(kLifeDuration));
         float pulse = 1.0f + std::sinf(t * 12.56636f) * 0.12f;
 
         // 出始めは細く、途中で一気に広がる
@@ -210,7 +256,7 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
     if (player && !player->IsDead() && hitTimer_ <= 0) {
         if (IsPlayerInsideBeam(player->GetPosition())) {
-            int finalDamage = damage_;
+            int finalDamage = (std::max)(1, damage_ / 3);
 
             // 発動元のボスが攻撃デバフ中ならダメージを半減する
             // 分裂ボス時に boss 引数へ依存すると、別個体を参照する可能性がある
@@ -218,8 +264,11 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 finalDamage /= 2;
             }
 
-            player->TakeDamage(finalDamage, pos_);
-            hitTimer_ = hitInterval_;
+            const int hpBefore = player->GetHP();
+            player->TakeContinuousDamage(finalDamage);
+            if (player->GetHP() < hpBefore) {
+                hitTimer_ = hitInterval_;
+            }
         }
     }
 
@@ -242,14 +291,14 @@ bool RuinBeamEffect::IsPlayerInsideBeam(const Vector3& playerPos) const {
         playerPos.z - pos_.z
     };
 
-    float sinY = std::sinf(-rot_.y);
-    float cosY = std::cosf(-rot_.y);
+    float sinY = std::sinf(rot_.y);
+    float cosY = std::cosf(rot_.y);
 
     float localX = diff.x * cosY - diff.z * sinY;
     float localZ = diff.x * sinY + diff.z * cosY;
 
-    const float halfWidth = baseScale_.x * 1.0f;
-    const float halfLength = baseScale_.z * 1.05f;
+    const float halfWidth = GetDebugHalfWidth();
+    const float halfLength = GetDebugHalfLength();
 
     return std::fabs(localX) <= halfWidth && std::fabs(localZ) <= halfLength;
 }

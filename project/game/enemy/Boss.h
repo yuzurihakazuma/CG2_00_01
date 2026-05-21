@@ -73,6 +73,8 @@ public:
 
     bool IsAttackDebuffed() const { return isAttackDebuffed_; }
     bool IsCasting() const { return isCasting_; }
+    int GetCastTimer() const { return castTimer_; }
+    int GetCastDurationCurrent() const { return castDurationCurrent_; }
 
     void SetAttackIntervalRangeFrames(int minFrames, int maxFrames) { // 攻撃間隔の範囲を設定
         attackIntervalMinFrames_ = minFrames;

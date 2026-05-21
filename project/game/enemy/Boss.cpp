@@ -178,7 +178,7 @@ int Boss::GetCastTimeForCard(int cardId, bool isEnraged) const {
 
 int Boss::GetRecoveryTimeForCard(int cardId, bool isEnraged) const {
 	if (cardId == 104) {
-		return isEnraged ? 34 : 48;
+		return isEnraged ? 92 : 98;
 	}
 
 	if (cardId == 103) {
@@ -743,13 +743,17 @@ void Boss::UpdateUseCard() {
 	if (castTimer_ > 0) {
 		castTimer_--;
 
-		Vector3 dir = {
-			playerPos_.x - pos_.x,
-			0.0f,
-			playerPos_.z - pos_.z
-		};
-		if (Length(dir) > 0.01f) {
-			rot_.y = std::atan2f(dir.x, dir.z);
+		const bool isBeamCard = selectedCard_.id == 104;
+		const int beamAimLockFrames = isEnraged ? 35 : 45;
+		if (!isBeamCard || castTimer_ > beamAimLockFrames) {
+			Vector3 dir = {
+				playerPos_.x - pos_.x,
+				0.0f,
+				playerPos_.z - pos_.z
+			};
+			if (Length(dir) > 0.01f) {
+				rot_.y = std::atan2f(dir.x, dir.z);
+			}
 		}
 
 		float t = 1.0f - static_cast<float>(castTimer_) / static_cast<float>(castDurationCurrent_);
@@ -800,13 +804,15 @@ void Boss::UpdateUseCard() {
 	rot_.x = 0.0f;
 	rot_.z = 0.0f;
 
-	Vector3 dir = {
-		playerPos_.x - pos_.x,
-		0.0f,
-		playerPos_.z - pos_.z
-	};
-	if (Length(dir) > 0.01f) {
-		rot_.y = std::atan2f(dir.x, dir.z);
+	if (selectedCard_.id != 104) {
+		Vector3 dir = {
+			playerPos_.x - pos_.x,
+			0.0f,
+			playerPos_.z - pos_.z
+		};
+		if (Length(dir) > 0.01f) {
+			rot_.y = std::atan2f(dir.x, dir.z);
+		}
 	}
 
 	lastUsedCardId_ = selectedCard_.id;
