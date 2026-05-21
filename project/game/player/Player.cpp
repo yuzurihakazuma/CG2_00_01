@@ -752,28 +752,28 @@ void Player::UpdateCost() {
 }
 
 // ダメージ処理
-void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale) {
-    if (isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_) {
+void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale){
+    if ( isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_ ) {
         return;
     }
 
-    if (shieldHitCount_ > 0) {
+    if ( shieldHitCount_ > 0 ) {
         shieldHitCount_--;
         return;
     }
 
-    if (isEnemyAtkDebuffed_) {
+    if ( isEnemyAtkDebuffed_ ) {
         damage /= 2;
     }
 
     int nextHp = hp_ - damage; // ダメージ適用後のHPを先に計算する
 
     // チュートリアル中は必ずHPを1残して死亡しないようにする
-    if (isTutorialNoDeath_ && nextHp <= 0) {
+    if ( isTutorialNoDeath_ && nextHp <= 0 ) {
         hp_ = 1;
     } else {
         hp_ = nextHp;
-        if (hp_ < 0) {
+        if ( hp_ < 0 ) {
             hp_ = 0;
         }
     }
@@ -791,14 +791,70 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
         pos_.z - attackFrom.z
     };
 
-    if (Length(hitDir) > 0.01f) {
+    if ( Length(hitDir) > 0.01f ) {
         hitDir = Normalize(hitDir);
-        knockbackVelocity_ = hitDir * (0.55f * knockbackScale);
+        knockbackVelocity_ = hitDir * ( 0.55f * knockbackScale );
         isKnockback_ = true;
         knockbackTimer_ = knockbackDuration_;
     }
 
-    if (hp_ <= 0) {
+    // 被弾エフェクト
+    Vector3 particleDir = ( Length(hitDir) > 0.01f ) ? Normalize(hitDir) : Vector3 { 0, 0, 1 };
+
+    // ① メインの衝撃飛び散り（白〜水色：攻撃の赤と区別）
+    for ( int i = 0; i < 20; i++ ) {
+        Vector3 sparkVel = {
+            particleDir.x * ( 0.5f + ( rand() % 10 ) * 0.08f ) + ( rand() % 11 - 5 ) * 0.12f,
+            0.15f + ( rand() % 10 ) * 0.08f,
+            particleDir.z * ( 0.5f + ( rand() % 10 ) * 0.08f ) + ( rand() % 11 - 5 ) * 0.12f
+        };
+        Vector3 sparkPos = {
+            pos_.x + ( rand() % 7 - 3 ) * 0.12f,
+            pos_.y + 0.6f + ( rand() % 6 ) * 0.1f,
+            pos_.z + ( rand() % 7 - 3 ) * 0.12f
+        };
+        float scale = 0.3f + ( rand() % 5 ) * 0.08f;
+        GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.35f, scale, { 0.85f, 0.95f, 1.0f, 1.0f });
+    }
+
+    // ② 衝撃波リング（銀白色）
+    for ( int i = 0; i < 12; i++ ) {
+        float ringAngle = ( 3.14159f * 2.0f / 12.0f ) * i;
+        float speed = 0.35f;
+        Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
+        GPUParticleManager::GetInstance()->Emit(
+            { pos_.x, pos_.y + 0.5f, pos_.z },
+            ringVel, 0.2f, 0.9f, { 0.75f, 0.88f, 1.0f, 0.9f }
+        );
+    }
+
+    // ③ 大きな白フラッシュ
+    GPUParticleManager::GetInstance()->Emit(
+        { pos_.x, pos_.y + 0.8f, pos_.z },
+        { 0, 0, 0 }, 0.1f, 2.5f, { 1.0f, 1.0f, 1.0f, 0.95f }
+    );
+
+    // ④ 水色コアフラッシュ（少し長く残る）
+    GPUParticleManager::GetInstance()->Emit(
+        { pos_.x, pos_.y + 0.7f, pos_.z },
+        { 0, 0, 0 }, 0.2f, 1.8f, { 0.5f, 0.8f, 1.0f, 0.8f }
+    );
+
+    // ⑤ ふわっと上に浮かぶ残滓（薄い水色）
+    for ( int i = 0; i < 8; i++ ) {
+        Vector3 driftPos = {
+            pos_.x + ( rand() % 9 - 4 ) * 0.15f,
+            pos_.y + 0.3f,
+            pos_.z + ( rand() % 9 - 4 ) * 0.15f
+        };
+        GPUParticleManager::GetInstance()->Emit(
+            driftPos,
+            { ( rand() % 7 - 3 ) * 0.03f, 0.08f + ( rand() % 5 ) * 0.02f, ( rand() % 7 - 3 ) * 0.03f },
+            0.6f, 0.35f, { 0.6f, 0.82f, 1.0f, 0.7f }
+        );
+    }
+
+    if ( hp_ <= 0 ) {
         isDead_ = true;
         deathAnimationTimer_ = deathAnimationDuration_;
         isActionLocked_ = true;
@@ -810,7 +866,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
         // 死亡時は現在姿勢から death ポーズへ少しずつ遷移する
         StartPoseBlendByName(deathPoseNameBuffer_, poseBlendDuration_);
 
-        if (model_) {
+        if ( model_ ) {
             model_->SetIsWalking(false);
             model_->SetTranslation(pos_);
             model_->SetRotation(rot_);

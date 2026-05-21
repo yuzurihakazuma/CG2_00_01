@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "PowerShell(Get-ChildItem -Path \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\project\" -Recurse -Directory | Where-Object { $_.Name -match \"\\(Player|Enemy|Boss|game\\)\" } | Select-Object -First 30 FullName)",
-      "PowerShell(head -20)"
+      "PowerShell(head -20)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\project\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)"
     ]
   }
 }

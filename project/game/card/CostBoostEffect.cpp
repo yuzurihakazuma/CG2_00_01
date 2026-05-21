@@ -2,9 +2,9 @@
 #include "game/player/Player.h"
 #include "engine/particle/GPUParticleManager.h"
 
-void CostBoostEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
+void CostBoostEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
     // この効果は発動元ボスを使わない
-    (void)casterBoss;
+    ( void ) casterBoss;
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
     timer_ = 0;
@@ -29,22 +29,50 @@ void CostBoostEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPl
     auraEmitter_->SetData(auraData);
 }
 
-void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level) {
-    if (isFinished_) return;
+void CostBoostEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level){
+    if ( isFinished_ ) return;
 
-    if (isPlayerCaster_ && player && !player->IsDead()) {
+    if ( isPlayerCaster_ && player && !player->IsDead() ) {
 
         Vector3 playerPos = player->GetPosition();
 
         // ==========================================
         // ★ 1. 最初の1フレーム目にバフをかける！
         // ==========================================
-        if (timer_ == 0) {
+        if ( timer_ == 0 ) {
             player->AddMaxCost(costBoostAmount_);        // コスト上限を増やす（※後でPlayerに追加）
             player->SetCostRecoveryMultiplier(2.0f);     // 回復速度を2倍にする（※後でPlayerに追加）
+
+            // 発動瞬間のバースト（金色の爆発）
+            for ( int i = 0; i < 20; i++ ) {
+                Vector3 burstPos = {
+                    playerPos.x + ( float ) ( rand() % 11 - 5 ) * 0.1f,
+                    playerPos.y + 0.8f,
+                    playerPos.z + ( float ) ( rand() % 11 - 5 ) * 0.1f
+                };
+                Vector3 burstVel = {
+                    ( float ) ( rand() % 11 - 5 ) * 0.22f,
+                    0.4f + ( float ) ( rand() % 10 ) * 0.1f,
+                    ( float ) ( rand() % 11 - 5 ) * 0.22f
+                };
+                GPUParticleManager::GetInstance()->Emit(burstPos, burstVel, 0.5f, 0.45f, { 1.0f, 0.85f, 0.1f, 1.0f });
+            }
+            // 発動瞬間の大フラッシュ
+            GPUParticleManager::GetInstance()->Emit(
+                { playerPos.x, playerPos.y + 0.8f, playerPos.z },
+                { 0, 0, 0 }, 0.2f, 2.8f, { 1.0f, 0.95f, 0.5f, 0.8f }
+            );
         }
 
         // --- ここにオーラなどのパーティクル演出を入れるとカッコいいです！ ---
+
+        // 10フレームに1回、大きなグロウパルス
+        if ( timer_ % 10 == 0 ) {
+            GPUParticleManager::GetInstance()->Emit(
+                { playerPos.x, playerPos.y + 0.8f, playerPos.z },
+                { 0, 0, 0 }, 0.15f, 2.2f, { 1.0f, 0.9f, 0.4f, 0.55f }
+            );
+        }
 
         if ( auraEmitter_ ) {
             auto data = auraEmitter_->GetData();
@@ -57,26 +85,20 @@ void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *b
             auraEmitter_->Burst();
         }
 
-        if ( timer_ % 3 == 0 ) { // 3フレームに1回（多すぎず少なすぎず）
-            // プレイヤーの周囲（-0.5f 〜 +0.5f）にランダムな発生座標を作る
-            Vector3 sparkPos = playerPos;
-            sparkPos.x += static_cast< float >( rand() % 11 - 5 ) * 0.1f;
-            sparkPos.y += 0.2f + static_cast< float >( rand() % 11 ) * 0.1f; // 足元〜胸のランダムな高さ
-            sparkPos.z += static_cast< float >( rand() % 11 - 5 ) * 0.1f;
-
-            // 上に向かってフワッと昇る速度
-            Vector3 sparkVel = {
-                static_cast< float >( rand() % 11 - 5 ) * 0.05f, // 左右の揺らぎ
-                0.8f + static_cast< float >( rand() % 11 ) * 0.1f, // 上昇する速度
-                static_cast< float >( rand() % 11 - 5 ) * 0.05f
-            };
-
-            // 明るい黄色で、サイズは小さめ
-            Vector4 sparkColor = { 1.0f, 0.9f, 0.4f, 1.0f };
-            float sparkScale = 0.1f + static_cast< float >( rand() % 5 ) * 0.02f;
-
-            // 直接 Manager を叩いて火の粉を発生！
-            GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, sparkScale, sparkColor);
+        if ( timer_ % 3 == 0 ) {
+            // 上昇スパーク（2個）
+            for ( int i = 0; i < 2; i++ ) {
+                Vector3 sparkPos = playerPos;
+                sparkPos.x += ( float ) ( rand() % 11 - 5 ) * 0.15f;
+                sparkPos.y += 0.2f + ( float ) ( rand() % 10 ) * 0.12f;
+                sparkPos.z += ( float ) ( rand() % 11 - 5 ) * 0.15f;
+                Vector3 sparkVel = {
+                    ( float ) ( rand() % 11 - 5 ) * 0.04f,
+                    0.9f + ( float ) ( rand() % 11 ) * 0.09f,
+                    ( float ) ( rand() % 11 - 5 ) * 0.04f
+                };
+                GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, 0.13f, { 1.0f, 0.92f, 0.3f, 1.0f });
+            }
         }
 
         timer_++;
@@ -84,7 +106,7 @@ void CostBoostEffect::Update(Player *player, EnemyManager *enemyManager, Boss *b
         // ==========================================
         // ★ 2. 時間切れになったらバフをはがして元に戻す！
         // ==========================================
-        if (timer_ >= duration_) {
+        if ( timer_ >= duration_ ) {
             player->AddMaxCost(-costBoostAmount_);       // 増やした分を引いて元に戻す
             player->SetCostRecoveryMultiplier(1.0f);     // 回復倍率を1.0（通常）に戻す
             isFinished_ = true;
