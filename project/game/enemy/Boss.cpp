@@ -2,6 +2,7 @@
 #include "engine/math/VectorMath.h"
 #include "game/card/CardDatabase.h"
 #include "engine/particle/GPUParticleManager.h" 
+#include "game/particle/StunEffectManager.h"
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -296,14 +297,7 @@ void Boss::Update() {
 			isStunned_ = false;
 		}
 
-		// スタン中の「ピヨピヨ星」エフェクト（頭上に黄色い光）
-		float angle = static_cast<float>(animationTimer_) * 0.15f;
-		Vector3 starPos = {
-			pos_.x + std::sinf(angle) * 0.8f, // ボスなので半径を少し広く(0.8f)
-			pos_.y + 4.5f,                    // ボスなので高い位置に
-			pos_.z + std::cosf(angle) * 0.8f
-		};
-		GPUParticleManager::GetInstance()->Emit(starPos, { 0, 0.05f, 0 }, 0.3f, 0.5f, { 1.0f, 1.0f, 0.0f, 1.0f });
+		StunEffectManager::Update(pos_, rot_, stunTimer_, 4.5f);
 
 		return; // スタン中は以下の AI 更新や移動を全てスキップ
 	}
