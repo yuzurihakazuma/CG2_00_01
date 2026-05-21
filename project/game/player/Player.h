@@ -82,7 +82,7 @@ public:
 
     bool IsKnockback() const { return isKnockback_; } // ノックバック中か
 
-    void TakeDamage(int damage, const Vector3& attackFrom); // ダメージ処理
+    void TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale = 1.0f); // ダメージ処理
     void PlayCardUsePose(int durationFrames); // カード使用ポーズを再生する
     void PlayIdlePose(int durationFrames); // 通常姿勢へ戻す
 
@@ -170,8 +170,8 @@ private:
     int costRecoveryInterval_ = 180;
 
     // HP
-    int hp_ = 8;
-    int maxHp_ = 8;
+    int hp_ = 10;
+    int maxHp_ = 10;
     bool isDead_ = false;
     int deathAnimationTimer_ = 0;             // 死亡演出の残り時間
     const int deathAnimationDuration_ = 45;   // 死亡演出の表示時間

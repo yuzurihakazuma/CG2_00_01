@@ -4,4 +4,5 @@ id,name,cost,effectType,sffectValue,description,modelName,effectName,seName,rari
 103,BossSummon,0,0,2,雑魚敵を2体召喚,bossSummon,nullptr,nullptr,0,1,1
 104,RuinBeam,0,0,6,ボスの破壊光線,ruinBeam,nullptr,nullptr,0,1,2
 105,BossCharge,0,0,5,ボスの突進攻撃,bossCharge,nullptr,nullptr,0,1,1
-
+106,BossKick,0,0,5,ボスの蹴り攻撃,bossKick,nullptr,nullptr,0,1,1
+107,BossSpear,0,0,5,ボスの槍攻撃,bossSpear,nullptr,nullptr,0,1,2

@@ -161,8 +161,10 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="game\card\BossSpearEffect.cpp" />
     <ClCompile Include="game\particle\DodgeParticleEffect.cpp" />
     <ClCompile Include="game\card\BossChargeEffect.cpp" />
+    <ClCompile Include="game\card\BossKickEffect.cpp" />
     <ClCompile Include="game\card\CostBoostEffect.cpp" />
     <ClCompile Include="engine\utils\AnimationEditor.cpp" />
     <ClCompile Include="engine\3d\animation\CustomAnimation.cpp" />
@@ -297,8 +299,10 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="game\card\BossSpearEffect.h" />
     <ClInclude Include="game\particle\DodgeParticleEffect.h" />
     <ClInclude Include="game\card\BossChargeEffect.h" />
+    <ClInclude Include="game\card\BossKickEffect.h" />
     <ClInclude Include="game\card\CostBoostEffect.h" />
     <ClInclude Include="engine\particle\GPUParticleEmitterData.h" />
     <ClInclude Include="engine\utils\AnimationEditor.h" />

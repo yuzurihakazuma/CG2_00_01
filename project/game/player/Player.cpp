@@ -107,8 +107,8 @@ void Player::Initialize() {
     cost_ = maxCost_;
     costRecoveryMultiplier_ = 1.0f; // バフをリセット
 
-    hp_ = 8;                  // 現在HP初期化
-    maxHp_ = 8;               // 最大HP初期化
+    hp_ = 10;                  // 現在HP初期化
+    maxHp_ = 10;               // 最大HP初期化
     isDead_ = false;          // 死亡状態リセット
     deathAnimationTimer_ = 0; // 死亡演出タイマー初期化
     poseBlendTimer_ = 0;      // ポーズ補間タイマー初期化
@@ -752,7 +752,7 @@ void Player::UpdateCost() {
 }
 
 // ダメージ処理
-void Player::TakeDamage(int damage, const Vector3& attackFrom) {
+void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale) {
     if (isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_) {
         return;
     }
@@ -793,7 +793,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom) {
 
     if (Length(hitDir) > 0.01f) {
         hitDir = Normalize(hitDir);
-        knockbackVelocity_ = hitDir * 0.35f;
+        knockbackVelocity_ = hitDir * (0.55f * knockbackScale);
         isKnockback_ = true;
         knockbackTimer_ = knockbackDuration_;
     }
