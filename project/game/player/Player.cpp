@@ -816,6 +816,58 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
     }
 }
 
+// 継続ダメージ処理
+void Player::TakeContinuousDamage(int damage) {
+    if (isDead_ || dodgeInvincibleTimer_ > 0 || isDebugInvincible_) {
+        return;
+    }
+
+    if (shieldHitCount_ > 0) {
+        shieldHitCount_--;
+        return;
+    }
+
+    if (isEnemyAtkDebuffed_) {
+        damage /= 2;
+    }
+    if (damage <= 0) {
+        damage = 1;
+    }
+
+    int nextHp = hp_ - damage;
+    if (isTutorialNoDeath_ && nextHp <= 0) {
+        hp_ = 1;
+    } else {
+        hp_ = nextHp;
+        if (hp_ < 0) {
+            hp_ = 0;
+        }
+    }
+
+    isHit_ = true;
+    hitTimer_ = (std::min)(hitDuration_, 8);
+
+    if (hp_ <= 0) {
+        isDead_ = true;
+        deathAnimationTimer_ = deathAnimationDuration_;
+        isActionLocked_ = true;
+        actionLockTimer_ = deathAnimationDuration_;
+        isDodging_ = false;
+        isKnockback_ = false;
+        knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+
+        StartPoseBlendByName(deathPoseNameBuffer_, poseBlendDuration_);
+
+        if (model_) {
+            model_->SetIsWalking(false);
+            model_->SetTranslation(pos_);
+            model_->SetRotation(rot_);
+            model_->SetScale(scale_);
+            model_->Update();
+        }
+    }
+}
+
 // カード使用ポーズを再生する
 void Player::PlayCardUsePose(int durationFrames) {
     if (isDead_) {

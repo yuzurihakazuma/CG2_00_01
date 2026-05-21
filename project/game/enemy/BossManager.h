@@ -173,7 +173,7 @@ private:
     // カード降らせ演出
     int bossCardRainTimer_ = 0;
     const int bossCardRainInterval_ = 180;
-    int bossCardRainMax_ = 5;
+    int bossCardRainMax_ = 8;
     bool isBossCardRainEnabled_ = true;
 
 	// ボスのタイプ

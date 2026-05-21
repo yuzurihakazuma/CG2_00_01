@@ -967,7 +967,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 	}
 }
 
-void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera) {
+void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera, int maxAliveEnemies) {
 	// ポインタが有効かチェック
 	if (!spawnManager || !mapManager || !spawnManager->HasLevelData()) {
 		return;
@@ -1021,7 +1021,7 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 	std::mt19937 mt(rd());
 	std::shuffle(filtered.begin(), filtered.end(), mt);
 
-	const int kMaxEnemies = 5;
+	const int kMaxEnemies = (std::max)(0, maxAliveEnemies);
 
 	// 生きている敵の数を数える
 	int aliveCount = 0;

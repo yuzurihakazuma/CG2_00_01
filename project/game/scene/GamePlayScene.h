@@ -140,8 +140,10 @@ private: // メンバ変数
 	Vector2 WorldToScreen(const Vector3& worldPos) const; // ワールド座標をスクリーン座標に変換する関数
 	bool ProjectWorldToScreen(const Vector3& worldPos, Vector2& screenPos) const;
 	void DrawCharacterHitboxesDebug() const;
+	void DrawBossBeamHitboxesDebug() const;
 	void DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const;
 	void DrawDebugCircleXZ(const Vector3& center, float radius, unsigned int color, float thickness) const;
+	void DrawDebugOrientedRectXZ(const Vector3& center, float yaw, float halfWidth, float halfLength, unsigned int color, float thickness) const;
 
 	//UI専用カメラ
 	std::unique_ptr<Camera> uiCamera_ = nullptr;
@@ -162,6 +164,10 @@ private: // メンバ変数
 	void DrawCardUseFlash();
 	void UpdatePlayerStatusGaugeUI();
 	void DrawPlayerStatusGaugeUI();
+	void UpdateTimedSpawns();
+	bool SpawnTimedCardPickup();
+	int CountActiveCardPickups() const;
+	int CountAliveEnemies() const;
 
 	// ポーズ画面の更新
 	void UpdatePause(Input* input);
@@ -180,6 +186,11 @@ private: // メンバ変数
 	// カードスポーン関連
 	int cardSpawnCount_ = 5;
 	int cardSpawnMargin_ = 1;
+	int timedEnemySpawnTimer_ = 600;
+	int timedCardSpawnTimer_ = 600;
+	const int timedSpawnIntervalFrames_ = 600;
+	const int normalTimedEnemyMax_ = 6;
+	const int normalTimedCardMax_ = 6;
 
 	// ダンジョン再生成とプレイヤー再スポーンの処理
 	void RegenerateDungeonAndRespawnPlayer(int roomCount);
@@ -236,6 +247,7 @@ private: // メンバ変数
 	std::unique_ptr<Sprite> playerCostGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeBackSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeFillSprite_ = nullptr;
+	float displayedHpRatio_ = -1.0f;
 
 	// コスト不足メッセージ表示用
 	int costLackMessageTimer_ = 0;

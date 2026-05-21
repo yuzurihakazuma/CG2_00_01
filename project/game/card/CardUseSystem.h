@@ -49,6 +49,7 @@ public:
 
 	bool IsDecoyActive() const;
 	Vector3 GetDecoyPosition() const;
+	const std::vector<std::unique_ptr<ICardEffect>>& GetActiveEffects() const { return activeEffects_; }
 
 private:
 	// 実際のカード発動処理

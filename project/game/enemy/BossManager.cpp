@@ -51,7 +51,7 @@ void BossManager::Initialize(Camera* camera) {
     if (beamWarningObj_) {
         beamWarningObj_->SetCamera(camera);
         beamWarningObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
-        beamWarningObj_->SetScale({ 0.45f, 0.04f, 16.0f });
+        beamWarningObj_->SetScale({ 2.0f, 0.04f, 14.6f });
 
         Model* model = beamWarningObj_->GetModel();
         if (model) {
@@ -343,16 +343,39 @@ void BossManager::UpdateBeamWarning(MapManager* mapManager) {
 		std::cosf(bossYaw)
 	};
 
-	const float warningLength = 16.0f;
+	const float beamBaseLength = 14.0f;
+	const float playerHitRadius = 0.6f;
+	const float warningHalfWidth = 1.4f + playerHitRadius;
+	const float warningHalfLength = beamBaseLength + playerHitRadius;
 	Vector3 warningPos = {
-		bossPos.x + forward.x * (warningLength * 0.90f),
+		bossPos.x + forward.x * (beamBaseLength * 0.90f),
 		mapManager->GetFloorSurfaceY(0.08f),
-		bossPos.z + forward.z * (warningLength * 0.90f)
+		bossPos.z + forward.z * (beamBaseLength * 0.90f)
 	};
+
+	float chargeRatio = 0.0f;
+	const int castDuration = warningBoss->GetCastDurationCurrent();
+	if (castDuration > 0) {
+		chargeRatio = 1.0f - static_cast<float>(warningBoss->GetCastTimer()) / static_cast<float>(castDuration);
+		chargeRatio = std::clamp(chargeRatio, 0.0f, 1.0f);
+	}
+	const Vector4 warningColor = {
+		1.0f,
+		0.90f - 0.88f * chargeRatio,
+		0.0f,
+		0.24f + 0.24f * chargeRatio
+	};
+
+	if (Model* model = beamWarningObj_->GetModel()) {
+		if (Model::Material* material = model->GetMaterial()) {
+			material->color = warningColor;
+			material->emissive = 1.6f + 2.2f * chargeRatio;
+		}
+	}
 
 	beamWarningObj_->SetTranslation(warningPos);
 	beamWarningObj_->SetRotation({ 0.0f, bossYaw, 0.0f });
-	beamWarningObj_->SetScale({ 0.45f, 0.04f, warningLength });
+	beamWarningObj_->SetScale({ warningHalfWidth, 0.04f, warningHalfLength });
 	beamWarningObj_->Update();
 }
 
