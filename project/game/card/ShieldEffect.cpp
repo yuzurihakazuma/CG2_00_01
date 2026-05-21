@@ -2,7 +2,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/EnemyManager.h"
 #include "engine/particle/GPUParticleManager.h"
-
+#include "engine/postEffect/PostEffect.h"
 #include <cmath>
 
 
@@ -123,6 +123,9 @@ void ShieldEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss
 					GPUParticleManager::GetInstance()->Emit(centerPos, burstVel, shardLife, shardScale, shardColor);
 				}
 			}
+
+			// シールド破壊：被弾ビネットをプレイヤー経由で発動
+			player->TriggerHitFlash();
 
 			isFinished_ = true;
 			return;

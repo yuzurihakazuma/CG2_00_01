@@ -97,6 +97,14 @@ public:
 
     bool IsActionLocked() const { return isActionLocked_ || isStunned_; }
 
+    // 被弾タイマーの残り割合（0.0=消滅, 1.0=発生直後）
+    float GetHitTimerRatio() const{
+        return isHit_ ? static_cast< float >( hitTimer_ ) / static_cast< float >( hitDuration_ ) : 0.0f;
+    }
+
+    // シールド破壊などでダメージなしの被弾ビネットを発動する
+    void TriggerHitFlash(){ isHit_ = true; hitTimer_ = hitDuration_; }
+
     void SetMaxCost(int cost) { maxCost_ = cost; }
     void SetCost(int cost) { cost_ = cost; }
     void SetHP(int hp) { hp_ = hp; }

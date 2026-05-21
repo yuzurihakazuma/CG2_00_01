@@ -117,9 +117,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> skinningObject3DRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> skinningObject3DPipelineState_;
 
-	// ポストエフェクトの種類ごとのパイプラインステートを格納する配列
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> postEffectPipelineStates_[10];
-
+	// 
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> postEffectPipelineStates_[11];
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleComputeRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleComputePipelineState_;
