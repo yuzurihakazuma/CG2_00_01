@@ -308,6 +308,9 @@
     <ClCompile Include="game\card\BossChargeEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="game\particle\StunEffectManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="game\card\BossKickEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -761,6 +764,9 @@
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\card\BossChargeEffect.h">
+      <Filter>ソース ファイル\ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="game\particle\StunEffectManager.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\card\BossKickEffect.h">
