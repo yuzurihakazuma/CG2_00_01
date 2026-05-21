@@ -37,22 +37,18 @@ void PostEffect::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uin
 	// ※背景は絶対に「真っ黒（フラグ0）」でクリアするため、Vector4{0,0,0,0}等を設定するように内部で調整するか、RenderTexture側で黒クリアになるようにします
 	maskTexture_->Initialize(dxCommon, srvManager, width, height);
 	
-	// 1枚目を「エフェクト前」、2枚目を「エフェクト後」としてわかりやすく変数に入れる
-	timeResource_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(float));
-	timeResource_->Map(0, nullptr, reinterpret_cast<void**>(&timeData_));
-	*timeData_ = 0.0f;
+	timeResource_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(PostEffectParams));
+	timeResource_->Map(0, nullptr, reinterpret_cast< void** >( &effectParamsData_ ));
+	*effectParamsData_ = PostEffectParams {};
 
 	Bloom::GetInstance()->Initialize(dxCommon, SrvManager::GetInstance(), width, height);
 	Bloom::GetInstance()->Load("resources/bloom.json");
 }
 
 
-void PostEffect::Update() {
-	if (isActive_) {
-		time_ += timeSpeed_; // 自分の持っているスピード分だけ進める
-		if (timeData_) {
-			*timeData_ = time_;
-		}
+void PostEffect::Update(){
+	if ( isActive_ && effectParamsData_ ) {
+		effectParamsData_->time += timeSpeed_;
 	}
 }
 
