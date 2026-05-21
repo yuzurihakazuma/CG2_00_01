@@ -967,27 +967,27 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 	}
 }
 
-void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera) {
+void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager* spawnManager, MapManager* mapManager, const Vector3& playerPos, Camera* camera){
 	// ポインタが有効かチェック
-	if (!spawnManager || !mapManager || !spawnManager->HasLevelData()) {
+	if ( !spawnManager || !mapManager || !spawnManager->HasLevelData() ) {
 		return;
 	}
 
-	const LevelData &level = mapManager->GetLevelData();
+	const LevelData& level = mapManager->GetLevelData();
 
 	// spawnManager-> に変更
 	std::vector<std::pair<int, int>> candidates = spawnManager->FindEnemySpawnCandidates(margin);
 
-	if (candidates.empty()) {
+	if ( candidates.empty() ) {
 		return;
 	}
 
 	// プレイヤーの現在位置をタイル座標に変換
-	int playerTileX = static_cast<int>(std::round(playerPos.x / level.tileSize));
-	int playerTileZ = static_cast<int>(std::round(playerPos.z / level.tileSize));
+	int playerTileX = static_cast< int >( std::round(playerPos.x / level.tileSize) );
+	int playerTileZ = static_cast< int >( std::round(playerPos.z / level.tileSize) );
 
 	std::vector<std::pair<int, int>> filtered;
-	for (const auto &c : candidates) {
+	for ( const auto& c : candidates ) {
 		int x = c.first;
 		int z = c.second;
 
@@ -995,8 +995,8 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		// if (IsNearStairsTile(x, z)) { continue; } 
 
 		// マップの範囲内かチェック
-		if (x >= 0 && x < level.width && z >= 0 && z < level.height) {
-			if (level.tiles[z][x] != 0) {
+		if ( x >= 0 && x < level.width && z >= 0 && z < level.height ) {
+			if ( level.tiles[z][x] != 0 ) {
 				continue;
 			}
 		}
@@ -1004,16 +1004,16 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		// プレイヤーから近すぎるマスを除外
 		int dx = x - playerTileX;
 		int dz = z - playerTileZ;
-		float distanceToPlayer = std::sqrt(static_cast<float>(dx * dx + dz * dz));
+		float distanceToPlayer = std::sqrt(static_cast< float >(dx * dx + dz * dz));
 
-		if (distanceToPlayer < 5.0f) {
+		if ( distanceToPlayer < 5.0f ) {
 			continue;
 		}
 
 		filtered.push_back(c);
 	}
 
-	if (filtered.empty()) {
+	if ( filtered.empty() ) {
 		return;
 	}
 
@@ -1025,36 +1025,67 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 
 	// 生きている敵の数を数える
 	int aliveCount = 0;
-	for (const auto& enemy : enemies_) {
-		if (enemy && !enemy->IsDead()) {
+	for ( const auto& enemy : enemies_ ) {
+		if ( enemy && !enemy->IsDead() ) {
 			aliveCount++;
 		}
 	}
 
 	int availableSpace = kMaxEnemies - aliveCount;
 
-	if (availableSpace <= 0) {
+	if ( availableSpace <= 0 ) {
 		return;
 	}
 
-	int actualSpawnCount = (std::min)(enemyCount, static_cast<int>(filtered.size()));
-	actualSpawnCount = (std::min)(actualSpawnCount, availableSpace);
+	int actualSpawnCount = ( std::min ) ( enemyCount, static_cast< int >( filtered.size() ) );
+	actualSpawnCount = ( std::min ) ( actualSpawnCount, availableSpace );
 
-	for (int i = 0; i < actualSpawnCount; ++i) {
+	for ( int i = 0; i < actualSpawnCount; ++i ) {
 		int tileX = filtered[i].first;
 		int tileZ = filtered[i].second;
 
-		
+
 		// spawnManager-> に変更
-		Vector3 worldPos = spawnManager->TileToWorldPosition(tileX, tileZ,0.0f);
+		Vector3 worldPos = spawnManager->TileToWorldPosition(tileX, tileZ, 0.0f);
 
 		auto enemy = std::make_unique<Enemy>();
 		enemy->Initialize();
 		enemy->SetType(GetRandomEnemyTypeForFloor(mapManager->GetCurrentFloor()));
 		enemy->SetPosition(worldPos);
 
+		// スポーンエフェクト
+		// ① 足元から湧き上がる黒煙
+		for ( int j = 0; j < 15; j++ ) {
+			Vector3 smokePos = {
+				worldPos.x + ( rand() % 11 - 5 ) * 0.1f,
+				worldPos.y + ( rand() % 6 ) * 0.1f,
+				worldPos.z + ( rand() % 11 - 5 ) * 0.1f
+			};
+			Vector3 smokeVel = {
+				( rand() % 11 - 5 ) * 0.04f,
+				0.06f + ( rand() % 8 ) * 0.02f,
+				( rand() % 11 - 5 ) * 0.04f
+			};
+			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 0.8f, 0.55f, { 0.15f, 0.15f, 0.15f, 0.85f });
+		}
+		// ② 外側に広がるリング
+		for ( int j = 0; j < 10; j++ ) {
+			float ringAngle = ( 3.14159f * 2.0f / 10.0f ) * j;
+			float speed = 0.18f;
+			Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
+			GPUParticleManager::GetInstance()->Emit(
+				{ worldPos.x, worldPos.y + 0.1f, worldPos.z },
+				ringVel, 0.35f, 0.7f, { 0.3f, 0.3f, 0.3f, 0.9f }
+			);
+		}
+		// ③ 中心フラッシュ
+		GPUParticleManager::GetInstance()->Emit(
+			{ worldPos.x, worldPos.y + 0.5f, worldPos.z },
+			{ 0, 0, 0 }, 0.12f, 1.4f, { 0.6f, 0.6f, 0.6f, 0.7f }
+		);
+
 		auto enemyVisual = CreateEnemyVisual(enemy->GetType(), camera);
-		if (enemyVisual.obj || enemyVisual.skinned) {
+		if ( enemyVisual.obj || enemyVisual.skinned ) {
 			UpdateEnemyVisual(enemyVisual, *enemy, worldPos);
 		}
 
@@ -1067,7 +1098,6 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		enemyCardSystems_.push_back(std::move(enemyCardSystem));
 	}
 }
-
 void EnemyManager::Clear() {
 	enemies_.clear();
 	enemyVisuals_.clear();
@@ -1271,15 +1301,46 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 }
 
 // 指定したワールド座標に敵をスポーンさせる
-void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int floor) {
+void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int floor){
 	auto enemy = std::make_unique<Enemy>();
 	enemy->Initialize();
 	enemy->SetType(GetRandomEnemyTypeForFloor(floor));
 	enemy->SetPosition(worldPos);
 
+	// スポーンエフェクト
+	// ① 足元から湧き上がる黒煙
+	for ( int j = 0; j < 15; j++ ) {
+		Vector3 smokePos = {
+			worldPos.x + ( rand() % 11 - 5 ) * 0.1f,
+			worldPos.y + ( rand() % 6 ) * 0.1f,
+			worldPos.z + ( rand() % 11 - 5 ) * 0.1f
+		};
+		Vector3 smokeVel = {
+			( rand() % 11 - 5 ) * 0.04f,
+			0.06f + ( rand() % 8 ) * 0.02f,
+			( rand() % 11 - 5 ) * 0.04f
+		};
+		GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 0.8f, 0.55f, { 0.15f, 0.15f, 0.15f, 0.85f });
+	}
+	// ② 外側に広がるリング
+	for ( int j = 0; j < 10; j++ ) {
+		float ringAngle = ( 3.14159f * 2.0f / 10.0f ) * j;
+		float speed = 0.18f;
+		Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
+		GPUParticleManager::GetInstance()->Emit(
+			{ worldPos.x, worldPos.y + 0.1f, worldPos.z },
+			ringVel, 0.35f, 0.7f, { 0.3f, 0.3f, 0.3f, 0.9f }
+		);
+	}
+	// ③ 中心フラッシュ
+	GPUParticleManager::GetInstance()->Emit(
+		{ worldPos.x, worldPos.y + 0.5f, worldPos.z },
+		{ 0, 0, 0 }, 0.12f, 1.4f, { 0.6f, 0.6f, 0.6f, 0.7f }
+	);
+
 	// 敵の見た目（3Dモデル）を生成
 	auto enemyVisual = CreateEnemyVisual(enemy->GetType(), camera);
-	if (enemyVisual.obj || enemyVisual.skinned) {
+	if ( enemyVisual.obj || enemyVisual.skinned ) {
 		UpdateEnemyVisual(enemyVisual, *enemy, worldPos);
 	}
 
