@@ -1,4 +1,13 @@
 id,name,spanX,spanZ,file,weight,enemySpawnMax,enemySpawnChance,cardSpawnMax,cardSpawnChance
-1,small_square,1,1,resources/map/rooms/smallRoom.csv,50,1,75,2,50
+1,small_square,1,1,resources/map/rooms/smallRoom.csv,30,1,75,2,50
 2,big_hall,2,2,resources/map/rooms/bigRoom.csv,20,3,85,3,80
-3,small_square,1,1,resources/map/rooms/smallRoom1.csv,30,1,75,1,100
+3,small_square,1,1,resources/map/rooms/smallRoom1.csv,20,1,75,1,100
+4,wide_room,2,1,resources/map/rooms/wide_room.csv,20,2,80,3,60
+5,tall_room,1,2,resources/map/rooms/tall_room.csv,20,2,80,3,60
+6,small_cave_1,1,1,resources/map/rooms/smallRoom3.csv,20,1,75,1,60
+7,small_cave_2,1,1,resources/map/rooms/smallRoom4.csv,20,1,75,1,60
+8,small_cave_3,1,1,resources/map/rooms/smallRoom5.csv,20,1,75,1,60
+9,tall_cave_1,1,2,resources/map/rooms/tall_room2.csv,20,2,80,2,60
+10,tall_cave_2,1,2,resources/map/rooms/tall_room3.csv,20,2,80,2,60
+11,wide_cave_1,2,1,resources/map/rooms/wide_room2.csv,20,2,80,2,60
+12,wide_cave_2,2,1,resources/map/rooms/wide_room3.csv,20,2,80,2,60
