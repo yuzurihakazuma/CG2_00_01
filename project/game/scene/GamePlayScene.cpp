@@ -1710,6 +1710,10 @@ void GamePlayScene::Draw() {
 
 	// カード使用演出描画
 	if (playerCardSystem_) {
+		// カードエフェクトの3Dオブジェクトが正しいパイプラインで描画されるようにする
+		Obj3dCommon::GetInstance()->PreDraw(commandList);
+		PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
+
 		playerCardSystem_->Draw();
 	}
 	DrawCardUseFlash();
@@ -2377,6 +2381,11 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	}
 
 	if (selectedCard.id == 1 && fistCooldownTimer_ > 0) {
+		return;
+	}
+
+	// シールドが有効中は、重ねがけを禁止する
+	if (selectedCard.id == 5 && player->GetShieldHits() > 0) {
 		return;
 	}
 
