@@ -127,18 +127,20 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("CardClaw", "resources/card", "CardClaw.obj");
 	ModelManager::GetInstance()->LoadModel("CardScanner", "resources/card", "MapOpen.obj");
 	ModelManager::GetInstance()->LoadModel("CardCostBoost", "resources/card", "CardCostBoost.obj");
+	ModelManager::GetInstance()->LoadModel("CardSpear", "resources/card", "spearCard.obj");
+	ModelManager::GetInstance()->LoadModel("CardSword", "resources/card", "swordCard.obj");
+	ModelManager::GetInstance()->LoadModel("CardHammer", "resources/card", "hammerCard.obj");
+	ModelManager::GetInstance()->LoadModel("CardKick", "resources/card", "kickCard.obj");
 
 
 	// 追加のカード用棘モデル
 	ModelManager::GetInstance()->LoadModel("Fang", "resources/Fang", "Fang.obj");
-	
 	ModelManager::GetInstance()->LoadModel("claw_model", "resources/claw", "claw.obj");
-
 	ModelManager::GetInstance()->LoadModel("Fist_model", "resources/Fist", "Fist.obj");
-
-	ModelManager::GetInstance()->LoadModel("sword_model", "resources/sword", "tomahawk.obj");
-
+	ModelManager::GetInstance()->LoadModel("sword_model", "resources/sword", "sword.obj");
+	ModelManager::GetInstance()->LoadModel("hammer_model", "resources/hammer", "hammer.obj");
 	ModelManager::GetInstance()->LoadModel("spear_model", "resources/spear", "ransu.obj");
+	ModelManager::GetInstance()->LoadModel("kick_model", "resources/kick", "kick.obj");
 
 	// CSVからカードデータベースを初期化
 	CardDatabase::Initialize("resources/card/CardData.csv");

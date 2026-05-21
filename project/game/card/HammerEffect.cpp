@@ -16,7 +16,7 @@ void HammerEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlaye
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
 
-    obj_ = Obj3d::Create("sword_model"); // ※ハンマーのモデル名
+    obj_ = Obj3d::Create("hammer_model"); // ※ハンマーのモデル名
     if ( obj_ ) {
         obj_->SetCamera(camera);
         obj_->SetScale(scale_);
@@ -35,7 +35,7 @@ void HammerEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlaye
     afterimages_.clear();
     for ( int index = 0; index < maxAfterimageCount_; index++ ) {
         AfterimageData afterimage;
-        afterimage.object = Obj3d::Create("sword_model");
+        afterimage.object = Obj3d::Create("hammer_model");
         if ( afterimage.object ) {
             afterimage.object->SetCamera(camera);
             afterimage.object->SetScale(scale_);

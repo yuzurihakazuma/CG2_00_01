@@ -30,7 +30,7 @@ void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerC
         startPos_.z + forward.z * 0.5f
     };
 
-    obj_ = Obj3d::Create("Fist_model"); // 拳モデルを代用
+    obj_ = Obj3d::Create("kick_model"); // 拳モデルを代用
     if (obj_) {
         obj_->SetCamera(camera);
         obj_->SetScale(scale_);
