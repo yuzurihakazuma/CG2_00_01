@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <fstream>
 #include <particle/StunEffectManager.h>
+#include "engine/postEffect/PostEffect.h"
+
 
 using namespace VectorMath;
 using json = nlohmann::json;
@@ -176,6 +178,38 @@ void Player::Initialize() {
 }
 
 void Player::Update() {
+   
+    // ---- ポストエフェクト：毎フレーム現在の状態を反映 ----
+    {
+        auto* pe = PostEffect::GetInstance();
+
+        // 死亡時 → グレースケール
+        pe->SetEffectActive(PostEffectType::Grayscale, isDead_);
+
+        // 回避中 → ラジアルブラー（弱め）
+        pe->SetEffectActive(PostEffectType::RadialBlur, isDodging_);
+        pe->SetRadialBlurStrength(isDodging_ ? 0.7f : 1.0f);
+
+        // ビネット：被弾直後 or 低HP
+        if ( isHit_ && hitTimer_ > 0 ) {
+            // 被弾直後：徐々に消えるフラッシュ。低HPなら赤みを帯びる
+            float prog = static_cast< float >( hitTimer_ ) / static_cast< float >( hitDuration_ );
+            float g = ( hp_ <= 3 ) ? 0.08f : 0.75f;
+            float b = ( hp_ <= 3 ) ? 0.08f : 0.75f;
+            pe->SetEffectActive(PostEffectType::Vignetting, true);
+            pe->SetVignetteParams(prog * 0.75f, 1.0f, g, b);
+        } else if ( hp_ <= 3 && !isDead_ ) {
+            // 低HP：HPが少ないほど赤く強くなる
+            float lowHpRatio = static_cast< float >( hp_ ) / 3.0f; // hp=3→1.0, hp=1→0.33
+            float intensity = 0.3f + ( 1.0f - lowHpRatio ) * 0.55f;
+            pe->SetEffectActive(PostEffectType::Vignetting, true);
+            pe->SetVignetteParams(intensity, 1.0f, 0.05f, 0.05f); // 赤
+        } else {
+            pe->SetEffectActive(PostEffectType::Vignetting, false);
+            pe->SetVignetteParams(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+    }
+    
     // デバッグGUIから開始したポーズ補間も毎フレーム進める
     if (IsPoseBlendPlaying()) {
         UpdatePoseBlend();

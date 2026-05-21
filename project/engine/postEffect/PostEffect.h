@@ -1,142 +1,127 @@
 #pragma once
 
-// --- 標準ライブラリ・外部ライブラリ ---
 #include <memory>
 #include <d3d12.h>
 #include <string>
-// --- エンジン側のファイル ---
 #include "engine/graphics/RenderTexture.h"
 
 class DirectXCommon;
 class SrvManager;
 
-enum class PostEffectType {
-	None,           // エフェクトなし（そのまま表示）
-	Grayscale,      // グレースケール
-	Sepia,          // セピア
-	Vignetting,     // ビネット（周辺減光）
-	BoxFilter,      // ボックスフィルター（ぼかし）
-	BoxFilter5x5,   // ボックスフィルター 5x5（強めのぼかし）
-	GaussianFilter, // ガウシアンフィルター（綺麗なぼかし）
-	RadialBlur,     // 放射状ブラー
-	Outline,        // アウトライン
-	RandomNoise,    // ランダムノイズ
-	Count           // 種類の数
+enum class PostEffectType{
+    None,
+    Grayscale,
+    Sepia,
+    Vignetting,
+    BoxFilter,
+    BoxFilter5x5,
+    GaussianFilter,
+    RadialBlur,
+    Outline,
+    RandomNoise,
+    Count
 };
 
+// シェーダーに渡す共有パラメータ（b0 レジスタ、32バイト固定）
+struct PostEffectParams{
+    float time = 0.0f;   // RandomNoise 用タイム
+    float param0 = 1.0f;   // Vignette: 強度 / RadialBlur: 強度倍率
+    float colorR = 1.0f;   // Vignette 縁の色 R
+    float colorG = 1.0f;   // Vignette 縁の色 G
+    float colorB = 1.0f;   // Vignette 縁の色 B
+    float pad0 = 0.0f;
+    float pad1 = 0.0f;
+    float pad2 = 0.0f;
+};
 
-class PostEffect {
+class PostEffect{
 public:
 
-	static PostEffect* GetInstance() {
-		static PostEffect instance;
-		return &instance;
-	}
+    static PostEffect* GetInstance(){
+        static PostEffect instance;
+        return &instance;
+    }
 
-	~PostEffect() = default;
+    ~PostEffect() = default;
 
-	// 初期化
-	void Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uint32_t width, uint32_t height);
-	
-	// 更新
-	void Update();
+    void Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uint32_t width, uint32_t height);
+    void Update();
+    void Finalize();
 
-	// 終了処理
-	void Finalize();
+    void PreDrawScene(ID3D12GraphicsCommandList* commandList);
+    void PostDrawScene(ID3D12GraphicsCommandList* commandList);
+    void Draw(ID3D12GraphicsCommandList* commandList);
+    void OnResize(uint32_t width, uint32_t height);
+    void PreDrawSceneMRT(ID3D12GraphicsCommandList* commandList);
+    void PostDrawSceneMRT(ID3D12GraphicsCommandList* commandList);
 
-	// お絵かき開始（画用紙への切り替え）
-	void PreDrawScene(ID3D12GraphicsCommandList* commandList);
+    void DrawDebugUI();
 
-	// お絵かき終了（メイン画面への切り替え）
-	void PostDrawScene(ID3D12GraphicsCommandList* commandList);
+    void AddTime(float addValue){
+        if ( effectParamsData_ ) {
+            effectParamsData_->time += addValue;
+        }
+    }
 
-	// ポストエフェクトの描画（巨大な三角形を描く）
-	void Draw(ID3D12GraphicsCommandList* commandList);
+    void Save(const std::string& filePath = "resources/data/postEffect.json");
+    void Load(const std::string& filePath = "resources/data/postEffect.json");
 
-	// ウィンドウサイズが変わったときの処理（画用紙のサイズも変える）
-	void OnResize(uint32_t width, uint32_t height);
+    uint32_t GetSrvIndex() const;
 
-	// MRT（2枚同時書き込み）を開始する関数
-	void PreDrawSceneMRT(ID3D12GraphicsCommandList* commandList);
-	void PostDrawSceneMRT(ID3D12GraphicsCommandList* commandList);
+    void SetEffectActive(PostEffectType type, bool isActive){
+        activeEffects_[static_cast< int >( type )] = isActive;
+    }
 
+    bool GetEffectActive(PostEffectType type) const{
+        return activeEffects_[static_cast< int >( type )];
+    }
 
+    void SetMasterActive(bool isActive){
+        isActive_ = isActive;
+    }
 
-	// デバッグ用UIの描画
-	void DrawDebugUI();
+    void ClearAllEffects(){
+        for ( int i = 0; i < static_cast< int >(PostEffectType::Count); ++i ) {
+            activeEffects_[i] = false;
+        }
+    }
 
+    uint32_t GetMaskSrvIndex() const{ return maskTexture_->GetSrvIndex(); }
 
-	// 外から時間を進めるための関数
-	void AddTime(float addValue) {
-		time_ += addValue;
-		if (timeData_) {
-			*timeData_ = time_;
-		}
-	}
+    // ビネットの強度と色を設定（毎フレーム呼ぶ）
+    void SetVignetteParams(float intensity, float r, float g, float b){
+        if ( !effectParamsData_ ) return;
+        effectParamsData_->param0 = intensity;
+        effectParamsData_->colorR = r;
+        effectParamsData_->colorG = g;
+        effectParamsData_->colorB = b;
+    }
 
-	// エフェクトの有効化・無効化
-	void Save(const std::string& filePath = "resources/data/postEffect.json"); // 現在のエフェクト設定をJSONファイルに保存
-	void Load(const std::string& filePath = "resources/data/postEffect.json"); // JSONファイルからエフェクト設定を読み込む
-public: // ゲームプレイシーンなどから、描画に必要なSRVインデックスを取得するための関数
-
-	uint32_t GetSrvIndex() const;
-
-	//  特定のエフェクトだけを狙ってON/OFFする
-	void SetEffectActive(PostEffectType type, bool isActive) {
-		activeEffects_[static_cast<int>(type)] = isActive;
-	}
-
-	//  特定のエフェクトが今ONになっているか確認する
-	bool GetEffectActive(PostEffectType type) const {
-		return activeEffects_[static_cast<int>(type)];
-	}
-
-	//  大元（マスター）のスイッチをON/OFFする
-	void SetMasterActive(bool isActive) {
-		isActive_ = isActive;
-	}
-
-	//  全てのエフェクトを一括でOFFにする（シーン切り替え時などに便利！）
-	void ClearAllEffects() {
-		for (int i = 0; i < static_cast<int>(PostEffectType::Count); ++i) {
-			activeEffects_[i] = false;
-		}
-	}
-
-	// いつでも最終的な結果のSRVインデックスを取得できる関数
-	uint32_t GetMaskSrvIndex() const{ return maskTexture_->GetSrvIndex(); }
+    // ラジアルブラー強度を設定（1.0=通常、0.5=半分）
+    void SetRadialBlurStrength(float strength){
+        if ( !effectParamsData_ ) return;
+        effectParamsData_->param0 = strength;
+    }
 
 private:
+    PostEffect() = default;
+    PostEffect(const PostEffect&) = delete;
+    PostEffect& operator=(const PostEffect&) = delete;
 
-	PostEffect() = default;
-	PostEffect(const PostEffect&) = delete;
-	PostEffect& operator=(const PostEffect&) = delete;
-
-private:
-
-	// ポストエフェクトの描画（巨大な三角形を描く）※エフェクトの種類を指定して、ON/OFFも指定できるバージョン
-	void ApplyEffect(ID3D12GraphicsCommandList* commandList, DirectXCommon* dxCommon, PostEffectType type, bool isEffectActive, uint32_t& src, uint32_t& dest);
-
+    void ApplyEffect(ID3D12GraphicsCommandList* commandList, DirectXCommon* dxCommon,
+        PostEffectType type, bool isEffectActive, uint32_t& src, uint32_t& dest);
 
 private:
-	// 2枚の画用紙を配列にして、交互に使い回す（ピンポン描画）
-	std::unique_ptr<RenderTexture> renderTextures_[2];
-	
-	uint32_t finalResultIndex_ = 0; // 最終的な結果がどちらの画用紙にあるかを示すインデックス（0か1）
+    std::unique_ptr<RenderTexture> renderTextures_[2];
+    uint32_t finalResultIndex_ = 0;
+    std::unique_ptr<RenderTexture> maskTexture_;
 
-	// もしエフェクトの中で、時間経過で変化させたいものがあれば、そこに必要なリソースをここで用意しておく
-	std::unique_ptr<RenderTexture> maskTexture_;
+    bool isActive_ = true;
+    bool activeEffects_[static_cast< int >( PostEffectType::Count )] = { false };
 
-	bool isActive_ = true; // エフェクト全体の大元スイッチ
-	// Enumの要素数(Count)の分だけ bool の配列を作る
-	bool activeEffects_[static_cast<int>(PostEffectType::Count)] = { false };
+    Microsoft::WRL::ComPtr<ID3D12Resource> timeResource_;
+    PostEffectParams* effectParamsData_ = nullptr;
+    float timeSpeed_ = 0.05f;
 
-	// 時間経過で変化するエフェクトのための時間管理
-	Microsoft::WRL::ComPtr<ID3D12Resource> timeResource_;
-	float* timeData_ = nullptr;
-	float time_ = 0.0f;
-	float timeSpeed_ = 0.05f;
-
-	DirectXCommon* dxCommon_ = nullptr;
-
+    DirectXCommon* dxCommon_ = nullptr;
 };
