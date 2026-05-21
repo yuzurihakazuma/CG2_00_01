@@ -194,6 +194,7 @@ private: // メンバ変数
 	const int timedSpawnIntervalFrames_ = 600;
 	const int normalTimedEnemyMax_ = 6;
 	const int normalTimedCardMax_ = 6;
+	const int bossTimedCardMax_ = 8;
 
 	// ダンジョン再生成とプレイヤー再スポーンの処理
 	void RegenerateDungeonAndRespawnPlayer(int roomCount);
@@ -244,13 +245,20 @@ private: // メンバ変数
 
 	// プレイヤーステータスの背景
 	std::unique_ptr<Sprite> playerStatusBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> handCountBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeBackSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeDelaySprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFillSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeGlossSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeBackSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeFillSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeGlossSprite_ = nullptr;
 	float displayedHpRatio_ = -1.0f;
+	float hpDamageTrailRatio_ = -1.0f;
 
 	// コスト不足メッセージ表示用
 	int costLackMessageTimer_ = 0;

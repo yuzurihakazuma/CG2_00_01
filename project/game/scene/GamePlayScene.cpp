@@ -250,6 +250,12 @@ void GamePlayScene::Initialize() {
 	// 画面サイズ取得
 	float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 	float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+	TextManager::GetInstance()->SetPosition("HandCountLabel", 48.0f, screenH - 126.0f);
+	TextManager::GetInstance()->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
+	TextManager::GetInstance()->SetScale("HandCountLabel", 0.58f);
+	TextManager::GetInstance()->SetScale("HandCountValue", 0.95f);
+	TextManager::GetInstance()->SetColor("HandCountLabel", 0.70f, 0.86f, 1.0f, 0.92f);
+	TextManager::GetInstance()->SetColor("HandCountValue", 0.96f, 1.0f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetPosition("FloorTransition", screenW * 0.5f, screenH * 0.5f);
 	TextManager::GetInstance()->SetScale("FloorTransition", 2.0f);
 	TextManager::GetInstance()->SetCentered("FloorTransition", true);
@@ -265,31 +271,59 @@ void GamePlayScene::Initialize() {
 	playerStatusBgSprite_ = Sprite::Create("resources/white1x1.png", { 170.0f, 625.0f });
 	playerStatusBgSprite_->SetSize({ 340.0f, 190.0f });
 	playerStatusBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.65f });
+	handCountBgSprite_ = Sprite::Create("resources/white1x1.png", { 132.0f, screenH - 82.0f });
+	if (handCountBgSprite_) {
+		handCountBgSprite_->SetSize({ 220.0f, 106.0f });
+		handCountBgSprite_->SetColor({ 0.02f, 0.04f, 0.06f, 0.58f });
+	}
+	playerHpGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerHpGaugeDelaySprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerHpGaugeGlossSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerCostGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerCostGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerCostGaugeFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeGlossSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	if (playerHpGaugeShadowSprite_) {
+		playerHpGaugeShadowSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.44f });
+	}
 	if (playerHpGaugeFrameSprite_) {
-		playerHpGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
+		playerHpGaugeFrameSprite_->SetColor({ 0.92f, 1.0f, 0.96f, 0.54f });
 	}
 	if (playerHpGaugeBackSprite_) {
-		playerHpGaugeBackSprite_->SetColor({ 0.08f, 0.03f, 0.03f, 0.85f });
+		playerHpGaugeBackSprite_->SetColor({ 0.04f, 0.05f, 0.06f, 0.86f });
+	}
+	if (playerHpGaugeDelaySprite_) {
+		playerHpGaugeDelaySprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerHpGaugeDelaySprite_->SetColor({ 1.0f, 0.88f, 0.38f, 0.36f });
 	}
 	if (playerHpGaugeFillSprite_) {
 		playerHpGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
 		playerHpGaugeFillSprite_->SetColor({ 0.15f, 0.9f, 0.25f, 0.95f });
 	}
+	if (playerHpGaugeGlossSprite_) {
+		playerHpGaugeGlossSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerHpGaugeGlossSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.20f });
+	}
+	if (playerCostGaugeShadowSprite_) {
+		playerCostGaugeShadowSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.44f });
+	}
 	if (playerCostGaugeFrameSprite_) {
-		playerCostGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
+		playerCostGaugeFrameSprite_->SetColor({ 0.82f, 0.96f, 1.0f, 0.50f });
 	}
 	if (playerCostGaugeBackSprite_) {
-		playerCostGaugeBackSprite_->SetColor({ 0.03f, 0.05f, 0.09f, 0.85f });
+		playerCostGaugeBackSprite_->SetColor({ 0.03f, 0.05f, 0.08f, 0.86f });
 	}
 	if (playerCostGaugeFillSprite_) {
 		playerCostGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
 		playerCostGaugeFillSprite_->SetColor({ 0.18f, 0.68f, 1.0f, 0.95f });
+	}
+	if (playerCostGaugeGlossSprite_) {
+		playerCostGaugeGlossSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerCostGaugeGlossSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.18f });
 	}
 
 	// スプライト作成（座標 X:100, Y:500）
@@ -1449,13 +1483,31 @@ void GamePlayScene::Update() {
 		// テキストの座標を最新のウィンドウ幅に合わせて更新
 		textMgr->SetPosition("PlayerHP", startX, topY);
 		textMgr->SetScale("PlayerHP", 0.72f);
-		textMgr->SetColor("PlayerHP", 0.86f, 1.0f, 1.0f, 1.0f);
+		textMgr->SetColor("PlayerHP", 0.92f, 1.0f, 0.94f, 1.0f);
 		textMgr->SetScale("PlayerCost", 0.68f);
+		textMgr->SetColor("PlayerCost", 0.82f, 0.96f, 1.0f, 1.0f);
 		textMgr->SetScale("PlayerLevel", 0.9f);
 		textMgr->SetScale("PlayerEXP", 0.9f);
 		textMgr->SetPosition("PlayerCost", startX, 58.0f);
 		textMgr->SetPosition("PlayerLevel", 770.0f, 30.0f);
 		textMgr->SetPosition("PlayerEXP", 870.0f, 30.0f);
+	}
+
+	{
+		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+		auto textMgr = TextManager::GetInstance();
+		textMgr->SetText("HandCountLabel", "HAND");
+		textMgr->SetText(
+			"HandCountValue",
+			std::to_string(handManager_.GetHandSize()) + " / " + std::to_string(handManager_.GetMaxHandSize())
+		);
+		textMgr->SetPosition("HandCountLabel", 48.0f, screenH - 126.0f);
+		textMgr->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
+		if (handCountBgSprite_) {
+			handCountBgSprite_->SetPosition({ 132.0f, screenH - 82.0f });
+			handCountBgSprite_->SetSize({ 220.0f, 106.0f });
+			handCountBgSprite_->Update();
+		}
 	}
 
 	if (tutorial_ && tutorial_->IsActive()) {
@@ -1820,6 +1872,10 @@ void GamePlayScene::Draw() {
 			playerStatusBgSprite_->Draw();
 		}
 		DrawPlayerStatusGaugeUI();
+
+		if (handCountBgSprite_) {
+			handCountBgSprite_->Draw();
+		}
 
 		if (minimap_) {
 			minimap_->Draw();
@@ -2292,12 +2348,30 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 	const float hpY = 42.0f;
 	const float costY = 72.0f;
 
-	auto updateGauge = [gaugeLeft, gaugeWidth, gaugeHeight](Sprite* frame, Sprite* back, Sprite* fill, float y, float ratio, const Vector4& fillColor) {
+	auto updateGauge = [gaugeLeft, gaugeWidth, gaugeHeight](
+		Sprite* shadow,
+		Sprite* frame,
+		Sprite* back,
+		Sprite* delay,
+		Sprite* fill,
+		Sprite* gloss,
+		float y,
+		float ratio,
+		float delayRatio,
+		const Vector4& fillColor
+	) {
 		const float safeRatio = std::clamp(ratio, 0.0f, 1.0f);
+		const float safeDelayRatio = std::clamp(delayRatio, 0.0f, 1.0f);
+
+		if (shadow) {
+			shadow->SetPosition({ gaugeLeft + gaugeWidth * 0.5f + 3.0f, y + 3.0f });
+			shadow->SetSize({ gaugeWidth + 10.0f, gaugeHeight + 10.0f });
+			shadow->Update();
+		}
 
 		if (frame) {
 			frame->SetPosition({ gaugeLeft + gaugeWidth * 0.5f, y });
-			frame->SetSize({ gaugeWidth + 4.0f, gaugeHeight + 4.0f });
+			frame->SetSize({ gaugeWidth + 6.0f, gaugeHeight + 6.0f });
 			frame->Update();
 		}
 		if (back) {
@@ -2305,11 +2379,21 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 			back->SetSize({ gaugeWidth, gaugeHeight });
 			back->Update();
 		}
+		if (delay) {
+			delay->SetPosition({ gaugeLeft, y });
+			delay->SetSize({ gaugeWidth * safeDelayRatio, gaugeHeight });
+			delay->Update();
+		}
 		if (fill) {
 			fill->SetPosition({ gaugeLeft, y });
 			fill->SetSize({ gaugeWidth * safeRatio, gaugeHeight });
 			fill->SetColor(fillColor);
 			fill->Update();
+		}
+		if (gloss) {
+			gloss->SetPosition({ gaugeLeft, y - gaugeHeight * 0.24f });
+			gloss->SetSize({ gaugeWidth * safeRatio, 3.0f });
+			gloss->Update();
 		}
 	};
 
@@ -2323,6 +2407,9 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 	if (displayedHpRatio_ < 0.0f) {
 		displayedHpRatio_ = targetHpRatio;
 	}
+	if (hpDamageTrailRatio_ < 0.0f) {
+		hpDamageTrailRatio_ = targetHpRatio;
+	}
 	const float hpDelta = targetHpRatio - displayedHpRatio_;
 	const float hpFollowSpeed = hpDelta >= 0.0f ? 0.075f : 0.025f;
 	if (std::fabs(hpDelta) <= hpFollowSpeed) {
@@ -2331,27 +2418,66 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 		displayedHpRatio_ += (hpDelta > 0.0f ? hpFollowSpeed : -hpFollowSpeed);
 	}
 	displayedHpRatio_ = std::clamp(displayedHpRatio_, 0.0f, 1.0f);
-
-	Vector4 hpColor = { 0.95f, 0.10f, 0.10f, 0.96f };
-	if (targetHpRatio > 0.5f) {
-		hpColor = { 0.20f, 0.96f, 0.38f, 0.96f };
-	} else if (targetHpRatio > 0.25f) {
-		hpColor = { 1.0f, 0.78f, 0.12f, 0.96f };
+	if (hpDamageTrailRatio_ < displayedHpRatio_) {
+		hpDamageTrailRatio_ = displayedHpRatio_;
+	} else {
+		hpDamageTrailRatio_ = (std::max)(displayedHpRatio_, hpDamageTrailRatio_ - 0.012f);
 	}
 
-	updateGauge(playerHpGaugeFrameSprite_.get(), playerHpGaugeBackSprite_.get(), playerHpGaugeFillSprite_.get(), hpY, displayedHpRatio_, hpColor);
-	updateGauge(playerCostGaugeFrameSprite_.get(), playerCostGaugeBackSprite_.get(), playerCostGaugeFillSprite_.get(), costY, costRatio, { 0.18f, 0.68f, 1.0f, 0.95f });
+	Vector4 hpColor = { 1.0f, 0.18f, 0.14f, 0.96f };
+	if (targetHpRatio > 0.5f) {
+		hpColor = { 0.24f, 0.98f, 0.48f, 0.96f };
+	} else if (targetHpRatio > 0.25f) {
+		hpColor = { 1.0f, 0.82f, 0.18f, 0.96f };
+	}
+
+	updateGauge(
+		playerHpGaugeShadowSprite_.get(),
+		playerHpGaugeFrameSprite_.get(),
+		playerHpGaugeBackSprite_.get(),
+		playerHpGaugeDelaySprite_.get(),
+		playerHpGaugeFillSprite_.get(),
+		playerHpGaugeGlossSprite_.get(),
+		hpY,
+		displayedHpRatio_,
+		hpDamageTrailRatio_,
+		hpColor
+	);
+	updateGauge(
+		playerCostGaugeShadowSprite_.get(),
+		playerCostGaugeFrameSprite_.get(),
+		playerCostGaugeBackSprite_.get(),
+		nullptr,
+		playerCostGaugeFillSprite_.get(),
+		playerCostGaugeGlossSprite_.get(),
+		costY,
+		costRatio,
+		costRatio,
+		{ 0.12f, 0.78f, 1.0f, 0.95f }
+	);
 }
 
 void GamePlayScene::DrawPlayerStatusGaugeUI() {
+	if (playerHpGaugeShadowSprite_) {
+		playerHpGaugeShadowSprite_->Draw();
+	}
 	if (playerHpGaugeFrameSprite_) {
 		playerHpGaugeFrameSprite_->Draw();
 	}
 	if (playerHpGaugeBackSprite_) {
 		playerHpGaugeBackSprite_->Draw();
 	}
+	if (playerHpGaugeDelaySprite_) {
+		playerHpGaugeDelaySprite_->Draw();
+	}
 	if (playerHpGaugeFillSprite_) {
 		playerHpGaugeFillSprite_->Draw();
+	}
+	if (playerHpGaugeGlossSprite_) {
+		playerHpGaugeGlossSprite_->Draw();
+	}
+	if (playerCostGaugeShadowSprite_) {
+		playerCostGaugeShadowSprite_->Draw();
 	}
 	if (playerCostGaugeFrameSprite_) {
 		playerCostGaugeFrameSprite_->Draw();
@@ -2361,6 +2487,9 @@ void GamePlayScene::DrawPlayerStatusGaugeUI() {
 	}
 	if (playerCostGaugeFillSprite_) {
 		playerCostGaugeFillSprite_->Draw();
+	}
+	if (playerCostGaugeGlossSprite_) {
+		playerCostGaugeGlossSprite_->Draw();
 	}
 }
 
@@ -2913,7 +3042,13 @@ void GamePlayScene::UpdateTimedSpawns() {
 
 	if (mapManager_->IsBossMap()) {
 		timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
-		timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+		timedCardSpawnTimer_--;
+		if (timedCardSpawnTimer_ <= 0) {
+			if (CountActiveCardPickups() < bossTimedCardMax_) {
+				SpawnTimedCardPickup();
+			}
+			timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+		}
 		return;
 	}
 

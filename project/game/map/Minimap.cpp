@@ -209,6 +209,28 @@ void Minimap::BuildChunkSprites() {
 	}
 }
 
+void Minimap::UpdateStaticSprites() {
+	if (backgroundSprite_) {
+		backgroundSprite_->Update();
+	}
+	if (frameSprite_) {
+		frameSprite_->Update();
+	}
+
+	for (Chunk& chunk : chunks_) {
+		for (const auto& sprite : chunk.wallSprites) {
+			if (sprite) {
+				sprite->Update();
+			}
+		}
+		for (const auto& sprite : chunk.stairsSprites) {
+			if (sprite) {
+				sprite->Update();
+			}
+		}
+	}
+}
+
 int Minimap::GetChunkIndexFromTile(int tileX, int tileZ) const {
 	if (!levelData_ || chunks_.empty()) {
 		return -1;
@@ -279,6 +301,7 @@ void Minimap::Update() {
 	if (!visible_) {
 		return;
 	}
+	UpdateStaticSprites();
 
 	// 今いる区画を探索済みにする
 	DiscoverCurrentChunk();

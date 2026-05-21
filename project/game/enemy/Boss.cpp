@@ -10,6 +10,20 @@ using namespace VectorMath;
 
 namespace {
 	constexpr float kBossAppearDropHeight = 18.0f;
+	constexpr float kBeamFiringTurnSpeed = 0.010f;
+
+	float NormalizeAngle(float angle) {
+		constexpr float pi = 3.14159265f;
+		constexpr float twoPi = pi * 2.0f;
+
+		while (angle > pi) {
+			angle -= twoPi;
+		}
+		while (angle < -pi) {
+			angle += twoPi;
+		}
+		return angle;
+	}
 }
 
 void Boss::Initialize() {
@@ -336,6 +350,25 @@ void Boss::Update() {
 	}
 
 	if (isActionLocked_) {
+		if (selectedCard_.id == 104) {
+			Vector3 dir = {
+				playerPos_.x - pos_.x,
+				0.0f,
+				playerPos_.z - pos_.z
+			};
+			if (Length(dir) > 0.01f) {
+				const float targetYaw = std::atan2f(dir.x, dir.z);
+				const float yawDiff = std::clamp(
+					NormalizeAngle(targetYaw - rot_.y),
+					-kBeamFiringTurnSpeed,
+					kBeamFiringTurnSpeed
+				);
+				rot_.y += yawDiff;
+				rot_.x = 0.0f;
+				rot_.z = 0.0f;
+			}
+		}
+
 		actionLockTimer_--;
 		if (actionLockTimer_ <= 0) {
 			isActionLocked_ = false;

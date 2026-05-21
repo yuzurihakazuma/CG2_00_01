@@ -46,6 +46,7 @@ private:
 	void RebuildMapSprites();
 	void BuildChunks();
 	void BuildChunkSprites();
+	void UpdateStaticSprites();
 	void DiscoverCurrentChunk();
 	int GetChunkIndexFromTile(int tileX, int tileZ) const;
 	bool IsWorldPositionInDiscoveredChunk(const Vector3& worldPos) const;
