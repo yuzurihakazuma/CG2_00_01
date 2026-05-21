@@ -21,5 +21,7 @@ public:
 	int duration_ = 300;
 	int timer_ = 0;
 	bool isFinished_ = false;
+
+	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
 };
 

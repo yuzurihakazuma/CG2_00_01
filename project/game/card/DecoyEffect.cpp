@@ -1,6 +1,7 @@
 ﻿#include "DecoyEffect.h"
 #include <cmath>
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/collision/Collision.h"
 
 using namespace VectorMath;
 
@@ -9,6 +10,8 @@ void DecoyEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayer
 	(void)casterBoss;
 	isFinished_ = false;
 	timer_ = duration_;
+
+	casterPos_ = casterPos;
 
 	Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
 	pos_ = { casterPos.x + forward.x * 2.0f, casterPos.y, casterPos.z + forward.z * 2.0f };
@@ -46,6 +49,25 @@ void DecoyEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss,
 
 	if (isFinished_) {
 		return;
+	}
+
+	// ==========================================
+	// 最初の1フレーム目だけ壁判定を行う
+	// ==========================================
+	if (timer_ == duration_) {
+
+		bool isWall = Collision::CheckBlockCollision(pos_, 0.5f, level); 
+
+		if (isWall) {
+			// 目の前が壁だったら、保存しておいたプレイヤーの足元に書き換える
+			pos_ = casterPos_;
+
+			// モデルの座標を即座に上書きしてチラつきを防ぐ
+			if (model_) {
+				model_->SetTranslation(pos_);
+				model_->Update();
+			}
+		}
 	}
 
 	timer_--;

@@ -95,7 +95,7 @@ public:
     void AddShieldHits(int hits) { shieldHitCount_ = hits; } // シールド回数セット
     int GetShieldHits() const { return shieldHitCount_; } // シールド残り回数取得
 
-    bool IsActionLocked() const { return isActionLocked_; }
+    bool IsActionLocked() const { return isActionLocked_ || isStunned_; }
 
     void SetMaxCost(int cost) { maxCost_ = cost; }
     void SetCost(int cost) { cost_ = cost; }
@@ -108,7 +108,7 @@ public:
 
     void SetStun(int durationFrames); // スタンさせる関数
 
-    bool IsStunned() const{ return isStunned_; }
+    bool IsStunned() const{ return isStunned_;}
 
 private:
     void LevelUp();      // レベルアップ処理
@@ -167,7 +167,7 @@ private:
     int cost_ = 3;
     int maxCost_ = 3;
     int costRecoveryTimer_ = 0;
-    int costRecoveryInterval_ = 180;
+    int costRecoveryInterval_ = 120;
 
     // HP
     int hp_ = 10;
