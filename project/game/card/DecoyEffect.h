@@ -26,16 +26,9 @@ public:
     int timer_ = 0;
     bool isFinished_ = false;
 
+    Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
+
 private:
     bool isBeingHit_ = false;  // このフレームにヒット通知があったか
-};
-	std::unique_ptr<SkinnedObj3d> model_ = nullptr;
-	Vector3 pos_ = { 0.0f, 0.0f, 0.0f };
-	Vector3 scale_ = { 1.0f, 1.0f, 1.0f };
-	int duration_ = 300;
-	int timer_ = 0;
-	bool isFinished_ = false;
-
-	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
 };
 
