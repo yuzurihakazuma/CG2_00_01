@@ -351,11 +351,7 @@ void EnemyManager::Initialize() {
 
 
 	castCardObjs_.clear();
-	castCardObjs_[1] = std::unique_ptr<Obj3d>(Obj3d::Create("cardF"));
-	castCardObjs_[2] = std::unique_ptr<Obj3d>(Obj3d::Create("cardFire"));
-	castCardObjs_[7] = std::unique_ptr<Obj3d>(Obj3d::Create("CardFang"));
-	castCardObjs_[10] = std::unique_ptr<Obj3d>(Obj3d::Create("CardClaw"));
-	castCardObjs_[15] = std::unique_ptr<Obj3d>(Obj3d::Create("CardFang"));
+	
 }
 
 EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera* camera) const {
@@ -817,8 +813,23 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
 		if (enemy && !enemy->IsDead() && enemy->IsCasting()) {
 			Vector3 ePos = enemy->GetPosition();
 
-			// 敵が今使おうとしているカードのIDを取得する
-			int currentCardId = enemy->GetCurrentUseCard().id;
+			// ★ 修正：IDだけでなく、カードのデータ丸ごと取得する
+			Card currentCard = enemy->GetCurrentUseCard();
+			int currentCardId = currentCard.id;
+
+			// ==========================================
+			// ★ 追加：まだこのカードIDのモデルを作っていなければ、自動で生成して登録する！
+			// ==========================================
+			if (castCardObjs_.count(currentCardId) == 0) {
+				// ⚠️【要確認】currentCard.modelName の「modelName」の部分は、
+				// 実際のCard構造体の中で、CSVの7列目（"CardFang"など）を格納している変数名に合わせてください！
+				std::string resName = currentCard.modelName;
+
+				// 文字列が空、または "nullptr" でなければモデルを新しく生成して辞書に保存
+				if (!resName.empty() && resName != "nullptr") {
+					castCardObjs_[currentCardId] = std::unique_ptr<Obj3d>(Obj3d::Create(resName));
+				}
+			}
 
 			// 辞書の中にそのIDのモデルが存在すれば描画処理を行う
 			if (castCardObjs_.count(currentCardId) && castCardObjs_[currentCardId]) {
@@ -852,7 +863,6 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
 				// ==========================================
 				// ★ ② 裏面を描画する（180度反転させて上書き）
 				// ==========================================
-				// 180度はラジアン（円周率）で 3.14159f です
 				cardObj->SetRotation({
 					0.0f,
 					(timer * rotateSpeed) + 3.14159f, // Y軸に180度足して裏返す！
@@ -860,16 +870,6 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
 					});
 				cardObj->Update();
 				cardObj->Draw();
-
-				//// 2. 回転の設定
-				//cardObj->SetRotation({
-				//	0.0f,                // X軸
-				//	timer * rotateSpeed, // Y軸で回転
-				//	0.0f                 // Z軸
-				//	});
-
-				//cardObj->Update();
-				//cardObj->Draw();
 			}
 		}
 	}

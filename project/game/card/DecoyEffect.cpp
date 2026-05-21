@@ -1,6 +1,7 @@
 ﻿#include "DecoyEffect.h"
 #include <cmath>
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/collision/Collision.h"
 
 using namespace VectorMath;
 
@@ -10,8 +11,10 @@ void DecoyEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
     isBeingHit_ = false;
     timer_ = duration_;
 
-    Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
-    pos_ = { casterPos.x + forward.x * 2.0f, casterPos.y, casterPos.z + forward.z * 2.0f };
+	casterPos_ = casterPos;
+
+	Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
+	pos_ = { casterPos.x + forward.x * 2.0f, casterPos.y, casterPos.z + forward.z * 2.0f };
 
     model_ = SkinnedObj3d::Create("playerDecoy", "resources/player", "player.gltf");
     if ( model_ ) {
@@ -32,6 +35,26 @@ void DecoyEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
 
         model_->Update();
     }
+
+    // ==========================================
+    // 最初の1フレーム目だけ壁判定を行う
+    // ==========================================
+    if (timer_ == duration_) {
+
+        bool isWall = Collision::CheckBlockCollision(pos_, 0.5f, level);
+
+        if (isWall) {
+            // 目の前が壁だったら、保存しておいたプレイヤーの足元に書き換える
+            pos_ = casterPos_;
+
+            // モデルの座標を即座に上書きしてチラつきを防ぐ
+            if (model_) {
+                model_->SetTranslation(pos_);
+                model_->Update();
+            }
+        }
+    }
+
 
     // =========================================
     // 出現バースト（大）
@@ -76,6 +99,11 @@ void DecoyEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
         );
     }
 
+	
+	timer_--;
+	if (timer_ <= 0) {
+		isFinished_ = true;
+	}
     // ④ 上段リング
     for ( int i = 0; i < 12; i++ ) {
         float angle = ( 3.14159f * 2.0f / 12.0f ) * i;
