@@ -186,6 +186,38 @@ bool HandManager::AddCard(const Card& newCard) {
 	return false;
 }
 
+bool HandManager::IsCardSelectableInCurrentMode(int index) const {
+	if (index < 0 || index >= static_cast<int>(hand_.size())) {
+		return false;
+	}
+
+	return !(swapModeVisual_ && hand_[index].id == 1);
+}
+
+void HandManager::MoveSelection(int direction) {
+	if (hand_.empty() || direction == 0) {
+		return;
+	}
+
+	const int handSize = static_cast<int>(hand_.size());
+	int nextIndex = selectedCardIndex_;
+
+	for (int i = 0; i < handSize; ++i) {
+		nextIndex += direction;
+		if (nextIndex >= handSize) {
+			nextIndex = 0;
+		}
+		if (nextIndex < 0) {
+			nextIndex = handSize - 1;
+		}
+
+		if (IsCardSelectableInCurrentMode(nextIndex)) {
+			selectedCardIndex_ = nextIndex;
+			return;
+		}
+	}
+}
+
 void HandManager::Update() {
 	//手札がなければ何もしない
 	if (hand_.empty()) {
@@ -195,19 +227,11 @@ void HandManager::Update() {
 
 	//左右キーで選んでいるカードの切り替え
 	if (input->Triggerkey(DIK_RIGHT)) {
-		selectedCardIndex_++;
-		//一番右に行ったらループ
-		if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
-			selectedCardIndex_ = 0;
-		}
+		MoveSelection(1);
 	}
 
 	if (input->Triggerkey(DIK_LEFT)) {
-		selectedCardIndex_--;
-		//一番左に行ったらループ
-		if (selectedCardIndex_ < 0) {
-			selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
-		}
+		MoveSelection(-1);
 	}
 
 	// カードとカードの間隔
@@ -255,6 +279,8 @@ void HandManager::Update() {
 		handModels_[i]->SetScale({ 0.3f,0.3f,0.3f });
 
 		// モデルに座標と角度をセットして更新
+		const bool cannotSwap = swapModeVisual_ && i < static_cast<int>(hand_.size()) && hand_[i].id == 1;
+		handModels_[i]->SetColor(cannotSwap ? Vector4{ 0.36f, 0.36f, 0.36f, 1.0f } : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f });
 		handModels_[i]->SetTranslation(pos);
 		handModels_[i]->SetRotation(rot);
 		handModels_[i]->Update();

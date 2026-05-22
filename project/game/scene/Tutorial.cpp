@@ -501,7 +501,7 @@ void Tutorial::UpdateTexts() const {
 		"LShift:回避\n"
 		"Space:カード使用\n"
 		"矢印キー:カード選択\n\n"
-		"クリア条件:5階層まで進みボスを倒す"
+		"クリア条件:10階層まで進みボスを倒す"
 	);
 
 
@@ -563,7 +563,7 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::ReachStairs:
 		text->SetText("TutorialTitle", "TUTORIAL 8 / 8");
-		text->SetText("TutorialBody", "階段をのぼると\nチュートリアルを終えて\nタイトルへ戻ります。");
+		text->SetText("TutorialBody", "階段をのぼると\nチュートリアルを終えて\n本編を開始します。");
 		break;
 	}
 }

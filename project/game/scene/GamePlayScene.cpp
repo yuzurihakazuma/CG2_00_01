@@ -665,7 +665,8 @@ void GamePlayScene::Update() {
 		}
 
 		if (tutorial_->ConsumeReturnToTitleRequest()) {
-			SceneManager::GetInstance()->ChangeScene("TITLE");
+			GamePlayScene::RequestTutorialStart(false);
+			SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
 			return;
 		}
 
@@ -1488,6 +1489,7 @@ void GamePlayScene::Update() {
 		if (uiCamera_) {
 			uiCamera_->Update();
 		}
+		handManager_.SetSwapModeVisual(false);
 		handManager_.Update();
 	}
 
@@ -1580,7 +1582,7 @@ void GamePlayScene::Update() {
 			"LShift:回避\n"
 			"Space:カード使用\n"
 			"矢印キー:カード選択\n\n"
-			"クリア条件:5階層まで進みボスを倒す"
+			"クリア条件:10階層まで進みボスを倒す"
 		);
 	}
 
@@ -2259,6 +2261,7 @@ void GamePlayScene::ResetBattleDebug() {
 void GamePlayScene::UpdateCardSwapMode(Input* input) {
 
 	// 手札の選択と見た目の更新
+	handManager_.SetSwapModeVisual(true);
 	handManager_.Update();
 	uiCamera_->Update(); // UIカメラの更新もここで行う
 
@@ -2321,6 +2324,7 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 
 		// 交換が終わったら、一番左(0)を選択し直す！
 		handManager_.SetSelectedCardIndex(0);
+		handManager_.SetSwapModeVisual(false);
 
 		isCardSwapMode_ = false;
 	}
