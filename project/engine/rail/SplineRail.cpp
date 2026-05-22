@@ -96,17 +96,43 @@ float SplineRail::GetTFromDistance(float targetDistance) const{
     return tTable_.back();
 }
 
-// ③ 進行方向ベクトル（Tangent）を求める
 Vector3 SplineRail::EvaluateTangent(float t) const{
-    // 微小なtを足した少し先の座標から現在地を引いて、方向ベクトルを作る
     float delta = 0.01f;
-    Vector3 p1 = EvaluatePosition(t);
-    Vector3 p2 = EvaluatePosition(t + delta);
+    float maxT = nodes.empty() ? 0.0f : static_cast< float >( nodes.size() - 1 );
+
+    float t1, t2;
+    if ( t + delta <= maxT ) {
+        t1 = t;
+        t2 = t + delta;
+    } else if ( t - delta >= 0.0f ) {
+        t1 = t - delta;
+        t2 = t;
+    } else {
+        return { 0.0f, 0.0f, 1.0f };
+    }
+
+    Vector3 p1 = EvaluatePosition(t1);
+    Vector3 p2 = EvaluatePosition(t2);
 
     Vector3 tangent = { p2.x - p1.x, p2.y - p1.y, p2.z - p1.z };
     float len = Length(tangent);
-    if ( len > 0.0f ) { // 正規化 (Normalize)
+    if ( len > 0.0f ){
         tangent.x /= len; tangent.y /= len; tangent.z /= len;
     }
     return tangent;
+}
+
+float SplineRail::GetDistanceFromT(float t) const{
+    if ( tTable_.empty() ) return 0.0f;
+    if ( t <= 0.0f ) return 0.0f;
+    if ( t >= tTable_.back() ) return totalLength_;
+
+    for ( size_t i = 0; i < tTable_.size() - 1; ++i ){
+        if ( tTable_[i] <= t && t <= tTable_[i + 1] ){
+            float segT = tTable_[i + 1] - tTable_[i];
+            float ratio = ( segT > 0.0f ) ? ( t - tTable_[i] ) / segT : 0.0f;
+            return distanceTable_[i] + ( distanceTable_[i + 1] - distanceTable_[i] ) * ratio;
+        }
+    }
+    return totalLength_;
 }

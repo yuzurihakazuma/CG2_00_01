@@ -39,6 +39,80 @@
 
 using namespace VectorMath;
 using namespace MatrixMath;
+
+// レール間の接続情報をロード時に1回だけ計算する
+static void BuildRailConnections(std::vector<SplineRail>& rails){
+	// --- 終端接続のリセット ---
+	for ( auto& r : rails ){
+		r.frontConnIndex = -1;
+		r.backConnIndex  = -1;
+		r.branchPoints.clear();
+	}
+
+	auto endDist = [](const Vector3& a, const Vector3& b) -> float{
+		float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+		return std::sqrt(dx * dx + dy * dy + dz * dz);
+		};
+
+	// --- 終端接続（既存） ---
+	for ( int i = 0; i < ( int ) rails.size(); ++i ){
+		for ( int j = 0; j < ( int ) rails.size(); ++j ){
+			if ( i == j ) continue;
+			const Vector3& iFront = rails[i].nodes.front();
+			const Vector3& iBack  = rails[i].nodes.back();
+			const Vector3& jFront = rails[j].nodes.front();
+			const Vector3& jBack  = rails[j].nodes.back();
+
+			if ( rails[i].frontConnIndex < 0 ){
+				if ( endDist(iFront, jFront) < 0.1f ){ rails[i].frontConnIndex = j; rails[i].frontConnToFront = true; } else if ( endDist(iFront, jBack) < 0.1f ){ rails[i].frontConnIndex = j; rails[i].frontConnToFront = false; }
+			}
+			if ( rails[i].backConnIndex < 0 ){
+				if ( endDist(iBack, jFront) < 0.1f ){ rails[i].backConnIndex = j; rails[i].backConnToFront = true; } else if ( endDist(iBack, jBack) < 0.1f ){ rails[i].backConnIndex = j; rails[i].backConnToFront = false; }
+			}
+		}
+	}
+
+	// --- 途中分岐点の計算 ---
+	// XY平面で branchXYThreshold 以内かつ Z方向に branchZMinDiff 以上離れたノード同士を分岐点として登録
+	const float branchXYThreshold = 1.5f;
+	const float branchZMinDiff    = 0.5f;
+
+	for ( int i = 0; i < ( int ) rails.size(); ++i ){
+		for ( size_t ni = 0; ni < rails[i].nodes.size(); ++ni ){
+			// 乗り継ぎ元の末尾ノードはスキップ（terminalFiredでカバー済み）
+			if ( ni == rails[i].nodes.size() - 1 ) continue;
+
+			const Vector3& nodeI = rails[i].nodes[ni];
+
+			for ( int j = 0; j < ( int ) rails.size(); ++j ){
+				if ( j == i ) continue;
+
+				for ( size_t nj = 0; nj < rails[j].nodes.size(); ++nj ){
+					// 乗り換え先の末尾ノードはtotalLength_に飛ぶのでスキップ
+					if ( nj == rails[j].nodes.size() - 1 ) continue;
+
+					const Vector3& nodeJ = rails[j].nodes[nj];
+
+					float dx = nodeI.x - nodeJ.x;
+					float dy = nodeI.y - nodeJ.y;
+					float xyDist = std::sqrt(dx * dx + dy * dy);
+					if ( xyDist >= branchXYThreshold ) continue;
+
+					float zDiff = nodeJ.z - nodeI.z;
+					if ( std::abs(zDiff) < branchZMinDiff ) continue;
+
+					SplineRail::BranchPoint bp;
+					bp.distance   = rails[i].GetDistanceFromT(static_cast< float >( ni ));
+					bp.targetRail = j;
+					bp.targetDist = rails[j].GetDistanceFromT(static_cast< float >( nj ));
+					bp.zSign      = ( zDiff > 0.0f ) ? 1 : -1;
+					rails[i].branchPoints.push_back(bp);
+				}
+			}
+		}
+	}
+}
+
 // 初期化
 void GamePlayScene::Initialize(){
 	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
@@ -110,7 +184,7 @@ void GamePlayScene::Initialize(){
 
 	// プレイヤーオブジェクト生成
 	testObj_ = Obj3d::Create("animatedCube");
-	testObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // これだけ！
+	testObj_->SetEnvironmentMap(textures_["skybox"].srvIndex);
 
 	if ( testObj_ ){
 
@@ -119,11 +193,8 @@ void GamePlayScene::Initialize(){
 		testObj_->SetCamera(camera_.get());
 		testObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
 
-		// ノイズ画像と初期の閾値(0.0)をセット
 		testObj_->SetNoiseTexture(textures_["noise0"].srvIndex);
 		testObj_->SetDissolveThreshold(0.0f);
-
-		//testObj_->PlayAnimation(&testAnimation_);
 
 		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
 	}
@@ -131,7 +202,7 @@ void GamePlayScene::Initialize(){
 
 
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
-	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // スキニングも
+	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex);
 	skinnedObj_->SetCamera(camera_.get());
 	skinnedObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
 	skinnedObj_->SetScale({ 1.0f, 1.0f, 1.0f });
@@ -153,7 +224,7 @@ void GamePlayScene::Initialize(){
 
 
 	blockGroup_ = std::make_unique<InstancedGroup>();
-	blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
+	blockGroup_->Initialize("block", 10000);
 	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
 
 
@@ -168,7 +239,6 @@ void GamePlayScene::Initialize(){
 	emitterData.emitRate = 20.0f;
 	emitter_.SetData(emitterData);
 
-	// エディタにエミッターを渡す（F1で開くエディタで操作できるようになる）
 	EditorManager::GetInstance()->SetParticleEmitter(&emitter_);
 
 
@@ -186,11 +256,11 @@ void GamePlayScene::Initialize(){
 	splineRails_.clear();
 	for ( const auto& line : mapData.railLines ) {
 		SplineRail newRail;
-		// 読み込んだ座標の配列をそのままセット
 		newRail.nodes = line;
 		newRail.BuildDistanceTable();
 		splineRails_.push_back(newRail);
 	}
+	BuildRailConnections(splineRails_); // ★接続情報を計算
 
 }
 
@@ -221,6 +291,7 @@ void GamePlayScene::Update(){
 			newRail.BuildDistanceTable();
 			splineRails_.push_back(newRail);
 		}
+		BuildRailConnections(splineRails_); // ★接続情報を計算
 
 		// ② プレイヤーをスタート地点に戻す
 		if ( player_ ) { player_->Initialize(); }
@@ -237,11 +308,8 @@ void GamePlayScene::Update(){
 	if ( currentMode == EngineMode::Play ) {
 
 		// プレイヤーのレール移動計算
-		if ( player_ && testObj_ ) {
-			// ★修正：splineRail_ を splineRails_ (配列)に変更
+		if ( player_ ) {
 			player_->Update(splineRails_);
-			testObj_->SetTranslation(player_->GetPosition());
-			testObj_->SetRotation(player_->GetRotation());
 		}
 
 		// スペースキー入力（エフェクト発生とBGM再生）
@@ -271,12 +339,11 @@ void GamePlayScene::Update(){
 	// ========================================================
 	// ▼ 3. モードに関わらず常に実行する処理（描画のための更新）
 	// ========================================================
-	// タイトルへ戻る処理はいつでも効くようにしておく
 	if ( input->Triggerkey(DIK_T) ) {
 		SceneManager::GetInstance()->ChangeScene(std::make_unique<TitleScene>());
 	}
 
-	// 3Dオブジェクトの行列更新（※これをしないとエディタで動かしても画面に反映されない）
+	// 3Dオブジェクトの行列更新
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 	if ( testObj_ ){ testObj_->Update(); }
 
@@ -284,6 +351,12 @@ void GamePlayScene::Update(){
 	if ( skinnedObj_ ) {
 		Vector3 pos, rot, scale;
 		skinnedAnimTrack_.UpdateTransformAtTime(skinnedAnimTime_, pos, rot, scale);
+
+		if ( currentMode == EngineMode::Play && player_ ) {
+			pos = player_->GetPosition();
+			rot = player_->GetRotation();
+		}
+
 		skinnedObj_->SetTranslation(pos);
 		skinnedObj_->SetRotation(rot);
 		skinnedObj_->SetScale(scale);
@@ -310,11 +383,10 @@ void GamePlayScene::Draw(){
 	auto dxCommon = DirectXCommon::GetInstance();
 	auto commandList = dxCommon->GetCommandList();
 
-	// GPUパーティクルの描画準備（DispatchでComputeシェーダーを実行して、描画に必要なデータをGPU側で更新してもらう）
 	GPUParticleManager::GetInstance()->Dispatch(commandList);
 
 
-	// 1. 【MRT開始】キャンバスを2枚(色用とマスク用)セットする！
+	// 1. 【MRT開始】
 	PostEffect::GetInstance()->PreDrawSceneMRT(commandList);
 
 	// --- 3D描画の前準備 ---
@@ -328,16 +400,15 @@ void GamePlayScene::Draw(){
 
 	EditorManager::GetInstance()->Draw();
 
-	if ( testObj_ ){
+	/*if ( testObj_ ){
 		testObj_->Draw();
-	}
+	}*/
 
 
 
 	// --- インスタンシングの3D描画 ---
 	if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
 
-	// 
 	if ( skinnedObj_ ) {
 		skinnedObj_->Draw();
 	}
@@ -362,35 +433,32 @@ void GamePlayScene::Draw(){
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
 
-	// 2. 【MRT終了】3Dの描画が終わったので、2枚のキャンバスを読み込みモードに戻す
+	// 2. 【MRT終了】
 	PostEffect::GetInstance()->PostDrawSceneMRT(commandList);
 
 
-	// 3. いつものPostEffect（色用のキャンバスだけに処理がかかります）
-	PostEffect::GetInstance()->Draw(commandList); // ※もしこの関数を作っていれば
+	// 3. PostEffect
+	PostEffect::GetInstance()->Draw(commandList);
 
-	// 4. エフェクト後の「色画像」と「マスク画像」の番号(SRV)をもらう
+	// 4. SRV番号取得
 	uint32_t colorSrv = PostEffect::GetInstance()->GetSrvIndex();
 	uint32_t maskSrv = PostEffect::GetInstance()->GetMaskSrvIndex();
 
-	// 5. Bloomに「色」と「マスク」を両方渡す！
+	// 5. Bloom
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
 
-	// 5-2. Bloomの最終結果のSRV番号をもらう
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
-	// エディタマネージャーに「これが最終的なゲーム画面のSRVだよ！」と教えてあげる
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
 
 
-	// 6. メイン画面（バックバッファ）への直接描画！
+	// 6. メイン画面への描画
 	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetBackBufferRtvHandle();
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
 	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
-	// 7. 最終的な結果を画面にドーン！と描く
-	PipelineManager::GetInstance()->SetPostEffectPipeline(commandList, PostEffectType::None); // シェーダーはエフェクトなしのやつを使う
-	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, finalSrv); // Bloomの結果をSRVとしてセット
-	commandList->DrawInstanced(3, 1, 0, 0); // 巨大な三角形を描いて全画面にテクスチャを貼る方式なので、頂点数は3でOK！
+	PipelineManager::GetInstance()->SetPostEffectPipeline(commandList, PostEffectType::None);
+	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, finalSrv);
+	commandList->DrawInstanced(3, 1, 0, 0);
 
 
 
@@ -405,7 +473,6 @@ void GamePlayScene::Draw(){
 void GamePlayScene::DrawDebugUI(){
 
 #ifdef USE_IMGUI
-	// 3Dオブジェクト、カメラ、パーティクルのUI
 	Obj3dCommon::GetInstance()->DrawDebugUI();
 	if ( camera_ ) { camera_->DrawDebugUI(); }
 	if ( debugCamera_ ) { debugCamera_->DrawDebugUI(); }

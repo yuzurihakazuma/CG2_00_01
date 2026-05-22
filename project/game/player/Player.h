@@ -36,4 +36,10 @@ private: // メンバ変数
 
     float jumpVelocity_ = 0.0f; // ジャンプの初速・落下速度
     float heightOffset_ = 0.0f; // レールからの「浮き具合」
+
+    int traverseSign_ = 1; // レール上の進行符号: 1=通常, -1=終端から入った
+
+    bool isHorizontal_ = true;  // レール乗り換え時のみ更新
+    int  lastRailIndex_ = -1;   // 前フレームのレール番号
+
 };
