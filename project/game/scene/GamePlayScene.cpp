@@ -679,13 +679,14 @@ void GamePlayScene::Update() {
 	// プレイヤーの更新処理
 	// ==========================================
 	const bool isBossIntroPlayingNow = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+	const bool isBossCinematicPlayingNow = isBossIntroPlayingNow || isBossDeathCinematicPlaying_;
 	if (playerManager_) {
 
 
 		playerManager_->ApplyInfiniteMode(isInfiniteMode_);
 
 		// 登場演出中は入力だけ止めて、見た目の同期は続ける
-		if (isBossIntroPlayingNow && playerManager_->GetPlayer()) {
+		if (isBossCinematicPlayingNow && playerManager_->GetPlayer()) {
 			playerManager_->GetPlayer()->LockAction(1);
 		}
 
@@ -763,6 +764,21 @@ void GamePlayScene::Update() {
 			playerPos_,
 			targetPos
 		);
+	}
+
+	if (bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
+		if (!isBossDeathCinematicPlaying_) {
+			isBossDeathCinematicPlaying_ = true;
+			bossDeathCinematicTimer_ = bossDeathCinematicDuration_;
+			bossDeathCinematicFocus_ = bossManager_->GetBossFocusPosition();
+			bossDeathFlashTimer_ = 45;
+		} else if (bossDeathCinematicTimer_ > 0) {
+			bossDeathCinematicTimer_--;
+			bossDeathCinematicFocus_ = bossManager_->GetBossFocusPosition();
+		}
+	} else {
+		isBossDeathCinematicPlaying_ = false;
+		bossDeathCinematicTimer_ = 0;
 	}
 
 
@@ -889,6 +905,7 @@ void GamePlayScene::Update() {
 			Vector3 currentRot = camera_->GetRotation();
 
 			bool isBossIntroPlaying = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+			bool isBossDeathCinematicPlaying = isBossDeathCinematicPlaying_;
 			BossManager::IntroCameraState bossIntroState =
 				bossManager_ ? bossManager_->GetBossIntroCameraState() : BossManager::IntroCameraState::None;
 			int bossIntroTimer = bossManager_ ? bossManager_->GetBossIntroTimer() : 0;
@@ -897,8 +914,30 @@ void GamePlayScene::Update() {
 			Vector3 targetPos = currentPos;
 			Vector3 targetRot = currentRot;
 
+			if (isBossDeathCinematicPlaying && mapManager_ && mapManager_->IsBossMap()) {
+				float t = 1.0f - static_cast<float>(bossDeathCinematicTimer_) / static_cast<float>(bossDeathCinematicDuration_);
+				t = std::clamp(t, 0.0f, 1.0f);
+				float pulse = std::sinf(t * 3.14159f);
+				const bool isSplitDeath = bossManager_ && bossManager_->IsSplitBossBattle();
+				float baseDistance = isSplitDeath ? 18.0f : 13.0f;
+				float baseHeight = isSplitDeath ? 6.8f : 5.4f;
+				float distance = baseDistance - pulse * 1.4f;
+
+				targetPos = {
+					bossDeathCinematicFocus_.x,
+					bossDeathCinematicFocus_.y + baseHeight + pulse * 0.8f,
+					bossDeathCinematicFocus_.z - distance
+				};
+
+				targetRot = {
+					(isSplitDeath ? 0.52f : 0.48f) - pulse * 0.04f,
+					0.0f,
+					0.0f
+				};
+			}
+
 			// ボス部屋突入時の演出カメラ
-			if (isBossIntroPlaying && mapManager_ && mapManager_->IsBossMap() && boss) {
+			else if (isBossIntroPlaying && mapManager_ && mapManager_->IsBossMap() && boss) {
 
 				// 分裂ボス時は2体の中心、通常時は通常ボス位置を使う
 				Vector3 bossPos = bossManager_->GetBossFocusPosition();
@@ -1205,6 +1244,8 @@ void GamePlayScene::Update() {
 				} else {
 					followRate = 0.16f;
 				}
+			} else if (isBossDeathCinematicPlaying) {
+				followRate = 0.28f;
 			}
 
 			// 位置をなめらかに移動
@@ -1258,7 +1299,7 @@ void GamePlayScene::Update() {
 				pickup.isActive = false;
 				continue;
 			}
-			else {
+			else if (handManager_.GetHandSize() >= handManager_.GetMaxHandSize()) {
 				// 手札が一杯ならカード交換モードへ移行
 				isCardSwapMode_ = true;
 				pendingCard_ = pickup.card;
@@ -1268,6 +1309,10 @@ void GamePlayScene::Update() {
 				// 手札の右端に仮置きする
 				handManager_.AddPendingCard(pendingCard_);
 				break;
+			}
+			else {
+				pickup.isActive = false;
+				continue;
 			}
 		}
 
@@ -1561,7 +1606,7 @@ void GamePlayScene::Update() {
 		bossPos = boss->GetPosition();
 	}
 
-	if (!isBossIntroPlaying) {
+	if (!isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
 		UpdateCardUse(input);
 	}
 	UpdateCardUseFlash();
@@ -1608,7 +1653,7 @@ void GamePlayScene::Update() {
 		TextManager::GetInstance()->SetPosition("ReadyCardT", textPosX, textPosY);
 
 		// Eキーで構え中の攻撃カードを発動
-		if (input->Triggerkey(DIK_E)) {
+		if (!isBossDeathCinematicPlaying_ && input->Triggerkey(DIK_E)) {
 			if (playerCardSystem_ && playerManager_ && !playerManager_->IsDodging()) {
 				StartCardUseFlash(readiedCard_);
 				playerCardSystem_->UseCard(
@@ -1631,7 +1676,7 @@ void GamePlayScene::Update() {
 	}
 
 	// プレイヤー用カードシステム更新
-	if (playerCardSystem_ && !isBossIntroPlaying) {
+	if (playerCardSystem_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
 		playerCardSystem_->Update(
 			player,
 			enemyManager_.get(),
@@ -1728,6 +1773,7 @@ void GamePlayScene::Draw() {
 
 	Boss* boss = bossManager_ ? bossManager_->GetBoss() : nullptr;
 	const bool isBossIntroPlaying = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
 
 	// GPUパーティクルの描画準備（DispatchでComputeシェーダーを実行して、描画に必要なデータをGPU側で更新してもらう）
 	GPUParticleManager::GetInstance()->Dispatch(commandList);
@@ -1799,7 +1845,7 @@ void GamePlayScene::Draw() {
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
 	// 手札カードもBloom対象にしたいので、MRT描画中に3Dとして描く
-	if (!isBossIntroPlaying) {
+	if (!isBossCinematicPlaying) {
 
 		// ==========================================
 		// ★ 修正1：黒幕を「手札」より先に描画する！
@@ -1854,7 +1900,7 @@ void GamePlayScene::Draw() {
 	// =========================================
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 
-	if (!isBossIntroPlaying) {
+	if (!isBossCinematicPlaying) {
 
 		if (!isCardSwapMode_) {
 			handManager_.DrawCooldownOverlays();
@@ -1993,6 +2039,18 @@ void GamePlayScene::DrawDebugUI() {
 		ImGui::Text("[Boss]");
 		ImGui::Text("Boss HP: %d / %d", boss->GetHP(), boss->GetMaxHP());
 		ImGui::Text("Boss Dead: %s", boss->IsDead() ? "true" : "false");
+		ImGui::Text("Death Cinematic: %s (%d)", isBossDeathCinematicPlaying_ ? "true" : "false", bossDeathCinematicTimer_);
+		if (ImGui::Button("Kill Boss Now")) {
+			if (bossManager_ && bossManager_->IsSplitBossBattle()) {
+				for (int i = 0; i < 2; ++i) {
+					if (Boss* splitBoss = bossManager_->GetBossAt(i); splitBoss && !splitBoss->IsDead()) {
+						splitBoss->TakeDamage(splitBoss->GetMaxHP());
+					}
+				}
+			} else if (!boss->IsDead()) {
+				boss->TakeDamage(boss->GetMaxHP());
+			}
+		}
 	}
 
 	// デバッグ用に経験値を加算
@@ -2191,6 +2249,10 @@ void GamePlayScene::ResetBattleDebug() {
 	// レベルボーナスのリセット
 	int currentLevel = playerManager_ ? playerManager_->GetLevel() : 1;
 	levelUpBonusManager_.Reset(currentLevel);
+
+	isBossDeathCinematicPlaying_ = false;
+	bossDeathCinematicPlayed_ = false;
+	bossDeathCinematicTimer_ = 0;
 }
 
 
@@ -2500,6 +2562,10 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
+	if (isBossDeathCinematicPlaying_) {
+		return;
+	}
+
 	// プレイヤー本体を取得
 	Player* player = playerManager_->GetPlayer();
 
@@ -2672,8 +2738,9 @@ void GamePlayScene::DrawPauseUI() {
 
 void GamePlayScene::UpdateBossIntroLetterbox() {
 	const bool isBossIntroPlaying = bossManager_ && bossManager_->IsBossIntroPlaying();
+	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
 
-	if (isBossIntroPlaying) {
+	if (isBossCinematicPlaying) {
 		bossIntroLetterboxFadeTimer_ = bossIntroLetterboxFadeDuration_;
 	}
 	else if (wasBossIntroPlaying_) {
@@ -2683,12 +2750,13 @@ void GamePlayScene::UpdateBossIntroLetterbox() {
 		bossIntroLetterboxFadeTimer_--;
 	}
 
-	wasBossIntroPlaying_ = isBossIntroPlaying;
+	wasBossIntroPlaying_ = isBossCinematicPlaying;
 }
 
 void GamePlayScene::DrawBossIntroLetterbox() {
 	const bool isBossIntroPlaying = bossManager_ && bossManager_->IsBossIntroPlaying();
-	if (!isBossIntroPlaying && bossIntroLetterboxFadeTimer_ <= 0) {
+	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
+	if (!isBossCinematicPlaying && bossIntroLetterboxFadeTimer_ <= 0) {
 		return;
 	}
 
@@ -2696,8 +2764,8 @@ void GamePlayScene::DrawBossIntroLetterbox() {
 	float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 	float barH = screenH * 0.13f;
 	float fadeT = static_cast<float>(bossIntroLetterboxFadeTimer_) / static_cast<float>(bossIntroLetterboxFadeDuration_);
-	float letterboxAlpha = isBossIntroPlaying ? 1.0f : fadeT;
-	float slideOffset = isBossIntroPlaying ? 0.0f : (1.0f - fadeT) * barH;
+	float letterboxAlpha = isBossCinematicPlaying ? 1.0f : fadeT;
+	float slideOffset = isBossCinematicPlaying ? 0.0f : (1.0f - fadeT) * barH;
 
 	if (bossIntroTopBar_) {
 		bossIntroTopBar_->SetPosition({ screenW * 0.5f, barH * 0.5f - slideOffset });

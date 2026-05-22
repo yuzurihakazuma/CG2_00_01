@@ -270,7 +270,7 @@ void BossManager::EndBossIntro() {
     bossIntroTimer_ = 0;
 }
 
-bool BossManager::ShouldTriggerGameClear(MapManager* mapManager) const {
+bool BossManager::IsBossBattleFinished(MapManager* mapManager) const {
 	// 無効な値ならクリアしない
 	if (!mapManager || !boss_) {
 		return false;
@@ -283,13 +283,34 @@ bool BossManager::ShouldTriggerGameClear(MapManager* mapManager) const {
 
 	// 10階の分裂ボスは2体とも倒していて、死亡処理も終わっている時だけクリア
 	if (bossType_ == BossType::Split) {
-		bool leftDead = !splitBosses_[0] || splitBosses_[0]->IsDead();
-		bool rightDead = !splitBosses_[1] || splitBosses_[1]->IsDead();
+		bool leftDead = !splitBosses_[0] || (splitBosses_[0]->IsDead() && !splitBosses_[0]->IsDeathAnimationPlaying());
+		bool rightDead = !splitBosses_[1] || (splitBosses_[1]->IsDead() && !splitBosses_[1]->IsDeathAnimationPlaying());
 		return leftDead && rightDead && bossDeadHandled_;
 	}
 
 	// 5階など通常ボスは今まで通り
 	return boss_->IsDead() && bossDeadHandled_;
+}
+
+bool BossManager::ShouldTriggerGameClear(MapManager* mapManager) const {
+	if (!mapManager || mapManager->GetCurrentFloor() < 10) {
+		return false;
+	}
+
+	return IsBossBattleFinished(mapManager);
+}
+
+bool BossManager::IsBossDeathAnimationPlaying() const {
+	if (bossType_ == BossType::Split) {
+		for (const auto& splitBoss : splitBosses_) {
+			if (splitBoss && splitBoss->IsDeathAnimationPlaying()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	return boss_ && boss_->IsDeathAnimationPlaying();
 }
 
 
@@ -396,7 +417,9 @@ void BossManager::Update(
 	// =========================================================
 	// ボス本体の更新
 	// =========================================================
-	if (bossType_ != BossType::Split && !boss_->IsDead() && mapManager->IsBossMap()) {
+	if (bossType_ != BossType::Split &&
+		(!boss_->IsDead() || boss_->IsDeathAnimationPlaying()) &&
+		mapManager->IsBossMap()) {
 
 		// 衝突で戻すために更新前の位置を保存
 		Vector3 oldBossPos = boss_->GetPosition();
@@ -485,7 +508,20 @@ void BossManager::Update(
 
 			// 分裂ボス2体をそれぞれ更新する
 			for (int i = 0; i < 2; ++i) {
-				if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
+				if (!splitBosses_[i]) {
+					continue;
+				}
+
+				if (splitBosses_[i]->IsDead()) {
+					if (splitBosses_[i]->IsDeathAnimationPlaying()) {
+						splitBosses_[i]->Update();
+						if (splitBossObjs_[i]) {
+							splitBossObjs_[i]->SetTranslation(splitBosses_[i]->GetPosition());
+							splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
+							splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
+							splitBossObjs_[i]->Update();
+						}
+					}
 					continue;
 				}
 
@@ -720,18 +756,22 @@ void BossManager::Update(
 
 	if (bossType_ == BossType::Split) {
 		// 10階は2体とも倒れたら終了
-		bool leftDead = !splitBosses_[0] || splitBosses_[0]->IsDead();
-		bool rightDead = !splitBosses_[1] || splitBosses_[1]->IsDead();
+		bool leftDead = !splitBosses_[0] || (splitBosses_[0]->IsDead() && !splitBosses_[0]->IsDeathAnimationPlaying());
+		bool rightDead = !splitBosses_[1] || (splitBosses_[1]->IsDead() && !splitBosses_[1]->IsDeathAnimationPlaying());
 		isBossBattleFinished = leftDead && rightDead;
 	} else {
 		// 5階など通常ボスは今まで通り
-		isBossBattleFinished = boss_->IsDead();
+		isBossBattleFinished = boss_->IsDead() && !boss_->IsDeathAnimationPlaying();
 	}
 
 	if (isBossBattleFinished && !bossDeadHandled_) {
 		// 経験値付与
 		if (player) {
 			player->AddExp(5);
+		}
+
+		if (enemyManager) {
+			enemyManager->DefeatAllWithoutRewards();
 		}
 
 		// 倒した側の位置に近いところへカードを落とす
@@ -745,8 +785,8 @@ void BossManager::Update(
 			// 分裂ボスは残っている個体から1枚落とす
 			for (int i = 0; i < 2; ++i) {
 				if (splitBosses_[i] && splitBosses_[i]->HasAnyCard()) {
-					Card dropCard = splitBosses_[i]->GetRandomDropCard();
-					if (dropCard.id != -1) {
+					Card dropCard = CardDatabase::GetRandomPlayerCard();
+					if (false && dropCard.id != -1) {
 						dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
 						cardPickupManager->AddPickup(dropPos, dropCard);
 					}
@@ -755,8 +795,8 @@ void BossManager::Update(
 			}
 		} else {
 			if (boss_->HasAnyCard()) {
-				Card dropCard = boss_->GetRandomDropCard();
-				if (dropCard.id != -1) {
+				Card dropCard = CardDatabase::GetRandomPlayerCard();
+				if (false && dropCard.id != -1) {
 					dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
 					cardPickupManager->AddPickup(dropPos, dropCard);
 				}
@@ -820,13 +860,13 @@ void BossManager::Draw(MapManager* mapManager) {
 		if (bossType_ == BossType::Split) {
 			// 分裂ボスは2体描画する
 			for (int i = 0; i < 2; ++i) {
-				if (splitBosses_[i] && !splitBosses_[i]->IsDead() && splitBosses_[i]->IsVisible() && splitBossObjs_[i]) {
+				if (splitBosses_[i] && (!splitBosses_[i]->IsDead() || splitBosses_[i]->IsDeathAnimationPlaying()) && splitBosses_[i]->IsVisible() && splitBossObjs_[i]) {
 					splitBossObjs_[i]->Draw();
 				}
 			}
 		} else {
 			// 通常ボスは今まで通り
-			if (!boss_->IsDead() && boss_->IsVisible() && bossObj_) {
+			if ((!boss_->IsDead() || boss_->IsDeathAnimationPlaying()) && boss_->IsVisible() && bossObj_) {
 				bossObj_->Draw();
 			}
 		}

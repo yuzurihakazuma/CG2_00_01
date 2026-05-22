@@ -289,6 +289,11 @@ private: // メンバ変数
 	bool wasBossIntroPlaying_ = false;
 	int bossIntroLetterboxFadeTimer_ = 0;
 	const int bossIntroLetterboxFadeDuration_ = 30;
+	bool isBossDeathCinematicPlaying_ = false;
+	bool bossDeathCinematicPlayed_ = false;
+	int bossDeathCinematicTimer_ = 0;
+	const int bossDeathCinematicDuration_ = 150;
+	Vector3 bossDeathCinematicFocus_{ 0.0f, 0.0f, 0.0f };
 
 	std::unique_ptr<SkinnedObj3d> skinnedObj_ = nullptr;
 

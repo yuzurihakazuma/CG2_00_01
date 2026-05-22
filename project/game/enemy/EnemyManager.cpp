@@ -1105,6 +1105,23 @@ void EnemyManager::Clear() {
 	enemyDeadHandled_.clear();
 }
 
+void EnemyManager::DefeatAllWithoutRewards() {
+	for (size_t i = 0; i < enemies_.size(); ++i) {
+		if (!enemies_[i] || enemies_[i]->IsDead()) {
+			continue;
+		}
+
+		if (i < enemyDeadHandled_.size()) {
+			enemyDeadHandled_[i] = true;
+		}
+		if (i < enemyCardSystems_.size() && enemyCardSystems_[i]) {
+			enemyCardSystems_[i]->Reset();
+		}
+
+		enemies_[i]->TakeDamage(enemies_[i]->GetHP());
+	}
+}
+
 void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 	if (!player || player->IsDead() || !mapManager) {
 		return;

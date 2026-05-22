@@ -47,6 +47,7 @@ public:
     int GetHP() const { return hp_; }
     int GetMaxHP() const { return maxHP_; }
     bool IsDead() const { return isDead_; }
+    bool IsDeathAnimationPlaying() const { return isDead_ && deathAnimationTimer_ > 0; }
 
     bool IsEnraged() const{ return !isDead_ && hasEnrageTriggered_; }
 
@@ -145,6 +146,7 @@ private:
     int GetRecoveryTimeForCard(int cardId, bool isEnraged) const;
     void ApplyCastingPose(float normalizedTime);
     void ApplyPreBattlePose(float normalizedTime);
+    void UpdateDeathAnimation();
     void ResetPose();
 
     bool IsCardReady(int cardId) const;
@@ -162,6 +164,9 @@ private:
     int hp_ = 20;
     int maxHP_ = 20;
     bool isDead_ = false;
+    int deathAnimationTimer_ = 0;
+    const int deathAnimationDuration_ = 150;
+    float deathStartY_ = 0.0f;
 
     float chaseSpeed_ = 0.06f;
     float chaseRange_ = 100.0f;

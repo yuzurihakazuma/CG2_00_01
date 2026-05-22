@@ -36,6 +36,7 @@ public:
 
 	// 全ての敵を消す
 	void Clear();
+	void DefeatAllWithoutRewards();
 
 	// 当たり判定のチェック
 	void CheckCollisions(Player* player, MapManager* mapManager);
