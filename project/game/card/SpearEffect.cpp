@@ -76,7 +76,7 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
         } else if ( localTimer <= 9 ) {
             // 7〜9フレーム：一気に突き出す！（発生が遅くなった分、速度が上がります）
             float t = static_cast< float >( localTimer - 6 ) / 3.0f;
-            zOffset = -0.8f + ( 6.8f * t );
+            zOffset = -0.8f + ( 7.8f * t );
             if ( cycle == 2 ) zOffset += 2.0f;
         } else {
             // 10〜14フレーム：元の位置にスッと戻る

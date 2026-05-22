@@ -14,4 +14,4 @@ id,name,cost,effectType,sffectValue,description,modelName,effectName,seName,rari
 13,蹴り,2,0,1,1～2ダメージ与えて\n敵を後方へ吹き飛ばす,CardKick,nullptr,nullptr,0,0,0
 14,剣,5,0,3,前方の広範囲ni\n横なぎに切りつける,CardSword,nullptr,nullptr,0,1,2
 15,ハンマー,6,0,2,力強く叩きつけ\nスタンさせる,CardHammer,nullptr,nullptr,0,1,2
-16,槍,8,0,3,3連続で突き攻撃をする,CardSpear,nullptr,nullptr,0,1,2
+16,槍,8,0,2,3連続で突き攻撃をする,CardSpear,nullptr,nullptr,0,1,2
