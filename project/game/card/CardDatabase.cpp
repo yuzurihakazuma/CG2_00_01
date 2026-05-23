@@ -7,6 +7,11 @@
 
 std::unordered_map<int, Card> CardDatabase::database_;
 
+namespace {
+constexpr int kBossRoomExcludedCardId = 11;
+constexpr int kBossRoomAttackCardWeight = 3;
+}
+
 void CardDatabase::Initialize(const std::string& filePath) {
     database_.clear();
 
@@ -168,6 +173,29 @@ Card CardDatabase::GetRandomPlayerCard() {
         return GetCardData(2);
     }
 
-    int randomIndex = rand() % dropCards.size();
+    int randomIndex = rand() % static_cast<int>(dropCards.size());
     return dropCards[randomIndex];
+}
+
+Card CardDatabase::GetRandomBossRoomPlayerCard() {
+    std::vector<Card> weightedDropCards;
+
+    for (const auto& pair : database_) {
+        const Card& card = pair.second;
+        if (card.id <= 1 || card.id >= 100 || card.id == kBossRoomExcludedCardId) {
+            continue;
+        }
+
+        int weight = card.effectType == CardEffectType::Attack ? kBossRoomAttackCardWeight : 1;
+        for (int i = 0; i < weight; ++i) {
+            weightedDropCards.push_back(card);
+        }
+    }
+
+    if (weightedDropCards.empty()) {
+        return GetCardData(2);
+    }
+
+    int randomIndex = rand() % static_cast<int>(weightedDropCards.size());
+    return weightedDropCards[randomIndex];
 }

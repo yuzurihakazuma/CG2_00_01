@@ -3222,7 +3222,10 @@ bool GamePlayScene::SpawnTimedCardPickup() {
 
 	const auto& selected = filtered.front();
 	Vector3 worldPos = spawnManager_.TileToWorldPosition(selected.first, selected.second, -0.99f);
-	cardPickupManager_.AddPickup(worldPos, CardDatabase::GetRandomPlayerCard());
+	Card dropCard = mapManager_->IsBossMap()
+		? CardDatabase::GetRandomBossRoomPlayerCard()
+		: CardDatabase::GetRandomPlayerCard();
+	cardPickupManager_.AddPickup(worldPos, dropCard);
 	return true;
 }
 

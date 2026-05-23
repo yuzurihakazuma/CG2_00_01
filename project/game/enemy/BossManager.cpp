@@ -644,7 +644,7 @@ void BossManager::Update(
 					}
 				}
 
-				Card dropCard = CardDatabase::GetRandomPlayerCard();
+				Card dropCard = CardDatabase::GetRandomBossRoomPlayerCard();
 				cardPickupManager->AddPickup(dropPos, dropCard);
 
 				// 次の出現までリセット
@@ -785,7 +785,7 @@ void BossManager::Update(
 			// 分裂ボスは残っている個体から1枚落とす
 			for (int i = 0; i < 2; ++i) {
 				if (splitBosses_[i] && splitBosses_[i]->HasAnyCard()) {
-					Card dropCard = CardDatabase::GetRandomPlayerCard();
+					Card dropCard = CardDatabase::GetRandomBossRoomPlayerCard();
 					if (false && dropCard.id != -1) {
 						dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
 						cardPickupManager->AddPickup(dropPos, dropCard);
@@ -795,7 +795,7 @@ void BossManager::Update(
 			}
 		} else {
 			if (boss_->HasAnyCard()) {
-				Card dropCard = CardDatabase::GetRandomPlayerCard();
+				Card dropCard = CardDatabase::GetRandomBossRoomPlayerCard();
 				if (false && dropCard.id != -1) {
 					dropPos.y = mapManager->GetFloorSurfaceY(0.5f);
 					cardPickupManager->AddPickup(dropPos, dropCard);
