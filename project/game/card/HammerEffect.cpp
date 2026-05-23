@@ -173,7 +173,7 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
 
                     if ( Length(diff) < 4.0f ) {
                         enemy->TakeDamage(randomDamage);
-                        enemy->SetStun(180);
+                        enemy->SetStun(120);
                     }
                 }
             }
@@ -181,14 +181,14 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
                 Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
                 if ( Length(diff) < 5.0f ) {
                     boss->TakeDamage(randomDamage);
-                    boss->SetStun(180);
+                    boss->SetStun(120);
                 }
             }
             if ( extraBoss && !extraBoss->IsDead() ) {
                 Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
                 if ( Length(diff) < 5.0f ) {
                     extraBoss->TakeDamage(randomDamage);
-                    extraBoss->SetStun(180);
+                    extraBoss->SetStun(120);
                 }
             }
         } else {
@@ -197,7 +197,7 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
                 Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
                 if ( Length(diff) < 3.5f ) {
                     player->TakeDamage(randomDamage, pos_);
-                    player->SetStun(180);
+                    player->SetStun(120);
                 }
             }
         }

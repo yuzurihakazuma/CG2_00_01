@@ -420,12 +420,7 @@ void HandManager::RemoveCard(int index) {
 		isDissolving_.erase(isDissolving_.begin() + index);
 		dissolveThresholds_.erase(dissolveThresholds_.begin() + index);
 
-		if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
-			selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
-		}
-		if (selectedCardIndex_ < 0) {
-			selectedCardIndex_ = 0;
-		}
+		selectedCardIndex_ = 0;
 	}
 }
 
