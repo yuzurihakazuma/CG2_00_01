@@ -1916,6 +1916,10 @@ void GamePlayScene::Draw() {
 			bossManager_->DrawHpBar(mapManager_.get());
 		}
 
+		if (minimap_) {
+			minimap_->Draw(); // 大きいマップを先に描いてHUDを上に重ねる
+		}
+
 		if (playerStatusBgSprite_) {
 			playerStatusBgSprite_->Draw();
 		}
@@ -1923,10 +1927,6 @@ void GamePlayScene::Draw() {
 
 		if (handCountBgSprite_) {
 			handCountBgSprite_->Draw();
-		}
-
-		if (minimap_) {
-			minimap_->Draw();
 		}
 
 		levelUpBonusManager_.Draw();
