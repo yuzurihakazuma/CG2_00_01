@@ -33,6 +33,8 @@ private:
 	int castTimer_ = 0;
 	int castDuration_ = 0;
 	bool swapModeVisual_ = false;
+	bool pendingReturnToFist_ = false;
+	bool manualSelectionAfterUse_ = false;
 
 	bool IsCardCoolingDown(int index) const;
 	float GetCardCooldownRatio(int index) const;
@@ -40,6 +42,9 @@ private:
 	float GetCardCastRatio(int index) const;
 	bool IsCardSelectableInCurrentMode(int index) const;
 	void MoveSelection(int direction);
+	void ClampSelectedCardIndex();
+	bool SelectCardById(int cardId);
+	void ApplyPostUseSelectionAfterRemove();
 
 public:
 	//初期化
