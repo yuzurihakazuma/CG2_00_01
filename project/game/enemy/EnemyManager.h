@@ -53,9 +53,11 @@ private:
 		std::unique_ptr<SkinnedObj3d> skinned;
 		std::unique_ptr<Obj3d> cardRing;
 		std::unique_ptr<Obj3d> cardRingFill;
+		bool useHeadIdleAnimation = false;
+		float headIdleTimer = 0.0f;
 	};
 
-	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera) const;
+	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera, bool useBossMinionModel = false) const;
 	void UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const;
 	void DrawEnemyVisual(const EnemyVisual& visual) const;
 

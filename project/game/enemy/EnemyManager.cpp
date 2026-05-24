@@ -336,7 +336,7 @@ const char* GetEnemyModelName(Enemy::Type type) {
 		return "cornerEnemy";
 	case Enemy::Type::Normal:
 	default:
-		return "normalEnemy";
+		return "happyEnemy";
 	}
 }
 }
@@ -354,16 +354,23 @@ void EnemyManager::Initialize() {
 	
 }
 
-EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera* camera) const {
+EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera* camera, bool useBossMinionModel) const {
 	EnemyVisual visual;
 
 	if (type == Enemy::Type::Normal) {
-		visual.skinned = SkinnedObj3d::Create("normalEnemy", "resources/enemy", "normalEnemy.gltf");
+		const char* modelName = useBossMinionModel ? "normalEnemy" : "happyEnemy";
+		const char* filename = useBossMinionModel ? "normalEnemy.gltf" : "happyEnemy.gltf";
+		visual.skinned = SkinnedObj3d::Create(modelName, "resources/enemy", filename);
 		if (visual.skinned) {
 			visual.skinned->SetCamera(camera);
 			visual.skinned->SetLoopAnimation(true);
-			visual.skinned->SetWalkAnimation(5.0f, 1.35f);
-			visual.skinned->SetIsWalking(false);
+			if (useBossMinionModel) {
+				visual.skinned->SetWalkAnimation(5.0f, 1.35f);
+				visual.skinned->SetIsWalking(false);
+			} else {
+				visual.useHeadIdleAnimation = true;
+				visual.skinned->SetIsWalking(false);
+			}
 		}
 	}
 
@@ -428,7 +435,14 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, co
 		visual.skinned->SetRotation(enemy.GetRotation());
 		visual.skinned->SetScale(enemy.GetScale());
 		visual.skinned->SetColor(GetEnemyDisplayColor(enemy));
-		visual.skinned->SetIsWalking(Length(enemy.GetPosition() - previousPosition) > 0.001f);
+
+		if (visual.useHeadIdleAnimation && visual.skinned->HasJoint("head")) {
+			visual.headIdleTimer += 1.0f / 60.0f;
+			const float pitch = std::sinf(visual.headIdleTimer * 4.0f) * 0.10f;
+			visual.skinned->SetJointRotationOffset("head", { pitch, 0.0f, 0.0f });
+		} else {
+			visual.skinned->SetIsWalking(Length(enemy.GetPosition() - previousPosition) > 0.001f);
+		}
 		visual.skinned->Update();
 		return;
 	}
@@ -950,7 +964,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 		newEnemy->SetBossRoomBehavior(true);
 
 		// 敵の見た目（3Dモデル）を生成
-		auto enemyVisual = CreateEnemyVisual(newEnemy->GetType(), camera);
+		auto enemyVisual = CreateEnemyVisual(newEnemy->GetType(), camera, true);
 		if (enemyVisual.obj || enemyVisual.skinned) {
 			UpdateEnemyVisual(enemyVisual, *newEnemy, spawnPos);
 		}

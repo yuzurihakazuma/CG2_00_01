@@ -78,6 +78,7 @@ void GamePlayScene::Initialize() {
 
 	// 敵モデル読み込み
 	ModelManager::GetInstance()->LoadModel("enemy", "resources/enemy", "enemy.obj");
+	ModelManager::GetInstance()->LoadModel("happyEnemy", "resources/enemy", "happyEnemy.gltf");
 	ModelManager::GetInstance()->LoadModel("normalEnemy", "resources/enemy", "normalEnemy.gltf");
 	ModelManager::GetInstance()->LoadModel("wallEnemy", "resources/enemy", "wallEnemy.obj");
 	ModelManager::GetInstance()->LoadModel("cornerEnemy", "resources/enemy", "cornerEnemy.obj");
