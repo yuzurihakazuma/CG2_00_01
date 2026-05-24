@@ -28,9 +28,23 @@ private:
 	int cooldownCardId_ = -1;
 	int cooldownTimer_ = 0;
 	int cooldownDuration_ = 0;
+	int castCardId_ = -1;
+	int castCardIndex_ = -1;
+	int castTimer_ = 0;
+	int castDuration_ = 0;
+	bool swapModeVisual_ = false;
+	bool pendingReturnToFist_ = false;
+	bool manualSelectionAfterUse_ = false;
 
 	bool IsCardCoolingDown(int index) const;
 	float GetCardCooldownRatio(int index) const;
+	bool IsCardCasting(int index) const;
+	float GetCardCastRatio(int index) const;
+	bool IsCardSelectableInCurrentMode(int index) const;
+	void MoveSelection(int direction);
+	void ClampSelectedCardIndex();
+	bool SelectCardById(int cardId);
+	void ApplyPostUseSelectionAfterRemove();
 
 public:
 	//初期化
@@ -87,6 +101,9 @@ public:
 	void RemoveCardImmediate(int index);
 
 	void SetCooldownDisplay(int cardId, int remainingFrames, int durationFrames);
+	void SetCastDisplay(int cardId, int remainingFrames, int durationFrames, int cardIndex = -1);
+
+	void SetSwapModeVisual(bool enabled) { swapModeVisual_ = enabled; }
 
 	// カーソルの位置を強制的に移動させる関数
 	void SetSelectedCardIndex(int index) {
