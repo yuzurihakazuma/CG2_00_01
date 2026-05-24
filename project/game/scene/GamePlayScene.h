@@ -162,7 +162,11 @@ private: // メンバ変数
 
 	//カード使用の処理
 	void UpdateCardUse(Input *input);
-	void StartCardUseFlash(const Card& card);
+	void SyncReadiedCardIndex();
+	void PauseMagicCastForSwap();
+	void ResumeMagicCastAfterSwap();
+	void EndMagicCast(bool consumeReadiedCard);
+	void StartCardUseFlash(const Card& card, bool persistent = false, bool dissolveEnabled = true);
 	void UpdateCardUseFlash();
 	void DrawCardUseFlash();
 	void UpdatePlayerStatusGaugeUI();
@@ -273,10 +277,18 @@ private: // メンバ変数
 	bool isCardReady_ = false;       // 現在カードを構えているか
 	Card readiedCard_{};             // 構えているカードの情報
 	int cardReadyTimer_ = 0;         // 構えていられる残り時間
+	int readiedCardIndex_ = -1;
+	static constexpr int kMagicCastDuration = 120;
+	bool isMagicCastPausedForSwap_ = false;
+	int magicRepeatCooldownTimer_ = 0;
+	static constexpr int kMagicRepeatCooldownDuration = 24;
 	int fistCooldownTimer_ = 0;
 	const int fistCooldownDuration_ = 60;
 	std::unique_ptr<Obj3d> cardUseFlashObj_ = nullptr;
 	int cardUseFlashTimer_ = 0;
+	bool cardUseFlashPersistent_ = false;
+	bool cardUseFlashDissolving_ = false;
+	bool cardUseFlashDissolveEnabled_ = true;
 	static constexpr int kCardUseFlashDuration = 18;
 
 	// ポーズ画面関連

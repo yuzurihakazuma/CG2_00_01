@@ -170,7 +170,11 @@ void CardUseSystem::UseCard(const Card& card, const Vector3& casterPos, float ca
 }
 
 // 実際のカード発動処理
-void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float casterYaw,bool isPlayerCaster,Player* player,Boss* casterBoss) {
+void CardUseSystem::UseCardImmediately(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player, Boss* casterBoss, bool restoreIdlePose) {
+	ExecuteCard(card, casterPos, casterYaw, isPlayerCaster, player, casterBoss, restoreIdlePose);
+}
+
+void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float casterYaw,bool isPlayerCaster,Player* player,Boss* casterBoss, bool restoreIdlePose) {
 
 	// 1. 辞書の中に、使われたカードのIDが登録されているかチェック
 	if (effectFactory_.count(card.id)) {
@@ -188,7 +192,7 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 	}
 
 	// プレイヤー発動後は通常姿勢へ戻す
-	if (isPlayerCaster && player) {
+	if (restoreIdlePose && isPlayerCaster && player) {
 		player->PlayIdlePose(8);
 	}
 }

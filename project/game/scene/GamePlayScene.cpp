@@ -565,6 +565,10 @@ void GamePlayScene::Update() {
 	}
 
 	if (isCardSwapMode_) {
+		if (isCardReady_) {
+			PauseMagicCastForSwap();
+		}
+
 		if (tutorial_ && tutorial_->IsActive()) {
 			tutorial_->SetTextSuppressed(true);
 		}
@@ -1301,6 +1305,9 @@ void GamePlayScene::Update() {
 				continue;
 			}
 			else if (handManager_.GetHandSize() >= handManager_.GetMaxHandSize()) {
+				if (isCardReady_) {
+					PauseMagicCastForSwap();
+				}
 				// 手札が一杯ならカード交換モードへ移行
 				isCardSwapMode_ = true;
 				pendingCard_ = pickup.card;
@@ -1485,6 +1492,9 @@ void GamePlayScene::Update() {
 		if (fistCooldownTimer_ > 0) {
 			fistCooldownTimer_--;
 		}
+		if (magicRepeatCooldownTimer_ > 0) {
+			magicRepeatCooldownTimer_--;
+		}
 		handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 		if (uiCamera_) {
 			uiCamera_->Update();
@@ -1613,68 +1623,36 @@ void GamePlayScene::Update() {
 	}
 	UpdateCardUseFlash();
 
-	// ==========================================
-	// 攻撃カードの「撃ち放題」タイマーと発動処理
-	// ==========================================
-	if (isCardReady_ && !isBossIntroPlaying) {
-		cardReadyTimer_--; // 毎フレーム時間を減らす
-
-		// 画面に表示する文字を作る
-		std::string displayText = "Eキーで発動：\n" + readiedCard_.name;
-
-		if (cardReadyTimer_ > 120) {
-			// 【残り2秒(120フレーム)より多いとき】
-			// まだ余裕があるので、ずっと常時表示しておく
-			TextManager::GetInstance()->SetText("ReadyCardT", displayText);
-
+	if (isCardReady_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
+		cardReadyTimer_--;
+		SyncReadiedCardIndex();
+		if (!isCardReady_) {
+			return;
 		}
-		else {
-			// 【残り2秒以下になったとき】
-			// 時間切れが近いので、チカチカ点滅させてプレイヤーを焦らす！
-			// （% 20 >= 10 にすることで、少し早めのスピードで点滅します）
-			if (cardReadyTimer_ % 20 >= 10) {
-				TextManager::GetInstance()->SetText("ReadyCardT", displayText);
-			}
-			else {
-				TextManager::GetInstance()->SetText("ReadyCardT", "");
-			}
+		if (readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+			handManager_.SetSelectedCardIndex(readiedCardIndex_);
 		}
+
+		handManager_.SetCastDisplay(readiedCard_.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
+		TextManager::GetInstance()->SetText("ReadyCardT", "詠唱中\nSPACEで発動\n" + readiedCard_.name);
+
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		TextManager::GetInstance()->SetPosition("ReadyCardT", screenW - 440.0f, 230.0f);
+		TextManager::GetInstance()->SetScale("ReadyCardT", 0.92f);
+		TextManager::GetInstance()->SetColor("ReadyCardT", 1.0f, 0.95f, 0.55f, 1.0f);
 
-		// カードUIと同じ設定値を使います
-		float bgWidth = 390.0f;
-		float bgHeight = 200.0f;
-		float marginRight = 50.0f;
-		float marginTop = 10.0f;
-
-		// X座標：カード説明の文字の左端に揃える
-		float textPosX = screenW - bgWidth - marginRight;
-		// Y座標：カードUIの黒枠の下端に、少し余白(20px)を足す
-		float textPosY = marginTop + bgHeight + 20.0f;
-
-		TextManager::GetInstance()->SetPosition("ReadyCardT", textPosX, textPosY);
-
-		// Eキーで構え中の攻撃カードを発動
-		if (!isBossDeathCinematicPlaying_ && input->Triggerkey(DIK_E)) {
-			if (playerCardSystem_ && playerManager_ && !playerManager_->IsDodging()) {
-				StartCardUseFlash(readiedCard_);
-				playerCardSystem_->UseCard(
-					readiedCard_,
-					playerPos_,
-					playerManager_->GetRotationY(),
-					true,
-					playerManager_->GetPlayer()
-				);
-			}
-		}
-
-		// 時間切れになったら構え状態（撃ち放題）を終了する
 		if (cardReadyTimer_ <= 0) {
-			isCardReady_ = false;
-
-			// 時間切れになったら文字を空（非表示）にする
-			TextManager::GetInstance()->SetText("ReadyCardT", "");
+			EndMagicCast(true);
 		}
+	} else if (!isCardReady_) {
+		handManager_.SetCastDisplay(-1, 0, 0, -1);
+		magicRepeatCooldownTimer_ = 0;
+		if (cardUseFlashPersistent_) {
+			cardUseFlashPersistent_ = false;
+			cardUseFlashDissolving_ = true;
+			cardUseFlashTimer_ = kCardUseFlashDuration;
+		}
+		TextManager::GetInstance()->SetText("ReadyCardT", "");
 	}
 
 	// プレイヤー用カードシステム更新
@@ -2305,6 +2283,9 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		int selectedIdx = handManager_.GetSelectedCardIndex();
 
 		// 選んでいるカードがID: 1（初期カード)なら交換をしない
+		const bool isSwappingReadiedCard = isMagicCastPausedForSwap_ && selectedIdx == readiedCardIndex_;
+		const bool shouldShiftReadiedIndex = isMagicCastPausedForSwap_ && selectedIdx < readiedCardIndex_;
+
 		if (handManager_.GetCard(selectedIdx).id == 1) {
 			return;
 		}
@@ -2323,15 +2304,113 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		}
 
 		// 交換が終わったら、一番左(0)を選択し直す！
-		handManager_.SetSelectedCardIndex(0);
 		handManager_.SetSwapModeVisual(false);
 
 		isCardSwapMode_ = false;
+
+		if (isSwappingReadiedCard) {
+			EndMagicCast(false);
+		}
+		else if (isMagicCastPausedForSwap_) {
+			if (shouldShiftReadiedIndex) {
+				readiedCardIndex_--;
+			}
+			ResumeMagicCastAfterSwap();
+		}
+		else {
+			handManager_.SetSelectedCardIndex(0);
+		}
 	}
 	
 }
 
-void GamePlayScene::StartCardUseFlash(const Card& card) {
+void GamePlayScene::PauseMagicCastForSwap() {
+	if (!isCardReady_ || isMagicCastPausedForSwap_) {
+		return;
+	}
+
+	isMagicCastPausedForSwap_ = true;
+	handManager_.SetCastDisplay(-1, 0, 0, -1);
+	if (playerManager_ && playerManager_->GetPlayer()) {
+		playerManager_->GetPlayer()->PlayIdlePose(8);
+	}
+	TextManager::GetInstance()->SetText("ReadyCardT", "");
+}
+
+void GamePlayScene::ResumeMagicCastAfterSwap() {
+	if (!isCardReady_) {
+		return;
+	}
+
+	isMagicCastPausedForSwap_ = false;
+	SyncReadiedCardIndex();
+	if (!isCardReady_) {
+		return;
+	}
+	if (readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+		handManager_.SetSelectedCardIndex(readiedCardIndex_);
+	}
+	handManager_.SetCastDisplay(readiedCard_.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
+	if (playerManager_ && playerManager_->GetPlayer()) {
+		playerManager_->GetPlayer()->PlayCardUsePose(10);
+	}
+}
+
+void GamePlayScene::SyncReadiedCardIndex() {
+	if (!isCardReady_) {
+		return;
+	}
+
+	auto isSameCard = [this](const Card& card) {
+		return card.id == readiedCard_.id &&
+			card.name == readiedCard_.name &&
+			card.modelName == readiedCard_.modelName;
+	};
+
+	if (readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+		if (isSameCard(handManager_.GetCard(readiedCardIndex_))) {
+			return;
+		}
+	}
+
+	for (int i = 0; i < handManager_.GetHandSize(); ++i) {
+		if (isSameCard(handManager_.GetCard(i))) {
+			readiedCardIndex_ = i;
+			return;
+		}
+	}
+
+	EndMagicCast(false);
+}
+
+void GamePlayScene::EndMagicCast(bool consumeReadiedCard) {
+	if (consumeReadiedCard && readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+		handManager_.SetSelectedCardIndex(readiedCardIndex_);
+		handManager_.StartDissolveSelectedCard();
+	}
+
+	if (playerManager_ && playerManager_->GetPlayer()) {
+		playerManager_->GetPlayer()->PlayIdlePose(8);
+	}
+
+	isCardReady_ = false;
+	isMagicCastPausedForSwap_ = false;
+	cardReadyTimer_ = 0;
+	magicRepeatCooldownTimer_ = 0;
+	readiedCard_ = Card{};
+	readiedCardIndex_ = -1;
+	handManager_.SetCastDisplay(-1, 0, 0, -1);
+
+	if (cardUseFlashPersistent_) {
+		cardUseFlashPersistent_ = false;
+		cardUseFlashDissolving_ = true;
+		cardUseFlashTimer_ = kCardUseFlashDuration;
+	}
+
+	TextManager::GetInstance()->SetText("ReadyCardT", "");
+}
+
+void GamePlayScene::StartCardUseFlash(const Card& card, bool persistent, bool dissolveEnabled) {
 	if (!camera_ || card.modelName.empty()) {
 		return;
 	}
@@ -2359,7 +2438,10 @@ void GamePlayScene::StartCardUseFlash(const Card& card) {
 	flashObj->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 
 	cardUseFlashObj_ = std::move(flashObj);
-	cardUseFlashTimer_ = kCardUseFlashDuration;
+	cardUseFlashTimer_ = persistent ? 0 : kCardUseFlashDuration;
+	cardUseFlashPersistent_ = persistent;
+	cardUseFlashDissolving_ = false;
+	cardUseFlashDissolveEnabled_ = dissolveEnabled;
 	UpdateCardUseFlash();
 }
 
@@ -2368,22 +2450,29 @@ void GamePlayScene::UpdateCardUseFlash() {
 		return;
 	}
 
-	if (cardUseFlashTimer_ <= 0) {
+	if (!cardUseFlashPersistent_ && cardUseFlashTimer_ <= 0) {
 		cardUseFlashObj_.reset();
+		cardUseFlashDissolving_ = false;
+		cardUseFlashDissolveEnabled_ = true;
 		return;
 	}
 
-	const float progress = 1.0f - static_cast<float>(cardUseFlashTimer_) / static_cast<float>(kCardUseFlashDuration);
+	const float progress = cardUseFlashPersistent_
+		? 0.5f
+		: 1.0f - static_cast<float>(cardUseFlashTimer_) / static_cast<float>(kCardUseFlashDuration);
 	const float yaw = playerManager_ ? playerManager_->GetRotationY() : 0.0f;
 	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+	const bool steadyCard = cardUseFlashPersistent_ || cardUseFlashDissolving_;
 	const Vector3 position = {
-		playerPos_.x + forward.x * (0.8f + progress * 0.18f),
-		playerPos_.y + 1.18f + std::sinf(progress * 3.141592f) * 0.12f,
-		playerPos_.z + forward.z * (0.8f + progress * 0.18f)
+		playerPos_.x + forward.x * (steadyCard ? 0.88f : 0.8f + progress * 0.18f),
+		playerPos_.y + 1.18f + (steadyCard ? std::sinf(static_cast<float>(cardReadyTimer_) * 0.10f) * 0.035f : std::sinf(progress * 3.141592f) * 0.12f),
+		playerPos_.z + forward.z * (steadyCard ? 0.88f : 0.8f + progress * 0.18f)
 	};
-	const float scale = 0.42f + std::sinf(progress * 3.141592f) * 0.12f;
-	const float dissolve = std::clamp((progress - 0.42f) / 0.58f, 0.0f, 1.0f);
-	const float flash = 0.75f + std::sinf(progress * 3.141592f) * 0.45f;
+	const float scale = steadyCard ? 0.36f : 0.42f + std::sinf(progress * 3.141592f) * 0.12f;
+	const float dissolve = steadyCard
+		? (cardUseFlashDissolving_ ? progress : 0.0f)
+		: (cardUseFlashDissolveEnabled_ ? std::clamp((progress - 0.42f) / 0.58f, 0.0f, 1.0f) : 0.0f);
+	const float flash = steadyCard ? 1.0f : 0.75f + std::sinf(progress * 3.141592f) * 0.45f;
 
 	cardUseFlashObj_->SetTranslation(position);
 	cardUseFlashObj_->SetRotation({ 0.0f, yaw, 0.0f });
@@ -2392,7 +2481,9 @@ void GamePlayScene::UpdateCardUseFlash() {
 	cardUseFlashObj_->SetColor({ flash, flash, flash, 1.0f });
 	cardUseFlashObj_->Update();
 
-	cardUseFlashTimer_--;
+	if (!cardUseFlashPersistent_) {
+		cardUseFlashTimer_--;
+	}
 }
 
 void GamePlayScene::DrawCardUseFlash() {
@@ -2570,6 +2661,10 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
+	auto isMagicCastCard = [](int id) {
+		return id == 2 || id == 6 || id == 7;
+	};
+
 	// プレイヤー本体を取得
 	Player* player = playerManager_->GetPlayer();
 
@@ -2585,6 +2680,25 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 
 	// 行動ロック中はカードを使えない
 	if (playerManager_->IsActionLocked()) {
+		return;
+	}
+
+	if (isCardReady_) {
+		if (magicRepeatCooldownTimer_ > 0) {
+			return;
+		}
+		if (playerCardSystem_) {
+			playerCardSystem_->UseCardImmediately(
+				readiedCard_,
+				playerPos_,
+				playerManager_->GetRotationY(),
+				true,
+				player,
+				nullptr,
+				false
+			);
+		}
+		magicRepeatCooldownTimer_ = kMagicRepeatCooldownDuration;
 		return;
 	}
 
@@ -2608,25 +2722,6 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
-	auto isImmediateAttack = [](int id) {
-		switch (id) {
-		case 1:  // 拳
-		case 10: // クロー
-		case 13: // 蹴り
-		case 14: // 剣
-		case 15: // ハンマー
-		case 16: // 槍
-			return true;
-		default:
-			return false;
-		}
-		};
-
-	// 攻撃カード構え中は他の攻撃カードを使えない
-	if (isCardReady_ && !isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
-		return;
-	}
-
 	// コスト不足ならメッセージを出して終了
 	if (!playerManager_->CanUseCost(selectedCard.cost)) {
 		costLackMessageTimer_ = 60;
@@ -2635,37 +2730,42 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 
 	// コストを消費
 	playerManager_->UseCost(selectedCard.cost);
-	StartCardUseFlash(selectedCard);
 
-	// 攻撃カードなら構え状態にする
-	if (!isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
+	if (isMagicCastCard(selectedCard.id)) {
 		isCardReady_ = true;
 		readiedCard_ = selectedCard;
-		cardReadyTimer_ = 60 * 5;
+		readiedCardIndex_ = handManager_.GetSelectedCardIndex();
+		cardReadyTimer_ = kMagicCastDuration;
+		magicRepeatCooldownTimer_ = 0;
+		handManager_.SetCastDisplay(selectedCard.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
+		StartCardUseFlash(selectedCard, true);
+		if (player) {
+			player->LockAction(20);
+			player->PlayCardUsePose(10);
+		}
+		return;
 	}
-	else {
-		// それ以外のカードは即時発動
-		if (playerCardSystem_) {
-			playerCardSystem_->UseCard(
-				selectedCard,
-				playerPos_,
-				playerManager_->GetRotationY(),
-				true,
-				player
-			);
-		}
 
-		if (selectedCard.id == 9) {
-			player->SetEnemyAtkDebuffed(true);
+	StartCardUseFlash(selectedCard, false, selectedCard.id != 1);
 
-			// ※ 先ほど作成したデバフUIクラス等があれば、ここで一緒に呼び出して文字を表示します
-			floorEffectManager_.ActivateDebuff(selectedCard.name);
-		}
+	if (playerCardSystem_) {
+		playerCardSystem_->UseCard(
+			selectedCard,
+			playerPos_,
+			playerManager_->GetRotationY(),
+			true,
+			player
+		);
+	}
 
-		if (selectedCard.id == 1) {
-			fistCooldownTimer_ = fistCooldownDuration_;
-			handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
-		}
+	if (selectedCard.id == 9) {
+		player->SetEnemyAtkDebuffed(true);
+		floorEffectManager_.ActivateDebuff(selectedCard.name);
+	}
+
+	if (selectedCard.id == 1) {
+		fistCooldownTimer_ = fistCooldownDuration_;
+		handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 	}
 
 	// 初期カード以外は使用後にディゾルブ開始
@@ -2673,7 +2773,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		handManager_.StartDissolveSelectedCard();
 	}
 
-	if (selectedCard.id == 9 || selectedCard.id == 11) {
+	if (selectedCard.id == 11) {
 		// ★ デバフ発動をマネージャーに頼む！
 		floorEffectManager_.ActivateDebuff(selectedCard.name);
 	}
