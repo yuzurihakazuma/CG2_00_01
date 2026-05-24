@@ -123,6 +123,12 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 					Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 					if ( Length(diff) < 2.5f ) { // 判定を少し広げて当てやすく
 						enemy->TakeDamage(randomDamage);
+						// シアン斬撃エフェクト
+						GPUParticleManager::GetInstance()->Emit(ePos, {0,0,0}, 0.1f, 1.5f, {0.3f, 1.0f, 1.0f, 0.9f});
+						for ( int j = 0; j < 15; j++ ) {
+							Vector3 sv = { (rand()%11-5)*0.5f, (rand()%11-5)*0.5f, (rand()%11-5)*0.5f };
+							GPUParticleManager::GetInstance()->Emit(ePos, sv, 0.2f, 0.18f, {0.5f, 1.0f, 1.0f, 1.0f});
+						}
 						hasHit_ = true; break;
 					}
 				}
@@ -131,6 +137,12 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 3.5f, boss, extraBoss);
 			if ( hitBoss ) {
 				hitBoss->TakeDamage(randomDamage);
+				// シアン斬撃エフェクト
+				GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.1f, 1.5f, {0.3f, 1.0f, 1.0f, 0.9f});
+				for ( int j = 0; j < 15; j++ ) {
+					Vector3 sv = { (rand()%11-5)*0.5f, (rand()%11-5)*0.5f, (rand()%11-5)*0.5f };
+					GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.2f, 0.18f, {0.5f, 1.0f, 1.0f, 1.0f});
+				}
 				hasHit_ = true;
 			}
 		} else {
@@ -140,6 +152,12 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
 				if ( Length(diff) < 2.0f ) {
 					player->TakeDamage(randomDamage, pos_);
+					// シアン斬撃エフェクト
+					GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.1f, 1.5f, {0.3f, 1.0f, 1.0f, 0.9f});
+					for ( int j = 0; j < 15; j++ ) {
+						Vector3 sv = { (rand()%11-5)*0.5f, (rand()%11-5)*0.5f, (rand()%11-5)*0.5f };
+						GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.2f, 0.18f, {0.5f, 1.0f, 1.0f, 1.0f});
+					}
 					hasHit_ = true;
 				}
 			}

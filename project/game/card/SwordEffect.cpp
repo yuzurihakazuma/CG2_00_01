@@ -89,6 +89,16 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
             Vector4 grayColor = { 0.4f, 0.4f, 0.4f, 0.1f };
             GPUParticleManager::GetInstance()->Emit(pos_, zeroVelocity, 0.1f, 1.2f, grayColor);
 
+            // 振り始め1フレーム目のみ：風の衝撃波バースト
+            if (timer_ == 1) {
+                for (int i = 0; i < 12; i++) {
+                    float angle = (3.14159f * 2.0f / 12.0f) * static_cast<float>(i);
+                    Vector3 vel = { std::sinf(angle) * 0.6f, 0.05f, std::cosf(angle) * 0.6f };
+                    GPUParticleManager::GetInstance()->Emit(pos_, vel, 0.2f, 0.25f, {0.5f, 0.9f, 1.0f, 0.8f});
+                }
+                GPUParticleManager::GetInstance()->Emit(pos_, {0.0f, 0.0f, 0.0f}, 0.1f, 1.8f, {0.3f, 0.8f, 1.0f, 0.9f});
+            }
+
             if ( timer_ < 15 ) {
                 for ( auto& afterimage : afterimages_ ) {
                     if ( !afterimage.isActive ) {

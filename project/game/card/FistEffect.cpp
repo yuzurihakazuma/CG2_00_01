@@ -17,6 +17,7 @@ void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	(void)casterBoss;
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
+	hasHit_ = false;
 	punchTimer_ = 10;
 	casterYaw_ = casterYaw;
 
@@ -49,6 +50,8 @@ void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 				material->emissive = 1.2f;
 			}
 		}
+		// 最初は極小サイズからスタートさせる
+		obj_->SetScale({ scale_.x * 0.05f, scale_.y * 0.05f, scale_.z * 0.05f });
 		obj_->Update();
 
 		Vector3 fwd = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
@@ -117,8 +120,12 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 		startPos_.z + forward.z * distance
 	};
 
+	// 8フレームかけて通常サイズまで成長（見た目のみ・判定は常時フルサイズ）
+	float scaleRatio = std::min(1.0f, static_cast<float>(10 - punchTimer_) / 8.0f);
+
 	if ( obj_ ) {
 		obj_->SetTranslation(pos_);
+		obj_->SetScale({ scale_.x * scaleRatio, scale_.y * scaleRatio, scale_.z * scaleRatio });
 		obj_->Update();
 
 		// 拳の炎トレイル（進行方向の逆に流れる火の粉）
@@ -145,51 +152,56 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	// 🌟 2. 当たり判定とヒット時の爆発エフェクト
 	// ==================================================
 	if ( isPlayerCaster_ ) {
-		int randomDamage = damage_ + ( rand() % 2 );
+		// 4フレーム経過後から判定発生（スタートアップ）、命中済みなら再判定しない
+		if ( (10 - punchTimer_) >= 4 && !hasHit_ ) {
+			int randomDamage = damage_ + ( rand() % 2 );
+			Vector3 forward = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
 
-		if ( enemyManager ) {
-			for ( auto& enemy : enemyManager->GetEnemies() ) {
-				if ( enemy && !enemy->IsDead() ) {
-					Vector3 ePos = enemy->GetPosition();
-					Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
+			if ( enemyManager ) {
+				for ( auto& enemy : enemyManager->GetEnemies() ) {
+					if ( enemy && !enemy->IsDead() ) {
+						Vector3 ePos = enemy->GetPosition();
+						Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 
-					if ( Length(diff) < 2.0f ) {
-						enemy->TakeDamage(randomDamage);
+						if ( Length(diff) < 2.0f ) {
+							enemy->TakeDamage(randomDamage);
+							enemy->ApplyKnockback(forward * 0.5f);
 
-						// 💥 敵に当たった瞬間に重い打撃の火花を出す！
-						for ( int i = 0; i < 20; i++ ) {
-							Vector3 sparkVel = {
-								( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f
-							};
-							GPUParticleManager::GetInstance()->Emit(
-								pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 0.8f, 0.2f, 1.0f });
+							for ( int i = 0; i < 20; i++ ) {
+								Vector3 sparkVel = {
+									( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f
+								};
+								GPUParticleManager::GetInstance()->Emit(
+									pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 0.8f, 0.2f, 1.0f });
+							}
+
+							hasHit_ = true;
 						}
-
-						isFinished_ = true;
-						return;
 					}
 				}
 			}
-		}
-		// 分裂戦では近い個体だけにダメージを入れる
-		Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 3.0f, boss, extraBoss);
-		if ( hitBoss ) {
-				hitBoss->TakeDamage(randomDamage);
 
-				// 💥 ボスヒット時の火花
-				for ( int i = 0; i < 20; i++ ) {
-					Vector3 sparkVel = {
-						( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f
-					};
-					GPUParticleManager::GetInstance()->Emit(
-						pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 0.8f, 0.2f, 1.0f });
+			if ( !hasHit_ ) {
+				Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 3.0f, boss, extraBoss);
+				if ( hitBoss ) {
+					hitBoss->TakeDamage(randomDamage);
+					hitBoss->ApplyKnockback(forward * 0.25f);
+
+					for ( int i = 0; i < 20; i++ ) {
+						Vector3 sparkVel = {
+							( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f
+						};
+						GPUParticleManager::GetInstance()->Emit(
+							pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 0.8f, 0.2f, 1.0f });
+					}
+
+					hasHit_ = true;
 				}
-
-				isFinished_ = true;
-				return;
+			}
 		}
+		// スタートアップ中・命中済みはスキップ（アニメーションは最後まで続く）
 	} else {
-		// 敵・ボスの攻撃
+		// ボス・敵の攻撃がプレイヤーに当たる
 		if ( player && !player->IsDead() ) {
 			Vector3 playerPos = player->GetPosition();
 			Vector3 diff = { playerPos.x - pos_.x, 0.0f, playerPos.z - pos_.z };
@@ -201,7 +213,6 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				}
 				player->TakeDamage(randomDamage, pos_);
 
-				// 💥 プレイヤーヒット時の火花
 				for ( int i = 0; i < 20; i++ ) {
 					Vector3 sparkVel = {
 						( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f, ( rand() % 11 - 5 ) * 0.2f

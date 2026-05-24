@@ -20,6 +20,12 @@ GameOverScene::GameOverScene() = default;
 GameOverScene::~GameOverScene() = default;
 
 void GameOverScene::Initialize(){
+    // ゲームシーンで付いたままのポストエフェクトをリセット
+    auto* pe = PostEffect::GetInstance();
+    pe->SetEffectActive(PostEffectType::Vignetting, false);
+    pe->SetEffectActive(PostEffectType::Grayscale, false);
+    pe->SetEffectActive(PostEffectType::RadialBlur, false);
+
     DirectXCommon* dxCommon = DirectXCommon::GetInstance();
     WindowProc* windowProc = WindowProc::GetInstance();
 

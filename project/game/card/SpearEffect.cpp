@@ -95,6 +95,23 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
         obj_->SetTranslation(pos_);
         obj_->Update();
 
+        // タメ中（0〜6フレーム）：槍の穂先に向かって風が収束する
+        if ( localTimer <= 6 ) {
+            for ( int i = 0; i < 3; i++ ) {
+                float angle = static_cast<float>(rand() % 628) * 0.01f;
+                float r = 0.4f + static_cast<float>(rand() % 5) * 0.1f;
+                Vector3 from = {
+                    pos_.x + std::sinf(angle) * r,
+                    pos_.y + static_cast<float>(rand() % 7 - 3) * 0.1f,
+                    pos_.z + std::cosf(angle) * r
+                };
+                float dx = pos_.x - from.x, dy = pos_.y - from.y, dz = pos_.z - from.z;
+                float d = std::sqrtf(dx*dx + dy*dy + dz*dz) + 0.001f;
+                float sp = 4.0f;
+                GPUParticleManager::GetInstance()->Emit(from, {dx/d*sp, dy/d*sp, dz/d*sp}, d/sp + 0.03f, 0.12f, {0.6f, 1.0f, 1.0f, 0.8f});
+            }
+        }
+
         // 🌟 残像の発生タイミングも突きの瞬間に合わせる
         if ( localTimer >= 7 && localTimer <= 9 ) {
             for ( auto& afterimage : afterimages_ ) {

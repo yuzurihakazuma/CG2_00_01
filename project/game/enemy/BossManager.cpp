@@ -211,6 +211,8 @@ splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 			splitBosses_[i]->SetHP(30);
 			// 10階の分裂ボスだけ専用AIを使う
 			splitBosses_[i]->SetSplitBehaviorEnabled(true);
+		hasSplitParticleTriggered_ = false;
+		hasSplitSeenAppearing_     = false;
 
 			if (i == 0) {
 				// 左側は遠距離型
@@ -579,6 +581,69 @@ void BossManager::Update(
 					splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
 					splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
 					splitBossObjs_[i]->Update();
+				}
+			}
+
+			// 両ボスの登場アニメが終わった瞬間に1回だけ分裂爆発を出す
+			if (!hasSplitParticleTriggered_ && !isBossIntroPlaying_) {
+				// まず Appear 中の個体を記憶する
+				for (int i = 0; i < 2; ++i) {
+					if (splitBosses_[i] && !splitBosses_[i]->IsDead() && splitBosses_[i]->IsAppearing()) {
+						hasSplitSeenAppearing_ = true;
+					}
+				}
+				// 「Appear を見た」後に全員が Appear を抜けたら発火
+				if (hasSplitSeenAppearing_) {
+					bool anyStillAppearing = false;
+					for (int i = 0; i < 2; ++i) {
+						if (splitBosses_[i] && !splitBosses_[i]->IsDead() && splitBosses_[i]->IsAppearing()) {
+							anyStillAppearing = true;
+						}
+					}
+					if (!anyStillAppearing) {
+						hasSplitParticleTriggered_ = true;
+						Vector3 c = splitBossCenterPosition_;
+
+						// ① 全方向バースト（小粒・明るい紫白）
+						for (int j = 0; j < 60; j++) {
+							float a = static_cast<float>(rand() % 628) * 0.01f;
+							float sp = 1.5f + static_cast<float>(rand() % 15) * 0.2f;
+							float vy = 0.3f + static_cast<float>(rand() % 10) * 0.15f;
+							Vector3 v = { std::cosf(a) * sp, vy, std::sinf(a) * sp };
+							Vector4 col = (rand() % 2 == 0)
+								? Vector4{ 0.85f, 0.5f, 1.0f, 1.0f }
+								: Vector4{ 1.0f,  0.85f, 1.0f, 1.0f };
+							GPUParticleManager::GetInstance()->Emit(c, v, 0.4f, 0.3f + static_cast<float>(rand() % 4) * 0.08f, col);
+						}
+
+						// ② 水平衝撃波リング 2段（紫・小粒）
+						for (int ring = 0; ring < 2; ring++) {
+							float h  = 0.3f + ring * 1.0f;
+							float sp = 1.8f + ring * 0.4f;
+							for (int j = 0; j < 32; j++) {
+								float a = (3.14159f * 2.0f / 32.0f) * j;
+								Vector3 v = { std::sinf(a) * sp, 0.0f, std::cosf(a) * sp };
+								GPUParticleManager::GetInstance()->Emit({ c.x, c.y + h, c.z }, v, 0.35f, 0.4f, { 0.6f, 0.2f, 1.0f, 1.0f });
+							}
+						}
+
+						// ③ 左右分裂ストリーク（どちらに分かれたかを表す）
+						for (int j = 0; j < 24; j++) {
+							float dir = (j < 12) ? -1.0f : 1.0f;
+							Vector3 v = {
+								dir * (2.0f + static_cast<float>(rand() % 10) * 0.25f),
+								0.4f + static_cast<float>(rand() % 6) * 0.12f,
+								static_cast<float>(rand() % 9 - 4) * 0.1f
+							};
+							GPUParticleManager::GetInstance()->Emit(c, v, 0.45f, 0.35f, { 0.8f, 0.4f, 1.0f, 1.0f });
+						}
+
+						// ④ 白い中心フラッシュ（小粒で複数、大玉にしない）
+						for (int j = 0; j < 10; j++) {
+							Vector3 v = { static_cast<float>(rand() % 7 - 3) * 0.08f, 0.08f, static_cast<float>(rand() % 7 - 3) * 0.08f };
+							GPUParticleManager::GetInstance()->Emit({ c.x, c.y + 1.5f, c.z }, v, 0.15f, 0.45f, { 1.0f, 1.0f, 1.0f, 1.0f });
+						}
+					}
 				}
 			}
 		} else if (!boss_->IsDead()) {

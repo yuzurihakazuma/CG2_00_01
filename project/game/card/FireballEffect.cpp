@@ -221,6 +221,19 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
 					if ( Length(diff) < 1.8f ) {
 						enemy->TakeDamage(randomDamage);
+						// 爆発エフェクト
+						GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.12f, 2.0f, {1.0f, 0.9f, 0.4f, 1.0f});
+						for ( int j = 0; j < 20; j++ ) {
+							float a = static_cast<float>(rand() % 628) * 0.01f;
+							float sp = 1.5f + static_cast<float>(rand() % 10) * 0.2f;
+							Vector3 ev = { std::cosf(a)*sp, 0.5f + static_cast<float>(rand()%8)*0.15f, std::sinf(a)*sp };
+							Vector4 ec = { 1.0f, 0.2f + static_cast<float>(rand()%4)*0.1f, 0.0f, 1.0f };
+							GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.35f, 0.3f, ec);
+						}
+						for ( int j = 0; j < 8; j++ ) {
+							Vector3 sv = { (rand()%11-5)*0.4f, 1.2f+(rand()%6)*0.2f, (rand()%11-5)*0.4f };
+							GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.25f, 0.15f, {1.0f, 1.0f, 0.5f, 1.0f});
+						}
 						isFinished_ = true;
 						return;
 					}
@@ -232,6 +245,19 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 		Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(pos_, 2.8f, boss, extraBoss);
 		if ( hitBoss ) {
 			hitBoss->TakeDamage(randomDamage);
+			// 爆発エフェクト
+			GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.12f, 2.0f, {1.0f, 0.9f, 0.4f, 1.0f});
+			for ( int j = 0; j < 20; j++ ) {
+				float a = static_cast<float>(rand() % 628) * 0.01f;
+				float sp = 1.5f + static_cast<float>(rand() % 10) * 0.2f;
+				Vector3 ev = { std::cosf(a)*sp, 0.5f + static_cast<float>(rand()%8)*0.15f, std::sinf(a)*sp };
+				Vector4 ec = { 1.0f, 0.2f + static_cast<float>(rand()%4)*0.1f, 0.0f, 1.0f };
+				GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.35f, 0.3f, ec);
+			}
+			for ( int j = 0; j < 8; j++ ) {
+				Vector3 sv = { (rand()%11-5)*0.4f, 1.2f+(rand()%6)*0.2f, (rand()%11-5)*0.4f };
+				GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.25f, 0.15f, {1.0f, 1.0f, 0.5f, 1.0f});
+			}
 			isFinished_ = true;
 			return;
 		}
@@ -263,6 +289,19 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 				}
 
 				player->TakeDamage(randomDamage, pos_);
+				// 爆発エフェクト
+				GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.12f, 2.0f, {1.0f, 0.9f, 0.4f, 1.0f});
+				for ( int j = 0; j < 20; j++ ) {
+					float a = static_cast<float>(rand() % 628) * 0.01f;
+					float sp = 1.5f + static_cast<float>(rand() % 10) * 0.2f;
+					Vector3 ev = { std::cosf(a)*sp, 0.5f + static_cast<float>(rand()%8)*0.15f, std::sinf(a)*sp };
+					Vector4 ec = { 1.0f, 0.2f + static_cast<float>(rand()%4)*0.1f, 0.0f, 1.0f };
+					GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.35f, 0.3f, ec);
+				}
+				for ( int j = 0; j < 8; j++ ) {
+					Vector3 sv = { (rand()%11-5)*0.4f, 1.2f+(rand()%6)*0.2f, (rand()%11-5)*0.4f };
+					GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.25f, 0.15f, {1.0f, 1.0f, 0.5f, 1.0f});
+				}
 				isFinished_ = true;
 				return;
 			}
@@ -271,6 +310,13 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
 	// 当たり判定の後で壁との衝突を見る
 	if ( Collision::CheckBlockCollision(pos_, 0.5f, level) ) {
+		// 壁衝突：小さめの炎の散り
+		for ( int j = 0; j < 10; j++ ) {
+			float a = static_cast<float>(rand() % 628) * 0.01f;
+			float sp = 0.8f + static_cast<float>(rand() % 5) * 0.15f;
+			Vector3 ev = { std::cosf(a)*sp, 0.3f+(rand()%5)*0.1f, std::sinf(a)*sp };
+			GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.25f, 0.2f, {1.0f, 0.3f, 0.0f, 0.9f});
+		}
 		isFinished_ = true;
 		return;
 	}

@@ -199,4 +199,7 @@ private:
     std::array<int, 2> splitBossAttackIntervalMinFrames_{ 120, 120 }; // 10階左・右ボスの最小攻撃間隔
     std::array<int, 2> splitBossAttackIntervalMaxFrames_{ 240, 240 }; // 10階左・右ボスの最大攻撃間隔
 
+    bool hasSplitParticleTriggered_ = false; // 分裂演出（登場完了爆発）の発火フラグ
+    bool hasSplitSeenAppearing_     = false; // 少なくとも1体がAppear中だったことを確認するフラグ
+
 };

@@ -20,6 +20,12 @@ GameClearScene::GameClearScene() = default;
 GameClearScene::~GameClearScene() = default;
 
 void GameClearScene::Initialize(){
+    // ゲームシーンで付いたままのポストエフェクトをリセット
+    auto* pe = PostEffect::GetInstance();
+    pe->SetEffectActive(PostEffectType::Vignetting, false);
+    pe->SetEffectActive(PostEffectType::Grayscale, false);
+    pe->SetEffectActive(PostEffectType::RadialBlur, false);
+
     DirectXCommon* dxCommon = DirectXCommon::GetInstance();
     WindowProc* windowProc = WindowProc::GetInstance();
 

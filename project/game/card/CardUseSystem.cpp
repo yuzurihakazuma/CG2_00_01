@@ -103,14 +103,19 @@ void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* bos
 		// 収束先：プレイヤーの胸の高さ
 		Vector3 gatherTo = { castPos_.x, castPos_.y + 1.0f, castPos_.z };
 
-		// 詠唱中：周囲の金色の光がプレイヤーへ飛び込む収束エフェクト
-		for (int i = 0; i < 6; i++) {
-			float angle = static_cast<float>(rand() % 628) * 0.01f;
-			float radius = 1.8f + static_cast<float>(rand() % 8) * 0.2f;
-			float heightOfs = -0.3f + static_cast<float>(rand() % 10) * 0.2f;
+		// 詠唱進行度（0→1、後半ほど速く・派手に）
+		float chargeRatio = 1.0f - static_cast<float>(castTimer_) / 20.0f;
+		// タイマーに連動して回転する基準角度（渦巻き感を出す）
+		float baseAngle = static_cast<float>(20 - castTimer_) * 0.45f;
+
+		// 6方向の螺旋アームがプレイヤーへ収束する
+		const int outerCount = 6;
+		for (int i = 0; i < outerCount; i++) {
+			float angle = baseAngle + (3.14159f * 2.0f / outerCount) * static_cast<float>(i);
+			float radius = 2.0f + static_cast<float>(rand() % 6) * 0.2f;
 			Vector3 emitPos = {
 				castPos_.x + std::sinf(angle) * radius,
-				castPos_.y + 1.0f + heightOfs,
+				castPos_.y + 1.0f + static_cast<float>(rand() % 7 - 3) * 0.15f,
 				castPos_.z + std::cosf(angle) * radius
 			};
 			float dx = gatherTo.x - emitPos.x;
@@ -118,25 +123,24 @@ void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* bos
 			float dz = gatherTo.z - emitPos.z;
 			float dist = std::sqrtf(dx * dx + dy * dy + dz * dz);
 			if (dist > 0.01f) {
-				float speed = 5.5f;
-				// 距離÷速度で寿命を決めることで確実にプレイヤーに届く
-				float lifeTime = dist / speed + 0.05f;
-				// 少し螺旋成分を加えてより華やかに
+				// 詠唱後半ほど速くなって「吸い込まれる加速感」を出す
+				float speed = 6.0f + chargeRatio * 2.0f;
+				float lifeTime = dist / speed + 0.03f;
+				// 接線成分を強めにして螺旋の弧が見える
 				float sideAngle = angle + 1.57f;
 				Vector3 vel = {
-					dx / dist * speed + std::sinf(sideAngle) * 0.5f,
+					dx / dist * speed + std::sinf(sideAngle) * 0.9f,
 					dy / dist * speed,
-					dz / dist * speed + std::cosf(sideAngle) * 0.5f
+					dz / dist * speed + std::cosf(sideAngle) * 0.9f
 				};
-				GPUParticleManager::GetInstance()->Emit(
-					emitPos, vel, lifeTime, 0.3f, { 1.0f, 0.85f, 0.2f, 1.0f });
+				float sc = 0.22f + chargeRatio * 0.06f;
+				GPUParticleManager::GetInstance()->Emit(emitPos, vel, lifeTime, sc, { 1.0f, 0.85f, 0.2f, 0.35f });
 			}
 		}
-		// 収束先（プレイヤー本体）に輝く金の光点を毎フレーム出して「集まる先」を強調
-		GPUParticleManager::GetInstance()->Emit(
-			gatherTo,
-			{ (rand() % 7 - 3) * 0.05f, 0.05f + (rand() % 5) * 0.02f, (rand() % 7 - 3) * 0.05f },
-			0.2f, 0.4f, { 1.0f, 0.9f, 0.4f, 0.8f });
+
+		// 中心輝き（極小・控えめ）
+		float glowScale = 0.18f + chargeRatio * 0.18f;
+		GPUParticleManager::GetInstance()->Emit(gatherTo, { 0,0,0 }, 0.08f, glowScale, { 1.0f, 0.95f, 0.5f, 0.3f });
 
 		if (castTimer_ <= 0) {
 			isCasting_ = false;

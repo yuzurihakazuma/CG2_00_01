@@ -31,6 +31,7 @@ private:
 
 	bool isPlayerCaster_ = true;             // 使用者がプレイヤーか
 	bool isFinished_ = false;                // 終了したか
+	bool hasHit_ = false;                    // 命中済みフラグ
 	int punchTimer_ = 0;                     // 効果時間
 
 	int damage_ = 0;                         // ダメージを保存しておく変数

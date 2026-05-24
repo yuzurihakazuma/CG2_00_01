@@ -196,8 +196,19 @@ void Player::Update() {
         } else {
             pe->SetRadialBlurStrength(1.0f);
         }
+
+        // 低HP（残り3以下）→ 赤いビネット / 被弾直後 → 赤フラッシュ
+        bool isLowHp = !isDead_ && hp_ > 0 && hp_ <= 3;
+        bool isHitFlash = isHit_ && hitTimer_ > hitDuration_ - 4;
+        pe->SetEffectActive(PostEffectType::Vignetting, isLowHp || isHitFlash);
+        if ( isHitFlash ) {
+            float ratio = static_cast<float>(hitTimer_ - (hitDuration_ - 4)) / 4.0f;
+            pe->SetVignetteParams(0.7f + ratio * 0.5f, 1.0f, 0.05f, 0.05f);
+        } else if ( isLowHp ) {
+            pe->SetVignetteParams(0.75f, 0.9f, 0.0f, 0.0f);
+        }
     }
-    
+
     // デバッグGUIから開始したポーズ補間も毎フレーム進める
     if (IsPoseBlendPlaying()) {
         UpdatePoseBlend();

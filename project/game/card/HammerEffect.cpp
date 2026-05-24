@@ -107,6 +107,19 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
             Vector3 sparkVel = { ( rand() % 11 - 5 ) * 0.02f, 0.05f, ( rand() % 11 - 5 ) * 0.02f };
             Vector4 sparkColor = { 1.0f, 0.4f, 0.0f, 0.8f }; // 鮮やかなオレンジ
             GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.15f, 0.4f, sparkColor);
+
+            // 振り上げタメ（0〜6フレーム）：ハンマーに向かって上からエネルギーが集まる
+            if ( timer_ < 7 ) {
+                for (int i = 0; i < 4; i++) {
+                    float angle = static_cast<float>(rand() % 628) * 0.01f;
+                    float radius = 0.5f + static_cast<float>(rand() % 5) * 0.1f;
+                    Vector3 from = { pos_.x + std::sinf(angle) * radius, pos_.y + 0.8f + static_cast<float>(rand() % 4) * 0.25f, pos_.z + std::cosf(angle) * radius };
+                    float dx = pos_.x - from.x, dy = pos_.y - from.y, dz = pos_.z - from.z;
+                    float d = std::sqrtf(dx * dx + dy * dy + dz * dz) + 0.001f;
+                    float sp = 3.5f;
+                    GPUParticleManager::GetInstance()->Emit(from, {dx/d*sp, dy/d*sp, dz/d*sp}, d/sp + 0.02f, 0.18f, {1.0f, 0.45f, 0.0f, 0.9f});
+                }
+            }
         }
     }
 

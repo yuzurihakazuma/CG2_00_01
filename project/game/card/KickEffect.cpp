@@ -33,7 +33,8 @@ void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerC
     obj_ = Obj3d::Create("kick_model"); // 拳モデルを代用
     if (obj_) {
         obj_->SetCamera(camera);
-        obj_->SetScale(scale_);
+        // 最初は極小サイズからスタートさせる
+        obj_->SetScale({ scale_.x * 0.05f, scale_.y * 0.05f, scale_.z * 0.05f });
         obj_->SetTranslation(pos_);
         obj_->SetRotation({ 0.0f, casterYaw_, 0.0f });
 
@@ -118,8 +119,12 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
         startPos_.z + forward.z * distance
     };
 
+    // 10フレームかけて通常サイズまで成長（見た目のみ・判定は常時フルサイズ）
+    float scaleRatio = std::min(1.0f, static_cast<float>(timer_) / 10.0f);
+
     if (obj_) {
         obj_->SetTranslation(pos_);
+        obj_->SetScale({ scale_.x * scaleRatio, scale_.y * scaleRatio, scale_.z * scaleRatio });
         obj_->Update();
         // 電撃トレイル（小さく鋭い）
         for (int i = 0; i < 3; i++) {
@@ -140,7 +145,8 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
 
 
     // 蹴りの発生フレーム（例：3〜8フレームの間に判定を出す）
-    if (timer_ >= 3 && timer_ <= 8 && !hasHit_) {
+    // 6フレーム経過後から判定発生（スタートアップ）
+    if (timer_ >= 6 && timer_ <= 11 && !hasHit_) {
 
         // 当たり判定の中心座標（モデルの少し前に判定を出す）
         Vector3 hitCenter = {
