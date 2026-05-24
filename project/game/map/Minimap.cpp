@@ -83,7 +83,7 @@ void Minimap::EnsureCardSprites(size_t count) {
 		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
 		sprite->SetAnchorPoint({ 0.5f, 0.5f });
 		sprite->SetSize({ 12.0f, 12.0f }); // 大マップ用にカードアイコンを見やすくする
-		sprite->SetColor({ aaaa, 1.0f, 0.4f, 0.3f }); // 少し透明にする
+		sprite->SetColor({ 0.2f, 1.0f, 0.4f, 0.3f }); // 少し透明にする
 		sprite->Update();
 		cardSprites_.push_back(std::move(sprite));
 	}
