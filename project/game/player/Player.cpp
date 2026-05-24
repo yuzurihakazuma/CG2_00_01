@@ -754,6 +754,24 @@ void Player::LevelUp() {
     if (costRecoveryInterval_ > 60) {
         costRecoveryInterval_ -= 15;
     }
+
+    // レベルアップ：金色の光が下から上へ舞い上がるバースト
+    for (int i = 0; i < 40; i++) {
+        float angle = static_cast<float>(rand() % 628) * 0.01f;
+        float radius = static_cast<float>(rand() % 8) * 0.15f;
+        Vector3 emitPos = {
+            pos_.x + std::sinf(angle) * radius,
+            pos_.y,
+            pos_.z + std::cosf(angle) * radius
+        };
+        Vector3 vel = {
+            (rand() % 11 - 5) * 0.04f,
+            0.3f + static_cast<float>(rand() % 15) * 0.06f,
+            (rand() % 11 - 5) * 0.04f
+        };
+        GPUParticleManager::GetInstance()->Emit(
+            emitPos, vel, 0.6f, 0.3f + (rand() % 3) * 0.1f, { 1.0f, 0.9f, 0.2f, 1.0f });
+    }
 }
 
 void Player::UpdateCost() {
@@ -928,6 +946,22 @@ void Player::TakeContinuousDamage(int damage) {
 
     isHit_ = true;
     hitTimer_ = (std::min)(hitDuration_, 8);
+
+    // 継続ダメージ（毒・炎など）の小さな赤いスパーク
+    for (int i = 0; i < 8; i++) {
+        Vector3 sparkPos = {
+            pos_.x + (rand() % 7 - 3) * 0.1f,
+            pos_.y + 0.3f + (rand() % 6) * 0.15f,
+            pos_.z + (rand() % 7 - 3) * 0.1f
+        };
+        Vector3 sparkVel = {
+            (rand() % 11 - 5) * 0.05f,
+            0.1f + (rand() % 5) * 0.04f,
+            (rand() % 11 - 5) * 0.05f
+        };
+        GPUParticleManager::GetInstance()->Emit(
+            sparkPos, sparkVel, 0.5f, 0.2f, { 1.0f, 0.3f, 0.1f, 0.85f });
+    }
 
     if (hp_ <= 0) {
         isDead_ = true;

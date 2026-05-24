@@ -50,6 +50,43 @@ void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 			}
 		}
 		obj_->Update();
+
+		Vector3 fwd = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
+
+		// ① 前方への炎ストリーク（「この方向に打つ」という方向表示）
+		for (int i = 0; i < 20; i++) {
+			float spread = static_cast<float>(rand() % 9 - 4) * 0.06f;
+			float speed = 0.6f + static_cast<float>(rand() % 10) * 0.08f;
+			float sc = 0.12f + static_cast<float>(rand() % 4) * 0.04f;
+			Vector3 vel = {
+				fwd.x * speed + spread * 0.4f,
+				0.02f + static_cast<float>(rand() % 4) * 0.02f,
+				fwd.z * speed + spread * 0.4f
+			};
+			GPUParticleManager::GetInstance()->Emit(
+				pos_, vel, 0.15f, sc, { 1.0f, 0.9f, 0.3f, 1.0f });
+		}
+
+		// ② 水平リング（小さく鋭い衝撃波）
+		for (int i = 0; i < 12; i++) {
+			float angle = (3.14159f * 2.0f / 12.0f) * static_cast<float>(i);
+			Vector3 ringVel = { std::sinf(angle) * 0.5f, 0.0f, std::cosf(angle) * 0.5f };
+			GPUParticleManager::GetInstance()->Emit(
+				pos_, ringVel, 0.14f, 0.2f, { 1.0f, 0.6f, 0.1f, 0.9f });
+		}
+
+		// ③ 前方散開スパーク（打撃寸前の火の粉）
+		for (int i = 0; i < 15; i++) {
+			float upward = 0.08f + static_cast<float>(rand() % 8) * 0.06f;
+			float hSpread = static_cast<float>(rand() % 11 - 5) * 0.12f;
+			Vector3 vel = {
+				fwd.x * (0.3f + static_cast<float>(rand() % 5) * 0.1f) + hSpread,
+				upward,
+				fwd.z * (0.3f + static_cast<float>(rand() % 5) * 0.1f) + hSpread
+			};
+			GPUParticleManager::GetInstance()->Emit(
+				pos_, vel, 0.2f, 0.18f, { 1.0f, 0.65f, 0.05f, 1.0f });
+		}
 	}
 }
 
@@ -84,9 +121,24 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 		obj_->SetTranslation(pos_);
 		obj_->Update();
 
-		// 拳の周りに風圧のようなオレンジ色のオーラを残す
+		// 拳の炎トレイル（進行方向の逆に流れる火の粉）
+		for (int i = 0; i < 3; i++) {
+			Vector3 trailPos = {
+				pos_.x + (rand() % 5 - 2) * 0.06f,
+				pos_.y + static_cast<float>(rand() % 3) * 0.08f,
+				pos_.z + (rand() % 5 - 2) * 0.06f
+			};
+			Vector3 vel = {
+				-forward.x * (0.08f + static_cast<float>(rand() % 3) * 0.04f) + (rand() % 5 - 2) * 0.03f,
+				0.02f + static_cast<float>(rand() % 3) * 0.02f,
+				-forward.z * (0.08f + static_cast<float>(rand() % 3) * 0.04f) + (rand() % 5 - 2) * 0.03f
+			};
+			GPUParticleManager::GetInstance()->Emit(
+				trailPos, vel, 0.18f, 0.2f, { 1.0f, 0.7f, 0.15f, 0.9f });
+		}
+		// 拳のコアに鋭い光点（小さめ）
 		GPUParticleManager::GetInstance()->Emit(
-			pos_, { 0,0,0 }, 0.2f, 1.0f, { 1.0f, 0.6f, 0.1f, 0.3f });
+			pos_, { 0.0f, 0.0f, 0.0f }, 0.12f, 0.6f, { 1.0f, 0.6f, 0.1f, 0.65f });
 	}
 
 	// ==================================================

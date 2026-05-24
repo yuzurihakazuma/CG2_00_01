@@ -32,6 +32,7 @@
 #include "game/card/BossChargeEffect.h"
 #include "game/card/BossKickEffect.h"
 #include "game/card/BossSpearEffect.h" // ボス専用の槍攻撃
+#include "engine/particle/GPUParticleManager.h"
 
 using namespace VectorMath;
 
@@ -98,6 +99,44 @@ void CardUseSystem::Update(Player* player, EnemyManager* enemyManager, Boss* bos
 	// 詠唱更新
 	if (isCasting_) {
 		castTimer_--;
+
+		// 収束先：プレイヤーの胸の高さ
+		Vector3 gatherTo = { castPos_.x, castPos_.y + 1.0f, castPos_.z };
+
+		// 詠唱中：周囲の金色の光がプレイヤーへ飛び込む収束エフェクト
+		for (int i = 0; i < 6; i++) {
+			float angle = static_cast<float>(rand() % 628) * 0.01f;
+			float radius = 1.8f + static_cast<float>(rand() % 8) * 0.2f;
+			float heightOfs = -0.3f + static_cast<float>(rand() % 10) * 0.2f;
+			Vector3 emitPos = {
+				castPos_.x + std::sinf(angle) * radius,
+				castPos_.y + 1.0f + heightOfs,
+				castPos_.z + std::cosf(angle) * radius
+			};
+			float dx = gatherTo.x - emitPos.x;
+			float dy = gatherTo.y - emitPos.y;
+			float dz = gatherTo.z - emitPos.z;
+			float dist = std::sqrtf(dx * dx + dy * dy + dz * dz);
+			if (dist > 0.01f) {
+				float speed = 5.5f;
+				// 距離÷速度で寿命を決めることで確実にプレイヤーに届く
+				float lifeTime = dist / speed + 0.05f;
+				// 少し螺旋成分を加えてより華やかに
+				float sideAngle = angle + 1.57f;
+				Vector3 vel = {
+					dx / dist * speed + std::sinf(sideAngle) * 0.5f,
+					dy / dist * speed,
+					dz / dist * speed + std::cosf(sideAngle) * 0.5f
+				};
+				GPUParticleManager::GetInstance()->Emit(
+					emitPos, vel, lifeTime, 0.3f, { 1.0f, 0.85f, 0.2f, 1.0f });
+			}
+		}
+		// 収束先（プレイヤー本体）に輝く金の光点を毎フレーム出して「集まる先」を強調
+		GPUParticleManager::GetInstance()->Emit(
+			gatherTo,
+			{ (rand() % 7 - 3) * 0.05f, 0.05f + (rand() % 5) * 0.02f, (rand() % 7 - 3) * 0.05f },
+			0.2f, 0.4f, { 1.0f, 0.9f, 0.4f, 0.8f });
 
 		if (castTimer_ <= 0) {
 			isCasting_ = false;
@@ -175,6 +214,21 @@ void CardUseSystem::UseCardImmediately(const Card& card, const Vector3& casterPo
 }
 
 void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float casterYaw,bool isPlayerCaster,Player* player,Boss* casterBoss, bool restoreIdlePose) {
+
+	// カード発動時：収束した光が一気に解放されるバーストエフェクト
+	for (int i = 0; i < 30; i++) {
+		float angle = static_cast<float>(rand() % 628) * 0.01f;
+		float elevation = static_cast<float>(rand() % 628) * 0.01f;
+		float speed = 0.4f + static_cast<float>(rand() % 10) * 0.1f;
+		Vector3 vel = {
+			std::sinf(angle) * std::cosf(elevation) * speed,
+			std::sinf(elevation) * speed + 0.1f,
+			std::cosf(angle) * std::cosf(elevation) * speed
+		};
+		GPUParticleManager::GetInstance()->Emit(
+			{ casterPos.x, casterPos.y + 1.3f, casterPos.z },
+			vel, 0.3f, 0.35f, { 1.0f, 0.9f, 0.3f, 1.0f });
+	}
 
 	// 1. 辞書の中に、使われたカードのIDが登録されているかチェック
 	if (effectFactory_.count(card.id)) {

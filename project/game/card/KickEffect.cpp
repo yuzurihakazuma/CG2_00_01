@@ -48,6 +48,54 @@ void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerC
             }
         }
         obj_->Update();
+
+        Vector3 fwd = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
+
+        // ① 縦方向リング（蹴り軌道面を表す — 横ではなく縦に広がる）
+        for (int i = 0; i < 16; i++) {
+            float ringAngle = (3.14159f * 2.0f / 16.0f) * static_cast<float>(i);
+            float speed = 0.55f;
+            Vector3 ringVel = {
+                fwd.x * std::cosf(ringAngle) * speed,
+                std::sinf(ringAngle) * speed,
+                fwd.z * std::cosf(ringAngle) * speed
+            };
+            GPUParticleManager::GetInstance()->Emit(
+                pos_, ringVel, 0.18f, 0.22f, { 0.3f, 0.85f, 1.0f, 0.95f });
+        }
+
+        // ② 斜め上前方への電撃ストリーク（蹴り上げ感）
+        for (int i = 0; i < 20; i++) {
+            float spread = static_cast<float>(rand() % 11 - 5) * 0.06f;
+            float fwdSpeed = 0.4f + static_cast<float>(rand() % 8) * 0.08f;
+            float upSpeed = 0.15f + static_cast<float>(rand() % 10) * 0.06f;
+            Vector3 vel = {
+                fwd.x * fwdSpeed + spread,
+                upSpeed,
+                fwd.z * fwdSpeed + spread
+            };
+            GPUParticleManager::GetInstance()->Emit(
+                pos_, vel, 0.18f, 0.15f, { 0.6f, 0.95f, 1.0f, 1.0f });
+        }
+
+        // ③ 真上に散る電撃（蹴り上げた衝撃）
+        for (int i = 0; i < 10; i++) {
+            Vector3 vel = {
+                (rand() % 11 - 5) * 0.08f,
+                0.5f + static_cast<float>(rand() % 8) * 0.08f,
+                (rand() % 11 - 5) * 0.08f
+            };
+            GPUParticleManager::GetInstance()->Emit(
+                pos_, vel, 0.15f, 0.15f, { 0.9f, 1.0f, 1.0f, 1.0f });
+        }
+
+        // ④ 接地衝撃波（薄い水平リング）
+        for (int i = 0; i < 10; i++) {
+            float angle = (3.14159f * 2.0f / 10.0f) * static_cast<float>(i);
+            Vector3 ringVel = { std::sinf(angle) * 0.4f, 0.02f, std::cosf(angle) * 0.4f };
+            GPUParticleManager::GetInstance()->Emit(
+                pos_, ringVel, 0.12f, 0.18f, { 0.2f, 0.8f, 1.0f, 0.7f });
+        }
     }
 }
 
@@ -73,9 +121,21 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
     if (obj_) {
         obj_->SetTranslation(pos_);
         obj_->Update();
-        // 青系のオーラ軌跡
+        // 電撃トレイル（小さく鋭い）
+        for (int i = 0; i < 3; i++) {
+            Vector3 trailPos = {
+                pos_.x + (rand() % 5 - 2) * 0.06f,
+                pos_.y + static_cast<float>(rand() % 3) * 0.08f,
+                pos_.z + (rand() % 5 - 2) * 0.06f
+            };
+            GPUParticleManager::GetInstance()->Emit(
+                trailPos,
+                { (rand() % 7 - 3) * 0.03f, 0.04f, (rand() % 7 - 3) * 0.03f },
+                0.18f, 0.2f, { 0.2f, 0.85f, 1.0f, 0.9f });
+        }
+        // 蹴りのコアに鋭い電撃光点
         GPUParticleManager::GetInstance()->Emit(
-            pos_, { 0,0,0 }, 0.2f, 1.0f, { 0.2f, 0.8f, 1.0f, 0.3f });
+            pos_, { 0.0f, 0.0f, 0.0f }, 0.12f, 0.6f, { 0.4f, 0.9f, 1.0f, 0.65f });
     }
 
 
