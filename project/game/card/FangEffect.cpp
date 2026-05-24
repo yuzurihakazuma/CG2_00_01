@@ -18,12 +18,14 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	isPlayerCaster_ = isPlayerCaster;
 	isFinished_ = false;
 	fangs_.clear();
+	indicators_.clear();
 
 	// 撃った人（敵）の位置を記憶しておく
 	casterPos_ = casterPos;
 
 	// 正面方向を計算
 	Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
+
 
 	// 前方に順番に5本並べる
 	for ( int i = 0; i < 5; i++ ) {
@@ -37,13 +39,40 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		fang.currentY = casterPos.y - 3.5f;
 
 		// 順番に出る間隔と、地上に留まる時間
-		fang.delayTimer = i * 8;
+		fang.delayTimer = 30 + (i * 8);
 		fang.activeTimer = 40;
 		fang.isActive = false;
 		fang.hasHit = false;
 		fang.hasEmergedParticle = false;
 		fangs_.push_back(fang);
+		// ==========================================
+		// ★ 追加：IceBulletと同じ「赤い予兆円」の作成
+		// ==========================================
+		auto indicator = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
+		if (indicator) {
+			indicator->SetCamera(camera);
+			// 地面にめり込まないよう、少しだけ浮かせる(y + 0.05f)
+			indicator->SetTranslation({ fang.pos.x, fang.pos.y + 0.05f, fang.pos.z });
+
+			// 当たり判定の範囲(半径1.5f)に合わせた大きさで平たくする
+			indicator->SetScale({ 1.0f, 0.05f, 1.5f });
+
+			Model *model = indicator->GetModel();
+			if (model) {
+				model->SetTexture("resources/white1x1.png");
+				Model::Material *material = model->GetMaterial();
+				if (material) {
+					// 氷魔法と同じように赤色で最初は薄く(0.1f)設定
+					material->color = { 1.0f, 0.0f, 0.0f, 0.1f };
+					material->emissive = 1.0f;
+				}
+			}
+			indicator->Update();
+		}
+		indicators_.push_back(std::move(indicator));
 	}
+
+	
 
 	// 表示用オブジェクトを生成
 	obj_ = Obj3d::Create("Fang");
@@ -73,12 +102,31 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	}
 
 	bool allDone = true;
+	for (size_t i = 0; i < fangs_.size(); ++i) {
+		auto &fang = fangs_[i];
 
-	for ( auto& fang : fangs_ ) {
 		// 出現待機中
-		if ( fang.delayTimer > 0 ) {
+		if (fang.delayTimer > 0) {
 			fang.delayTimer--;
 
+			// ==========================================
+			// ★ 追加：予兆円の透明度を更新（だんだん濃くする）
+			// ==========================================
+			if (i < indicators_.size() && indicators_[i]) {
+				Model *model = indicators_[i]->GetModel();
+				if (model && model->GetMaterial()) {
+					Model::Material *material = model->GetMaterial();
+
+					// それぞれのトゲの初期待機時間(30 + i*8)を計算
+					float maxDelay = 30.0f + (i * 8.0f);
+					// 残り時間から進行度(0.0〜1.0)を出す
+					float progress = 1.0f - (static_cast<float>(fang.delayTimer) / maxDelay);
+
+					// 透明度を 0.1（薄い）から 0.5（濃い）へ変化させる
+					material->color.w = 0.1f + (progress * 0.4f);
+				}
+				indicators_[i]->Update();
+			}
 			// 待機が終わったら有効化
 			if ( fang.delayTimer <= 0 ) {
 				fang.isActive = true;
@@ -293,6 +341,14 @@ void FangEffect::Draw(){
 	// 終了済みまたは描画オブジェクトが無ければ何もしない
 	if ( isFinished_ || !obj_ ) {
 		return;
+	}
+
+	// 予兆円の描画（トゲが地面に隠れている待機中のみ）
+	for (size_t i = 0; i < fangs_.size(); ++i) {
+		// 待機中(delayTimer > 0)の時だけ描画する
+		if (fangs_[i].delayTimer > 0 && i < indicators_.size() && indicators_[i]) {
+			indicators_[i]->Draw();
+		}
 	}
 
 	// 有効なトゲだけ描画する

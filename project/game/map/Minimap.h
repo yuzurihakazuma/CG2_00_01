@@ -46,6 +46,7 @@ private:
 	void RebuildMapSprites();
 	void BuildChunks();
 	void BuildChunkSprites();
+	void UpdateStaticSprites();
 	void DiscoverCurrentChunk();
 	int GetChunkIndexFromTile(int tileX, int tileZ) const;
 	bool IsWorldPositionInDiscoveredChunk(const Vector3& worldPos) const;
@@ -55,8 +56,8 @@ private:
 
 	bool visible_ = true;
 
-	Vector2 mapLeftTop_ = { 20.0f, 20.0f };
-	Vector2 mapSize_ = { 220.0f, 220.0f };
+	Vector2 mapLeftTop_ = { 600.0f, 60.0f };   // 画面中央寄りに表示する位置
+	Vector2 mapSize_ = { 700.0f, 700.0f };      // 正方形にしてずれをなくす
 
 	float drawTileSize_ = 8.0f;
 

@@ -37,6 +37,7 @@ public:
 
 	// カード使用（ここでは即発動ではなく詠唱開始）
 	void UseCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player = nullptr, Boss* casterBoss = nullptr);
+	void UseCardImmediately(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player = nullptr, Boss* casterBoss = nullptr, bool restoreIdlePose = true);
 
 	// ★追加：ミニマップを外部（Scene）から受け取るための関数
 	void SetMinimap(Minimap *minimap) { minimap_ = minimap; }
@@ -49,10 +50,11 @@ public:
 
 	bool IsDecoyActive() const;
 	Vector3 GetDecoyPosition() const;
+	const std::vector<std::unique_ptr<ICardEffect>>& GetActiveEffects() const { return activeEffects_; }
 
 private:
 	// 実際のカード発動処理
-	void ExecuteCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player, Boss* casterBoss);
+	void ExecuteCard(const Card& card, const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Player* player, Boss* casterBoss, bool restoreIdlePose = true);
 
 	// カードごとの詠唱時間
 	int GetCastTime(const Card& card) const;

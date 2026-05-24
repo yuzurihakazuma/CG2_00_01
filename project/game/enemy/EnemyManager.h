@@ -32,10 +32,11 @@ public:
 	void SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera);
 
 	// 通常の敵をランダムに配置する
-	void SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera);
+	void SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera, int maxAliveEnemies = 5);
 
 	// 全ての敵を消す
 	void Clear();
+	void DefeatAllWithoutRewards();
 
 	// 当たり判定のチェック
 	void CheckCollisions(Player* player, MapManager* mapManager);
@@ -52,9 +53,11 @@ private:
 		std::unique_ptr<SkinnedObj3d> skinned;
 		std::unique_ptr<Obj3d> cardRing;
 		std::unique_ptr<Obj3d> cardRingFill;
+		bool useHeadIdleAnimation = false;
+		float headIdleTimer = 0.0f;
 	};
 
-	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera) const;
+	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera, bool useBossMinionModel = false) const;
 	void UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const;
 	void DrawEnemyVisual(const EnemyVisual& visual) const;
 

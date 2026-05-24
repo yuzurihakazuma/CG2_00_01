@@ -10,6 +10,20 @@ using namespace VectorMath;
 
 namespace {
 	constexpr float kBossAppearDropHeight = 18.0f;
+	constexpr float kBeamFiringTurnSpeed = 0.010f;
+
+	float NormalizeAngle(float angle) {
+		constexpr float pi = 3.14159265f;
+		constexpr float twoPi = pi * 2.0f;
+
+		while (angle > pi) {
+			angle -= twoPi;
+		}
+		while (angle < -pi) {
+			angle += twoPi;
+		}
+		return angle;
+	}
 }
 
 void Boss::Initialize() {
@@ -23,6 +37,8 @@ void Boss::Initialize() {
 	maxHP_ = 60;
 	hp_ = maxHP_;
 	isDead_ = false;
+	deathAnimationTimer_ = 0;
+	deathStartY_ = 0.0f;
 
 	thinkTimer_ = 0;
 
@@ -178,7 +194,7 @@ int Boss::GetCastTimeForCard(int cardId, bool isEnraged) const {
 
 int Boss::GetRecoveryTimeForCard(int cardId, bool isEnraged) const {
 	if (cardId == 104) {
-		return isEnraged ? 34 : 48;
+		return isEnraged ? 92 : 98;
 	}
 
 	if (cardId == 103) {
@@ -285,6 +301,7 @@ void Boss::ResetPose() {
 void Boss::Update() {
 	if (isDead_) {
 		state_ = State::Dead;
+		UpdateDeathAnimation();
 		return;
 	}
 
@@ -336,6 +353,25 @@ void Boss::Update() {
 	}
 
 	if (isActionLocked_) {
+		if (selectedCard_.id == 104) {
+			Vector3 dir = {
+				playerPos_.x - pos_.x,
+				0.0f,
+				playerPos_.z - pos_.z
+			};
+			if (Length(dir) > 0.01f) {
+				const float targetYaw = std::atan2f(dir.x, dir.z);
+				const float yawDiff = std::clamp(
+					NormalizeAngle(targetYaw - rot_.y),
+					-kBeamFiringTurnSpeed,
+					kBeamFiringTurnSpeed
+				);
+				rot_.y += yawDiff;
+				rot_.x = 0.0f;
+				rot_.z = 0.0f;
+			}
+		}
+
 		actionLockTimer_--;
 		if (actionLockTimer_ <= 0) {
 			isActionLocked_ = false;
@@ -743,13 +779,17 @@ void Boss::UpdateUseCard() {
 	if (castTimer_ > 0) {
 		castTimer_--;
 
-		Vector3 dir = {
-			playerPos_.x - pos_.x,
-			0.0f,
-			playerPos_.z - pos_.z
-		};
-		if (Length(dir) > 0.01f) {
-			rot_.y = std::atan2f(dir.x, dir.z);
+		const bool isBeamCard = selectedCard_.id == 104;
+		const int beamAimLockFrames = isEnraged ? 35 : 45;
+		if (!isBeamCard || castTimer_ > beamAimLockFrames) {
+			Vector3 dir = {
+				playerPos_.x - pos_.x,
+				0.0f,
+				playerPos_.z - pos_.z
+			};
+			if (Length(dir) > 0.01f) {
+				rot_.y = std::atan2f(dir.x, dir.z);
+			}
 		}
 
 		float t = 1.0f - static_cast<float>(castTimer_) / static_cast<float>(castDurationCurrent_);
@@ -800,13 +840,15 @@ void Boss::UpdateUseCard() {
 	rot_.x = 0.0f;
 	rot_.z = 0.0f;
 
-	Vector3 dir = {
-		playerPos_.x - pos_.x,
-		0.0f,
-		playerPos_.z - pos_.z
-	};
-	if (Length(dir) > 0.01f) {
-		rot_.y = std::atan2f(dir.x, dir.z);
+	if (selectedCard_.id != 104) {
+		Vector3 dir = {
+			playerPos_.x - pos_.x,
+			0.0f,
+			playerPos_.z - pos_.z
+		};
+		if (Length(dir) > 0.01f) {
+			rot_.y = std::atan2f(dir.x, dir.z);
+		}
 	}
 
 	lastUsedCardId_ = selectedCard_.id;
@@ -950,6 +992,46 @@ void Boss::UpdateEnrageEffect(){
 		GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
 	}
 }
+
+void Boss::UpdateDeathAnimation() {
+	if (deathAnimationTimer_ <= 0) {
+		return;
+	}
+
+	deathAnimationTimer_--;
+
+	float t = 1.0f - static_cast<float>(deathAnimationTimer_) / static_cast<float>(deathAnimationDuration_);
+	t = std::clamp(t, 0.0f, 1.0f);
+	float ease = 1.0f - std::pow(1.0f - t, 3.0f);
+	float shake = std::sinf(t * 56.0f) * (1.0f - t);
+
+	rot_.x = ease * 1.25f;
+	rot_.z = shake * 0.18f;
+	pos_.y = deathStartY_ - ease * 0.45f;
+
+	float shrink = 1.0f - ease * 0.28f;
+	scale_ = {
+		baseScale_.x * (1.0f + std::sinf(t * 3.14159f) * 0.18f),
+		baseScale_.y * shrink,
+		baseScale_.z * shrink
+	};
+
+	if (deathAnimationTimer_ % 4 == 0) {
+		for (int i = 0; i < 8; i++) {
+			Vector3 smokePos = {
+				pos_.x + (rand() % 41 - 20) * 0.08f,
+				pos_.y + 0.8f + (rand() % 21) * 0.05f,
+				pos_.z + (rand() % 41 - 20) * 0.08f
+			};
+			Vector3 smokeVel = {
+				(rand() % 11 - 5) * 0.03f,
+				0.04f + (rand() % 10) * 0.01f,
+				(rand() % 11 - 5) * 0.03f
+			};
+			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 0.6f, 0.7f, { 1.0f, 0.45f, 0.15f, 0.85f });
+		}
+	}
+}
 Card Boss::GetRandomDropCard() const {
 	if (heldCards_.empty()) {
 		return Card{ -1, "", 0 };
@@ -1019,6 +1101,11 @@ void Boss::TakeDamage(int damage) {
 		hp_ = 0;
 		isDead_ = true;
 		state_ = State::Dead;
+		isHit_ = false;
+		hitTimer_ = 0;
+		knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+		deathAnimationTimer_ = deathAnimationDuration_;
+		deathStartY_ = pos_.y;
 
 		for (int i = 0; i < 80; i++) {
 			Vector3 expPos = {
@@ -1061,6 +1148,10 @@ void Boss::SetActionLock(int frame) {
 }
 
 bool Boss::IsVisible() const {
+	if (IsDeathAnimationPlaying()) {
+		return true;
+	}
+
 	if (!isHit_) {
 		return true;
 	}

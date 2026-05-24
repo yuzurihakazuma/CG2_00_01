@@ -143,8 +143,10 @@ private: // メンバ変数
 	Vector2 WorldToScreen(const Vector3& worldPos) const; // ワールド座標をスクリーン座標に変換する関数
 	bool ProjectWorldToScreen(const Vector3& worldPos, Vector2& screenPos) const;
 	void DrawCharacterHitboxesDebug() const;
+	void DrawBossBeamHitboxesDebug() const;
 	void DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const;
 	void DrawDebugCircleXZ(const Vector3& center, float radius, unsigned int color, float thickness) const;
+	void DrawDebugOrientedRectXZ(const Vector3& center, float yaw, float halfWidth, float halfLength, unsigned int color, float thickness) const;
 
 	//UI専用カメラ
 	std::unique_ptr<Camera> uiCamera_ = nullptr;
@@ -160,11 +162,19 @@ private: // メンバ変数
 
 	//カード使用の処理
 	void UpdateCardUse(Input *input);
-	void StartCardUseFlash(const Card& card);
+	void SyncReadiedCardIndex();
+	void PauseMagicCastForSwap();
+	void ResumeMagicCastAfterSwap();
+	void EndMagicCast(bool consumeReadiedCard);
+	void StartCardUseFlash(const Card& card, bool persistent = false, bool dissolveEnabled = true);
 	void UpdateCardUseFlash();
 	void DrawCardUseFlash();
 	void UpdatePlayerStatusGaugeUI();
 	void DrawPlayerStatusGaugeUI();
+	void UpdateTimedSpawns();
+	bool SpawnTimedCardPickup();
+	int CountActiveCardPickups() const;
+	int CountAliveEnemies() const;
 
 	// ポーズ画面の更新
 	void UpdatePause(Input* input);
@@ -183,6 +193,12 @@ private: // メンバ変数
 	// カードスポーン関連
 	int cardSpawnCount_ = 5;
 	int cardSpawnMargin_ = 1;
+	int timedEnemySpawnTimer_ = 600;
+	int timedCardSpawnTimer_ = 600;
+	const int timedSpawnIntervalFrames_ = 600;
+	const int normalTimedEnemyMax_ = 6;
+	const int normalTimedCardMax_ = 6;
+	const int bossTimedCardMax_ = 8;
 
 	// ダンジョン再生成とプレイヤー再スポーンの処理
 	void RegenerateDungeonAndRespawnPlayer(int roomCount);
@@ -233,12 +249,20 @@ private: // メンバ変数
 
 	// プレイヤーステータスの背景
 	std::unique_ptr<Sprite> playerStatusBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> handCountBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeBackSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeDelaySprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFillSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerHpGaugeGlossSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeBackSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerCostGaugeFillSprite_ = nullptr;
+	std::unique_ptr<Sprite> playerCostGaugeGlossSprite_ = nullptr;
+	float displayedHpRatio_ = -1.0f;
+	float hpDamageTrailRatio_ = -1.0f;
 
 	// コスト不足メッセージ表示用
 	int costLackMessageTimer_ = 0;
@@ -253,10 +277,18 @@ private: // メンバ変数
 	bool isCardReady_ = false;       // 現在カードを構えているか
 	Card readiedCard_{};             // 構えているカードの情報
 	int cardReadyTimer_ = 0;         // 構えていられる残り時間
+	int readiedCardIndex_ = -1;
+	static constexpr int kMagicCastDuration = 120;
+	bool isMagicCastPausedForSwap_ = false;
+	int magicRepeatCooldownTimer_ = 0;
+	static constexpr int kMagicRepeatCooldownDuration = 24;
 	int fistCooldownTimer_ = 0;
 	const int fistCooldownDuration_ = 60;
 	std::unique_ptr<Obj3d> cardUseFlashObj_ = nullptr;
 	int cardUseFlashTimer_ = 0;
+	bool cardUseFlashPersistent_ = false;
+	bool cardUseFlashDissolving_ = false;
+	bool cardUseFlashDissolveEnabled_ = true;
 	static constexpr int kCardUseFlashDuration = 18;
 
 	// ポーズ画面関連
@@ -269,6 +301,11 @@ private: // メンバ変数
 	bool wasBossIntroPlaying_ = false;
 	int bossIntroLetterboxFadeTimer_ = 0;
 	const int bossIntroLetterboxFadeDuration_ = 30;
+	bool isBossDeathCinematicPlaying_ = false;
+	bool bossDeathCinematicPlayed_ = false;
+	int bossDeathCinematicTimer_ = 0;
+	const int bossDeathCinematicDuration_ = 150;
+	Vector3 bossDeathCinematicFocus_{ 0.0f, 0.0f, 0.0f };
 
 	std::unique_ptr<SkinnedObj3d> skinnedObj_ = nullptr;
 

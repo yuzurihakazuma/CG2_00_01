@@ -36,6 +36,8 @@
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/BossManager.h"
 #include "game/card/CardUseSystem.h"
+#include "game/card/CardDatabase.h"
+#include "game/card/RuinBeamEffect.h"
 #include "game/map/Minimap.h"
 #include "game/map/MapManager.h"
 #include "Bloom.h"
@@ -76,6 +78,7 @@ void GamePlayScene::Initialize() {
 
 	// 敵モデル読み込み
 	ModelManager::GetInstance()->LoadModel("enemy", "resources/enemy", "enemy.obj");
+	ModelManager::GetInstance()->LoadModel("happyEnemy", "resources/enemy", "happyEnemy.gltf");
 	ModelManager::GetInstance()->LoadModel("normalEnemy", "resources/enemy", "normalEnemy.gltf");
 	ModelManager::GetInstance()->LoadModel("wallEnemy", "resources/enemy", "wallEnemy.obj");
 	ModelManager::GetInstance()->LoadModel("cornerEnemy", "resources/enemy", "cornerEnemy.obj");
@@ -230,7 +233,7 @@ void GamePlayScene::Initialize() {
 		mapManager_->ConsumeMapChanged();
 	}
 
-	
+
 	// ★追加：カードシステムにミニマップを教える
 	if (playerCardSystem_ && minimap_) {
 		playerCardSystem_->SetMinimap(minimap_.get());
@@ -248,6 +251,12 @@ void GamePlayScene::Initialize() {
 	// 画面サイズ取得
 	float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 	float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+	TextManager::GetInstance()->SetPosition("HandCountLabel", 48.0f, screenH - 126.0f);
+	TextManager::GetInstance()->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
+	TextManager::GetInstance()->SetScale("HandCountLabel", 0.58f);
+	TextManager::GetInstance()->SetScale("HandCountValue", 0.95f);
+	TextManager::GetInstance()->SetColor("HandCountLabel", 0.70f, 0.86f, 1.0f, 0.92f);
+	TextManager::GetInstance()->SetColor("HandCountValue", 0.96f, 1.0f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetPosition("FloorTransition", screenW * 0.5f, screenH * 0.5f);
 	TextManager::GetInstance()->SetScale("FloorTransition", 2.0f);
 	TextManager::GetInstance()->SetCentered("FloorTransition", true);
@@ -263,31 +272,59 @@ void GamePlayScene::Initialize() {
 	playerStatusBgSprite_ = Sprite::Create("resources/white1x1.png", { 170.0f, 625.0f });
 	playerStatusBgSprite_->SetSize({ 340.0f, 190.0f });
 	playerStatusBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.65f });
+	handCountBgSprite_ = Sprite::Create("resources/white1x1.png", { 132.0f, screenH - 82.0f });
+	if (handCountBgSprite_) {
+		handCountBgSprite_->SetSize({ 220.0f, 106.0f });
+		handCountBgSprite_->SetColor({ 0.02f, 0.04f, 0.06f, 0.58f });
+	}
+	playerHpGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerHpGaugeDelaySprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerHpGaugeGlossSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerCostGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerCostGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerCostGaugeFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	playerCostGaugeGlossSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+	if (playerHpGaugeShadowSprite_) {
+		playerHpGaugeShadowSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.44f });
+	}
 	if (playerHpGaugeFrameSprite_) {
-		playerHpGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
+		playerHpGaugeFrameSprite_->SetColor({ 0.92f, 1.0f, 0.96f, 0.54f });
 	}
 	if (playerHpGaugeBackSprite_) {
-		playerHpGaugeBackSprite_->SetColor({ 0.08f, 0.03f, 0.03f, 0.85f });
+		playerHpGaugeBackSprite_->SetColor({ 0.04f, 0.05f, 0.06f, 0.86f });
+	}
+	if (playerHpGaugeDelaySprite_) {
+		playerHpGaugeDelaySprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerHpGaugeDelaySprite_->SetColor({ 1.0f, 0.88f, 0.38f, 0.36f });
 	}
 	if (playerHpGaugeFillSprite_) {
 		playerHpGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
-		playerHpGaugeFillSprite_->SetColor({ 0.95f, 0.12f, 0.13f, 0.95f });
+		playerHpGaugeFillSprite_->SetColor({ 0.15f, 0.9f, 0.25f, 0.95f });
+	}
+	if (playerHpGaugeGlossSprite_) {
+		playerHpGaugeGlossSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerHpGaugeGlossSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.20f });
+	}
+	if (playerCostGaugeShadowSprite_) {
+		playerCostGaugeShadowSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.44f });
 	}
 	if (playerCostGaugeFrameSprite_) {
-		playerCostGaugeFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.28f });
+		playerCostGaugeFrameSprite_->SetColor({ 0.82f, 0.96f, 1.0f, 0.50f });
 	}
 	if (playerCostGaugeBackSprite_) {
-		playerCostGaugeBackSprite_->SetColor({ 0.03f, 0.05f, 0.09f, 0.85f });
+		playerCostGaugeBackSprite_->SetColor({ 0.03f, 0.05f, 0.08f, 0.86f });
 	}
 	if (playerCostGaugeFillSprite_) {
 		playerCostGaugeFillSprite_->SetAnchorPoint({ 0.0f, 0.5f });
 		playerCostGaugeFillSprite_->SetColor({ 0.18f, 0.68f, 1.0f, 0.95f });
+	}
+	if (playerCostGaugeGlossSprite_) {
+		playerCostGaugeGlossSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+		playerCostGaugeGlossSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.18f });
 	}
 
 	// スプライト作成（座標 X:100, Y:500）
@@ -529,6 +566,10 @@ void GamePlayScene::Update() {
 	}
 
 	if (isCardSwapMode_) {
+		if (isCardReady_) {
+			PauseMagicCastForSwap();
+		}
+
 		if (tutorial_ && tutorial_->IsActive()) {
 			tutorial_->SetTextSuppressed(true);
 		}
@@ -629,7 +670,8 @@ void GamePlayScene::Update() {
 		}
 
 		if (tutorial_->ConsumeReturnToTitleRequest()) {
-			SceneManager::GetInstance()->ChangeScene("TITLE");
+			GamePlayScene::RequestTutorialStart(false);
+			SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
 			return;
 		}
 
@@ -643,13 +685,14 @@ void GamePlayScene::Update() {
 	// プレイヤーの更新処理
 	// ==========================================
 	const bool isBossIntroPlayingNow = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+	const bool isBossCinematicPlayingNow = isBossIntroPlayingNow || isBossDeathCinematicPlaying_;
 	if (playerManager_) {
 
 
 		playerManager_->ApplyInfiniteMode(isInfiniteMode_);
 
 		// 登場演出中は入力だけ止めて、見た目の同期は続ける
-		if (isBossIntroPlayingNow && playerManager_->GetPlayer()) {
+		if (isBossCinematicPlayingNow && playerManager_->GetPlayer()) {
 			playerManager_->GetPlayer()->LockAction(1);
 		}
 
@@ -729,8 +772,24 @@ void GamePlayScene::Update() {
 		);
 	}
 
+	if (bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
+		if (!isBossDeathCinematicPlaying_) {
+			isBossDeathCinematicPlaying_ = true;
+			bossDeathCinematicTimer_ = bossDeathCinematicDuration_;
+			bossDeathCinematicFocus_ = bossManager_->GetBossFocusPosition();
+			bossDeathFlashTimer_ = 45;
+		} else if (bossDeathCinematicTimer_ > 0) {
+			bossDeathCinematicTimer_--;
+			bossDeathCinematicFocus_ = bossManager_->GetBossFocusPosition();
+		}
+	} else {
+		isBossDeathCinematicPlaying_ = false;
+		bossDeathCinematicTimer_ = 0;
+	}
+
 
 	// ボスを倒していたらゲームクリアへ遷移
+	UpdateTimedSpawns();
 	if (bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
 		// 10階ボス撃破後にゲームクリアへ遷移する
 		SceneManager::GetInstance()->ChangeScene("GAMECLEAR");
@@ -852,6 +911,7 @@ void GamePlayScene::Update() {
 			Vector3 currentRot = camera_->GetRotation();
 
 			bool isBossIntroPlaying = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+			bool isBossDeathCinematicPlaying = isBossDeathCinematicPlaying_;
 			BossManager::IntroCameraState bossIntroState =
 				bossManager_ ? bossManager_->GetBossIntroCameraState() : BossManager::IntroCameraState::None;
 			int bossIntroTimer = bossManager_ ? bossManager_->GetBossIntroTimer() : 0;
@@ -860,8 +920,30 @@ void GamePlayScene::Update() {
 			Vector3 targetPos = currentPos;
 			Vector3 targetRot = currentRot;
 
+			if (isBossDeathCinematicPlaying && mapManager_ && mapManager_->IsBossMap()) {
+				float t = 1.0f - static_cast<float>(bossDeathCinematicTimer_) / static_cast<float>(bossDeathCinematicDuration_);
+				t = std::clamp(t, 0.0f, 1.0f);
+				float pulse = std::sinf(t * 3.14159f);
+				const bool isSplitDeath = bossManager_ && bossManager_->IsSplitBossBattle();
+				float baseDistance = isSplitDeath ? 18.0f : 13.0f;
+				float baseHeight = isSplitDeath ? 6.8f : 5.4f;
+				float distance = baseDistance - pulse * 1.4f;
+
+				targetPos = {
+					bossDeathCinematicFocus_.x,
+					bossDeathCinematicFocus_.y + baseHeight + pulse * 0.8f,
+					bossDeathCinematicFocus_.z - distance
+				};
+
+				targetRot = {
+					(isSplitDeath ? 0.52f : 0.48f) - pulse * 0.04f,
+					0.0f,
+					0.0f
+				};
+			}
+
 			// ボス部屋突入時の演出カメラ
-			if (isBossIntroPlaying && mapManager_ && mapManager_->IsBossMap() && boss) {
+			else if (isBossIntroPlaying && mapManager_ && mapManager_->IsBossMap() && boss) {
 
 				// 分裂ボス時は2体の中心、通常時は通常ボス位置を使う
 				Vector3 bossPos = bossManager_->GetBossFocusPosition();
@@ -1168,6 +1250,8 @@ void GamePlayScene::Update() {
 				} else {
 					followRate = 0.16f;
 				}
+			} else if (isBossDeathCinematicPlaying) {
+				followRate = 0.28f;
 			}
 
 			// 位置をなめらかに移動
@@ -1221,7 +1305,10 @@ void GamePlayScene::Update() {
 				pickup.isActive = false;
 				continue;
 			}
-			else {
+			else if (handManager_.GetHandSize() >= handManager_.GetMaxHandSize()) {
+				if (isCardReady_) {
+					PauseMagicCastForSwap();
+				}
 				// 手札が一杯ならカード交換モードへ移行
 				isCardSwapMode_ = true;
 				pendingCard_ = pickup.card;
@@ -1231,6 +1318,10 @@ void GamePlayScene::Update() {
 				// 手札の右端に仮置きする
 				handManager_.AddPendingCard(pendingCard_);
 				break;
+			}
+			else {
+				pickup.isActive = false;
+				continue;
 			}
 		}
 
@@ -1402,10 +1493,14 @@ void GamePlayScene::Update() {
 		if (fistCooldownTimer_ > 0) {
 			fistCooldownTimer_--;
 		}
+		if (magicRepeatCooldownTimer_ > 0) {
+			magicRepeatCooldownTimer_--;
+		}
 		handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 		if (uiCamera_) {
 			uiCamera_->Update();
 		}
+		handManager_.SetSwapModeVisual(false);
 		handManager_.Update();
 	}
 
@@ -1422,7 +1517,7 @@ void GamePlayScene::Update() {
 	// プレイヤーステータス表示更新
 	if (playerManager_) {
 		std::string hpText =
-			"HP:" + std::to_string(playerManager_->GetHP()) + "/" + std::to_string(playerManager_->GetMaxHP());
+			"HP  " + std::to_string(playerManager_->GetHP()) + "/" + std::to_string(playerManager_->GetMaxHP());
 
 		std::string costText =
 			"COST:" + std::to_string(playerManager_->GetCost()) + "/" + std::to_string(playerManager_->GetMaxCost());
@@ -1445,13 +1540,32 @@ void GamePlayScene::Update() {
 
 		// テキストの座標を最新のウィンドウ幅に合わせて更新
 		textMgr->SetPosition("PlayerHP", startX, topY);
-		textMgr->SetScale("PlayerHP", 0.68f);
+		textMgr->SetScale("PlayerHP", 0.72f);
+		textMgr->SetColor("PlayerHP", 0.92f, 1.0f, 0.94f, 1.0f);
 		textMgr->SetScale("PlayerCost", 0.68f);
+		textMgr->SetColor("PlayerCost", 0.82f, 0.96f, 1.0f, 1.0f);
 		textMgr->SetScale("PlayerLevel", 0.9f);
 		textMgr->SetScale("PlayerEXP", 0.9f);
 		textMgr->SetPosition("PlayerCost", startX, 58.0f);
 		textMgr->SetPosition("PlayerLevel", 770.0f, 30.0f);
 		textMgr->SetPosition("PlayerEXP", 870.0f, 30.0f);
+	}
+
+	{
+		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+		auto textMgr = TextManager::GetInstance();
+		textMgr->SetText("HandCountLabel", "HAND");
+		textMgr->SetText(
+			"HandCountValue",
+			std::to_string(handManager_.GetHandSize()) + " / " + std::to_string(handManager_.GetMaxHandSize())
+		);
+		textMgr->SetPosition("HandCountLabel", 48.0f, screenH - 126.0f);
+		textMgr->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
+		if (handCountBgSprite_) {
+			handCountBgSprite_->SetPosition({ 132.0f, screenH - 82.0f });
+			handCountBgSprite_->SetSize({ 220.0f, 106.0f });
+			handCountBgSprite_->Update();
+		}
 	}
 
 	if (tutorial_ && tutorial_->IsActive()) {
@@ -1479,7 +1593,7 @@ void GamePlayScene::Update() {
 			"LShift:回避\n"
 			"Space:カード使用\n"
 			"矢印キー:カード選択\n\n"
-			"クリア条件:5階層まで進みボスを倒す"
+			"クリア条件:10階層まで進みボスを倒す"
 		);
 	}
 
@@ -1505,77 +1619,45 @@ void GamePlayScene::Update() {
 		bossPos = boss->GetPosition();
 	}
 
-	if (!isBossIntroPlaying) {
+	if (!isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
 		UpdateCardUse(input);
 	}
 	UpdateCardUseFlash();
 
-	// ==========================================
-	// 攻撃カードの「撃ち放題」タイマーと発動処理
-	// ==========================================
-	if (isCardReady_ && !isBossIntroPlaying) {
-		cardReadyTimer_--; // 毎フレーム時間を減らす
-
-		// 画面に表示する文字を作る
-		std::string displayText = "Eキーで発動：\n" + readiedCard_.name;
-
-		if (cardReadyTimer_ > 120) {
-			// 【残り2秒(120フレーム)より多いとき】
-			// まだ余裕があるので、ずっと常時表示しておく
-			TextManager::GetInstance()->SetText("ReadyCardT", displayText);
-
+	if (isCardReady_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
+		cardReadyTimer_--;
+		SyncReadiedCardIndex();
+		if (!isCardReady_) {
+			return;
 		}
-		else {
-			// 【残り2秒以下になったとき】
-			// 時間切れが近いので、チカチカ点滅させてプレイヤーを焦らす！
-			// （% 20 >= 10 にすることで、少し早めのスピードで点滅します）
-			if (cardReadyTimer_ % 20 >= 10) {
-				TextManager::GetInstance()->SetText("ReadyCardT", displayText);
-			}
-			else {
-				TextManager::GetInstance()->SetText("ReadyCardT", "");
-			}
+		if (readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+			handManager_.SetSelectedCardIndex(readiedCardIndex_);
 		}
+
+		handManager_.SetCastDisplay(readiedCard_.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
+		TextManager::GetInstance()->SetText("ReadyCardT", "詠唱中\nSPACEで発動\n" + readiedCard_.name);
+
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		TextManager::GetInstance()->SetPosition("ReadyCardT", screenW - 440.0f, 230.0f);
+		TextManager::GetInstance()->SetScale("ReadyCardT", 0.92f);
+		TextManager::GetInstance()->SetColor("ReadyCardT", 1.0f, 0.95f, 0.55f, 1.0f);
 
-		// カードUIと同じ設定値を使います
-		float bgWidth = 390.0f;
-		float bgHeight = 200.0f;
-		float marginRight = 50.0f;
-		float marginTop = 10.0f;
-
-		// X座標：カード説明の文字の左端に揃える
-		float textPosX = screenW - bgWidth - marginRight;
-		// Y座標：カードUIの黒枠の下端に、少し余白(20px)を足す
-		float textPosY = marginTop + bgHeight + 20.0f;
-
-		TextManager::GetInstance()->SetPosition("ReadyCardT", textPosX, textPosY);
-
-		// Eキーで構え中の攻撃カードを発動
-		if (input->Triggerkey(DIK_E)) {
-			if (playerCardSystem_ && playerManager_ && !playerManager_->IsDodging()) {
-				StartCardUseFlash(readiedCard_);
-				playerCardSystem_->UseCard(
-					readiedCard_,
-					playerPos_,
-					playerManager_->GetRotationY(),
-					true,
-					playerManager_->GetPlayer()
-				);
-			}
-		}
-
-		// 時間切れになったら構え状態（撃ち放題）を終了する
 		if (cardReadyTimer_ <= 0) {
-			isCardReady_ = false;
-
-			// 時間切れになったら文字を空（非表示）にする
-			TextManager::GetInstance()->SetText("ReadyCardT", "");
+			EndMagicCast(true);
 		}
+	} else if (!isCardReady_) {
+		handManager_.SetCastDisplay(-1, 0, 0, -1);
+		magicRepeatCooldownTimer_ = 0;
+		if (cardUseFlashPersistent_) {
+			cardUseFlashPersistent_ = false;
+			cardUseFlashDissolving_ = true;
+			cardUseFlashTimer_ = kCardUseFlashDuration;
+		}
+		TextManager::GetInstance()->SetText("ReadyCardT", "");
 	}
 
 	// プレイヤー用カードシステム更新
-	if (playerCardSystem_ && !isBossIntroPlaying) {
+	if (playerCardSystem_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
 		playerCardSystem_->Update(
 			player,
 			enemyManager_.get(),
@@ -1672,6 +1754,7 @@ void GamePlayScene::Draw() {
 
 	Boss* boss = bossManager_ ? bossManager_->GetBoss() : nullptr;
 	const bool isBossIntroPlaying = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
 
 	// GPUパーティクルの描画準備（DispatchでComputeシェーダーを実行して、描画に必要なデータをGPU側で更新してもらう）
 	GPUParticleManager::GetInstance()->Dispatch(commandList);
@@ -1743,7 +1826,7 @@ void GamePlayScene::Draw() {
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
 	// 手札カードもBloom対象にしたいので、MRT描画中に3Dとして描く
-	if (!isBossIntroPlaying) {
+	if (!isBossCinematicPlaying) {
 
 		// ==========================================
 		// ★ 修正1：黒幕を「手札」より先に描画する！
@@ -1798,7 +1881,7 @@ void GamePlayScene::Draw() {
 	// =========================================
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 
-	if (!isBossIntroPlaying) {
+	if (!isBossCinematicPlaying) {
 
 		if (!isCardSwapMode_) {
 			handManager_.DrawCooldownOverlays();
@@ -1812,13 +1895,17 @@ void GamePlayScene::Draw() {
 			bossManager_->DrawHpBar(mapManager_.get());
 		}
 
+		if (minimap_) {
+			minimap_->Draw(); // 大きいマップを先に描いてHUDを上に重ねる
+		}
+
 		if (playerStatusBgSprite_) {
 			playerStatusBgSprite_->Draw();
 		}
 		DrawPlayerStatusGaugeUI();
 
-		if (minimap_) {
-			minimap_->Draw();
+		if (handCountBgSprite_) {
+			handCountBgSprite_->Draw();
 		}
 
 		levelUpBonusManager_.Draw();
@@ -1933,6 +2020,18 @@ void GamePlayScene::DrawDebugUI() {
 		ImGui::Text("[Boss]");
 		ImGui::Text("Boss HP: %d / %d", boss->GetHP(), boss->GetMaxHP());
 		ImGui::Text("Boss Dead: %s", boss->IsDead() ? "true" : "false");
+		ImGui::Text("Death Cinematic: %s (%d)", isBossDeathCinematicPlaying_ ? "true" : "false", bossDeathCinematicTimer_);
+		if (ImGui::Button("Kill Boss Now")) {
+			if (bossManager_ && bossManager_->IsSplitBossBattle()) {
+				for (int i = 0; i < 2; ++i) {
+					if (Boss* splitBoss = bossManager_->GetBossAt(i); splitBoss && !splitBoss->IsDead()) {
+						splitBoss->TakeDamage(splitBoss->GetMaxHP());
+					}
+				}
+			} else if (!boss->IsDead()) {
+				boss->TakeDamage(boss->GetMaxHP());
+			}
+		}
 	}
 
 	// デバッグ用に経験値を加算
@@ -2131,12 +2230,17 @@ void GamePlayScene::ResetBattleDebug() {
 	// レベルボーナスのリセット
 	int currentLevel = playerManager_ ? playerManager_->GetLevel() : 1;
 	levelUpBonusManager_.Reset(currentLevel);
+
+	isBossDeathCinematicPlaying_ = false;
+	bossDeathCinematicPlayed_ = false;
+	bossDeathCinematicTimer_ = 0;
 }
 
 
 void GamePlayScene::UpdateCardSwapMode(Input* input) {
 
 	// 手札の選択と見た目の更新
+	handManager_.SetSwapModeVisual(true);
 	handManager_.Update();
 	uiCamera_->Update(); // UIカメラの更新もここで行う
 
@@ -2180,6 +2284,9 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		int selectedIdx = handManager_.GetSelectedCardIndex();
 
 		// 選んでいるカードがID: 1（初期カード)なら交換をしない
+		const bool isSwappingReadiedCard = isMagicCastPausedForSwap_ && selectedIdx == readiedCardIndex_;
+		const bool shouldShiftReadiedIndex = isMagicCastPausedForSwap_ && selectedIdx < readiedCardIndex_;
+
 		if (handManager_.GetCard(selectedIdx).id == 1) {
 			return;
 		}
@@ -2198,14 +2305,113 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		}
 
 		// 交換が終わったら、一番左(0)を選択し直す！
-		handManager_.SetSelectedCardIndex(0);
+		handManager_.SetSwapModeVisual(false);
 
 		isCardSwapMode_ = false;
+
+		if (isSwappingReadiedCard) {
+			EndMagicCast(false);
+		}
+		else if (isMagicCastPausedForSwap_) {
+			if (shouldShiftReadiedIndex) {
+				readiedCardIndex_--;
+			}
+			ResumeMagicCastAfterSwap();
+		}
+		else {
+			handManager_.SetSelectedCardIndex(0);
+		}
 	}
 	
 }
 
-void GamePlayScene::StartCardUseFlash(const Card& card) {
+void GamePlayScene::PauseMagicCastForSwap() {
+	if (!isCardReady_ || isMagicCastPausedForSwap_) {
+		return;
+	}
+
+	isMagicCastPausedForSwap_ = true;
+	handManager_.SetCastDisplay(-1, 0, 0, -1);
+	if (playerManager_ && playerManager_->GetPlayer()) {
+		playerManager_->GetPlayer()->PlayIdlePose(8);
+	}
+	TextManager::GetInstance()->SetText("ReadyCardT", "");
+}
+
+void GamePlayScene::ResumeMagicCastAfterSwap() {
+	if (!isCardReady_) {
+		return;
+	}
+
+	isMagicCastPausedForSwap_ = false;
+	SyncReadiedCardIndex();
+	if (!isCardReady_) {
+		return;
+	}
+	if (readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+		handManager_.SetSelectedCardIndex(readiedCardIndex_);
+	}
+	handManager_.SetCastDisplay(readiedCard_.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
+	if (playerManager_ && playerManager_->GetPlayer()) {
+		playerManager_->GetPlayer()->PlayCardUsePose(10);
+	}
+}
+
+void GamePlayScene::SyncReadiedCardIndex() {
+	if (!isCardReady_) {
+		return;
+	}
+
+	auto isSameCard = [this](const Card& card) {
+		return card.id == readiedCard_.id &&
+			card.name == readiedCard_.name &&
+			card.modelName == readiedCard_.modelName;
+	};
+
+	if (readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+		if (isSameCard(handManager_.GetCard(readiedCardIndex_))) {
+			return;
+		}
+	}
+
+	for (int i = 0; i < handManager_.GetHandSize(); ++i) {
+		if (isSameCard(handManager_.GetCard(i))) {
+			readiedCardIndex_ = i;
+			return;
+		}
+	}
+
+	EndMagicCast(false);
+}
+
+void GamePlayScene::EndMagicCast(bool consumeReadiedCard) {
+	if (consumeReadiedCard && readiedCardIndex_ >= 0 && readiedCardIndex_ < handManager_.GetHandSize()) {
+		handManager_.SetSelectedCardIndex(readiedCardIndex_);
+		handManager_.StartDissolveSelectedCard();
+	}
+
+	if (playerManager_ && playerManager_->GetPlayer()) {
+		playerManager_->GetPlayer()->PlayIdlePose(8);
+	}
+
+	isCardReady_ = false;
+	isMagicCastPausedForSwap_ = false;
+	cardReadyTimer_ = 0;
+	magicRepeatCooldownTimer_ = 0;
+	readiedCard_ = Card{};
+	readiedCardIndex_ = -1;
+	handManager_.SetCastDisplay(-1, 0, 0, -1);
+
+	if (cardUseFlashPersistent_) {
+		cardUseFlashPersistent_ = false;
+		cardUseFlashDissolving_ = true;
+		cardUseFlashTimer_ = kCardUseFlashDuration;
+	}
+
+	TextManager::GetInstance()->SetText("ReadyCardT", "");
+}
+
+void GamePlayScene::StartCardUseFlash(const Card& card, bool persistent, bool dissolveEnabled) {
 	if (!camera_ || card.modelName.empty()) {
 		return;
 	}
@@ -2233,7 +2439,10 @@ void GamePlayScene::StartCardUseFlash(const Card& card) {
 	flashObj->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 
 	cardUseFlashObj_ = std::move(flashObj);
-	cardUseFlashTimer_ = kCardUseFlashDuration;
+	cardUseFlashTimer_ = persistent ? 0 : kCardUseFlashDuration;
+	cardUseFlashPersistent_ = persistent;
+	cardUseFlashDissolving_ = false;
+	cardUseFlashDissolveEnabled_ = dissolveEnabled;
 	UpdateCardUseFlash();
 }
 
@@ -2242,22 +2451,29 @@ void GamePlayScene::UpdateCardUseFlash() {
 		return;
 	}
 
-	if (cardUseFlashTimer_ <= 0) {
+	if (!cardUseFlashPersistent_ && cardUseFlashTimer_ <= 0) {
 		cardUseFlashObj_.reset();
+		cardUseFlashDissolving_ = false;
+		cardUseFlashDissolveEnabled_ = true;
 		return;
 	}
 
-	const float progress = 1.0f - static_cast<float>(cardUseFlashTimer_) / static_cast<float>(kCardUseFlashDuration);
+	const float progress = cardUseFlashPersistent_
+		? 0.5f
+		: 1.0f - static_cast<float>(cardUseFlashTimer_) / static_cast<float>(kCardUseFlashDuration);
 	const float yaw = playerManager_ ? playerManager_->GetRotationY() : 0.0f;
 	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+	const bool steadyCard = cardUseFlashPersistent_ || cardUseFlashDissolving_;
 	const Vector3 position = {
-		playerPos_.x + forward.x * (0.8f + progress * 0.18f),
-		playerPos_.y + 1.18f + std::sinf(progress * 3.141592f) * 0.12f,
-		playerPos_.z + forward.z * (0.8f + progress * 0.18f)
+		playerPos_.x + forward.x * (steadyCard ? 0.88f : 0.8f + progress * 0.18f),
+		playerPos_.y + 1.18f + (steadyCard ? std::sinf(static_cast<float>(cardReadyTimer_) * 0.10f) * 0.035f : std::sinf(progress * 3.141592f) * 0.12f),
+		playerPos_.z + forward.z * (steadyCard ? 0.88f : 0.8f + progress * 0.18f)
 	};
-	const float scale = 0.42f + std::sinf(progress * 3.141592f) * 0.12f;
-	const float dissolve = std::clamp((progress - 0.42f) / 0.58f, 0.0f, 1.0f);
-	const float flash = 0.75f + std::sinf(progress * 3.141592f) * 0.45f;
+	const float scale = steadyCard ? 0.36f : 0.42f + std::sinf(progress * 3.141592f) * 0.12f;
+	const float dissolve = steadyCard
+		? (cardUseFlashDissolving_ ? progress : 0.0f)
+		: (cardUseFlashDissolveEnabled_ ? std::clamp((progress - 0.42f) / 0.58f, 0.0f, 1.0f) : 0.0f);
+	const float flash = steadyCard ? 1.0f : 0.75f + std::sinf(progress * 3.141592f) * 0.45f;
 
 	cardUseFlashObj_->SetTranslation(position);
 	cardUseFlashObj_->SetRotation({ 0.0f, yaw, 0.0f });
@@ -2266,7 +2482,9 @@ void GamePlayScene::UpdateCardUseFlash() {
 	cardUseFlashObj_->SetColor({ flash, flash, flash, 1.0f });
 	cardUseFlashObj_->Update();
 
-	cardUseFlashTimer_--;
+	if (!cardUseFlashPersistent_) {
+		cardUseFlashTimer_--;
+	}
 }
 
 void GamePlayScene::DrawCardUseFlash() {
@@ -2281,19 +2499,37 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 	}
 
 	const float panelLeft = 250.0f;
-	const float labelWidth = 170.0f;
+	const float labelWidth = 150.0f;
 	const float gaugeLeft = panelLeft + labelWidth + 18.0f;
-	const float gaugeWidth = 300.0f;
-	const float gaugeHeight = 16.0f;
+	const float gaugeWidth = 330.0f;
+	const float gaugeHeight = 14.0f;
 	const float hpY = 42.0f;
 	const float costY = 72.0f;
 
-	auto updateGauge = [gaugeLeft, gaugeWidth, gaugeHeight](Sprite* frame, Sprite* back, Sprite* fill, float y, float ratio, const Vector4& fillColor) {
+	auto updateGauge = [gaugeLeft, gaugeWidth, gaugeHeight](
+		Sprite* shadow,
+		Sprite* frame,
+		Sprite* back,
+		Sprite* delay,
+		Sprite* fill,
+		Sprite* gloss,
+		float y,
+		float ratio,
+		float delayRatio,
+		const Vector4& fillColor
+	) {
 		const float safeRatio = std::clamp(ratio, 0.0f, 1.0f);
+		const float safeDelayRatio = std::clamp(delayRatio, 0.0f, 1.0f);
+
+		if (shadow) {
+			shadow->SetPosition({ gaugeLeft + gaugeWidth * 0.5f + 3.0f, y + 3.0f });
+			shadow->SetSize({ gaugeWidth + 10.0f, gaugeHeight + 10.0f });
+			shadow->Update();
+		}
 
 		if (frame) {
 			frame->SetPosition({ gaugeLeft + gaugeWidth * 0.5f, y });
-			frame->SetSize({ gaugeWidth + 4.0f, gaugeHeight + 4.0f });
+			frame->SetSize({ gaugeWidth + 6.0f, gaugeHeight + 6.0f });
 			frame->Update();
 		}
 		if (back) {
@@ -2301,11 +2537,21 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 			back->SetSize({ gaugeWidth, gaugeHeight });
 			back->Update();
 		}
+		if (delay) {
+			delay->SetPosition({ gaugeLeft, y });
+			delay->SetSize({ gaugeWidth * safeDelayRatio, gaugeHeight });
+			delay->Update();
+		}
 		if (fill) {
 			fill->SetPosition({ gaugeLeft, y });
 			fill->SetSize({ gaugeWidth * safeRatio, gaugeHeight });
 			fill->SetColor(fillColor);
 			fill->Update();
+		}
+		if (gloss) {
+			gloss->SetPosition({ gaugeLeft, y - gaugeHeight * 0.24f });
+			gloss->SetSize({ gaugeWidth * safeRatio, 3.0f });
+			gloss->Update();
 		}
 	};
 
@@ -2315,26 +2561,81 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 	const float costRatio = playerManager_->GetMaxCost() > 0
 		? static_cast<float>(playerManager_->GetCost()) / static_cast<float>(playerManager_->GetMaxCost())
 		: 0.0f;
-	Vector4 hpColor = { 0.95f, 0.12f, 0.13f, 0.95f };
-	if (hpRatio > 0.5f) {
-		hpColor = { 0.15f, 0.9f, 0.25f, 0.95f };
-	} else if (hpRatio > 0.25f) {
-		hpColor = { 1.0f, 0.82f, 0.12f, 0.95f };
+	const float targetHpRatio = std::clamp(hpRatio, 0.0f, 1.0f);
+	if (displayedHpRatio_ < 0.0f) {
+		displayedHpRatio_ = targetHpRatio;
+	}
+	if (hpDamageTrailRatio_ < 0.0f) {
+		hpDamageTrailRatio_ = targetHpRatio;
+	}
+	const float hpDelta = targetHpRatio - displayedHpRatio_;
+	const float hpFollowSpeed = hpDelta >= 0.0f ? 0.075f : 0.025f;
+	if (std::fabs(hpDelta) <= hpFollowSpeed) {
+		displayedHpRatio_ = targetHpRatio;
+	} else {
+		displayedHpRatio_ += (hpDelta > 0.0f ? hpFollowSpeed : -hpFollowSpeed);
+	}
+	displayedHpRatio_ = std::clamp(displayedHpRatio_, 0.0f, 1.0f);
+	if (hpDamageTrailRatio_ < displayedHpRatio_) {
+		hpDamageTrailRatio_ = displayedHpRatio_;
+	} else {
+		hpDamageTrailRatio_ = (std::max)(displayedHpRatio_, hpDamageTrailRatio_ - 0.012f);
 	}
 
-	updateGauge(playerHpGaugeFrameSprite_.get(), playerHpGaugeBackSprite_.get(), playerHpGaugeFillSprite_.get(), hpY, hpRatio, hpColor);
-	updateGauge(playerCostGaugeFrameSprite_.get(), playerCostGaugeBackSprite_.get(), playerCostGaugeFillSprite_.get(), costY, costRatio, { 0.18f, 0.68f, 1.0f, 0.95f });
+	Vector4 hpColor = { 1.0f, 0.18f, 0.14f, 0.96f };
+	if (targetHpRatio > 0.5f) {
+		hpColor = { 0.24f, 0.98f, 0.48f, 0.96f };
+	} else if (targetHpRatio > 0.25f) {
+		hpColor = { 1.0f, 0.82f, 0.18f, 0.96f };
+	}
+
+	updateGauge(
+		playerHpGaugeShadowSprite_.get(),
+		playerHpGaugeFrameSprite_.get(),
+		playerHpGaugeBackSprite_.get(),
+		playerHpGaugeDelaySprite_.get(),
+		playerHpGaugeFillSprite_.get(),
+		playerHpGaugeGlossSprite_.get(),
+		hpY,
+		displayedHpRatio_,
+		hpDamageTrailRatio_,
+		hpColor
+	);
+	updateGauge(
+		playerCostGaugeShadowSprite_.get(),
+		playerCostGaugeFrameSprite_.get(),
+		playerCostGaugeBackSprite_.get(),
+		nullptr,
+		playerCostGaugeFillSprite_.get(),
+		playerCostGaugeGlossSprite_.get(),
+		costY,
+		costRatio,
+		costRatio,
+		{ 0.12f, 0.78f, 1.0f, 0.95f }
+	);
 }
 
 void GamePlayScene::DrawPlayerStatusGaugeUI() {
+	if (playerHpGaugeShadowSprite_) {
+		playerHpGaugeShadowSprite_->Draw();
+	}
 	if (playerHpGaugeFrameSprite_) {
 		playerHpGaugeFrameSprite_->Draw();
 	}
 	if (playerHpGaugeBackSprite_) {
 		playerHpGaugeBackSprite_->Draw();
 	}
+	if (playerHpGaugeDelaySprite_) {
+		playerHpGaugeDelaySprite_->Draw();
+	}
 	if (playerHpGaugeFillSprite_) {
 		playerHpGaugeFillSprite_->Draw();
+	}
+	if (playerHpGaugeGlossSprite_) {
+		playerHpGaugeGlossSprite_->Draw();
+	}
+	if (playerCostGaugeShadowSprite_) {
+		playerCostGaugeShadowSprite_->Draw();
 	}
 	if (playerCostGaugeFrameSprite_) {
 		playerCostGaugeFrameSprite_->Draw();
@@ -2345,6 +2646,9 @@ void GamePlayScene::DrawPlayerStatusGaugeUI() {
 	if (playerCostGaugeFillSprite_) {
 		playerCostGaugeFillSprite_->Draw();
 	}
+	if (playerCostGaugeGlossSprite_) {
+		playerCostGaugeGlossSprite_->Draw();
+	}
 }
 
 void GamePlayScene::UpdateCardUse(Input* input) {
@@ -2353,6 +2657,14 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	if (!playerManager_) {
 		return;
 	}
+
+	if (isBossDeathCinematicPlaying_) {
+		return;
+	}
+
+	auto isMagicCastCard = [](int id) {
+		return id == 2 || id == 6 || id == 7;
+	};
 
 	// プレイヤー本体を取得
 	Player* player = playerManager_->GetPlayer();
@@ -2369,6 +2681,25 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 
 	// 行動ロック中はカードを使えない
 	if (playerManager_->IsActionLocked()) {
+		return;
+	}
+
+	if (isCardReady_) {
+		if (magicRepeatCooldownTimer_ > 0) {
+			return;
+		}
+		if (playerCardSystem_) {
+			playerCardSystem_->UseCardImmediately(
+				readiedCard_,
+				playerPos_,
+				playerManager_->GetRotationY(),
+				true,
+				player,
+				nullptr,
+				false
+			);
+		}
+		magicRepeatCooldownTimer_ = kMagicRepeatCooldownDuration;
 		return;
 	}
 
@@ -2392,25 +2723,6 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
-	auto isImmediateAttack = [](int id) {
-		switch (id) {
-		case 1:  // 拳
-		case 10: // クロー
-		case 13: // 蹴り
-		case 14: // 剣
-		case 15: // ハンマー
-		case 16: // 槍
-			return true;
-		default:
-			return false;
-		}
-		};
-
-	// 攻撃カード構え中は他の攻撃カードを使えない
-	if (isCardReady_ && !isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
-		return;
-	}
-
 	// コスト不足ならメッセージを出して終了
 	if (!playerManager_->CanUseCost(selectedCard.cost)) {
 		costLackMessageTimer_ = 60;
@@ -2419,37 +2731,42 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 
 	// コストを消費
 	playerManager_->UseCost(selectedCard.cost);
-	StartCardUseFlash(selectedCard);
 
-	// 攻撃カードなら構え状態にする
-	if (!isImmediateAttack(selectedCard.id) && static_cast<int>(selectedCard.effectType) == 0) {
+	if (isMagicCastCard(selectedCard.id)) {
 		isCardReady_ = true;
 		readiedCard_ = selectedCard;
-		cardReadyTimer_ = 60 * 5;
+		readiedCardIndex_ = handManager_.GetSelectedCardIndex();
+		cardReadyTimer_ = kMagicCastDuration;
+		magicRepeatCooldownTimer_ = 0;
+		handManager_.SetCastDisplay(selectedCard.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
+		StartCardUseFlash(selectedCard, true);
+		if (player) {
+			player->LockAction(20);
+			player->PlayCardUsePose(10);
+		}
+		return;
 	}
-	else {
-		// それ以外のカードは即時発動
-		if (playerCardSystem_) {
-			playerCardSystem_->UseCard(
-				selectedCard,
-				playerPos_,
-				playerManager_->GetRotationY(),
-				true,
-				player
-			);
-		}
 
-		if (selectedCard.id == 9) {
-			player->SetEnemyAtkDebuffed(true);
+	StartCardUseFlash(selectedCard, false, selectedCard.id != 1);
 
-			// ※ 先ほど作成したデバフUIクラス等があれば、ここで一緒に呼び出して文字を表示します
-			floorEffectManager_.ActivateDebuff(selectedCard.name);
-		}
+	if (playerCardSystem_) {
+		playerCardSystem_->UseCard(
+			selectedCard,
+			playerPos_,
+			playerManager_->GetRotationY(),
+			true,
+			player
+		);
+	}
 
-		if (selectedCard.id == 1) {
-			fistCooldownTimer_ = fistCooldownDuration_;
-			handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
-		}
+	if (selectedCard.id == 9) {
+		player->SetEnemyAtkDebuffed(true);
+		floorEffectManager_.ActivateDebuff(selectedCard.name);
+	}
+
+	if (selectedCard.id == 1) {
+		fistCooldownTimer_ = fistCooldownDuration_;
+		handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 	}
 
 	// 初期カード以外は使用後にディゾルブ開始
@@ -2457,7 +2774,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		handManager_.StartDissolveSelectedCard();
 	}
 
-	if (selectedCard.id == 9 || selectedCard.id == 11) {
+	if (selectedCard.id == 11) {
 		// ★ デバフ発動をマネージャーに頼む！
 		floorEffectManager_.ActivateDebuff(selectedCard.name);
 	}
@@ -2526,8 +2843,9 @@ void GamePlayScene::DrawPauseUI() {
 
 void GamePlayScene::UpdateBossIntroLetterbox() {
 	const bool isBossIntroPlaying = bossManager_ && bossManager_->IsBossIntroPlaying();
+	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
 
-	if (isBossIntroPlaying) {
+	if (isBossCinematicPlaying) {
 		bossIntroLetterboxFadeTimer_ = bossIntroLetterboxFadeDuration_;
 	}
 	else if (wasBossIntroPlaying_) {
@@ -2537,12 +2855,13 @@ void GamePlayScene::UpdateBossIntroLetterbox() {
 		bossIntroLetterboxFadeTimer_--;
 	}
 
-	wasBossIntroPlaying_ = isBossIntroPlaying;
+	wasBossIntroPlaying_ = isBossCinematicPlaying;
 }
 
 void GamePlayScene::DrawBossIntroLetterbox() {
 	const bool isBossIntroPlaying = bossManager_ && bossManager_->IsBossIntroPlaying();
-	if (!isBossIntroPlaying && bossIntroLetterboxFadeTimer_ <= 0) {
+	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
+	if (!isBossCinematicPlaying && bossIntroLetterboxFadeTimer_ <= 0) {
 		return;
 	}
 
@@ -2550,8 +2869,8 @@ void GamePlayScene::DrawBossIntroLetterbox() {
 	float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 	float barH = screenH * 0.13f;
 	float fadeT = static_cast<float>(bossIntroLetterboxFadeTimer_) / static_cast<float>(bossIntroLetterboxFadeDuration_);
-	float letterboxAlpha = isBossIntroPlaying ? 1.0f : fadeT;
-	float slideOffset = isBossIntroPlaying ? 0.0f : (1.0f - fadeT) * barH;
+	float letterboxAlpha = isBossCinematicPlaying ? 1.0f : fadeT;
+	float slideOffset = isBossCinematicPlaying ? 0.0f : (1.0f - fadeT) * barH;
 
 	if (bossIntroTopBar_) {
 		bossIntroTopBar_->SetPosition({ screenW * 0.5f, barH * 0.5f - slideOffset });
@@ -2665,6 +2984,74 @@ void GamePlayScene::DrawCharacterHitboxesDebug() const {
 			}
 		}
 	}
+
+	DrawBossBeamHitboxesDebug();
+}
+
+void GamePlayScene::DrawBossBeamHitboxesDebug() const {
+	if (!bossManager_ || !mapManager_ || !mapManager_->IsBossMap()) {
+		return;
+	}
+
+	for (int i = 0; i < 2; ++i) {
+		Boss* boss = bossManager_->GetBossAt(i);
+		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsCasting() || boss->GetSelectedCard().id != 104) {
+			continue;
+		}
+
+		const Vector3& bossPos = boss->GetPosition();
+		const float bossYaw = boss->GetRotation().y;
+		const Vector3 forward = {
+			std::sinf(bossYaw),
+			0.0f,
+			std::cosf(bossYaw)
+		};
+
+		const float beamBaseLength = 14.0f;
+		const float playerHitRadius = 0.6f;
+		const float warningHalfWidth = 1.4f + playerHitRadius;
+		const float warningHalfLength = beamBaseLength + playerHitRadius;
+		const Vector3 warningCenter = {
+			bossPos.x + forward.x * (beamBaseLength * 0.90f),
+			mapManager_->GetFloorSurfaceY(0.05f),
+			bossPos.z + forward.z * (beamBaseLength * 0.90f)
+		};
+
+		float chargeRatio = 0.0f;
+		const int castDuration = boss->GetCastDurationCurrent();
+		if (castDuration > 0) {
+			chargeRatio = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(castDuration);
+			chargeRatio = std::clamp(chargeRatio, 0.0f, 1.0f);
+		}
+		const unsigned int warningColor = IM_COL32(
+			255,
+			static_cast<int>(230.0f - 225.0f * chargeRatio),
+			0,
+			static_cast<int>(190.0f + 45.0f * chargeRatio)
+		);
+		DrawDebugOrientedRectXZ(warningCenter, bossYaw, warningHalfWidth, warningHalfLength, warningColor, 2.0f);
+	}
+
+	CardUseSystem* bossCardSystem = bossManager_->GetBossCardSystem();
+	if (!bossCardSystem) {
+		return;
+	}
+
+	for (const auto& effect : bossCardSystem->GetActiveEffects()) {
+		const auto* beamEffect = dynamic_cast<const RuinBeamEffect*>(effect.get());
+		if (!beamEffect || beamEffect->IsFinished()) {
+			continue;
+		}
+
+		DrawDebugOrientedRectXZ(
+			beamEffect->GetDebugCenter(),
+			beamEffect->GetDebugYaw(),
+			beamEffect->GetDebugHalfWidth(),
+			beamEffect->GetDebugHalfLength(),
+			IM_COL32(255, 80, 220, 235),
+			2.5f
+		);
+	}
 }
 
 void GamePlayScene::DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const {
@@ -2746,6 +3133,50 @@ void GamePlayScene::DrawDebugCircleXZ(const Vector3& center, float radius, unsig
 	}
 }
 
+void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, float halfWidth, float halfLength, unsigned int color, float thickness) const {
+	ImDrawList* drawList = ImGui::GetForegroundDrawList();
+	if (!drawList) {
+		return;
+	}
+
+	const Vector3 right = {
+		std::cosf(yaw),
+		0.0f,
+		-std::sinf(yaw)
+	};
+	const Vector3 forward = {
+		std::sinf(yaw),
+		0.0f,
+		std::cosf(yaw)
+	};
+
+	const std::array<Vector3, 4> corners = {
+		center - right * halfWidth - forward * halfLength,
+		center + right * halfWidth - forward * halfLength,
+		center + right * halfWidth + forward * halfLength,
+		center - right * halfWidth + forward * halfLength,
+	};
+
+	std::array<Vector2, 4> screenCorners{};
+	std::array<bool, 4> visible{};
+	for (size_t i = 0; i < corners.size(); ++i) {
+		visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+	}
+
+	for (int i = 0; i < 4; ++i) {
+		const int next = (i + 1) % 4;
+		if (!visible[i] || !visible[next]) {
+			continue;
+		}
+		drawList->AddLine(
+			ImVec2(screenCorners[i].x, screenCorners[i].y),
+			ImVec2(screenCorners[next].x, screenCorners[next].y),
+			color,
+			thickness
+		);
+	}
+}
+
 void GamePlayScene::RegenerateDungeonAndRespawnPlayer(int roomCount) {
 	if (!mapManager_) {
 		return;
@@ -2766,6 +3197,161 @@ void GamePlayScene::RegenerateDungeonAndRespawnPlayer(int roomCount) {
 		cardSpawnCount_,
 		cardSpawnMargin_
 	);
+
+	timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+	timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+}
+
+void GamePlayScene::UpdateTimedSpawns() {
+	if (!mapManager_ || !enemyManager_ || !camera_ || !spawnManager_.HasLevelData()) {
+		return;
+	}
+	if (transitionState_ != TransitionState::None || isCardSwapMode_) {
+		return;
+	}
+	if (tutorial_ && tutorial_->IsActive()) {
+		return;
+	}
+
+	if (mapManager_->IsBossMap()) {
+		timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+		timedCardSpawnTimer_--;
+		if (timedCardSpawnTimer_ <= 0) {
+			if (CountActiveCardPickups() < bossTimedCardMax_) {
+				SpawnTimedCardPickup();
+			}
+			timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+		}
+		return;
+	}
+
+	timedEnemySpawnTimer_--;
+	if (timedEnemySpawnTimer_ <= 0) {
+		if (CountAliveEnemies() < normalTimedEnemyMax_) {
+			enemyManager_->SpawnEnemiesRandom(
+				1,
+				enemySpawnMargin_,
+				&spawnManager_,
+				mapManager_.get(),
+				playerPos_,
+				camera_.get(),
+				normalTimedEnemyMax_
+			);
+		}
+		timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+	}
+
+	timedCardSpawnTimer_--;
+	if (timedCardSpawnTimer_ <= 0) {
+		if (CountActiveCardPickups() < normalTimedCardMax_) {
+			SpawnTimedCardPickup();
+		}
+		timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+	}
+}
+
+bool GamePlayScene::SpawnTimedCardPickup() {
+	if (!mapManager_ || !spawnManager_.HasLevelData()) {
+		return false;
+	}
+
+	const LevelData& level = mapManager_->GetLevelData();
+	std::vector<std::pair<int, int>> candidates = spawnManager_.FindCardSpawnCandidates(cardSpawnMargin_);
+	if (candidates.empty()) {
+		return false;
+	}
+
+	std::vector<std::pair<int, int>> filtered;
+	for (const auto& candidate : candidates) {
+		const int x = candidate.first;
+		const int z = candidate.second;
+
+		if (mapManager_->IsNearStairsTile(x, z)) {
+			continue;
+		}
+		if (x < 0 || x >= level.width || z < 0 || z >= level.height || level.tiles[z][x] != 0) {
+			continue;
+		}
+
+		Vector3 worldPos = spawnManager_.TileToWorldPosition(x, z, -0.99f);
+		Vector3 playerDiff = { worldPos.x - playerPos_.x, 0.0f, worldPos.z - playerPos_.z };
+		if (Length(playerDiff) < 5.0f) {
+			continue;
+		}
+
+		bool tooClose = false;
+		for (const auto& pickup : cardPickupManager_.GetPickups()) {
+			if (!pickup.isActive) {
+				continue;
+			}
+			Vector3 pickupDiff = { worldPos.x - pickup.position.x, 0.0f, worldPos.z - pickup.position.z };
+			if (Length(pickupDiff) < 4.0f) {
+				tooClose = true;
+				break;
+			}
+		}
+		if (tooClose) {
+			continue;
+		}
+
+		if (enemyManager_) {
+			for (const auto& enemy : enemyManager_->GetEnemies()) {
+				if (!enemy || enemy->IsDead()) {
+					continue;
+				}
+				Vector3 enemyDiff = { worldPos.x - enemy->GetPosition().x, 0.0f, worldPos.z - enemy->GetPosition().z };
+				if (Length(enemyDiff) < 3.0f) {
+					tooClose = true;
+					break;
+				}
+			}
+		}
+		if (tooClose) {
+			continue;
+		}
+
+		filtered.push_back(candidate);
+	}
+
+	if (filtered.empty()) {
+		return false;
+	}
+
+	std::random_device rd;
+	std::mt19937 mt(rd());
+	std::shuffle(filtered.begin(), filtered.end(), mt);
+
+	const auto& selected = filtered.front();
+	Vector3 worldPos = spawnManager_.TileToWorldPosition(selected.first, selected.second, -0.99f);
+	Card dropCard = mapManager_->IsBossMap()
+		? CardDatabase::GetRandomBossRoomPlayerCard()
+		: CardDatabase::GetRandomPlayerCard();
+	cardPickupManager_.AddPickup(worldPos, dropCard);
+	return true;
+}
+
+int GamePlayScene::CountActiveCardPickups() const {
+	int count = 0;
+	for (const auto& pickup : cardPickupManager_.GetPickups()) {
+		if (pickup.isActive) {
+			count++;
+		}
+	}
+	return count;
+}
+
+int GamePlayScene::CountAliveEnemies() const {
+	if (!enemyManager_) {
+		return 0;
+	}
+
+	int count = 0;
+	for (const auto& enemy : enemyManager_->GetEnemies()) {
+		if (enemy && !enemy->IsDead()) {
+			count++;
+		}
+	}
+	return count;
 }
 
 bool GamePlayScene::pendingTutorialStart_ = false;

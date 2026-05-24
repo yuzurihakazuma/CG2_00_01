@@ -8,19 +8,19 @@ void Minimap::Initialize() {
 	backgroundSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
 	backgroundSprite_->SetAnchorPoint({ 0.0f, 0.0f });
 	backgroundSprite_->SetSize(mapSize_);
-	backgroundSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.28f });
+	backgroundSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f }); // 背景を消す
 	backgroundSprite_->Update();
 
 	frameSprite_.reset(Sprite::Create("resources/white1x1.png", { mapLeftTop_.x - 2.0f, mapLeftTop_.y - 2.0f }).release());
 	frameSprite_->SetAnchorPoint({ 0.0f, 0.0f });
 	frameSprite_->SetSize({ mapSize_.x + 4.0f, mapSize_.y + 4.0f });
-	frameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.18f });
+	frameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.0f }); // 枠も消す
 	frameSprite_->Update();
 
 	playerSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
 	playerSprite_->SetAnchorPoint({ 0.5f, 0.5f });
-	playerSprite_->SetSize({ 6.0f, 6.0f });
-	playerSprite_->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f });
+	playerSprite_->SetSize({ 18.0f, 18.0f }); // 大きいマップでも見やすくする
+	playerSprite_->SetColor({ 1.0f, 1.0f, 0.0f, 0.3f });
 	playerSprite_->Update();
 }
 
@@ -67,8 +67,8 @@ void Minimap::EnsureEnemySprites(size_t count) {
 	while (enemySprites_.size() < count) {
 		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
 		sprite->SetAnchorPoint({ 0.5f, 0.5f });
-		sprite->SetSize({ 5.0f, 5.0f });
-		sprite->SetColor({ 1.0f, 0.3f, 0.3f, 0.95f });
+		sprite->SetSize({ 14.0f, 14.0f }); // 大マップ用に敵アイコンを見やすくする
+		sprite->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 少し透明にする
 		sprite->Update();
 		enemySprites_.push_back(std::move(sprite));
 	}
@@ -82,8 +82,8 @@ void Minimap::EnsureCardSprites(size_t count) {
 	while (cardSprites_.size() < count) {
 		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
 		sprite->SetAnchorPoint({ 0.5f, 0.5f });
-		sprite->SetSize({ 4.0f, 4.0f });
-		sprite->SetColor({ 0.0f, 1.0f, 0.0f, 1.0f });
+		sprite->SetSize({ 12.0f, 12.0f }); // 大マップ用にカードアイコンを見やすくする
+		sprite->SetColor({ 0.2f, 1.0f, 0.4f, 0.3f }); // 少し透明にする
 		sprite->Update();
 		cardSprites_.push_back(std::move(sprite));
 	}
@@ -159,14 +159,14 @@ void Minimap::BuildChunkSprites() {
 			int x = chunk.startX;
 
 			while (x <= chunk.endX) {
-				if (levelData_->tiles[z][x] != 1 && levelData_->tiles[z][x] != 2) {
+				if (levelData_->tiles[z][x] != 0 && levelData_->tiles[z][x] != 3) {
 					++x;
 					continue;
 				}
 
 				const int startX = x;
 				while (x <= chunk.endX &&
-					(levelData_->tiles[z][x] == 1 || levelData_->tiles[z][x] == 2)) {
+					(levelData_->tiles[z][x] == 0 || levelData_->tiles[z][x] == 3)) {
 					++x;
 				}
 				const int endX = x - 1;
@@ -179,7 +179,7 @@ void Minimap::BuildChunkSprites() {
 				auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", drawPos));
 				sprite->SetAnchorPoint({ 0.0f, 0.0f });
 				sprite->SetSize({ drawTileSize_ * length, drawTileSize_ });
-				sprite->SetColor({ 0.78f, 0.78f, 0.88f, 0.58f });
+				sprite->SetColor({ 0.45f, 0.85f, 1.0f, 0.1f }); // 道を薄い水色の半透明で表示する
 				sprite->Update();
 
 				chunk.wallSprites.push_back(std::move(sprite));
@@ -200,10 +200,32 @@ void Minimap::BuildChunkSprites() {
 				auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", drawPos));
 				sprite->SetAnchorPoint({ 0.0f, 0.0f });
 				sprite->SetSize({ drawTileSize_, drawTileSize_ });
-				sprite->SetColor({ 0.2f, 1.0f, 1.0f, 0.95f });
+				sprite->SetColor({ 0.0f, 1.0f, 0.8f, 0.3f }); // 階段マスを少し強めの色で表示する
 				sprite->Update();
 
 				chunk.stairsSprites.push_back(std::move(sprite));
+			}
+		}
+	}
+}
+
+void Minimap::UpdateStaticSprites() {
+	if (backgroundSprite_) {
+		backgroundSprite_->Update();
+	}
+	if (frameSprite_) {
+		frameSprite_->Update();
+	}
+
+	for (Chunk& chunk : chunks_) {
+		for (const auto& sprite : chunk.wallSprites) {
+			if (sprite) {
+				sprite->Update();
+			}
+		}
+		for (const auto& sprite : chunk.stairsSprites) {
+			if (sprite) {
+				sprite->Update();
 			}
 		}
 	}
@@ -279,6 +301,7 @@ void Minimap::Update() {
 	if (!visible_) {
 		return;
 	}
+	UpdateStaticSprites();
 
 	// 今いる区画を探索済みにする
 	DiscoverCurrentChunk();

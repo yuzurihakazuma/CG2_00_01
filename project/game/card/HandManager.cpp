@@ -1,6 +1,7 @@
 ﻿#include "HandManager.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "Engine/3D/Model/ModelManager.h"
 #include "Engine/2D/Sprite.h"
@@ -92,6 +93,22 @@ ScreenRect GetCardScreenRect(const Camera* camera, const Obj3d* cardObj) {
 		{ (maxX - minX) + paddingX, (maxY - minY) + paddingY }
 	};
 }
+
+void ApplyCardDissolveColor(Obj3d* model, CardEffectType effectType) {
+	if (model == nullptr) {
+		return;
+	}
+
+	if (effectType == CardEffectType::Attack) {
+		model->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
+	} else if (effectType == CardEffectType::Heal) {
+		model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
+	} else if (effectType == CardEffectType::Defense) {
+		model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
+	} else if (effectType == CardEffectType::Special) {
+		model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
+	}
+}
 }
 
 void HandManager::Initialize(Camera* camera, uint32_t noiseTextureIndex) {
@@ -106,6 +123,13 @@ void HandManager::Initialize(Camera* camera, uint32_t noiseTextureIndex) {
 	cooldownCardId_ = -1;
 	cooldownTimer_ = 0;
 	cooldownDuration_ = 0;
+	castCardId_ = -1;
+	castCardIndex_ = -1;
+	castTimer_ = 0;
+	castDuration_ = 0;
+	swapModeVisual_ = false;
+	pendingReturnToFist_ = false;
+	manualSelectionAfterUse_ = false;
 }
 
 bool HandManager::AddCard(const Card& newCard) {
@@ -130,16 +154,7 @@ bool HandManager::AddCard(const Card& newCard) {
 			model->SetCamera(camera_);
 			model->SetNoiseTexture(noiseTextureIndex_);
 			model->SetDissolveThreshold(0.0f);
-			// 再利用枠でもカード種別に合わせてディゾルブ色を更新する
-			if (newCard.effectType == CardEffectType::Attack) {
-				model->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
-			} else if (newCard.effectType == CardEffectType::Heal) {
-				model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-			} else if (newCard.effectType == CardEffectType::Defense) {
-				model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-			} else if (newCard.effectType == CardEffectType::Special) {
-				model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
-			}
+			ApplyCardDissolveColor(model.get(), newCard.effectType);
 
 			handModels_[i] = std::move(model);
 			cooldownOverlays_[i] = CreateCooldownOverlay();
@@ -163,16 +178,7 @@ bool HandManager::AddCard(const Card& newCard) {
 		model->SetCamera(camera_);
 		model->SetNoiseTexture(noiseTextureIndex_);
 		model->SetDissolveThreshold(0.0f);
-		// 新規追加時もカード種別に応じた色でディゾルブさせる
-		if (newCard.effectType == CardEffectType::Attack) {
-			model->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
-		} else if (newCard.effectType == CardEffectType::Heal) {
-			model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-		} else if (newCard.effectType == CardEffectType::Defense) {
-			model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-		} else if (newCard.effectType == CardEffectType::Special) {
-			model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
-		}
+		ApplyCardDissolveColor(model.get(), newCard.effectType);
 
 		handModels_.push_back(std::move(model));
 		cooldownOverlays_.push_back(CreateCooldownOverlay());
@@ -186,27 +192,105 @@ bool HandManager::AddCard(const Card& newCard) {
 	return false;
 }
 
+bool HandManager::IsCardSelectableInCurrentMode(int index) const {
+	if (index < 0 || index >= static_cast<int>(hand_.size())) {
+		return false;
+	}
+
+	return !(swapModeVisual_ && hand_[index].id == 1);
+}
+
+void HandManager::MoveSelection(int direction) {
+	if (hand_.empty() || direction == 0) {
+		return;
+	}
+
+	const int handSize = static_cast<int>(hand_.size());
+	int nextIndex = selectedCardIndex_;
+
+	for (int i = 0; i < handSize; ++i) {
+		nextIndex += direction;
+		if (nextIndex >= handSize) {
+			nextIndex = 0;
+		}
+		if (nextIndex < 0) {
+			nextIndex = handSize - 1;
+		}
+
+		if (IsCardSelectableInCurrentMode(nextIndex)) {
+			selectedCardIndex_ = nextIndex;
+			return;
+		}
+	}
+}
+
+void HandManager::ClampSelectedCardIndex() {
+	if (hand_.empty()) {
+		selectedCardIndex_ = 0;
+		return;
+	}
+
+	if (selectedCardIndex_ < 0) {
+		selectedCardIndex_ = 0;
+	}
+	if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
+		selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
+	}
+}
+
+bool HandManager::SelectCardById(int cardId) {
+	for (int i = 0; i < static_cast<int>(hand_.size()); ++i) {
+		if (hand_[i].id == cardId && !isDissolving_[i] && IsCardSelectableInCurrentMode(i)) {
+			selectedCardIndex_ = i;
+			return true;
+		}
+	}
+	return false;
+}
+
+void HandManager::ApplyPostUseSelectionAfterRemove() {
+	ClampSelectedCardIndex();
+
+	if (!pendingReturnToFist_) {
+		return;
+	}
+
+	if (!manualSelectionAfterUse_ && !swapModeVisual_) {
+		SelectCardById(1);
+	}
+
+	pendingReturnToFist_ = false;
+	manualSelectionAfterUse_ = false;
+}
+
 void HandManager::Update() {
 	//手札がなければ何もしない
 	if (hand_.empty()) {
 		return;
 	}
 	auto input = Input::GetInstance();
+	const bool isCasting =
+		!swapModeVisual_ &&
+		castTimer_ > 0 &&
+		castDuration_ > 0 &&
+		castCardIndex_ >= 0 &&
+		castCardIndex_ < static_cast<int>(hand_.size());
 
 	//左右キーで選んでいるカードの切り替え
-	if (input->Triggerkey(DIK_RIGHT)) {
-		selectedCardIndex_++;
-		//一番右に行ったらループ
-		if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
-			selectedCardIndex_ = 0;
+	if (isCasting) {
+		selectedCardIndex_ = castCardIndex_;
+	}
+	else if (input->Triggerkey(DIK_RIGHT)) {
+		MoveSelection(1);
+		if (pendingReturnToFist_ && !swapModeVisual_) {
+			manualSelectionAfterUse_ = true;
 		}
 	}
 
-	if (input->Triggerkey(DIK_LEFT)) {
-		selectedCardIndex_--;
-		//一番左に行ったらループ
-		if (selectedCardIndex_ < 0) {
-			selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
+	if (!isCasting && input->Triggerkey(DIK_LEFT)) {
+		MoveSelection(-1);
+		if (pendingReturnToFist_ && !swapModeVisual_) {
+			manualSelectionAfterUse_ = true;
 		}
 	}
 
@@ -252,9 +336,31 @@ void HandManager::Update() {
 			rot.x = 0.0f;   // 角度をまっすぐ正面に向ける
 		}
 
-		handModels_[i]->SetScale({ 0.3f,0.3f,0.3f });
+		float cardScale = 0.3f;
+		Vector4 cardColor{ 1.0f, 1.0f, 1.0f, 1.0f };
 
 		// モデルに座標と角度をセットして更新
+		const bool cannotSwap = swapModeVisual_ && i < static_cast<int>(hand_.size()) && hand_[i].id == 1;
+		const bool castingThisCard = IsCardCasting(i);
+		if (cannotSwap) {
+			cardColor = { 0.36f, 0.36f, 0.36f, 1.0f };
+		}
+		else if (isCasting && !castingThisCard) {
+			cardColor = { 0.32f, 0.32f, 0.36f, 0.82f };
+			cardScale = 0.26f;
+			pos.y -= 0.12f;
+			pos.z += 0.08f;
+		}
+		else if (castingThisCard) {
+			const float pulse = 0.5f + 0.5f * std::sinf(static_cast<float>(castTimer_) * 0.22f);
+			cardScale = 0.325f + 0.012f * pulse;
+			pos.y += 0.04f + 0.02f * pulse;
+			pos.z -= 0.035f;
+			cardColor = { 1.0f, 1.0f, 0.78f + 0.12f * pulse, 1.0f };
+		}
+
+		handModels_[i]->SetScale({ cardScale, cardScale, cardScale });
+		handModels_[i]->SetColor(cardColor);
 		handModels_[i]->SetTranslation(pos);
 		handModels_[i]->SetRotation(rot);
 		handModels_[i]->Update();
@@ -274,7 +380,8 @@ void HandManager::Draw() {
 }
 
 void HandManager::DrawCooldownOverlays() {
-	if (cooldownTimer_ <= 0 || cooldownDuration_ <= 0) {
+	if ((cooldownTimer_ <= 0 || cooldownDuration_ <= 0) &&
+		(castTimer_ <= 0 || castDuration_ <= 0)) {
 		return;
 	}
 
@@ -283,7 +390,7 @@ void HandManager::DrawCooldownOverlays() {
 	}
 
 	for (int i = 0; i < static_cast<int>(hand_.size()); ++i) {
-		if (!IsCardCoolingDown(i)) {
+		if (!IsCardCoolingDown(i) && !IsCardCasting(i)) {
 			continue;
 		}
 
@@ -294,7 +401,7 @@ void HandManager::DrawCooldownOverlays() {
 			continue;
 		}
 
-		const float ratio = GetCardCooldownRatio(i);
+		const float ratio = (std::max)(GetCardCooldownRatio(i), GetCardCastRatio(i));
 		const ScreenRect rect = GetCardScreenRect(camera_, handModels_[i].get());
 
 		cooldownOverlays_[i]->SetPosition({ rect.center.x, rect.center.y + rect.size.y * 0.5f });
@@ -375,6 +482,8 @@ bool HandManager::SwapSelectedCard(const Card& newCard) {
 	cooldownOverlays_[selectedCardIndex_] = CreateCooldownOverlay();
 	isDissolving_[selectedCardIndex_] = false;
 	dissolveThresholds_[selectedCardIndex_] = 0.0f;
+	pendingReturnToFist_ = false;
+	manualSelectionAfterUse_ = false;
 
 	return true;
 }
@@ -394,12 +503,23 @@ void HandManager::RemoveCard(int index) {
 		isDissolving_.erase(isDissolving_.begin() + index);
 		dissolveThresholds_.erase(dissolveThresholds_.begin() + index);
 
+		if (hand_.empty()) {
+			selectedCardIndex_ = 0;
+			pendingReturnToFist_ = false;
+			manualSelectionAfterUse_ = false;
+			return;
+		}
+
+		if (selectedCardIndex_ > index) {
+			selectedCardIndex_--;
+		}
 		if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
 			selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
 		}
 		if (selectedCardIndex_ < 0) {
 			selectedCardIndex_ = 0;
 		}
+		ApplyPostUseSelectionAfterRemove();
 	}
 }
 
@@ -427,18 +547,11 @@ void HandManager::StartDissolveSelectedCard() {
 
 	isDissolving_[selectedCardIndex_] = true;
 	dissolveThresholds_[selectedCardIndex_] = 0.0f;
+	pendingReturnToFist_ = hand_[selectedCardIndex_].id != 1;
+	manualSelectionAfterUse_ = false;
 
 	if (handModels_[selectedCardIndex_]) {
-		// 使用直前に選択中カードの色を再反映して、ブルーム色ずれを防ぐ
-		if (hand_[selectedCardIndex_].effectType == CardEffectType::Attack) {
-			handModels_[selectedCardIndex_]->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
-		} else if (hand_[selectedCardIndex_].effectType == CardEffectType::Heal) {
-			handModels_[selectedCardIndex_]->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-		} else if (hand_[selectedCardIndex_].effectType == CardEffectType::Defense) {
-			handModels_[selectedCardIndex_]->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-		} else if (hand_[selectedCardIndex_].effectType == CardEffectType::Special) {
-			handModels_[selectedCardIndex_]->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
-		}
+		ApplyCardDissolveColor(handModels_[selectedCardIndex_].get(), hand_[selectedCardIndex_].effectType);
 		handModels_[selectedCardIndex_]->SetDissolveThreshold(0.0f);
 	}
 }
@@ -486,6 +599,8 @@ void HandManager::AddPendingCard(const Card &pendingCard) {
 	cooldownOverlays_.push_back(CreateCooldownOverlay());
 	isDissolving_.push_back(false);
 	dissolveThresholds_.push_back(0.0f);
+	pendingReturnToFist_ = false;
+	manualSelectionAfterUse_ = false;
 
 	// ★ 拾ったカード（一番右）にカーソルを強制的に合わせておく
 	selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
@@ -502,13 +617,23 @@ void HandManager::RemoveCardImmediate(int index) {
 	isDissolving_.erase(isDissolving_.begin() + index);
 	dissolveThresholds_.erase(dissolveThresholds_.begin() + index);
 
-	// ★ 修正1：ここも selectedCardIndex_ に直しました
+	if (hand_.empty()) {
+		selectedCardIndex_ = 0;
+		pendingReturnToFist_ = false;
+		manualSelectionAfterUse_ = false;
+		return;
+	}
+
+	if (selectedCardIndex_ > index) {
+		selectedCardIndex_--;
+	}
 	if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
 		selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
 	}
 	if (selectedCardIndex_ < 0) {
 		selectedCardIndex_ = 0;
 	}
+	ApplyPostUseSelectionAfterRemove();
 }
 
 void HandManager::SetCooldownDisplay(int cardId, int remainingFrames, int durationFrames) {
@@ -517,12 +642,38 @@ void HandManager::SetCooldownDisplay(int cardId, int remainingFrames, int durati
 	cooldownDuration_ = (durationFrames > 0) ? durationFrames : 0;
 }
 
+void HandManager::SetCastDisplay(int cardId, int remainingFrames, int durationFrames, int cardIndex) {
+	castCardId_ = cardId;
+	castCardIndex_ = cardIndex;
+	castTimer_ = (remainingFrames > 0) ? remainingFrames : 0;
+	castDuration_ = (durationFrames > 0) ? durationFrames : 0;
+	if (castTimer_ <= 0 || castDuration_ <= 0) {
+		castCardIndex_ = -1;
+	}
+}
+
 bool HandManager::IsCardCoolingDown(int index) const {
 	if (index < 0 || index >= static_cast<int>(hand_.size())) {
 		return false;
 	}
 
 	return cooldownTimer_ > 0 && cooldownDuration_ > 0 && hand_[index].id == cooldownCardId_;
+}
+
+bool HandManager::IsCardCasting(int index) const {
+	if (index < 0 || index >= static_cast<int>(hand_.size())) {
+		return false;
+	}
+
+	if (castTimer_ <= 0 || castDuration_ <= 0) {
+		return false;
+	}
+
+	if (castCardIndex_ >= 0) {
+		return index == castCardIndex_;
+	}
+
+	return hand_[index].id == castCardId_;
 }
 
 float HandManager::GetCardCooldownRatio(int index) const {
@@ -536,25 +687,15 @@ float HandManager::GetCardCooldownRatio(int index) const {
 		1.0f
 	);
 }
-#include "HandManager.h"
 
-#include "Engine/3D/Model/ModelManager.h"
-
-namespace {
-// カード種別ごとのディゾルブ色をモデルへ反映する
-void ApplyCardDissolveColor(Obj3d* model, CardEffectType effectType) {
-	if (model == nullptr) {
-		return;
+float HandManager::GetCardCastRatio(int index) const {
+	if (!IsCardCasting(index)) {
+		return 0.0f;
 	}
 
-	if (effectType == CardEffectType::Attack) {
-		model->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
-	} else if (effectType == CardEffectType::Heal) {
-		model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-	} else if (effectType == CardEffectType::Defense) {
-		model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-	} else if (effectType == CardEffectType::Special) {
-		model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
-	}
-}
+	return std::clamp(
+		1.0f - static_cast<float>(castTimer_) / static_cast<float>(castDuration_),
+		0.0f,
+		1.0f
+	);
 }

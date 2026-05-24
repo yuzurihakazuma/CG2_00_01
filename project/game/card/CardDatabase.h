@@ -67,5 +67,7 @@ public:
 	// プレイヤーが拾えるカードだけをランダムに取得
 	static Card GetRandomPlayerCard();
 
-};
+	// ボス部屋でフィールドに出るプレイヤー用カードをランダムに取得
+	static Card GetRandomBossRoomPlayerCard();
 
+};
