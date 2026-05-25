@@ -304,12 +304,19 @@ bool BossManager::ShouldTriggerGameClear(MapManager* mapManager) const {
 
 bool BossManager::IsBossDeathAnimationPlaying() const {
 	if (bossType_ == BossType::Split) {
+		bool allDead = true;
+		bool anyDeathAnimationPlaying = false;
+
 		for (const auto& splitBoss : splitBosses_) {
-			if (splitBoss && splitBoss->IsDeathAnimationPlaying()) {
-				return true;
+			if (!splitBoss) {
+				continue;
 			}
+
+			allDead = allDead && splitBoss->IsDead();
+			anyDeathAnimationPlaying = anyDeathAnimationPlaying || splitBoss->IsDeathAnimationPlaying();
 		}
-		return false;
+
+		return allDead && anyDeathAnimationPlaying;
 	}
 
 	return boss_ && boss_->IsDeathAnimationPlaying();
@@ -1002,6 +1009,20 @@ Vector3 BossManager::GetBossFocusPosition() const {
 
 		if (aliveCount > 0) {
 			return sum / static_cast<float>(aliveCount);
+		}
+
+		// 全滅後の死亡演出中は、最後に沈んでいる個体をカメラの注視点にする
+		Vector3 deathAnimationSum{ 0.0f, 0.0f, 0.0f };
+		int deathAnimationCount = 0;
+		for (int i = 0; i < 2; ++i) {
+			if (splitBosses_[i] && splitBosses_[i]->IsDeathAnimationPlaying()) {
+				deathAnimationSum += splitBosses_[i]->GetPosition();
+				deathAnimationCount++;
+			}
+		}
+
+		if (deathAnimationCount > 0) {
+			return deathAnimationSum / static_cast<float>(deathAnimationCount);
 		}
 
 		return splitBossCenterPosition_;
