@@ -56,8 +56,8 @@ private:
 
 	bool visible_ = true;
 
-	Vector2 mapLeftTop_ = { 600.0f, 60.0f };   // 画面中央寄りに表示する位置
-	Vector2 mapSize_ = { 700.0f, 700.0f };      // 正方形にしてずれをなくす
+	Vector2 mapLeftTop_ = { 1300.0f, 200.0f };   // 画面中央寄りに表示する位置
+	Vector2 mapSize_ = { 550.0f, 550.0f };      // 正方形にしてずれをなくす
 
 	float drawTileSize_ = 8.0f;
 
