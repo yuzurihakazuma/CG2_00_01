@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <vector>
 
+class Camera;
+
 class Boss {
 public:
     enum class State {
@@ -37,6 +39,7 @@ public:
     void SetSpawnPosition(const Vector3& pos);
 
     void SetPlayerPosition(const Vector3& pos) { playerPos_ = pos; }
+    void SetCamera(Camera* camera) { camera_ = camera; }
 
     void SetState(State state) { state_ = state; }
     State GetState() const { return state_; }
@@ -159,6 +162,7 @@ private:
     Vector3 scale_{ 2.0f, 2.0f, 2.0f };
 
     Vector3 playerPos_{ 0.0f, 0.0f, 0.0f };
+    Camera* camera_ = nullptr;
     State state_ = State::Appear;
 
     int hp_ = 20;

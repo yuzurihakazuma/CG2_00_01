@@ -22,6 +22,7 @@ using namespace VectorMath;
 void BossManager::Initialize(Camera* camera) {
     boss_ = std::make_unique<Boss>();
     boss_->Initialize();
+    boss_->SetCamera(camera);
     boss_->SetScale({ 2.0f, 2.0f, 2.0f });
 
     bossObj_ = std::unique_ptr<Obj3d>(Obj3d::Create("boss"));
@@ -34,6 +35,7 @@ void BossManager::Initialize(Camera* camera) {
 		// 分裂ボス本体を用意しておく
 		splitBosses_[i] = std::make_unique<Boss>();
 		splitBosses_[i]->Initialize();
+		splitBosses_[i]->SetCamera(camera);
 		splitBosses_[i]->SetScale(splitBossScale_);
 
 		// 分裂ボスの見た目オブジェクトも2つ用意する

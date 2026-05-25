@@ -1,4 +1,5 @@
 #include "game/enemy/Boss.h"
+#include "engine/camera/Camera.h"
 #include "engine/math/VectorMath.h"
 #include "game/card/CardDatabase.h"
 #include "engine/particle/GPUParticleManager.h" 
@@ -1105,6 +1106,11 @@ void Boss::TakeDamage(int damage) {
 	}
 
 	hp_ -= damage;
+
+	// ボス被弾時のカメラシェイク（プレイヤー被弾より小さめ）
+	if ( camera_ ) {
+		camera_->TriggerShake(0.06f, 6);
+	}
 
 	Vector3 bossHitCenter = { pos_.x, pos_.y + 1.2f, pos_.z };
 
