@@ -135,6 +135,13 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("CardSword", "resources/card", "swordCard.obj");
 	ModelManager::GetInstance()->LoadModel("CardHammer", "resources/card", "hammerCard.obj");
 	ModelManager::GetInstance()->LoadModel("CardKick", "resources/card", "kickCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossClaw", "resources/card", "BossClawCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossFier", "resources/card", "CardFire.obj");
+	ModelManager::GetInstance()->LoadModel("bossSummon", "resources/card", "BossSummonCard.obj");
+	ModelManager::GetInstance()->LoadModel("ruinBeam", "resources/card", "BossBeamCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossCharge", "resources/card", "BossRushCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossKick", "resources/card", "kickCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossSpear", "resources/card", "spearCard.obj");
 
 
 	// 追加のカード用棘モデル

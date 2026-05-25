@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <array>
+#include <unordered_map>
 #include "engine/math/VectorMath.h"
 
 // 前方宣言
@@ -153,10 +154,14 @@ public:
 
 private:
     void UpdateBeamWarning(MapManager* mapManager);
+    void DrawBossCastCards(MapManager* mapManager);
+    void DrawCastCardForBoss(const Boss& boss);
 
     std::unique_ptr<Boss> boss_ = nullptr;              // ボス本体
     std::unique_ptr<Obj3d> bossObj_ = nullptr;          // 描画用
     std::unique_ptr<Obj3d> beamWarningObj_ = nullptr;
+    std::unordered_map<int, std::unique_ptr<Obj3d>> bossCastCardObjs_;
+    Camera* camera_ = nullptr;
     std::unique_ptr<CardUseSystem> bossCardSystem_ = nullptr; // カード処理
 
     bool bossDeadHandled_ = false; // 死亡処理フラグ

@@ -20,6 +20,9 @@
 using namespace VectorMath;
 
 void BossManager::Initialize(Camera* camera) {
+    camera_ = camera;
+    bossCastCardObjs_.clear();
+
     boss_ = std::make_unique<Boss>();
     boss_->Initialize();
     boss_->SetCamera(camera);
@@ -110,6 +113,7 @@ void BossManager::Initialize(Camera* camera) {
 }
 
 void BossManager::Finalize() {
+    bossCastCardObjs_.clear();
     bossCardSystem_.reset();
     beamWarningObj_.reset();
     bossHpBackSprite_.reset();
@@ -124,6 +128,7 @@ void BossManager::Finalize() {
 		splitBossObjs_[i].reset();
 		splitBosses_[i].reset();
 	}
+    camera_ = nullptr;
 
 }
 
@@ -137,6 +142,7 @@ void BossManager::Reset() {
     if (bossCardSystem_) {
         bossCardSystem_->Reset();
     }
+    bossCastCardObjs_.clear();
 
     bossDeadHandled_ = false;
     EndBossIntro();
@@ -919,6 +925,72 @@ void BossManager::Update(
 	}
 }
 
+void BossManager::DrawCastCardForBoss(const Boss& boss) {
+	if (!camera_ || boss.IsDead() || boss.IsAppearing() || !boss.IsVisible() || !boss.IsCasting()) {
+		return;
+	}
+
+	const Card& currentCard = boss.GetSelectedCard();
+	const int currentCardId = currentCard.id;
+	if (currentCardId < 0 || currentCard.modelName.empty() || currentCard.modelName == "nullptr") {
+		return;
+	}
+
+	auto it = bossCastCardObjs_.find(currentCardId);
+	if (it == bossCastCardObjs_.end()) {
+		auto cardObj = Obj3d::Create(currentCard.modelName);
+		if (!cardObj) {
+			return;
+		}
+		cardObj->SetCamera(camera_);
+		it = bossCastCardObjs_.emplace(currentCardId, std::move(cardObj)).first;
+	}
+
+	auto& cardObj = it->second;
+	if (!cardObj) {
+		return;
+	}
+
+	const Vector3& bossPos = boss.GetPosition();
+	const Vector3& bossScale = boss.GetBaseScale();
+	const float height = bossScale.y * 1.65f + 1.1f;
+	const float cardScale = (std::max)(1.0f, bossScale.y * 0.55f);
+	const float elapsed = static_cast<float>((std::max)(0, boss.GetCastDurationCurrent() - boss.GetCastTimer()));
+	const float rotateSpeed = 0.1f;
+	const float yRotation = elapsed * rotateSpeed;
+
+	cardObj->SetCamera(camera_);
+	cardObj->SetTranslation({ bossPos.x, bossPos.y + height, bossPos.z });
+	cardObj->SetScale({ cardScale, cardScale, cardScale });
+
+	cardObj->SetRotation({ 0.0f, yRotation, 0.0f });
+	cardObj->Update();
+	cardObj->Draw();
+
+	cardObj->SetRotation({ 0.0f, yRotation + 3.14159f, 0.0f });
+	cardObj->Update();
+	cardObj->Draw();
+}
+
+void BossManager::DrawBossCastCards(MapManager* mapManager) {
+	if (!mapManager || !mapManager->IsBossMap() || isBossIntroPlaying_) {
+		return;
+	}
+
+	if (bossType_ == BossType::Split) {
+		for (const auto& splitBoss : splitBosses_) {
+			if (splitBoss) {
+				DrawCastCardForBoss(*splitBoss);
+			}
+		}
+		return;
+	}
+
+	if (boss_) {
+		DrawCastCardForBoss(*boss_);
+	}
+}
+
 void BossManager::Draw(MapManager* mapManager) {
 	// 必要な物が無ければ描画しない
 	if (!boss_ || !mapManager) {
@@ -946,6 +1018,7 @@ void BossManager::Draw(MapManager* mapManager) {
 		}
 	}
 
+	DrawBossCastCards(mapManager);
 
 	// ボスのカード演出描画
 	if (bossCardSystem_) {
