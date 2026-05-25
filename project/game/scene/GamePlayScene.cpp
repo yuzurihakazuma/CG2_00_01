@@ -745,12 +745,18 @@ void GamePlayScene::Update() {
 	// ターゲットを決める！
 	Vector3 targetPos = playerPos_; // 基本はプレイヤーの位置を狙う
 	const bool isBossIntroPlaying = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+	const bool isBossDeathAnimationPlaying = bossManager_ ? bossManager_->IsBossDeathAnimationPlaying() : false;
 	if (playerCardSystem_ && playerCardSystem_->IsDecoyActive()) {
 		targetPos = playerCardSystem_->GetDecoyPosition(); // 身代わりがいたら身代わりを狙う！
 	}
 
+	// ボス死亡演出が始まったら、演出中に雑魚が攻撃し続けないよう即座に片付ける
+	if (enemyManager_ && isBossDeathAnimationPlaying) {
+		enemyManager_->DefeatAllWithoutRewards();
+	}
+
 	// EnemyManager に更新をお願いする
-	if (enemyManager_ && !isBossIntroPlaying) {
+	if (enemyManager_ && !isBossIntroPlaying && !isBossDeathAnimationPlaying) {
 		enemyManager_->Update(player, &cardPickupManager_, mapManager_.get(), boss, targetPos);
 	}
 
@@ -798,7 +804,7 @@ void GamePlayScene::Update() {
 	}
 
 	// 敵とプレイヤーの当たり判定
-	if (enemyManager_ && !isBossIntroPlaying) {
+	if (enemyManager_ && !isBossIntroPlaying && !isBossDeathAnimationPlaying) {
 		enemyManager_->CheckCollisions(player, mapManager_.get());
 	}
 
