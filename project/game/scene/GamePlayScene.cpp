@@ -49,6 +49,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdlib>
 
 
 using namespace VectorMath;
@@ -1512,14 +1513,25 @@ void GamePlayScene::Update() {
 		handManager_.Update();
 	}
 
-	// コスト不足メッセージ更新 ←ここ追加
+	// コスト不足メッセージ更新
 	if (costLackMessageTimer_ > 0) {
 		costLackMessageTimer_--;
-
 		TextManager::GetInstance()->SetText("CostLack", "コスト不足です");
-	}
-	else {
+	} else {
 		TextManager::GetInstance()->SetText("CostLack", "");
+	}
+
+	// コスト不足ビネットフラッシュ（Player の PostEffect 制御と競合しないよう、
+	// Player 側が Vignetting を使っていない間だけ上書きする）
+	if ( costFlashTimer_ > 0 ) {
+		costFlashTimer_--;
+		float ratio = static_cast<float>(costFlashTimer_) / static_cast<float>(costFlashDuration_);
+		auto* pe = PostEffect::GetInstance();
+		// Player が vignette を使っていない時だけ橙フラッシュを出す
+		if ( !pe->GetEffectActive(PostEffectType::Vignetting) ) {
+			pe->SetEffectActive(PostEffectType::Vignetting, true);
+			pe->SetVignetteParams(0.55f + ratio * 0.3f, 1.0f, 0.45f, 0.0f);
+		}
 	}
 
 	// プレイヤーステータス表示更新
@@ -2734,9 +2746,29 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		return;
 	}
 
-	// コスト不足ならメッセージを出して終了
+	// コスト不足ならメッセージ＋ビジュアルフィードバックを出して終了
 	if (!playerManager_->CanUseCost(selectedCard.cost)) {
 		costLackMessageTimer_ = 60;
+		costFlashTimer_ = costFlashDuration_;
+
+		// オレンジの弾かれスパーク
+		Vector3 cp = playerPos_;
+		cp.y += 0.5f;
+		for ( int i = 0; i < 10; i++ ) {
+			Vector3 sv = {
+				( rand() % 13 - 6 ) * 0.07f,
+				0.18f + ( rand() % 8 ) * 0.04f,
+				( rand() % 13 - 6 ) * 0.07f
+			};
+			float sc = 0.25f + ( rand() % 4 ) * 0.06f;
+			GPUParticleManager::GetInstance()->Emit(cp, sv, 0.35f, sc, { 1.0f, 0.55f, 0.05f, 1.0f });
+		}
+		// 小さなリング（弾かれ感）
+		for ( int i = 0; i < 8; i++ ) {
+			float a = ( 3.14159f * 2.0f / 8.0f ) * i;
+			Vector3 rv = { std::sinf(a) * 0.3f, 0.0f, std::cosf(a) * 0.3f };
+			GPUParticleManager::GetInstance()->Emit(cp, rv, 0.2f, 0.5f, { 1.0f, 0.4f, 0.05f, 0.9f });
+		}
 		return;
 	}
 

@@ -268,6 +268,9 @@ private:
 
     std::unique_ptr<DodgeParticleEffect> dodgeParticle_;
 
+    int footDustTimer_ = 0;          // 足元ほこりの発生間隔タイマー
+    const int footDustInterval_ = 4; // 何フレームに1回ほこりを出すか
+
 
     bool isStunned_ = false;  // スタン状態フラグ
     int stunTimer_ = 0;   // スタン時間タイマー

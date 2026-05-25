@@ -467,6 +467,30 @@ void Player::Update() {
         if ( Length(move) > 0.0f ) {
             pos_ += move * ( moveSpeed_ * speedMultiplier_ );
             rot_.y = std::atan2f(move.x, move.z);
+
+            // 足元ほこり
+            footDustTimer_--;
+            if ( footDustTimer_ <= 0 ) {
+                footDustTimer_ = footDustInterval_;
+                for ( int i = 0; i < 2; i++ ) {
+                    Vector3 dp = {
+                        pos_.x + ( rand() % 7 - 3 ) * 0.08f,
+                        pos_.y + 0.05f,
+                        pos_.z + ( rand() % 7 - 3 ) * 0.08f
+                    };
+                    // 移動方向の逆へ少し流れる
+                    Vector3 dv = {
+                        -move.x * 0.03f + ( rand() % 5 - 2 ) * 0.015f,
+                        0.03f + ( rand() % 4 ) * 0.01f,
+                        -move.z * 0.03f + ( rand() % 5 - 2 ) * 0.015f
+                    };
+                    float sc = 0.22f + ( rand() % 4 ) * 0.06f;
+                    float br = 0.55f + ( rand() % 5 ) * 0.04f; // グレー
+                    GPUParticleManager::GetInstance()->Emit(dp, dv, 0.5f, sc, { br, br, br, 0.5f });
+                }
+            }
+        } else {
+            footDustTimer_ = 0; // 止まったらリセット（再び動き出した直後に即出る）
         }
     }
 
@@ -823,6 +847,36 @@ void Player::UpdateCost() {
 
         if (cost_ > maxCost_) {
             cost_ = maxCost_;
+        }
+
+        // コスト回復きらめき
+        Vector3 cc = { pos_.x, pos_.y + 0.4f, pos_.z };
+
+        // 中心フラッシュ
+        GPUParticleManager::GetInstance()->Emit(cc, { 0, 0, 0 }, 0.12f, 1.2f, { 0.4f, 0.85f, 1.0f, 1.0f });
+
+        // 放射リング
+        for ( int i = 0; i < 8; i++ ) {
+            float a = ( 3.14159f * 2.0f / 8.0f ) * i;
+            float spd = 0.18f + ( rand() % 4 ) * 0.03f;
+            Vector3 rv = { std::sinf(a) * spd, 0.02f, std::cosf(a) * spd };
+            GPUParticleManager::GetInstance()->Emit(cc, rv, 0.4f, 0.4f, { 0.3f, 0.8f, 1.0f, 1.0f });
+        }
+
+        // 上へ舞うスパーク
+        for ( int i = 0; i < 8; i++ ) {
+            Vector3 sp = {
+                pos_.x + ( rand() % 9 - 4 ) * 0.1f,
+                pos_.y + 0.1f + ( rand() % 4 ) * 0.15f,
+                pos_.z + ( rand() % 9 - 4 ) * 0.1f
+            };
+            Vector3 sv = {
+                ( rand() % 7 - 3 ) * 0.04f,
+                0.15f + ( rand() % 6 ) * 0.03f,
+                ( rand() % 7 - 3 ) * 0.04f
+            };
+            float sc = 0.28f + ( rand() % 4 ) * 0.07f;
+            GPUParticleManager::GetInstance()->Emit(sp, sv, 0.55f, sc, { 0.35f, 0.82f, 1.0f, 0.95f });
         }
     }
 }
