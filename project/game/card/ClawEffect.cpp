@@ -121,7 +121,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 					if ( !enemy || enemy->IsDead() ) continue;
 					Vector3 ePos = enemy->GetPosition();
 					Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
-					if ( Length(diff) < 2.5f ) { // 判定を少し広げて当てやすく
+					if ( Length(diff) < 3.0f ) {
 						enemy->TakeDamage(randomDamage);
 						// シアン斬撃エフェクト
 						GPUParticleManager::GetInstance()->Emit(ePos, {0,0,0}, 0.1f, 1.5f, {0.3f, 1.0f, 1.0f, 0.9f});
@@ -150,7 +150,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			if ( player && !player->IsDead() ) {
 				Vector3 pPos = player->GetPosition();
 				Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
-				if ( Length(diff) < 2.0f ) {
+				if ( Length(diff) < 1.8f ) {
 					player->TakeDamage(randomDamage, pos_);
 					// シアン斬撃エフェクト
 					GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.1f, 1.5f, {0.3f, 1.0f, 1.0f, 0.9f});

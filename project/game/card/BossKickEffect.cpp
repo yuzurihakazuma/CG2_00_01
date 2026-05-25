@@ -103,7 +103,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             startPos_.z + forward.z * 2.0f
         };
 
-        const float hitRadius = 2.0f;
+        const float hitRadius = 2.2f; // ボスは体が大きいぶん少し広め
         int finalDamage = damage_;
 
         if (casterBoss_ && casterBoss_->IsAttackDebuffed()) {

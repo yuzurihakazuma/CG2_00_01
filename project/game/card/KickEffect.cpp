@@ -110,8 +110,8 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
     // ==================================================
     // ★ 前に突き出すアニメーション ＆ 青いオーラ
     // ==================================================
-    float progress = static_cast<float>(timer_) / 15.0f; // 15フレームで完了
-    float distance = 0.5f + progress * 2.5f;
+    float progress = std::min(1.0f, static_cast<float>(timer_) / 15.0f); // 15フレームで最大到達・以降は固定
+    float distance = 0.5f + progress * 3.5f; // 最大リーチ 4.0f（一歩分延長）
 
     pos_ = {
         startPos_.x + forward.x * distance,
@@ -144,18 +144,17 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
     }
 
 
-    // 蹴りの発生フレーム（例：3〜8フレームの間に判定を出す）
-    // 6フレーム経過後から判定発生（スタートアップ）
-    if (timer_ >= 6 && timer_ <= 11 && !hasHit_) {
+    // 6フレーム経過後から判定発生（スタートアップ）、14フレームまで持続
+    if (timer_ >= 6 && timer_ <= 14 && !hasHit_) {
 
-        // 当たり判定の中心座標（モデルの少し前に判定を出す）
+        // 当たり判定の中心座標（一歩前に延ばした位置）
         Vector3 hitCenter = {
-            startPos_.x + forward.x * 2.0f,
+            startPos_.x + forward.x * 3.0f,
             startPos_.y,
-            startPos_.z + forward.z * 2.0f
+            startPos_.z + forward.z * 3.0f
         };
 
-        float hitRadius = 2.0f; // 蹴りの判定サイズ
+        float hitRadius = 2.5f; // 蹴りの判定サイズ（プレイヤー用：広め）
         int randomDamage = damage_ + (rand() % 2); // ★ ランダムダメージ（1〜2）
 
         if (isPlayerCaster_) {
@@ -207,8 +206,8 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
         }
     }
 
-    // 蹴りのモーションが終わる時間
-    if (timer_ > 15) {
+    // 蹴りのモーションが終わる時間（15fで最大到達後、22fまで残像として残る）
+    if (timer_ > 22) {
         isFinished_ = true;
     }
 }

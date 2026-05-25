@@ -221,7 +221,7 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 						ePos.z - pos_.z
 					};
 
-					if ( Length(diff) < 1.8f ) {
+					if ( Length(diff) < 2.3f ) {
 						enemy->TakeDamage(randomDamage);
 						// 爆発エフェクト
 						GPUParticleManager::GetInstance()->Emit(pos_, {0,0,0}, 0.12f, 2.0f, {1.0f, 0.9f, 0.4f, 1.0f});

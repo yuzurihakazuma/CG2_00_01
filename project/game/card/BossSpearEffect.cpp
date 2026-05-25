@@ -206,7 +206,7 @@ void BossSpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* b
                 Vector3 playerPos = player->GetPosition();
                 Vector3 diff = { playerPos.x - pos_.x, 0.0f, playerPos.z - pos_.z };
 
-                if (Length(diff) < 2.0f) { // 通常槍より少し広めでもOKなら 2.2f にしてもよい
+                if (Length(diff) < 1.8f) { // 槍の先端は細い：プレイヤー体幹に合わせた判定
                     player->TakeDamage(currentDamage, pos_);
                     hitTargets_.push_back(player);
                 }

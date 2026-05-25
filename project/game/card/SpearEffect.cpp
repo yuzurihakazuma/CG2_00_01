@@ -194,7 +194,7 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                     Vector3 ePos = enemy->GetPosition();
                     Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 
-                    if ( Length(diff) < 1.5f ) {
+                    if ( Length(diff) < 2.0f ) {
                         enemy->TakeDamage(currentDamage);
                         hitTargets_.push_back(enemy.get());
 
@@ -211,7 +211,7 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), boss);
                 if ( it == hitTargets_.end() ) {
                     Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                    if ( Length(diff) < 2.5f ) {
+                    if ( Length(diff) < 3.0f ) {
                         boss->TakeDamage(currentDamage);
                         hitTargets_.push_back(boss);
                     }
@@ -221,7 +221,7 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), extraBoss);
                 if ( it == hitTargets_.end() ) {
                     Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                    if ( Length(diff) < 2.5f ) {
+                    if ( Length(diff) < 3.0f ) {
                         extraBoss->TakeDamage(currentDamage);
                         hitTargets_.push_back(extraBoss);
                     }
