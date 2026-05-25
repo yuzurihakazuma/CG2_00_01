@@ -3324,6 +3324,10 @@ void GamePlayScene::UpdateTimedSpawns() {
 
 	if (mapManager_->IsBossMap()) {
 		timedEnemySpawnTimer_ = timedSpawnIntervalFrames_;
+		if (bossManager_ && (bossManager_->IsBossDeathAnimationPlaying() || bossManager_->IsBossDeadHandled())) {
+			timedCardSpawnTimer_ = timedSpawnIntervalFrames_;
+			return;
+		}
 		timedCardSpawnTimer_--;
 		if (timedCardSpawnTimer_ <= 0) {
 			if (CountActiveCardPickups() < bossTimedCardMax_) {

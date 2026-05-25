@@ -539,7 +539,9 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 					player->AddExp(enemy->GetExpReward());
 				}
 				if (enemy->HasUsablePickupCard() && !enemy->IsBossRoomBehavior()) {
-					cardPickupManager->AddPickup(enemy->GetPosition(), enemy->GetPickupCard());
+					Vector3 dropPos = enemy->GetPosition();
+					dropPos.y = -0.99f;
+					cardPickupManager->AddPickup(dropPos, enemy->GetPickupCard());
 					enemy->ClearPickupCard();
 				}
 				enemyDeadHandled_[i] = true;
