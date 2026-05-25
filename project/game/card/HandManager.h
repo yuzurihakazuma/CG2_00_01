@@ -22,7 +22,7 @@ private:
 	std::vector<float> dissolveThresholds_;  // ディゾルブ進行度
 
 	int selectedCardIndex_ = 0;   //現在選んでいるカードの番号
-	int maxHandSize_ = 3;  //最大手札枚数
+	int maxHandSize_ = 4;  //最大手札枚数
 
 	Camera* camera_ = nullptr;
 	uint32_t noiseTextureIndex_ = 0; // ノイズテクスチャ番号

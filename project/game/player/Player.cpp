@@ -767,7 +767,7 @@ void Player::LevelUp() {
 
     level_++;
     nextLevelExp_ += 2;
-    maxHp_ += 2;
+    maxHp_ += 3;
     hp_ = maxHp_;
     maxCost_ += 1;
     cost_ = maxCost_;
