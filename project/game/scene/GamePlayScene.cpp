@@ -2784,14 +2784,14 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 void GamePlayScene::UpdatePause(Input* input) {
 
 	// 上下で選択
-	if (input->Triggerkey(DIK_W)) {
+	if (input->Triggerkey(DIK_W) || input->Triggerkey(DIK_RIGHT)) {
 		pauseSelection_--;
 		if (pauseSelection_ < 0) {
 			pauseSelection_ = 1;
 		}
 	}
 
-	if (input->Triggerkey(DIK_S)) {
+	if (input->Triggerkey(DIK_S)|| input->Triggerkey(DIK_LEFT)) {
 		pauseSelection_++;
 		if (pauseSelection_ > 1) {
 			pauseSelection_ = 0;
