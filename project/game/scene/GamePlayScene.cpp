@@ -1577,7 +1577,7 @@ void GamePlayScene::Update() {
 
 		// ★ 横並びに配置するための計算
 		float topY = 28.0f;
-		float startX = 260.0f;   // 左端からのX座標
+		float startX = 0.0f;   // 左端からのX座標
 
 		// テキストの座標を最新のウィンドウ幅に合わせて更新
 		textMgr->SetPosition("PlayerHP", startX, topY);
@@ -1753,18 +1753,23 @@ void GamePlayScene::Update() {
 		// ★ 2. 右上への配置計算
 		// ==========================================
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 
 		// 枠のサイズ
 		float bgWidth = 390.0f;  // ミニマップの横幅に合わせると綺麗です
 		float bgHeight = 200.0f;
 
 		// 右端・上端からの余白
-		float marginRight = 20.0f;
-		float marginTop = 10.0f; // ミニマップの下に置く場合は 350.0f 前後に調整
+		float marginLeft = 20.0f;
+		float marginBottom = 260.0f;
 
 		// 背景枠の位置（中心座標）
-		float bgPosX = screenW - (bgWidth * 0.5f) - marginRight;
-		float bgPosY = marginTop + (bgHeight * 0.5f);
+		float textPosX = marginLeft;
+		if (textPosX + bgWidth > screenW - 20.0f) {
+			textPosX = screenW - bgWidth - 20.0f;
+		}
+		float bgPosX = textPosX + (bgWidth * 0.5f);
+		float bgPosY = screenH - marginBottom - (bgHeight * 0.5f);
 
 		if (descBgSprite_) {
 			descBgSprite_->SetSize({ bgWidth, bgHeight });
@@ -1773,8 +1778,7 @@ void GamePlayScene::Update() {
 		}
 
 		// 3. 文字の位置（枠の左上に合わせる）
-		float textPosX = screenW - bgWidth - marginRight ;
-		float textPosY = marginTop + 15.0f;
+		float textPosY = screenH - marginBottom - bgHeight + 15.0f;
 		TextManager::GetInstance()->SetPosition("CardT", textPosX, textPosY);
 	}
 	else {
@@ -2302,13 +2306,18 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		TextManager::GetInstance()->SetText("CardT", displayText);
 
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 		float bgWidth = 390.0f;
 		float bgHeight = 200.0f;
-		float marginRight = 20.0f;
-		float marginTop = 10.0f;
+		float marginLeft = 20.0f;
+		float marginBottom = 260.0f;
 
-		float bgPosX = screenW - (bgWidth * 0.5f) - marginRight;
-		float bgPosY = marginTop + (bgHeight * 0.5f);
+		float textPosX = marginLeft;
+		if (textPosX + bgWidth > screenW - 20.0f) {
+			textPosX = screenW - bgWidth - 20.0f;
+		}
+		float bgPosX = textPosX + (bgWidth * 0.5f);
+		float bgPosY = screenH - marginBottom - (bgHeight * 0.5f);
 
 		if (descBgSprite_) {
 			descBgSprite_->SetSize({ bgWidth, bgHeight });
@@ -2316,8 +2325,7 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 			descBgSprite_->Update();
 		}
 
-		float textPosX = screenW - bgWidth - marginRight;
-		float textPosY = marginTop + 15.0f;
+		float textPosY = screenH - marginBottom - bgHeight + 15.0f;
 		TextManager::GetInstance()->SetPosition("CardT", textPosX, textPosY);
 	}
 

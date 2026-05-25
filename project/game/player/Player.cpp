@@ -103,7 +103,7 @@ void Player::Initialize() {
     cost_ = 5 ;                // 現在コスト初期化
     maxCost_ = 5;             // 最大コスト初期化
     costRecoveryTimer_ = 0;   // コスト回復タイマー初期化
-    costRecoveryInterval_ = 180; // コスト回復速度初期化
+    costRecoveryInterval_ = 120; // コスト回復速度初期化
 
     maxCost_ = 5; // 初期最大コスト
     cost_ = maxCost_;
