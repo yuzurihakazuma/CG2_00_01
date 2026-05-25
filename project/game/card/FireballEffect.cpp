@@ -8,6 +8,7 @@
 #include "engine/collision/Collision.h"
 #include "game/enemy/EnemyManager.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/postEffect/PostEffect.h"
 #include <memory>
 #include <cmath>
 
@@ -18,6 +19,7 @@ void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
 	(void)casterBoss;
 	// 使用者情報を保存
 	isPlayerCaster_ = isPlayerCaster;
+	camera_ = camera;
 	isFinished_ = false;
 
 	// 正面方向を計算
@@ -234,6 +236,17 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 							Vector3 sv = { (rand()%11-5)*0.4f, 1.2f+(rand()%6)*0.2f, (rand()%11-5)*0.4f };
 							GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.25f, 0.15f, {1.0f, 1.0f, 0.5f, 1.0f});
 						}
+						// 着弾点に熱波歪みを一時発生（炎の爆発演出）
+						if ( camera_ ) {
+							const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+							float hcx = pos_.x*vp.m[0][0]+pos_.y*vp.m[1][0]+pos_.z*vp.m[2][0]+vp.m[3][0];
+							float hcy = pos_.x*vp.m[0][1]+pos_.y*vp.m[1][1]+pos_.z*vp.m[2][1]+vp.m[3][1];
+							float hcw = pos_.x*vp.m[0][3]+pos_.y*vp.m[1][3]+pos_.z*vp.m[2][3]+vp.m[3][3];
+							if ( hcw > 0.001f ) {
+								PostEffect::GetInstance()->TriggerDistortion(
+									hcx/hcw*0.5f+0.5f, -hcy/hcw*0.5f+0.5f, 0.20f, 45);
+							}
+						}
 						isFinished_ = true;
 						return;
 					}
@@ -257,6 +270,17 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 			for ( int j = 0; j < 8; j++ ) {
 				Vector3 sv = { (rand()%11-5)*0.4f, 1.2f+(rand()%6)*0.2f, (rand()%11-5)*0.4f };
 				GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.25f, 0.15f, {1.0f, 1.0f, 0.5f, 1.0f});
+			}
+			// 着弾点に熱波歪みを一時発生（炎の爆発演出）
+			if ( camera_ ) {
+				const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+				float hcx = pos_.x*vp.m[0][0]+pos_.y*vp.m[1][0]+pos_.z*vp.m[2][0]+vp.m[3][0];
+				float hcy = pos_.x*vp.m[0][1]+pos_.y*vp.m[1][1]+pos_.z*vp.m[2][1]+vp.m[3][1];
+				float hcw = pos_.x*vp.m[0][3]+pos_.y*vp.m[1][3]+pos_.z*vp.m[2][3]+vp.m[3][3];
+				if ( hcw > 0.001f ) {
+					PostEffect::GetInstance()->TriggerDistortion(
+						hcx/hcw*0.5f+0.5f, -hcy/hcw*0.5f+0.5f, 0.20f, 45);
+				}
 			}
 			isFinished_ = true;
 			return;
@@ -301,6 +325,17 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 				for ( int j = 0; j < 8; j++ ) {
 					Vector3 sv = { (rand()%11-5)*0.4f, 1.2f+(rand()%6)*0.2f, (rand()%11-5)*0.4f };
 					GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.25f, 0.15f, {1.0f, 1.0f, 0.5f, 1.0f});
+				}
+				// 着弾点に熱波歪みを一時発生（炎の爆発演出）
+				if ( camera_ ) {
+					const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+					float hcx = pos_.x*vp.m[0][0]+pos_.y*vp.m[1][0]+pos_.z*vp.m[2][0]+vp.m[3][0];
+					float hcy = pos_.x*vp.m[0][1]+pos_.y*vp.m[1][1]+pos_.z*vp.m[2][1]+vp.m[3][1];
+					float hcw = pos_.x*vp.m[0][3]+pos_.y*vp.m[1][3]+pos_.z*vp.m[2][3]+vp.m[3][3];
+					if ( hcw > 0.001f ) {
+						PostEffect::GetInstance()->TriggerDistortion(
+							hcx/hcw*0.5f+0.5f, -hcy/hcw*0.5f+0.5f, 0.20f, 45);
+					}
 				}
 				isFinished_ = true;
 				return;

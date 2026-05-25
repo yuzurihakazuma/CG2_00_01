@@ -41,6 +41,10 @@ void PostEffect::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uin
 	timeResource_->Map(0, nullptr, reinterpret_cast< void** >( &effectParamsData_ ));
 	*effectParamsData_ = PostEffectParams {};
 
+	maskParamsResource_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(MaskParams));
+	maskParamsResource_->Map(0, nullptr, reinterpret_cast< void** >( &maskParamsData_ ));
+	*maskParamsData_ = MaskParams {};
+
 	Bloom::GetInstance()->Initialize(dxCommon, SrvManager::GetInstance(), width, height);
 	Bloom::GetInstance()->Load("resources/bloom.json");
 }
@@ -49,6 +53,14 @@ void PostEffect::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uin
 void PostEffect::Update(){
 	if ( isActive_ && effectParamsData_ ) {
 		effectParamsData_->time += timeSpeed_;
+	}
+
+	// 一時歪みタイマー：0になったら自動オフ
+	if ( distortionTimer_ > 0 ) {
+		distortionTimer_--;
+		if ( distortionTimer_ == 0 ) {
+			SetEffectActive(PostEffectType::MaskedDistortion, false);
+		}
 	}
 }
 
@@ -71,6 +83,7 @@ void PostEffect::Finalize() {
 	Bloom::GetInstance()->Finalize();
 
 	if ( maskTexture_ ) { maskTexture_.reset(); }
+	if ( maskParamsResource_ ) { maskParamsResource_.Reset(); }
 }
 
 void PostEffect::PreDrawScene(ID3D12GraphicsCommandList* commandList) {
@@ -230,6 +243,10 @@ void PostEffect::ApplyEffect(
 
 	// 4. 特殊なパラメータ渡し（ノイズの時間など）
 	commandList->SetGraphicsRootConstantBufferView(1, timeResource_->GetGPUVirtualAddress());
+	// 5. マスクパラメータ渡し（b1: ボス/プレイヤーのスクリーンUV）
+	if ( maskParamsResource_ ) {
+		commandList->SetGraphicsRootConstantBufferView(2, maskParamsResource_->GetGPUVirtualAddress());
+	}
 
 	// 5. 描画！
 	commandList->DrawInstanced(3, 1, 0, 0);
@@ -260,8 +277,10 @@ void PostEffect::DrawDebugUI(){
 			"アウトライン・輪郭抽出 (Outline)",
 			"放射状ブラー (Radial Blur)",
 			"ノイズ・砂嵐 (Random Noise)",
-			"カラーティント (ColorTint)"
-
+			"カラーティント (ColorTint)",
+			"ボス周囲の歪み (MaskedDistortion)",
+			"プレイヤー周囲グロー (MaskedGlow)",
+			"特定エリアセピア (MaskedSepia)",
 		};
 		// --- ポストエフェクトのON/OFF設定 ---
 		if ( ImGui::CollapsingHeader("ポストエフェクト設定 (Post Effect)", ImGuiTreeNodeFlags_DefaultOpen) ) {
