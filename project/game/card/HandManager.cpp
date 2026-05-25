@@ -133,6 +133,11 @@ void HandManager::Initialize(Camera* camera, uint32_t noiseTextureIndex) {
 	swapModeVisual_ = false;
 	pendingReturnToFist_ = false;
 	manualSelectionAfterUse_ = false;
+	prevSelectedIndex_  = 0;    // 初回フレームで変化扱いにしない
+	selectionTickTimer_ = 6;    // 起動直後はすぐ出さない
+	selectionPulseTime_ = 0.0f;
+	drawSparkFrames_    = 0;
+	drawSparkCardIdx_   = -1;
 }
 
 bool HandManager::AddCard(const Card& newCard) {
@@ -369,6 +374,12 @@ void HandManager::Update() {
 			pos.z -= 0.035f;
 			cardColor = { 1.0f, 1.0f, 0.78f + 0.12f * pulse, 1.0f };
 		}
+		else if ( i == selectedCardIndex_ ) {
+			// 選択中カードのゴールド点滅パルス
+			const float pulse = 0.5f + 0.5f * std::sinf(selectionPulseTime_);
+			cardScale = 0.305f + 0.012f * pulse;           // 少し大きくなる
+			cardColor = { 1.0f, 0.88f + 0.12f * pulse, 0.4f + 0.3f * pulse, 1.0f }; // 白→金色
+		}
 
 		handModels_[i]->SetScale({ cardScale, cardScale, cardScale });
 		handModels_[i]->SetColor(cardColor);
@@ -406,8 +417,57 @@ void HandManager::Update() {
 		}
 	}
 
+	// 選択パルスタイムを進める
+	selectionPulseTime_ += 0.1f;
+
 	// ドローきらめきタイマーを1フレーム減らす
 	if ( drawSparkFrames_ > 0 ) drawSparkFrames_--;
+
+	// ---- カード選択ハイライト ----
+	if ( !hand_.empty() ) {
+		Vector3 emitPos = { playerWorldPos_.x, playerWorldPos_.y + 0.8f, playerWorldPos_.z };
+		bool selectionChanged = ( prevSelectedIndex_ != selectedCardIndex_ );
+
+		// 選択が変わった瞬間：バーストを1回出す
+		if ( selectionChanged && prevSelectedIndex_ >= 0 ) {
+			// 選択中カードの色を取得
+			Vector4 burstColor = { 1.0f, 1.0f, 0.6f, 1.0f };
+			if ( selectedCardIndex_ < static_cast<int>(hand_.size()) ) {
+				switch ( hand_[selectedCardIndex_].effectType ) {
+				case CardEffectType::Attack:  burstColor = { 1.0f, 0.5f, 0.2f, 1.0f }; break;
+				case CardEffectType::Heal:    burstColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break;
+				case CardEffectType::Defense: burstColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break;
+				case CardEffectType::Special: burstColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break;
+				default: break;
+				}
+			}
+			// 切り替わりバースト（リング状に広がる）
+			for ( int s = 0; s < 10; s++ ) {
+				float angle = ( 3.14159f * 2.0f / 10.0f ) * s;
+				float speed = 0.25f + ( rand() % 4 ) * 0.04f;
+				Vector3 sv = { std::sinf(angle) * speed, 0.05f, std::cosf(angle) * speed };
+				GPUParticleManager::GetInstance()->Emit(emitPos, sv, 0.35f, 0.5f, burstColor);
+			}
+			selectionTickTimer_ = 0; // バースト直後は継続きらめきをすぐ出さない
+		}
+
+		// 選択中の継続きらめき（6フレームに1回）
+		if ( selectionTickTimer_ <= 0 ) {
+			selectionTickTimer_ = 6;
+			if ( selectedCardIndex_ < static_cast<int>(hand_.size()) ) {
+				Vector4 tickColor = { 1.0f, 1.0f, 0.7f, 0.85f };
+				Vector3 sv = {
+					( rand() % 9 - 4 ) * 0.06f,
+					0.08f + ( rand() % 5 ) * 0.03f,
+					( rand() % 9 - 4 ) * 0.06f
+				};
+				GPUParticleManager::GetInstance()->Emit(emitPos, sv, 0.55f, 0.3f, tickColor);
+			}
+		}
+		if ( selectionTickTimer_ > 0 ) selectionTickTimer_--;
+	}
+
+	prevSelectedIndex_ = selectedCardIndex_;
 
 	// 後ろから削除
 	for (int i = static_cast<int>(removeIndices.size()) - 1; i >= 0; --i) {

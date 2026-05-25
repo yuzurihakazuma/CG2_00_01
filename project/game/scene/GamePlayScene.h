@@ -267,6 +267,8 @@ private: // メンバ変数
 
 	// コスト不足メッセージ表示用
 	int costLackMessageTimer_ = 0;
+	int costFlashTimer_ = 0;              // コスト不足ビネットフラッシュの残り時間
+	const int costFlashDuration_ = 12;   // フラッシュ持続フレーム数
 
 
 	// ブロックの一括描画用グループ

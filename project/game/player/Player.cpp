@@ -175,6 +175,10 @@ void Player::Initialize() {
         ai.isActive = false;
         afterimages_.push_back(std::move(ai));
     }
+
+    // DodgeParticle は Initialize で1回だけ生成する（Update で毎フレーム再生成しない）
+    dodgeParticle_ = std::make_unique<DodgeParticleEffect>();
+    dodgeParticle_->Initialize();
 }
 
 void Player::Update() {
@@ -183,8 +187,12 @@ void Player::Update() {
     {
         auto* pe = PostEffect::GetInstance();
 
-        // 死亡時 → グレースケール
-        pe->SetEffectActive(PostEffectType::Grayscale, isDead_);
+        // 死亡フラッシュタイマー更新
+        if ( deathFlashTimer_ > 0 ) deathFlashTimer_--;
+        bool isDeathFlash = deathFlashTimer_ > 0;
+
+        // 死亡時 → グレースケール（白→赤フラッシュ中はColorTintを優先してグレースケールを抑制）
+        pe->SetEffectActive(PostEffectType::Grayscale, isDead_ && !isDeathFlash);
 
         // スピードバフ中 → ラジアルブラー（回避中は視認性のため無効）
         bool hasSpeedBuff = speedMultiplier_ > 1.0f && speedBuffTimer_ > 0;
@@ -212,6 +220,17 @@ void Player::Update() {
             pe->SetVignetteParams(0.7f + ratio * 0.5f, 1.0f, 0.05f, 0.05f);
         } else if ( isLowHp ) {
             pe->SetVignetteParams(0.75f, 0.9f, 0.0f, 0.0f);
+        }
+
+        // 死亡フラッシュ → 白→赤のフルスクリーンColorTint
+        pe->SetEffectActive(PostEffectType::ColorTint, isDeathFlash);
+        if ( isDeathFlash ) {
+            // ratio: 1.0=発生直後(白), 0.0=終わり(赤)
+            float ratio = static_cast<float>(deathFlashTimer_) / static_cast<float>(deathFlashDuration_);
+            float g = ratio * 0.85f;
+            float b = ratio * 0.85f;
+            float alpha = 0.55f + ratio * 0.4f; // 直後ほど強く、だんだん薄れる
+            pe->SetColorTint(alpha, 1.0f, g, b);
         }
     }
 
@@ -448,6 +467,30 @@ void Player::Update() {
         if ( Length(move) > 0.0f ) {
             pos_ += move * ( moveSpeed_ * speedMultiplier_ );
             rot_.y = std::atan2f(move.x, move.z);
+
+            // 足元ほこり
+            footDustTimer_--;
+            if ( footDustTimer_ <= 0 ) {
+                footDustTimer_ = footDustInterval_;
+                for ( int i = 0; i < 2; i++ ) {
+                    Vector3 dp = {
+                        pos_.x + ( rand() % 7 - 3 ) * 0.08f,
+                        pos_.y + 0.05f,
+                        pos_.z + ( rand() % 7 - 3 ) * 0.08f
+                    };
+                    // 移動方向の逆へ少し流れる
+                    Vector3 dv = {
+                        -move.x * 0.03f + ( rand() % 5 - 2 ) * 0.015f,
+                        0.03f + ( rand() % 4 ) * 0.01f,
+                        -move.z * 0.03f + ( rand() % 5 - 2 ) * 0.015f
+                    };
+                    float sc = 0.22f + ( rand() % 4 ) * 0.06f;
+                    float br = 0.55f + ( rand() % 5 ) * 0.04f; // グレー
+                    GPUParticleManager::GetInstance()->Emit(dp, dv, 0.5f, sc, { br, br, br, 0.5f });
+                }
+            }
+        } else {
+            footDustTimer_ = 0; // 止まったらリセット（再び動き出した直後に即出る）
         }
     }
 
@@ -490,10 +533,6 @@ void Player::Update() {
         }
     }
 
-
-    // パーティクル演出クラスの生成と初期化
-    dodgeParticle_ = std::make_unique<DodgeParticleEffect>();
-    dodgeParticle_->Initialize();
 
 }
 
@@ -767,7 +806,7 @@ void Player::LevelUp() {
 
     level_++;
     nextLevelExp_ += 2;
-    maxHp_ += 2;
+    maxHp_ += 3;
     hp_ = maxHp_;
     maxCost_ += 1;
     cost_ = maxCost_;
@@ -808,6 +847,36 @@ void Player::UpdateCost() {
 
         if (cost_ > maxCost_) {
             cost_ = maxCost_;
+        }
+
+        // コスト回復きらめき
+        Vector3 cc = { pos_.x, pos_.y + 0.4f, pos_.z };
+
+        // 中心フラッシュ
+        GPUParticleManager::GetInstance()->Emit(cc, { 0, 0, 0 }, 0.12f, 1.2f, { 0.4f, 0.85f, 1.0f, 1.0f });
+
+        // 放射リング
+        for ( int i = 0; i < 8; i++ ) {
+            float a = ( 3.14159f * 2.0f / 8.0f ) * i;
+            float spd = 0.18f + ( rand() % 4 ) * 0.03f;
+            Vector3 rv = { std::sinf(a) * spd, 0.02f, std::cosf(a) * spd };
+            GPUParticleManager::GetInstance()->Emit(cc, rv, 0.4f, 0.4f, { 0.3f, 0.8f, 1.0f, 1.0f });
+        }
+
+        // 上へ舞うスパーク
+        for ( int i = 0; i < 8; i++ ) {
+            Vector3 sp = {
+                pos_.x + ( rand() % 9 - 4 ) * 0.1f,
+                pos_.y + 0.1f + ( rand() % 4 ) * 0.15f,
+                pos_.z + ( rand() % 9 - 4 ) * 0.1f
+            };
+            Vector3 sv = {
+                ( rand() % 7 - 3 ) * 0.04f,
+                0.15f + ( rand() % 6 ) * 0.03f,
+                ( rand() % 7 - 3 ) * 0.04f
+            };
+            float sc = 0.28f + ( rand() % 4 ) * 0.07f;
+            GPUParticleManager::GetInstance()->Emit(sp, sv, 0.55f, sc, { 0.35f, 0.82f, 1.0f, 0.95f });
         }
     }
 }
@@ -960,6 +1029,78 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
         isKnockback_ = false;
         knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
 
+        // 死亡フラッシュ（白→赤 ColorTint）を起動
+        deathFlashTimer_ = deathFlashDuration_;
+
+        // カメラシェイク（死亡時）
+        if ( camera_ ) {
+            camera_->TriggerShake(0.18f, 12);
+        }
+
+        // ========== 死亡時パーティクル（大幅強化） ==========
+        Vector3 dc = { pos_.x, pos_.y + 0.6f, pos_.z };
+
+        // ① 超巨大白フラッシュ（爆発の一瞬）
+        GPUParticleManager::GetInstance()->Emit(dc, { 0, 0, 0 }, 0.05f, 12.0f, { 1.0f, 1.0f, 1.0f, 1.0f });
+        GPUParticleManager::GetInstance()->Emit(dc, { 0, 0, 0 }, 0.12f, 8.5f,  { 1.0f, 0.95f, 0.85f, 1.0f });
+
+        // ② 赤コアフラッシュ
+        GPUParticleManager::GetInstance()->Emit(dc, { 0, 0, 0 }, 0.2f,  6.0f,  { 1.0f, 0.2f, 0.05f, 1.0f });
+        GPUParticleManager::GetInstance()->Emit(dc, { 0, 0, 0 }, 0.35f, 4.0f,  { 1.0f, 0.35f, 0.1f, 0.9f });
+
+        // ③ 爆発リング①（速い・大きい）
+        for ( int i = 0; i < 32; i++ ) {
+            float angle = ( 3.14159f * 2.0f / 32.0f ) * i;
+            float speed = 0.8f + ( rand() % 8 ) * 0.06f;
+            Vector3 rv = { std::sinf(angle) * speed, 0.02f + (rand() % 4) * 0.01f, std::cosf(angle) * speed };
+            float gc = 0.08f + ( rand() % 5 ) * 0.07f;
+            GPUParticleManager::GetInstance()->Emit(dc, rv, 0.4f, 3.0f, { 1.0f, gc, 0.05f, 1.0f });
+        }
+
+        // ④ 爆発リング②（少し遅く・白オレンジ）
+        for ( int i = 0; i < 24; i++ ) {
+            float angle = ( 3.14159f * 2.0f / 24.0f ) * i + 0.2f;
+            float speed = 0.45f + ( rand() % 6 ) * 0.05f;
+            Vector3 rv = { std::sinf(angle) * speed, 0.12f, std::cosf(angle) * speed };
+            GPUParticleManager::GetInstance()->Emit(dc, rv, 0.65f, 2.0f, { 1.0f, 0.55f, 0.15f, 0.9f });
+        }
+
+        // ⑤ 赤い爆散（大量・広範囲）
+        for ( int i = 0; i < 70; i++ ) {
+            Vector3 ev = {
+                ( rand() % 21 - 10 ) * 0.28f,
+                ( rand() % 16 ) * 0.13f + 0.05f,
+                ( rand() % 21 - 10 ) * 0.28f
+            };
+            Vector3 ep = {
+                pos_.x + ( rand() % 17 - 8 ) * 0.1f,
+                pos_.y + 0.2f + ( rand() % 15 ) * 0.1f,
+                pos_.z + ( rand() % 17 - 8 ) * 0.1f
+            };
+            float gc = 0.05f + ( rand() % 6 ) * 0.06f;
+            float sc = 0.5f + ( rand() % 8 ) * 0.12f;
+            GPUParticleManager::GetInstance()->Emit(ep, ev, 0.65f, sc, { 1.0f, gc, 0.05f, 1.0f });
+        }
+
+        // ⑥ 白い散乱（爆発コアの残骸）
+        for ( int i = 0; i < 18; i++ ) {
+            Vector3 wv = {
+                ( rand() % 21 - 10 ) * 0.18f,
+                0.35f + ( rand() % 12 ) * 0.1f,
+                ( rand() % 21 - 10 ) * 0.18f
+            };
+            float sc = 1.5f + ( rand() % 6 ) * 0.2f;
+            GPUParticleManager::GetInstance()->Emit(dc, wv, 0.22f, sc, { 1.0f, 0.92f, 0.85f, 1.0f });
+        }
+
+        // ⑦ 暗い煙（大量・大きく・長く残る）
+        for ( int i = 0; i < 22; i++ ) {
+            Vector3 sv = { ( rand() % 11 - 5 ) * 0.07f, 0.08f + ( rand() % 10 ) * 0.04f, ( rand() % 11 - 5 ) * 0.07f };
+            float sc = 1.4f + ( rand() % 7 ) * 0.25f;
+            float br = 0.08f + ( rand() % 3 ) * 0.04f;
+            GPUParticleManager::GetInstance()->Emit(dc, sv, 1.8f, sc, { br, br, br, 0.88f });
+        }
+
         // 死亡時は現在姿勢から death ポーズへ少しずつ遷移する
         StartPoseBlendByName(deathPoseNameBuffer_, poseBlendDuration_);
 
@@ -1028,6 +1169,27 @@ void Player::TakeContinuousDamage(int damage) {
         isDodging_ = false;
         isKnockback_ = false;
         knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+
+        // 継続ダメージ死亡でも同じ派手な演出を出す
+        deathFlashTimer_ = deathFlashDuration_;
+        if ( camera_ ) {
+            camera_->TriggerShake(0.6f, 35);
+        }
+
+        Vector3 dc2 = { pos_.x, pos_.y + 0.6f, pos_.z };
+        GPUParticleManager::GetInstance()->Emit(dc2, { 0, 0, 0 }, 0.05f, 12.0f, { 1.0f, 1.0f, 1.0f, 1.0f });
+        GPUParticleManager::GetInstance()->Emit(dc2, { 0, 0, 0 }, 0.2f,  6.0f,  { 1.0f, 0.2f, 0.05f, 1.0f });
+        for ( int i = 0; i < 28; i++ ) {
+            float angle = ( 3.14159f * 2.0f / 28.0f ) * i;
+            float speed = 0.75f + ( rand() % 7 ) * 0.06f;
+            Vector3 rv = { std::sinf(angle) * speed, 0.02f, std::cosf(angle) * speed };
+            GPUParticleManager::GetInstance()->Emit(dc2, rv, 0.4f, 2.8f, { 1.0f, 0.08f + (rand()%5)*0.07f, 0.05f, 1.0f });
+        }
+        for ( int i = 0; i < 40; i++ ) {
+            Vector3 ev = { (rand()%21-10)*0.25f, (rand()%14)*0.12f+0.05f, (rand()%21-10)*0.25f };
+            Vector3 ep = { pos_.x+(rand()%15-7)*0.1f, pos_.y+0.2f+(rand()%12)*0.1f, pos_.z+(rand()%15-7)*0.1f };
+            GPUParticleManager::GetInstance()->Emit(ep, ev, 0.6f, 0.5f+(rand()%7)*0.1f, { 1.0f, 0.06f+(rand()%5)*0.06f, 0.05f, 1.0f });
+        }
 
         StartPoseBlendByName(deathPoseNameBuffer_, poseBlendDuration_);
 

@@ -202,6 +202,10 @@ private:
     int shieldFlashTimer_ = 0;
     const int shieldFlashDuration_ = 10;
 
+    // 死亡フラッシュ（全画面白→赤）
+    int deathFlashTimer_ = 0;
+    const int deathFlashDuration_ = 25;
+
     // ノックバック
     bool isKnockback_ = false;
     int knockbackTimer_ = 0;
@@ -263,6 +267,9 @@ private:
     Vector3 lastAfterimagePos_ = { 9999.0f, 9999.0f, 9999.0f };
 
     std::unique_ptr<DodgeParticleEffect> dodgeParticle_;
+
+    int footDustTimer_ = 0;          // 足元ほこりの発生間隔タイマー
+    const int footDustInterval_ = 4; // 何フレームに1回ほこりを出すか
 
 
     bool isStunned_ = false;  // スタン状態フラグ

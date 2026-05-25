@@ -22,7 +22,7 @@ private:
 	std::vector<float> dissolveThresholds_;  // ディゾルブ進行度
 
 	int selectedCardIndex_ = 0;   //現在選んでいるカードの番号
-	int maxHandSize_ = 3;  //最大手札枚数
+	int maxHandSize_ = 4;  //最大手札枚数
 
 	Camera* camera_ = nullptr;
 	uint32_t noiseTextureIndex_ = 0; // ノイズテクスチャ番号
@@ -41,6 +41,11 @@ private:
 	int     drawSparkFrames_  = 0;   // 残り発行フレーム数
 	int     drawSparkCardIdx_ = -1;  // きらめかせるスロット番号
 	Vector3 playerWorldPos_   = {};  // パーティクル発行用のプレイヤーワールド座標
+
+	// カード選択ハイライト
+	int   prevSelectedIndex_   = -1;   // 前フレームの選択index（変化検出用）
+	int   selectionTickTimer_  =  0;   // 継続きらめきのインターバルタイマー
+	float selectionPulseTime_  = 0.0f; // 選択カードの点滅に使うタイム
 
 	bool IsCardCoolingDown(int index) const;
 	float GetCardCooldownRatio(int index) const;
