@@ -217,10 +217,20 @@ void TitleScene::Update() {
 	// ==========================================
 	// W/Sキー または 上下矢印キーで選択
 	// ==========================================
-	if (input->Triggerkey(DIK_W) || input->Triggerkey(DIK_UP)) {
+	// W と 上キーに加えて 上D-Pad でも上選択できるようにする
+	if (
+		input->Triggerkey(DIK_W) ||
+		input->Triggerkey(DIK_UP) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP)
+		) {
 		currentSelection_ = TitleChoice::StartGame;
 	}
-	if (input->Triggerkey(DIK_S) || input->Triggerkey(DIK_DOWN)) {
+	// S と 下キーに加えて 下D-Pad でも下選択できるようにする
+	if (
+		input->Triggerkey(DIK_S) ||
+		input->Triggerkey(DIK_DOWN) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN)
+		) {
 		currentSelection_ = TitleChoice::Tutorial;
 	}
 
@@ -279,7 +289,8 @@ void TitleScene::Update() {
 	}
 
 	// SPACEでゲーム開始
-	if (input->Triggerkey(DIK_SPACE)) {
+	// SPACE に加えて A ボタンでも決定できるようにする
+	if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
 		if (currentSelection_ == TitleChoice::StartGame) {
 			// 通常プレイ
 			GamePlayScene::RequestTutorialStart(false);

@@ -470,7 +470,14 @@ void GamePlayScene::Update() {
 
 
 	// ポーズ切り替え
-	if (!isEditingDebugText && input->Triggerkey(DIK_ESCAPE)) {
+	// ESC に加えて START ボタンでもポーズできるようにする
+	if (
+		!isEditingDebugText &&
+		(
+			input->Triggerkey(DIK_ESCAPE) ||
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_START)
+			)
+		) {
 		isPaused_ = !isPaused_;
 		pauseSelection_ = 0; // 開くたびに先頭へ戻す
 	}
@@ -2300,7 +2307,8 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		TextManager::GetInstance()->SetPosition("CardT", textPosX, textPosY);
 	}
 
-	if (input->Triggerkey(DIK_SPACE)) {
+	// SPACE に加えて A ボタンでも決定できるようにする
+	if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
 		// 現在選んでいるカードを取得
 		int selectedIdx = handManager_.GetSelectedCardIndex();
 
@@ -2694,7 +2702,12 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	Player* player = playerManager_->GetPlayer();
 
 	// プレイヤー不在、死亡中、または入力が無ければ何もしない
-	if (!player || playerManager_->IsDead() || !input->Triggerkey(DIK_SPACE)) {
+	// SPACE に加えて A ボタンでもカード使用できるようにする
+	if (
+		!player ||
+		playerManager_->IsDead() ||
+		!(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))
+		) {
 		return;
 	}
 
@@ -2827,14 +2840,24 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 void GamePlayScene::UpdatePause(Input* input) {
 
 	// 上下で選択
-	if (input->Triggerkey(DIK_W) || input->Triggerkey(DIK_RIGHT)) {
+	// W と 上キーに加えて 上D-Pad でも上選択できるようにする
+	if (
+		input->Triggerkey(DIK_W) ||
+		input->Triggerkey(DIK_UP) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP)
+		) {
 		pauseSelection_--;
 		if (pauseSelection_ < 0) {
 			pauseSelection_ = 1;
 		}
 	}
 
-	if (input->Triggerkey(DIK_S)|| input->Triggerkey(DIK_LEFT)) {
+	// S と 下キーに加えて 下D-Pad でも下選択できるようにする
+	if (
+		input->Triggerkey(DIK_S) ||
+		input->Triggerkey(DIK_DOWN) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN)
+		) {
 		pauseSelection_++;
 		if (pauseSelection_ > 1) {
 			pauseSelection_ = 0;
@@ -2842,7 +2865,12 @@ void GamePlayScene::UpdatePause(Input* input) {
 	}
 
 	// 決定
-	if (input->Triggerkey(DIK_SPACE) || input->Triggerkey(DIK_RETURN)) {
+	// SPACE と Enter に加えて A ボタンでも決定できるようにする
+	if (
+		input->Triggerkey(DIK_SPACE) ||
+		input->Triggerkey(DIK_RETURN) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
+		) {
 		if (pauseSelection_ == 0) {
 			isPaused_ = false; // ゲームに戻る
 		}

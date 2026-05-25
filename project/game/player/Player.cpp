@@ -355,11 +355,17 @@ void Player::Update() {
         return; // ここでリターンすればWASD入力は処理されない
     }
 
-    // WASD入力
+    // キーボード移動入力
     if (input->Pushkey(DIK_W)) { move.z += 1.0f; }
     if (input->Pushkey(DIK_S)) { move.z -= 1.0f; }
     if (input->Pushkey(DIK_A)) { move.x -= 1.0f; }
     if (input->Pushkey(DIK_D)) { move.x += 1.0f; }
+
+    // 左スティック移動入力を加算する
+    move.x += input->GetLeftStickX();
+    move.z += input->GetLeftStickY();
+
+
 
     // 移動方向を正規化
     if (Length(move) > 0.0f) {
@@ -367,7 +373,9 @@ void Player::Update() {
     }
 
     // 回避開始
-    if (!isDodging_ && dodgeCooldownTimer_ <= 0 && input->Triggerkey(DIK_LSHIFT)) {
+   // Shift に加えて B ボタンでも回避できるようにする
+    if (!isDodging_ && dodgeCooldownTimer_ <= 0 &&
+        (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
         isDodging_ = true;
         dodgeTimer_ = dodgeDuration_;
         dodgeInvincibleTimer_ = dodgeInvincibleDuration_;

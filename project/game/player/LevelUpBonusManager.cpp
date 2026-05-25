@@ -93,16 +93,26 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
         }
 
         // 選択画面表示中：入力処理（A/Dキー または 左右矢印キー）
-        if (input->Triggerkey(DIK_A) || input->Triggerkey(DIK_LEFT)) {
+       // Aキーと左キーに加えて 左D-Pad でも左選択できるようにする
+        if (
+            input->Triggerkey(DIK_A) ||
+            input->Triggerkey(DIK_LEFT) ||
+            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT)
+            ) {
             currentSelectedChoice_ = Choice::IncreaseMaxHandSize;
-            // 必要ならここにカーソル移動SEなどを鳴らす
         }
-        if (input->Triggerkey(DIK_D) || input->Triggerkey(DIK_RIGHT)) {
+        // Dキーと右キーに加えて 右D-Pad でも右選択できるようにする
+        if (
+            input->Triggerkey(DIK_D) ||
+            input->Triggerkey(DIK_RIGHT) ||
+            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_RIGHT)
+            ) {
             currentSelectedChoice_ = Choice::GetRandomCard;
         }
 
         // 決定（スペースキー）
-        if (input->Triggerkey(DIK_SPACE)) {
+        // SPACE に加えて A ボタンでも決定できるようにする
+        if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
             // 選択されたボーナスを適用
             finalResult = ApplyBonus(handManager, currentSelectedChoice_);
 

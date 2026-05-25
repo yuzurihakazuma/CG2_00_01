@@ -296,14 +296,27 @@ void HandManager::Update() {
 	if (isCasting) {
 		selectedCardIndex_ = castCardIndex_;
 	}
-	else if (input->Triggerkey(DIK_RIGHT)) {
+	// 右キーに加えて 右D-Pad と RB でも右選択できるようにする
+	else if (
+		input->Triggerkey(DIK_RIGHT) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_RIGHT) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_RIGHT_SHOULDER)
+		) {
 		MoveSelection(1);
 		if (pendingReturnToFist_ && !swapModeVisual_) {
 			manualSelectionAfterUse_ = true;
 		}
 	}
 
-	if (!isCasting && input->Triggerkey(DIK_LEFT)) {
+	// 左キーに加えて 左D-Pad と LB でも左選択できるようにする
+	if (
+		!isCasting &&
+		(
+			input->Triggerkey(DIK_LEFT) ||
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT) ||
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_LEFT_SHOULDER)
+			)
+		) {
 		MoveSelection(-1);
 		if (pendingReturnToFist_ && !swapModeVisual_) {
 			manualSelectionAfterUse_ = true;

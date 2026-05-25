@@ -118,7 +118,11 @@ void GameClearScene::Update(){
     }
 
     // スペースキーでタイトルへ戻る
-    if ( Input::GetInstance()->Triggerkey(DIK_SPACE) ) {
+    // SPACE に加えて A ボタンでもタイトルへ戻れるようにする
+    if (
+        Input::GetInstance()->Triggerkey(DIK_SPACE) ||
+        Input::GetInstance()->TriggerJoystickButton(XINPUT_GAMEPAD_A)
+        ) {
         SceneManager::GetInstance()->ChangeScene("TITLE");
         return;
     }

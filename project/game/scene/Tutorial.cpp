@@ -73,7 +73,8 @@ void Tutorial::Update(Input* input) {
 			return;
 		}
 
-		if (!input || !input->Triggerkey(DIK_SPACE)) {
+		// SPACE に加えて A ボタンでもチュートリアルを進められるようにする
+		if (!input || !(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
 			return;
 		}
 
