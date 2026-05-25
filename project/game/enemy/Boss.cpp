@@ -1,6 +1,8 @@
 #include "game/enemy/Boss.h"
 #include "engine/camera/Camera.h"
 #include "engine/math/VectorMath.h"
+#include "engine/postEffect/PostEffect.h"
+#include <cmath>
 #include "game/card/CardDatabase.h"
 #include "engine/particle/GPUParticleManager.h" 
 #include "game/particle/StunEffectManager.h"
@@ -302,6 +304,9 @@ void Boss::ResetPose() {
 void Boss::Update() {
 	if (isDead_) {
 		state_ = State::Dead;
+		// 死亡時はマスクエフェクトを無効化
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedDistortion, false);
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, false);
 		UpdateDeathAnimation();
 		return;
 	}
@@ -408,7 +413,24 @@ void Boss::Update() {
 		break;
 	}
 
-
+	// ---- マスクポストエフェクト（ボス位置をスクリーンUVに変換して渡す） ----
+	if ( camera_ && state_ != State::Appear ) {
+		const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+		// ワールド座標 → クリップ空間（行ベクトル×行列）
+		float cx = pos_.x * vp.m[0][0] + pos_.y * vp.m[1][0] + pos_.z * vp.m[2][0] + vp.m[3][0];
+		float cy = pos_.x * vp.m[0][1] + pos_.y * vp.m[1][1] + pos_.z * vp.m[2][1] + vp.m[3][1];
+		float cw = pos_.x * vp.m[0][3] + pos_.y * vp.m[1][3] + pos_.z * vp.m[2][3] + vp.m[3][3];
+		if ( cw > 0.001f ) {
+			float uvX = cx / cw * 0.5f + 0.5f;
+			float uvY = -cy / cw * 0.5f + 0.5f;
+			PostEffect::GetInstance()->SetBossScreenUV(uvX, uvY, 0.18f, 0.35f);
+		}
+		// 歪み：カード命中時にイベント駆動でON（常時ではない）/ セピア：激怒時のみON
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, hasEnrageTriggered_);
+	} else if ( state_ == State::Appear ) {
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedDistortion, false);
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, false);
+	}
 }
 
 void Boss::UpdateAppear() {

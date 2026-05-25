@@ -232,6 +232,20 @@ void Player::Update() {
             float alpha = 0.55f + ratio * 0.4f; // 直後ほど強く、だんだん薄れる
             pe->SetColorTint(alpha, 1.0f, g, b);
         }
+
+        // プレイヤー周囲のスポットライトグロー
+        pe->SetEffectActive(PostEffectType::MaskedGlow, !isDead_);
+        if ( !isDead_ && camera_ ) {
+            const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+            float cx = pos_.x * vp.m[0][0] + pos_.y * vp.m[1][0] + pos_.z * vp.m[2][0] + vp.m[3][0];
+            float cy = pos_.x * vp.m[0][1] + pos_.y * vp.m[1][1] + pos_.z * vp.m[2][1] + vp.m[3][1];
+            float cw = pos_.x * vp.m[0][3] + pos_.y * vp.m[1][3] + pos_.z * vp.m[2][3] + vp.m[3][3];
+            if ( cw > 0.001f ) {
+                float uvX = cx / cw * 0.5f + 0.5f;
+                float uvY = -cy / cw * 0.5f + 0.5f;
+                pe->SetPlayerScreenUV(uvX, uvY, 0.15f);
+            }
+        }
     }
 
     // デバッグGUIから開始したポーズ補間も毎フレーム進める

@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "game/card/ICardEffect.h"
+#include "engine/camera/Camera.h"
 
 class FireballEffect : public ICardEffect{
 public:
@@ -26,6 +27,7 @@ private:
 	Vector3 velocity_ = { 0.0f, 0.0f, 0.0f }; // 移動速度
 	Vector3 scale_ = { 0.8f, 0.8f, 0.8f };    // 大きさ
 
+	Camera* camera_ = nullptr;                // スクリーンUV変換用
 	bool isPlayerCaster_ = true;              // 使用者がプレイヤーか
 	bool isFinished_ = false;                 // 終了したか
 

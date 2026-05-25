@@ -6,7 +6,8 @@
 #include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/collision/Collision.h"
-#include "engine/particle/GPUParticleManager.h" 
+#include "engine/particle/GPUParticleManager.h"
+#include "engine/postEffect/PostEffect.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -15,6 +16,7 @@ void IceBulletEffect::Start(const Vector3& casterPos, float casterYaw, bool isPl
     // この効果は発動元ボスを使わない
     ( void ) casterBoss;
     isPlayerCaster_ = isPlayerCaster;
+    camera_ = camera;
     isFinished_ = false;
 
     delayTimer_ = 30; // 0.5秒間（30フレーム）の「発動前クールタイム（予兆）」を作る
@@ -251,6 +253,18 @@ void IceBulletEffect::Update(Player* player, EnemyManager* enemyManager, Boss* b
             { pos_.x, pos_.y + 0.5f, pos_.z },
             { 0, 0, 0 }, 0.12f, 3.5f, { 0.3f, 0.7f, 1.0f, 1.0f }
         );
+
+        // 着弾点に空気歪みを一時発生（凍結で空気が揺らぐ演出）
+        if ( camera_ ) {
+            const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+            float icx = pos_.x*vp.m[0][0]+pos_.y*vp.m[1][0]+pos_.z*vp.m[2][0]+vp.m[3][0];
+            float icy = pos_.x*vp.m[0][1]+pos_.y*vp.m[1][1]+pos_.z*vp.m[2][1]+vp.m[3][1];
+            float icw = pos_.x*vp.m[0][3]+pos_.y*vp.m[1][3]+pos_.z*vp.m[2][3]+vp.m[3][3];
+            if ( icw > 0.001f ) {
+                PostEffect::GetInstance()->TriggerDistortion(
+                    icx/icw*0.5f+0.5f, -icy/icw*0.5f+0.5f, 0.25f, 55);
+            }
+        }
 
         // =========================================
         // ヒット判定（元のまま）

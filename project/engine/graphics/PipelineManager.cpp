@@ -39,7 +39,7 @@ void PipelineManager::Finalize(){
 	gpuParticleDrawPipelineState_.Reset();
 
 	// ポストエフェクトの種類ごとのパイプラインステートも忘れずに解放
-	for ( int i = 0; i < 11; ++i ) {
+	for ( int i = 0; i < 14; ++i ) {
 		if ( postEffectPipelineStates_[i] != nullptr ) {
 			postEffectPipelineStates_[i].Reset();
 		}
@@ -323,6 +323,7 @@ void PipelineManager::CreatePostEffectRootSignature(){
 	builder.AddDescriptorTableSRV(0, D3D12_SHADER_VISIBILITY_PIXEL);  // [0]: テクスチャ (t0)
 	builder.AddDefaultSampler(0);                                     // サンプラー (s0)
 	builder.AddCBV(0, D3D12_SHADER_VISIBILITY_PIXEL); // [1]: エフェクト共通定数バッファ (b0)
+	builder.AddCBV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [2]: マスクパラメータ (b1)
 
 	// 構築して postEffectRootSignature_ に入れる！
 	builder.Build(dxCommon_->GetDevice(), postEffectRootSignature_);
@@ -347,7 +348,10 @@ void PipelineManager::CreatePostEffectPipeline(){
 		L"resources/shaders/PostEffect/RadialBlur.PS.hlsl", // 7: RadialBlur
 		L"resources/shaders/PostEffect/LuminanceBasedOutline.PS.hlsl", // 8: LuminanceBasedOutline
 		L"resources/shaders/PostEffect/RandomNoise.PS.hlsl", // 9: RandomNoise
-		L"resources/shaders/PostEffect/ColorTint.PS.hlsl"    // 10: ColorTint
+		L"resources/shaders/PostEffect/ColorTint.PS.hlsl",         // 10: ColorTint
+		L"resources/shaders/PostEffect/MaskedDistortion.PS.hlsl",  // 11: MaskedDistortion
+		L"resources/shaders/PostEffect/MaskedGlow.PS.hlsl",        // 12: MaskedGlow
+		L"resources/shaders/PostEffect/MaskedSepia.PS.hlsl",       // 13: MaskedSepia
 	};
 
 	// パイプラインの共通設定（ブレンドやカリングなど）
@@ -359,7 +363,7 @@ void PipelineManager::CreatePostEffectPipeline(){
 		.SetBlendMode(BlendMode::kNormal);
 
 	// for文で7個のシェーダーを一気にコンパイルして配列に保存！
-	for ( int i = 0; i < 11; ++i ) {
+	for ( int i = 0; i < 14; ++i ) {
 		auto psBlob = dxCommon_->GetShaderCompiler().CompileShader(psPaths[i], L"ps_6_0");
 		builder.SetShaders(vsBlob.Get(), psBlob.Get());
 		builder.Build(dxCommon_->GetDevice(), postEffectPipelineStates_[i]);

@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "game/card/ICardEffect.h"
 #include "engine/3d/obj/Obj3d.h"
+#include "engine/camera/Camera.h"
 #include <memory>
 
 class IceBulletEffect : public ICardEffect {
@@ -21,6 +22,7 @@ private:
 	std::unique_ptr<Obj3d> indicatorObj_ = nullptr; // 範囲インジケーター（危険表示）
 
 	Vector3 pos_ = { 0.0f, 0.0f, 0.0f };      // 魔法の中心位置
+	Camera* camera_ = nullptr;                 // スクリーンUV変換用
 
 	bool isPlayerCaster_ = true;
 	bool isFinished_ = false;
