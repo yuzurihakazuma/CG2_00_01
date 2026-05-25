@@ -238,7 +238,7 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 								Vector3 ePos = enemy->GetPosition();
 								Vector3 diff = { ePos.x - fang.pos.x, 0.0f, ePos.z - fang.pos.z };
 
-								if ( Length(diff) < 1.5f ) {
+								if ( Length(diff) < 2.0f ) {
 									Vector3 toEnemy = { ePos.x - playerPos.x, 0.0f, ePos.z - playerPos.z };
 									float distanceToPlayer = Length(toEnemy);
 									int finalDamage = damage_;

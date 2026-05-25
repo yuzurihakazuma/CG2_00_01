@@ -157,7 +157,7 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                     Vector3 enemyPosition = currentEnemy->GetPosition();
                     Vector3 distanceVector = { enemyPosition.x - pos_.x, 0.0f, enemyPosition.z - pos_.z };
 
-                    if ( Length(distanceVector) < 3.0f ) {
+                    if ( Length(distanceVector) < 4.0f ) {
                         currentEnemy->TakeDamage(randomDamage);
                         hitTargets_.push_back(currentEnemy.get());
 

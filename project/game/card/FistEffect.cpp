@@ -163,7 +163,7 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 						Vector3 ePos = enemy->GetPosition();
 						Vector3 diff = { ePos.x - pos_.x, 0.0f, ePos.z - pos_.z };
 
-						if ( Length(diff) < 2.0f ) {
+						if ( Length(diff) < 2.5f ) {
 							enemy->TakeDamage(randomDamage);
 							enemy->ApplyKnockback(forward * 0.5f);
 
@@ -206,7 +206,7 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			Vector3 playerPos = player->GetPosition();
 			Vector3 diff = { playerPos.x - pos_.x, 0.0f, playerPos.z - pos_.z };
 
-			if ( Length(diff) < 2.0f ) {
+			if ( Length(diff) < 1.8f ) {
 				int randomDamage = damage_ + ( rand() % 2 );
 				if ( boss && boss->IsAttackDebuffed() ) {
 					randomDamage = damage_ + ( rand() % 2 );
