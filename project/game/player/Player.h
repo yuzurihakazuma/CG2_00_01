@@ -202,6 +202,10 @@ private:
     int shieldFlashTimer_ = 0;
     const int shieldFlashDuration_ = 10;
 
+    // 死亡フラッシュ（全画面白→赤）
+    int deathFlashTimer_ = 0;
+    const int deathFlashDuration_ = 25;
+
     // ノックバック
     bool isKnockback_ = false;
     int knockbackTimer_ = 0;
