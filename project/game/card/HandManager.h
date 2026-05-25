@@ -42,6 +42,11 @@ private:
 	int     drawSparkCardIdx_ = -1;  // きらめかせるスロット番号
 	Vector3 playerWorldPos_   = {};  // パーティクル発行用のプレイヤーワールド座標
 
+	// カード選択ハイライト
+	int   prevSelectedIndex_   = -1;   // 前フレームの選択index（変化検出用）
+	int   selectionTickTimer_  =  0;   // 継続きらめきのインターバルタイマー
+	float selectionPulseTime_  = 0.0f; // 選択カードの点滅に使うタイム
+
 	bool IsCardCoolingDown(int index) const;
 	float GetCardCooldownRatio(int index) const;
 	bool IsCardCasting(int index) const;
