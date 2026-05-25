@@ -207,8 +207,8 @@ splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 
 
 			// 今のボス60HPを半分にして30HPずつにする
-			splitBosses_[i]->SetMaxHP(30);
-			splitBosses_[i]->SetHP(30);
+			splitBosses_[i]->SetMaxHP(18);
+			splitBosses_[i]->SetHP(18);
 			// 10階の分裂ボスだけ専用AIを使う
 			splitBosses_[i]->SetSplitBehaviorEnabled(true);
 		hasSplitParticleTriggered_ = false;
@@ -839,7 +839,7 @@ void BossManager::Update(
 	if (isBossBattleFinished && !bossDeadHandled_) {
 		// 経験値付与
 		if (player) {
-			player->AddExp(5);
+			player->AddExp(15);
 		}
 
 		if (enemyManager) {

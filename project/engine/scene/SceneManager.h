@@ -1,8 +1,11 @@
 #pragma once
 // --- 標準ライブラリ ---
+#include <array>
 #include <memory>
 #include <string>
 #include <chrono>
+#include <cstdint>
+#include <vector>
 // 前方宣言
 class IScene;
 class AbstractSceneFactory;
@@ -51,6 +54,11 @@ private:
 	SceneManager(const SceneManager&) = delete;
 	SceneManager& operator=(const SceneManager&) = delete;
 
+	void EnsureFadeSprites(uint32_t fadeTextureIndex, const std::vector<uint32_t>& cardTextureIndices);
+	void RandomizeFadeCardTextures();
+	void UpdateFadeCardSprites();
+	void DrawFadeCardSprites();
+
 private:
 	// 現在のシーン
 	std::unique_ptr<IScene> currentScene_ = nullptr;
@@ -72,11 +80,16 @@ private:
 	// フェード用スプライト
 	std::unique_ptr<Sprite> fadeSprite_ = nullptr;
 
+	// タイトルのカード雨のように画面を覆うフェード用カード
+	static constexpr int kFadeCardCount_ = 90;
+	std::array<std::unique_ptr<Sprite>, kFadeCardCount_> fadeCardSprites_{};
+	std::vector<uint32_t> fadeCardTextureIndices_{};
+
 	// フェードの透明度
 	float fadeAlpha_ = 0.0f;
 
 	// フェード速度
-	float fadeSpeed_ = 0.05f;
+	float fadeSpeed_ = 0.035f;
 
 	// 真っ黒で停止する時間
 	int fadeWaitTimer_ = 0;
