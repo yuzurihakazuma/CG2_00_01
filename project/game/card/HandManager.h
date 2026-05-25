@@ -6,6 +6,7 @@
 
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/base/Input.h"
+#include "engine/math/struct.h"
 
 class Camera;
 class Sprite;
@@ -35,6 +36,11 @@ private:
 	bool swapModeVisual_ = false;
 	bool pendingReturnToFist_ = false;
 	bool manualSelectionAfterUse_ = false;
+
+	// ドロー時のきらめき
+	int     drawSparkFrames_  = 0;   // 残り発行フレーム数
+	int     drawSparkCardIdx_ = -1;  // きらめかせるスロット番号
+	Vector3 playerWorldPos_   = {};  // パーティクル発行用のプレイヤーワールド座標
 
 	bool IsCardCoolingDown(int index) const;
 	float GetCardCooldownRatio(int index) const;
@@ -104,6 +110,20 @@ public:
 	void SetCastDisplay(int cardId, int remainingFrames, int durationFrames, int cardIndex = -1);
 
 	void SetSwapModeVisual(bool enabled) { swapModeVisual_ = enabled; }
+
+	// パーティクル発行用にプレイヤーのワールド座標を毎フレーム渡す
+	void SetPlayerWorldPos(const Vector3& pos) { playerWorldPos_ = pos; }
+
+	// きらめきを即座にキャンセルする（初期化直後など意図しない発光を抑制）
+	void SuppressDrawSparkle() { drawSparkFrames_ = 0; drawSparkCardIdx_ = -1; }
+
+	// カード交換完了時に外から直接きらめきをトリガーする
+	void TriggerDrawSparkle() {
+		if ( !hand_.empty() ) {
+			drawSparkCardIdx_ = static_cast<int>(hand_.size()) - 1;
+			drawSparkFrames_  = 4;
+		}
+	}
 
 	// カーソルの位置を強制的に移動させる関数
 	void SetSelectedCardIndex(int index) {

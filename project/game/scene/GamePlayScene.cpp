@@ -217,8 +217,9 @@ void GamePlayScene::Initialize() {
 	// 手札マネージャーの初期化
 	handManager_.Initialize(uiCamera_.get(), textures_["noise0"].srvIndex);
 
-	//最初から手札にID１を追加する
+	//最初から手札にID１を追加する（きらめきは出さない）
 	handManager_.AddCard(CardDatabase::GetCardData(1));
+	handManager_.SuppressDrawSparkle();
 
 	// これだけでOK
 	RegenerateDungeonAndRespawnPlayer(8);
@@ -1501,6 +1502,7 @@ void GamePlayScene::Update() {
 			uiCamera_->Update();
 		}
 		handManager_.SetSwapModeVisual(false);
+		handManager_.SetPlayerWorldPos(playerPos_);
 		handManager_.Update();
 	}
 
@@ -2294,6 +2296,9 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		handManager_.RemoveCardImmediate(selectedIdx);
 
 		handManager_.AddCard(pendingCard_);
+
+		// 交換パスではAddCardが上限でスキップされるので直接きらめきをトリガー
+		handManager_.TriggerDrawSparkle();
 
 		// 手札の「仮置き（保留）」状態を空っぽにしてリセットする
 		handManager_.AddPendingCard({ -1, "", 0 });
