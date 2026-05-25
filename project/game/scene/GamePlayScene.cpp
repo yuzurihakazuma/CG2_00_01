@@ -1692,7 +1692,11 @@ void GamePlayScene::Update() {
 	}
 
 	// プレイヤー用カードシステム更新
-	if (playerCardSystem_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
+	const bool shouldUpdatePlayerCardSystem =
+		playerCardSystem_ &&
+		!isBossDeathCinematicPlaying_ &&
+		(!isBossIntroPlaying || (player && player->GetShieldHits() > 0));
+	if (shouldUpdatePlayerCardSystem) {
 		playerCardSystem_->Update(
 			player,
 			enemyManager_.get(),
@@ -2231,6 +2235,9 @@ void GamePlayScene::ResetBattleDebug() {
 	// カード使用システムの状態をリセット
 	if (playerCardSystem_) {
 		playerCardSystem_->Reset();
+		if (playerManager_ && playerManager_->GetPlayer()) {
+			playerCardSystem_->EnsureShieldVisual(playerManager_->GetPlayer());
+		}
 	}
 	fistCooldownTimer_ = 0;
 	handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);

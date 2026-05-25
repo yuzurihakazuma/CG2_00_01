@@ -44,6 +44,7 @@ public:
 
 	// リセット
 	void Reset();
+	void EnsureShieldVisual(Player* player);
 
 	void CancelCasting();
 

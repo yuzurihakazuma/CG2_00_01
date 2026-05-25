@@ -8,6 +8,7 @@
 
 void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
 	// この効果は発動元ボスを使わない
+	(void)casterYaw;
 	(void)casterBoss;
 	// 誰が使ったか（プレイヤーか敵か）を保存
 	isPlayerCaster_ = isPlayerCaster;
@@ -15,7 +16,21 @@ void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlaye
 	// 演出終了フラグをリセットし、タイマーを初期化
 	isFinished_ = false;
 	isFirstFrame_ = true;
+	rotAngle_ = 0.0f;
 
+	CreateShieldObject(casterPos, camera);
+}
+
+void ShieldEffect::RestoreVisual(const Vector3 &casterPos, Camera *camera) {
+	isPlayerCaster_ = true;
+	isFinished_ = false;
+	isFirstFrame_ = false;
+	rotAngle_ = 0.0f;
+
+	CreateShieldObject(casterPos, camera);
+}
+
+void ShieldEffect::CreateShieldObject(const Vector3 &casterPos, Camera *camera) {
 	// シールド用オブジェクト生成
 	obj_ = Obj3d::Create("shield_sphere");
 	if (obj_) {

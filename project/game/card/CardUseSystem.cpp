@@ -277,6 +277,22 @@ void CardUseSystem::Reset() {
 	castingBoss_ = nullptr;
 }
 
+void CardUseSystem::EnsureShieldVisual(Player* player) {
+	if (!player || player->GetShieldHits() <= 0) {
+		return;
+	}
+
+	for (const auto& effect : activeEffects_) {
+		if (dynamic_cast<ShieldEffect*>(effect.get()) && !effect->IsFinished()) {
+			return;
+		}
+	}
+
+	auto shieldEffect = std::make_unique<ShieldEffect>();
+	shieldEffect->RestoreVisual(player->GetPosition(), camera_);
+	activeEffects_.push_back(std::move(shieldEffect));
+}
+
 void CardUseSystem::CancelCasting() {
 	isCasting_ = false;
 	castTimer_ = 0;
