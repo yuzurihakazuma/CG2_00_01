@@ -274,4 +274,6 @@ private:
 
     bool isStunned_ = false;  // スタン状態フラグ
     int stunTimer_ = 0;   // スタン時間タイマー
+    int stunResistTimer_ = 0;
+    const int stunResistDuration_ = 60;
 };

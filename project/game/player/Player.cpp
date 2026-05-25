@@ -135,6 +135,10 @@ void Player::Initialize() {
     isShieldActive_ = false;
     shieldHitCount_ = 0;
 
+    isStunned_ = false;
+    stunTimer_ = 0;
+    stunResistTimer_ = 0;
+
     afterimageLife_ = 10;           //  寿命を20→10に短縮（回避が終わる前に消える）
     afterimageSpawnInterval_ = 5;   //  発生間隔を少し広げて、重なりすぎを防
 
@@ -276,6 +280,8 @@ void Player::Update() {
         StunEffectManager::Update(pos_, rot_, stunTimer_);
         if (stunTimer_ <= 0) {
             isStunned_ = false;
+            stunTimer_ = 0;
+            stunResistTimer_ = stunResistDuration_;
             rot_.x = 0.0f;
         }
 
@@ -287,6 +293,10 @@ void Player::Update() {
             model_->Update();
         }
         return; // WASD入力や回避などの処理を全てスキップ
+    }
+
+    if (stunResistTimer_ > 0) {
+        stunResistTimer_--;
     }
 
     Input* input = Input::GetInstance();
@@ -815,6 +825,9 @@ void Player::Heal(int amount) {
 void Player::SetStun(int durationFrames) {
     // シールド展開中はスタン無効
     if (shieldHitCount_ > 0) {
+        return;
+    }
+    if (isStunned_ || stunResistTimer_ > 0 || durationFrames <= 0) {
         return;
     }
     isStunned_ = true;
