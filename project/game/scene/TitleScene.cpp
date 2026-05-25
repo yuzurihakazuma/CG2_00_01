@@ -209,6 +209,8 @@ void TitleScene::Update() {
 
 	Input* input = Input::GetInstance();
 
+
+
 	// BGM再生はBキーに分ける
 	if (input->Triggerkey(DIK_B)) {
 		AudioManager::GetInstance()->PlayWave(bgmFile_);
@@ -217,22 +219,37 @@ void TitleScene::Update() {
 	// ==========================================
 	// W/Sキー または 上下矢印キーで選択
 	// ==========================================
-	// W と 上キーに加えて 上D-Pad でも上選択できるようにする
+	// 左スティックの倒し込みを1回入力として扱うための前フレーム保持
+	static bool wasStickUp = false;
+	static bool wasStickDown = false;
+
+	// 今フレームで上/下に倒れているかを判定する
+	bool isStickUp = input->GetLeftStickY() > 0.5f;
+	bool isStickDown = input->GetLeftStickY() < -0.5f;
+
+	// 上入力は W / ↑ / 上D-Pad / 左スティック上
 	if (
 		input->Triggerkey(DIK_W) ||
 		input->Triggerkey(DIK_UP) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP)
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP) ||
+		(isStickUp && !wasStickUp)
 		) {
 		currentSelection_ = TitleChoice::StartGame;
 	}
-	// S と 下キーに加えて 下D-Pad でも下選択できるようにする
+
+	// 下入力は S / ↓ / 下D-Pad / 左スティック下
 	if (
 		input->Triggerkey(DIK_S) ||
 		input->Triggerkey(DIK_DOWN) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN)
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN) ||
+		(isStickDown && !wasStickDown)
 		) {
 		currentSelection_ = TitleChoice::Tutorial;
 	}
+
+	// 次フレーム用に保存する
+	wasStickUp = isStickUp;
+	wasStickDown = isStickDown;
 
 	// ==========================================
 	// スプライトのサイズ変更と更新

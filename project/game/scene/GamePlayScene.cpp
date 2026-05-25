@@ -2838,13 +2838,16 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 }
 
 void GamePlayScene::UpdatePause(Input* input) {
-
-	// 上下で選択
-	// W と 上キーに加えて 上D-Pad でも上選択できるようにする
+	// 左スティックの上下を1回入力として扱う
+	static bool wasStickUp = false;
+	static bool wasStickDown = false;
+	bool isStickUp = input->GetLeftStickY() > 0.5f;
+	bool isStickDown = input->GetLeftStickY() < -0.5f;
+	// 上入力は W / 上キー / 上スティック
 	if (
 		input->Triggerkey(DIK_W) ||
 		input->Triggerkey(DIK_UP) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP)
+		(isStickUp && !wasStickUp)
 		) {
 		pauseSelection_--;
 		if (pauseSelection_ < 0) {
@@ -2852,18 +2855,20 @@ void GamePlayScene::UpdatePause(Input* input) {
 		}
 	}
 
-	// S と 下キーに加えて 下D-Pad でも下選択できるようにする
+	// 下入力は S / 下キー / 下スティック
 	if (
 		input->Triggerkey(DIK_S) ||
 		input->Triggerkey(DIK_DOWN) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN)
+		(isStickDown && !wasStickDown)
 		) {
 		pauseSelection_++;
 		if (pauseSelection_ > 1) {
 			pauseSelection_ = 0;
 		}
 	}
-
+	// 次フレーム比較用に左スティック状態を保存する
+	wasStickUp = isStickUp;
+	wasStickDown = isStickDown;
 	// 決定
 	// SPACE と Enter に加えて A ボタンでも決定できるようにする
 	if (

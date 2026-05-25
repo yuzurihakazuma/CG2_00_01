@@ -285,6 +285,15 @@ void HandManager::Update() {
 		return;
 	}
 	auto input = Input::GetInstance();
+
+	// 右スティック左右の倒し込みを1回入力として扱うための前フレーム保持
+	static bool wasStickLeft = false;
+	static bool wasStickRight = false;
+
+	// 右スティックのX入力で左右選択する
+	bool isStickLeft = input->GetRightStickX() < -0.5f;
+	bool isStickRight = input->GetRightStickX() > 0.5f;
+
 	const bool isCasting =
 		!swapModeVisual_ &&
 		castTimer_ > 0 &&
@@ -296,11 +305,12 @@ void HandManager::Update() {
 	if (isCasting) {
 		selectedCardIndex_ = castCardIndex_;
 	}
-	// 右キーに加えて 右D-Pad と RB でも右選択できるようにする
+	// 右キーに加えて 右D-Pad / RB / 左スティック右でも右選択できるようにする
 	else if (
 		input->Triggerkey(DIK_RIGHT) ||
 		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_RIGHT) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_RIGHT_SHOULDER)
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_RIGHT_SHOULDER) ||
+		(isStickRight && !wasStickRight)
 		) {
 		MoveSelection(1);
 		if (pendingReturnToFist_ && !swapModeVisual_) {
@@ -309,12 +319,14 @@ void HandManager::Update() {
 	}
 
 	// 左キーに加えて 左D-Pad と LB でも左選択できるようにする
+	// 左キーに加えて 左D-Pad / LB / 左スティック左でも左選択できるようにする
 	if (
 		!isCasting &&
 		(
 			input->Triggerkey(DIK_LEFT) ||
 			input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT) ||
-			input->TriggerJoystickButton(XINPUT_GAMEPAD_LEFT_SHOULDER)
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_LEFT_SHOULDER) ||
+			(isStickLeft && !wasStickLeft)
 			)
 		) {
 		MoveSelection(-1);
@@ -322,6 +334,10 @@ void HandManager::Update() {
 			manualSelectionAfterUse_ = true;
 		}
 	}
+
+	// 次フレーム用に保存する
+	wasStickLeft = isStickLeft;
+	wasStickRight = isStickRight;
 
 	// カードとカードの間隔
 	float spacing = 0.3f;
