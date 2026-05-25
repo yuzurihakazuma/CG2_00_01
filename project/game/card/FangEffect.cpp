@@ -39,7 +39,7 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		fang.currentY = casterPos.y - 3.5f;
 
 		// 順番に出る間隔と、地上に留まる時間
-		fang.delayTimer = 30 + (i * 8);
+		fang.delayTimer = 15 + (i * 8);
 		fang.activeTimer = 40;
 		fang.isActive = false;
 		fang.hasHit = false;
@@ -149,7 +149,7 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 
 				// まだ地上に出ていなければ、上に伸びる
 				if ( fang.currentY < fang.pos.y ) {
-					fang.currentY += 0.15f;
+					fang.currentY += 0.25f;
 					if ( fang.currentY > fang.pos.y ) {
 						fang.currentY = fang.pos.y;
 					}

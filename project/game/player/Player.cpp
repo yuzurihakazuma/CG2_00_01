@@ -746,6 +746,10 @@ void Player::Heal(int amount) {
 }
 
 void Player::SetStun(int durationFrames) {
+    // シールド展開中はスタン無効
+    if (shieldHitCount_ > 0) {
+        return;
+    }
     isStunned_ = true;
     stunTimer_ = durationFrames;
 }
