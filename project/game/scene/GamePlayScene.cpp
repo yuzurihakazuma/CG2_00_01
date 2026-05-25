@@ -348,19 +348,26 @@ void GamePlayScene::Initialize() {
 	fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
 	// ポーズ画面用の文字位置
-	TextManager::GetInstance()->SetPosition("PauseTitle", screenW * 0.5f, screenH * 0.5f - 140.0f);
+	/*TextManager::GetInstance()->SetPosition("PauseTitle", screenW * 0.5f, screenH * 0.5f - 140.0f);
 	TextManager::GetInstance()->SetPosition("PauseResume", screenW * 0.5f, screenH * 0.5f - 40.0f);
 	TextManager::GetInstance()->SetPosition("PauseToTitle", screenW * 0.5f, screenH * 0.5f);
 	TextManager::GetInstance()->SetCentered("PauseTitle", true);
 	TextManager::GetInstance()->SetCentered("PauseResume", true);
-	TextManager::GetInstance()->SetCentered("PauseToTitle", true);
-
+	TextManager::GetInstance()->SetCentered("PauseToTitle", true);*/
 
 	// ポーズ中の半透明背景
 	pauseBgSprite_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH * 0.5f });
 	pauseBgSprite_->SetSize({ screenW, screenH });
 	pauseBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.5f });
 	pauseBgSprite_->Update();
+
+	//　ポーズ画面のUIスプライト
+	const Vector2 pauseScreenCenter = { screenW * 0.5f, screenH * 0.5f };
+	pauseHelpSprite_ = Sprite::Create("resources/pose/pose.png", pauseScreenCenter);
+	pauseChoiceSprite_ = Sprite::Create("resources/pose/poseChoice.png", pauseScreenCenter);
+	pauseGameSprite_ = Sprite::Create("resources/pose/poseUIG.png", pauseScreenCenter);
+	pauseTitleSprite_ = Sprite::Create("resources/pose/poseUIT.png", pauseScreenCenter);
+	UpdatePauseSpriteLayout();
 
 	bossIntroTopBar_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, 0.0f });
 	bossIntroBottomBar_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH });
@@ -1596,15 +1603,9 @@ void GamePlayScene::Update() {
 		text->SetColor("TutorialGuide", 1.0f, 1.0f, 1.0f, 0.9f);
 		text->SetText(
 			"TutorialGuide",
-			"操作説明\n"
-			"WASD:移動\n"
-			"LShift:回避\n"
-			"Space:カード使用\n"
-			"矢印キー:カード選択\n\n"
 			"クリア条件:10階層まで進みボスを倒す"
 		);
 	}
-
 
 	// ==========================================
 	// カードシステム用のターゲット検索と更新
@@ -2794,14 +2795,14 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 void GamePlayScene::UpdatePause(Input* input) {
 
 	// 上下で選択
-	if (input->Triggerkey(DIK_W)) {
+	if (input->Triggerkey(DIK_W) || input->Triggerkey(DIK_RIGHT)) {
 		pauseSelection_--;
 		if (pauseSelection_ < 0) {
 			pauseSelection_ = 1;
 		}
 	}
 
-	if (input->Triggerkey(DIK_S)) {
+	if (input->Triggerkey(DIK_S)|| input->Triggerkey(DIK_LEFT)) {
 		pauseSelection_++;
 		if (pauseSelection_ > 1) {
 			pauseSelection_ = 0;
@@ -2818,37 +2819,102 @@ void GamePlayScene::UpdatePause(Input* input) {
 			return;
 		}
 	}
+	Vector2 choicePos;
 
-	// ポーズ中の文字表示
-	TextManager::GetInstance()->SetText("PauseTitle", "PAUSE");
 
 	if (pauseSelection_ == 0) {
-		TextManager::GetInstance()->SetText("PauseResume", "> Resume");
-		TextManager::GetInstance()->SetText("PauseToTitle", "  Title");
+		// ゲームに戻るの横
+		choicePos = { 760.0f, 560.0f };
+	} else {
+		// タイトルへの横
+		choicePos = { 80.0f, 620.0f };
 	}
-	else {
-		TextManager::GetInstance()->SetText("PauseResume", "  Resume");
-		TextManager::GetInstance()->SetText("PauseToTitle", "> Title");
+
+	if (pauseChoiceSprite_) {
+		pauseChoiceSprite_->SetPosition(choicePos);
+		pauseChoiceSprite_->Update();
 	}
+
+	if (pauseHelpSprite_) pauseHelpSprite_->Update();
+	if (pauseGameSprite_) pauseGameSprite_->Update();
+	if (pauseTitleSprite_) pauseTitleSprite_->Update();
 
 	// 背景更新
 	if (pauseBgSprite_) {
 		pauseBgSprite_->Update();
 	}
 
+	UpdatePauseSpriteLayout();
+
+}
+
+void GamePlayScene::UpdatePauseSpriteLayout() {
+	constexpr float kPauseCanvasWidth = 1920.0f;
+	constexpr float kPauseCanvasHeight = 1280.0f;
+	constexpr float kTitleChoiceOffsetX = -760.0f;
+	constexpr float kTitleChoiceOffsetY = 0.0f;
+
+	const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+	const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+	if (screenW <= 0.0f || screenH <= 0.0f) {
+		return;
+	}
+
+	const Vector2 screenCenter = { screenW * 0.5f, screenH * 0.5f };
+	const Vector2 screenSize = { screenW, screenH };
+
+	auto applyFullscreenLayout = [&](const std::unique_ptr<Sprite>& sprite) {
+		if (!sprite) {
+			return;
+		}
+		sprite->SetPosition(screenCenter);
+		sprite->SetSize(screenSize);
+		sprite->Update();
+	};
+
+	applyFullscreenLayout(pauseBgSprite_);
+	applyFullscreenLayout(pauseHelpSprite_);
+	applyFullscreenLayout(pauseGameSprite_);
+	applyFullscreenLayout(pauseTitleSprite_);
+
+	if (pauseChoiceSprite_) {
+		Vector2 choicePosition = screenCenter;
+		if (pauseSelection_ == 1) {
+			choicePosition.x += kTitleChoiceOffsetX * (screenW / kPauseCanvasWidth);
+			choicePosition.y += kTitleChoiceOffsetY * (screenH / kPauseCanvasHeight);
+		}
+		pauseChoiceSprite_->SetPosition(choicePosition);
+		pauseChoiceSprite_->SetSize(screenSize);
+		pauseChoiceSprite_->Update();
+	}
 }
 
 void GamePlayScene::DrawPauseUI() {
 
 	if (!isPaused_) {
-		TextManager::GetInstance()->SetText("PauseTitle", "");
-		TextManager::GetInstance()->SetText("PauseResume", "");
-		TextManager::GetInstance()->SetText("PauseToTitle", "");
 		return;
 	}
 
+	UpdatePauseSpriteLayout();
+
 	if (pauseBgSprite_) {
 		pauseBgSprite_->Draw();
+	}
+
+	if (pauseHelpSprite_) {
+		pauseHelpSprite_->Draw();
+	}
+
+	if (pauseGameSprite_) {
+		pauseGameSprite_->Draw();
+	}
+
+	if (pauseTitleSprite_) {
+		pauseTitleSprite_->Draw();
+	}
+
+	if (pauseChoiceSprite_) {
+		pauseChoiceSprite_->Draw();
 	}
 }
 
