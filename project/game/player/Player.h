@@ -198,6 +198,10 @@ private:
     int hitTimer_ = 0;
     const int hitDuration_ = 20;
 
+    // シールド吸収フラッシュ
+    int shieldFlashTimer_ = 0;
+    const int shieldFlashDuration_ = 10;
+
     // ノックバック
     bool isKnockback_ = false;
     int knockbackTimer_ = 0;

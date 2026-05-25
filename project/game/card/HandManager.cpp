@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+
+#include "engine/particle/GPUParticleManager.h"
 
 #include "Engine/3D/Model/ModelManager.h"
 #include "Engine/2D/Sprite.h"
@@ -163,6 +166,10 @@ bool HandManager::AddCard(const Card& newCard) {
 			isDissolving_[i] = false;
 			dissolveThresholds_[i] = 0.0f;
 
+			// ドローきらめきフラグ
+			drawSparkCardIdx_ = static_cast<int>(i);
+			drawSparkFrames_  = 4;
+
 			return true; // 取得成功！
 		}
 	}
@@ -184,6 +191,10 @@ bool HandManager::AddCard(const Card& newCard) {
 		cooldownOverlays_.push_back(CreateCooldownOverlay());
 		isDissolving_.push_back(false);
 		dissolveThresholds_.push_back(0.0f);
+
+		// ドローきらめきフラグ
+		drawSparkCardIdx_ = static_cast<int>(hand_.size()) - 1;
+		drawSparkFrames_  = 4;
 
 		return true; // 取得成功！
 	}
@@ -364,7 +375,39 @@ void HandManager::Update() {
 		handModels_[i]->SetTranslation(pos);
 		handModels_[i]->SetRotation(rot);
 		handModels_[i]->Update();
+
+		// ドロー時きらめき発行（プレイヤーのワールド座標で出す）
+		if ( drawSparkFrames_ > 0 && i == drawSparkCardIdx_ ) {
+			// カードの属性によって色を変える
+			Vector4 sparkColor = { 1.0f, 1.0f, 0.6f, 1.0f }; // デフォルト：金色
+			if ( i < static_cast<int>(hand_.size()) ) {
+				switch ( hand_[i].effectType ) {
+				case CardEffectType::Attack:   sparkColor = { 1.0f, 0.5f, 0.2f, 1.0f }; break; // オレンジ
+				case CardEffectType::Heal:     sparkColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break; // 緑
+				case CardEffectType::Defense:  sparkColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break; // 青
+				case CardEffectType::Special:  sparkColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 紫
+				default: break;
+				}
+			}
+			// 中心フラッシュ（大きめ）
+			Vector3 emitPos = { playerWorldPos_.x, playerWorldPos_.y + 0.8f, playerWorldPos_.z };
+			GPUParticleManager::GetInstance()->Emit(emitPos, { 0, 0, 0 }, 0.12f, 3.0f, sparkColor);
+
+			// 周囲に散るきらめき
+			for ( int s = 0; s < 10; s++ ) {
+				Vector3 sv = {
+					( rand() % 11 - 5 ) * 0.1f,
+					0.1f + ( rand() % 8 ) * 0.05f,
+					( rand() % 11 - 5 ) * 0.1f
+				};
+				float sc = 0.3f + ( rand() % 5 ) * 0.08f;
+				GPUParticleManager::GetInstance()->Emit(emitPos, sv, 0.6f, sc, sparkColor);
+			}
+		}
 	}
+
+	// ドローきらめきタイマーを1フレーム減らす
+	if ( drawSparkFrames_ > 0 ) drawSparkFrames_--;
 
 	// 後ろから削除
 	for (int i = static_cast<int>(removeIndices.size()) - 1; i >= 0; --i) {

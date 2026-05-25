@@ -195,11 +195,19 @@ void Player::Update() {
             pe->SetRadialBlurStrength(1.0f);
         }
 
+        // シールドフラッシュタイマー更新
+        if ( shieldFlashTimer_ > 0 ) shieldFlashTimer_--;
+
         // 低HP（残り3以下）→ 赤いビネット / 被弾直後 → 赤フラッシュ（死亡時はどちらも消す）
-        bool isLowHp = !isDead_ && hp_ > 0 && hp_ <= 3;
+        bool isLowHp    = !isDead_ && hp_ > 0 && hp_ <= 3;
         bool isHitFlash = !isDead_ && isHit_ && hitTimer_ > hitDuration_ - 4;
-        pe->SetEffectActive(PostEffectType::Vignetting, isLowHp || isHitFlash);
-        if ( isHitFlash ) {
+        bool isShieldFlash = shieldFlashTimer_ > 0;
+        pe->SetEffectActive(PostEffectType::Vignetting, isLowHp || isHitFlash || isShieldFlash);
+        if ( isShieldFlash ) {
+            // 青いビネット（シールドが弾いた瞬間）
+            float ratio = static_cast<float>(shieldFlashTimer_) / static_cast<float>(shieldFlashDuration_);
+            pe->SetVignetteParams(0.6f + ratio * 0.5f, 0.15f, 0.6f, 1.0f);
+        } else if ( isHitFlash ) {
             float ratio = static_cast<float>(hitTimer_ - (hitDuration_ - 4)) / 4.0f;
             pe->SetVignetteParams(0.7f + ratio * 0.5f, 1.0f, 0.05f, 0.05f);
         } else if ( isLowHp ) {
@@ -812,6 +820,36 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
 
     if ( shieldHitCount_ > 0 ) {
         shieldHitCount_--;
+
+        // 画面全体の青いビネットフラッシュ
+        shieldFlashTimer_ = shieldFlashDuration_;
+
+        // シールド吸収：青いバースト（カメラが高いので大きめサイズで）
+        Vector3 sc = { pos_.x, pos_.y + 0.5f, pos_.z };
+
+        // 中心フラッシュ（大きく）
+        GPUParticleManager::GetInstance()->Emit(sc, { 0, 0, 0 }, 0.07f, 7.0f, { 0.5f, 0.9f, 1.0f, 1.0f });
+        GPUParticleManager::GetInstance()->Emit(sc, { 0, 0, 0 }, 0.15f, 4.5f, { 0.3f, 0.7f, 1.0f, 0.85f });
+
+        // 放射リング（大きく・速く）
+        for ( int i = 0; i < 20; i++ ) {
+            float a = ( 3.14159f * 2.0f / 20.0f ) * i;
+            float speed = 0.7f + ( rand() % 6 ) * 0.05f;
+            Vector3 v = { std::sinf(a) * speed, 0.02f, std::cosf(a) * speed };
+            GPUParticleManager::GetInstance()->Emit(sc, v, 0.25f, 2.5f, { 0.2f, 0.75f, 1.0f, 1.0f });
+        }
+
+        // 上方向へ散る青いスパーク
+        for ( int i = 0; i < 14; i++ ) {
+            Vector3 sv = {
+                ( rand() % 11 - 5 ) * 0.1f,
+                0.25f + ( rand() % 8 ) * 0.06f,
+                ( rand() % 11 - 5 ) * 0.1f
+            };
+            float scale = 0.5f + ( rand() % 5 ) * 0.1f;
+            GPUParticleManager::GetInstance()->Emit(sc, sv, 0.5f, scale, { 0.5f, 0.9f, 1.0f, 0.9f });
+        }
+
         return;
     }
 
