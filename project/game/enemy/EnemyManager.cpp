@@ -26,319 +26,317 @@
 using namespace VectorMath;
 
 namespace {
-struct EnemyTypeWeight {
-	Enemy::Type type;
-	int weight;
-};
-
-Enemy::Type GetRandomEnemyTypeForFloor(int floor) {
-	static const EnemyTypeWeight floor1To2[] = {
-		{ Enemy::Type::Normal, 100 },
-	};
-	static const EnemyTypeWeight floor3To5[] = {
-		{ Enemy::Type::Normal, 70 },
-		{ Enemy::Type::Fast, 30 },
-	};
-	static const EnemyTypeWeight floor6To8[] = {
-		{ Enemy::Type::Normal, 45 },
-		{ Enemy::Type::Fast, 30 },
-		{ Enemy::Type::Ranged, 25 },
-	};
-	static const EnemyTypeWeight floor9Plus[] = {
-		{ Enemy::Type::Normal, 35 },
-		{ Enemy::Type::Fast, 25 },
-		{ Enemy::Type::Ranged, 25 },
-		{ Enemy::Type::Heavy, 15 },
+	struct EnemyTypeWeight {
+		Enemy::Type type;
+		int weight;
 	};
 
-	const EnemyTypeWeight* weights = floor1To2;
-	int weightCount = static_cast<int>(std::size(floor1To2));
-	if (floor >= 9) {
-		weights = floor9Plus;
-		weightCount = static_cast<int>(std::size(floor9Plus));
-	}
-	else if (floor >= 6) {
-		weights = floor6To8;
-		weightCount = static_cast<int>(std::size(floor6To8));
-	}
-	else if (floor >= 3) {
-		weights = floor3To5;
-		weightCount = static_cast<int>(std::size(floor3To5));
-	}
+	Enemy::Type GetRandomEnemyTypeForFloor(int floor) {
+		static const EnemyTypeWeight floor1To2[] = {
+			{ Enemy::Type::Normal, 100 },
+		};
+		static const EnemyTypeWeight floor3To5[] = {
+			{ Enemy::Type::Normal, 70 },
+			{ Enemy::Type::Fast, 30 },
+		};
+		static const EnemyTypeWeight floor6To8[] = {
+			{ Enemy::Type::Normal, 45 },
+			{ Enemy::Type::Fast, 30 },
+			{ Enemy::Type::Ranged, 25 },
+		};
+		static const EnemyTypeWeight floor9Plus[] = {
+			{ Enemy::Type::Normal, 35 },
+			{ Enemy::Type::Fast, 25 },
+			{ Enemy::Type::Ranged, 25 },
+			{ Enemy::Type::Heavy, 15 },
+		};
 
-	int totalWeight = 0;
-	for (int i = 0; i < weightCount; ++i) {
-		totalWeight += weights[i].weight;
-	}
-
-	static std::random_device rd;
-	static std::mt19937 mt(rd());
-	std::uniform_int_distribution<int> dist(1, totalWeight);
-	int roll = dist(mt);
-
-	for (int i = 0; i < weightCount; ++i) {
-		roll -= weights[i].weight;
-		if (roll <= 0) {
-			return weights[i].type;
+		const EnemyTypeWeight *weights = floor1To2;
+		int weightCount = static_cast<int>(std::size(floor1To2));
+		if (floor >= 9) {
+			weights = floor9Plus;
+			weightCount = static_cast<int>(std::size(floor9Plus));
+		} else if (floor >= 6) {
+			weights = floor6To8;
+			weightCount = static_cast<int>(std::size(floor6To8));
+		} else if (floor >= 3) {
+			weights = floor3To5;
+			weightCount = static_cast<int>(std::size(floor3To5));
 		}
+
+		int totalWeight = 0;
+		for (int i = 0; i < weightCount; ++i) {
+			totalWeight += weights[i].weight;
+		}
+
+		static std::random_device rd;
+		static std::mt19937 mt(rd());
+		std::uniform_int_distribution<int> dist(1, totalWeight);
+		int roll = dist(mt);
+
+		for (int i = 0; i < weightCount; ++i) {
+			roll -= weights[i].weight;
+			if (roll <= 0) {
+				return weights[i].type;
+			}
+		}
+
+		return Enemy::Type::Normal;
 	}
 
-	return Enemy::Type::Normal;
-}
-
-bool IsWalkableTile(const LevelData& level, int x, int z) {
-	if (x < 0 || x >= level.width || z < 0 || z >= level.height) {
-		return false;
-	}
-
-	int tile = level.tiles[z][x];
-	return tile == 0 || tile == 3;
-}
-
-bool HasClearStraightPath(const LevelData& level, const Vector3& from, const Vector3& to) {
-	if (level.tileSize <= 0.0f || level.tiles.empty()) {
-		return false;
-	}
-
-	float dx = to.x - from.x;
-	float dz = to.z - from.z;
-	float distance = std::sqrt(dx * dx + dz * dz);
-	int steps = (std::max)(1, static_cast<int>(std::ceil(distance / (level.tileSize * 0.25f))));
-
-	for (int i = 0; i <= steps; ++i) {
-		float t = static_cast<float>(i) / static_cast<float>(steps);
-		float x = from.x + dx * t;
-		float z = from.z + dz * t;
-		int tileX = static_cast<int>(std::round(x / level.tileSize));
-		int tileZ = static_cast<int>(std::round(z / level.tileSize));
-
-		if (!IsWalkableTile(level, tileX, tileZ)) {
+	bool IsWalkableTile(const LevelData &level, int x, int z) {
+		if (x < 0 || x >= level.width || z < 0 || z >= level.height) {
 			return false;
 		}
+
+		int tile = level.tiles[z][x];
+		return tile == 0 || tile == 3;
 	}
 
-	return true;
-}
-
-int TileIndex(const LevelData& level, int x, int z) {
-	return z * level.width + x;
-}
-
-std::pair<int, int> WorldToTile(const LevelData& level, const Vector3& pos) {
-	return {
-		static_cast<int>(std::round(pos.x / level.tileSize)),
-		static_cast<int>(std::round(pos.z / level.tileSize))
-	};
-}
-
-Vector3 TileToWorld(const LevelData& level, int x, int z, float y) {
-	return {
-		static_cast<float>(x) * level.tileSize,
-		y,
-		static_cast<float>(z) * level.tileSize
-	};
-}
-
-bool FindNextPathTarget(const LevelData& level, const Vector3& from, const Vector3& to, Vector3& outTarget) {
-	if (level.tileSize <= 0.0f || level.width <= 0 || level.height <= 0 || level.tiles.empty()) {
-		return false;
-	}
-
-	auto [startX, startZ] = WorldToTile(level, from);
-	auto [goalX, goalZ] = WorldToTile(level, to);
-
-	if (!IsWalkableTile(level, startX, startZ) || !IsWalkableTile(level, goalX, goalZ)) {
-		return false;
-	}
-
-	const int tileCount = level.width * level.height;
-	const int unreachable = (std::numeric_limits<int>::max)();
-	std::vector<int> cost(tileCount, unreachable);
-	std::vector<int> parent(tileCount, -1);
-	std::priority_queue<
-		std::pair<int, int>,
-		std::vector<std::pair<int, int>>,
-		std::greater<std::pair<int, int>>
-	> open;
-
-	int startIndex = TileIndex(level, startX, startZ);
-	int goalIndex = TileIndex(level, goalX, goalZ);
-
-	auto Heuristic = [&](int x, int z) {
-		return (std::abs(goalX - x) + std::abs(goalZ - z)) * 10;
-	};
-
-	cost[startIndex] = 0;
-	open.push({ Heuristic(startX, startZ), startIndex });
-
-	const int dirs[4][2] = {
-		{ 1, 0 },
-		{ -1, 0 },
-		{ 0, 1 },
-		{ 0, -1 },
-	};
-
-	while (!open.empty()) {
-		int currentIndex = open.top().second;
-		open.pop();
-
-		if (currentIndex == goalIndex) {
-			break;
+	bool HasClearStraightPath(const LevelData &level, const Vector3 &from, const Vector3 &to) {
+		if (level.tileSize <= 0.0f || level.tiles.empty()) {
+			return false;
 		}
 
-		int currentX = currentIndex % level.width;
-		int currentZ = currentIndex / level.width;
+		float dx = to.x - from.x;
+		float dz = to.z - from.z;
+		float distance = std::sqrt(dx * dx + dz * dz);
+		int steps = (std::max)(1, static_cast<int>(std::ceil(distance / (level.tileSize * 0.25f))));
 
-		for (const auto& dir : dirs) {
-			int nextX = currentX + dir[0];
-			int nextZ = currentZ + dir[1];
-			if (!IsWalkableTile(level, nextX, nextZ)) {
-				continue;
+		for (int i = 0; i <= steps; ++i) {
+			float t = static_cast<float>(i) / static_cast<float>(steps);
+			float x = from.x + dx * t;
+			float z = from.z + dz * t;
+			int tileX = static_cast<int>(std::round(x / level.tileSize));
+			int tileZ = static_cast<int>(std::round(z / level.tileSize));
+
+			if (!IsWalkableTile(level, tileX, tileZ)) {
+				return false;
 			}
-
-			int nextIndex = TileIndex(level, nextX, nextZ);
-			int nextCost = cost[currentIndex] + 10;
-			if (nextCost >= cost[nextIndex]) {
-				continue;
-			}
-
-			cost[nextIndex] = nextCost;
-			parent[nextIndex] = currentIndex;
-			open.push({ nextCost + Heuristic(nextX, nextZ), nextIndex });
 		}
-	}
 
-	if (cost[goalIndex] == unreachable) {
-		return false;
-	}
-
-	int nextIndex = goalIndex;
-	while (parent[nextIndex] != -1 && parent[nextIndex] != startIndex) {
-		nextIndex = parent[nextIndex];
-	}
-
-	if (nextIndex == startIndex) {
-		outTarget = to;
 		return true;
 	}
 
-	int nextX = nextIndex % level.width;
-	int nextZ = nextIndex / level.width;
-	outTarget = TileToWorld(level, nextX, nextZ, from.y);
-	return true;
-}
-
-Vector4 GetEnemyDisplayColor(const Enemy& enemy) {
-	Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-	switch (enemy.GetType()) {
-	case Enemy::Type::Fast:
-		baseColor = { 0.85f, 1.0f, 0.7f, 1.0f };
-		break;
-	case Enemy::Type::Ranged:
-		baseColor = { 0.75f, 0.9f, 1.0f, 1.0f };
-		break;
-	case Enemy::Type::Heavy:
-		baseColor = { 1.0f, 0.78f, 0.58f, 1.0f };
-		break;
-	case Enemy::Type::Normal:
-	default:
-		break;
+	int TileIndex(const LevelData &level, int x, int z) {
+		return z * level.width + x;
 	}
 
-	if (enemy.IsFrozen()) {
-		Vector4 freezeColor = { 0.45f, 0.85f, 1.25f, 1.0f };
+	std::pair<int, int> WorldToTile(const LevelData &level, const Vector3 &pos) {
 		return {
-			baseColor.x * 0.35f + freezeColor.x * 0.65f,
-			baseColor.y * 0.35f + freezeColor.y * 0.65f,
-			baseColor.z * 0.35f + freezeColor.z * 0.65f,
-			1.0f
+			static_cast<int>(std::round(pos.x / level.tileSize)),
+			static_cast<int>(std::round(pos.z / level.tileSize))
 		};
 	}
 
-	if (enemy.IsAttackDebuffed()) {
-		Vector4 debuffColor = { 0.65f, 0.35f, 0.9f, 1.0f };
+	Vector3 TileToWorld(const LevelData &level, int x, int z, float y) {
 		return {
-			baseColor.x * 0.45f + debuffColor.x * 0.55f,
-			baseColor.y * 0.45f + debuffColor.y * 0.55f,
-			baseColor.z * 0.45f + debuffColor.z * 0.55f,
-			1.0f
+			static_cast<float>(x) * level.tileSize,
+			y,
+			static_cast<float>(z) * level.tileSize
 		};
 	}
 
-	return baseColor;
-}
+	bool FindNextPathTarget(const LevelData &level, const Vector3 &from, const Vector3 &to, Vector3 &outTarget) {
+		if (level.tileSize <= 0.0f || level.width <= 0 || level.height <= 0 || level.tiles.empty()) {
+			return false;
+		}
 
-bool ShouldShowEnemyCardRing(const Enemy& enemy) {
-	return enemy.GetBaseCard().id != -1 || enemy.HasPickupCard() || enemy.IsCasting();
-}
+		auto [startX, startZ] = WorldToTile(level, from);
+		auto [goalX, goalZ] = WorldToTile(level, to);
 
-Vector4 GetEnemyCardRingColor(const Enemy& enemy, bool useReadyFlash = false) {
-	CardAttackRangeType rangeType = enemy.GetCurrentAttackRangeType();
-	if (enemy.IsCasting() && enemy.GetCurrentUseCard().id != -1) {
-		rangeType = enemy.GetCurrentUseCard().attackRangeType;
+		if (!IsWalkableTile(level, startX, startZ) || !IsWalkableTile(level, goalX, goalZ)) {
+			return false;
+		}
+
+		const int tileCount = level.width * level.height;
+		const int unreachable = (std::numeric_limits<int>::max)();
+		std::vector<int> cost(tileCount, unreachable);
+		std::vector<int> parent(tileCount, -1);
+		std::priority_queue<
+			std::pair<int, int>,
+			std::vector<std::pair<int, int>>,
+			std::greater<std::pair<int, int>>
+		> open;
+
+		int startIndex = TileIndex(level, startX, startZ);
+		int goalIndex = TileIndex(level, goalX, goalZ);
+
+		auto Heuristic = [&](int x, int z) {
+			return (std::abs(goalX - x) + std::abs(goalZ - z)) * 10;
+			};
+
+		cost[startIndex] = 0;
+		open.push({ Heuristic(startX, startZ), startIndex });
+
+		const int dirs[4][2] = {
+			{ 1, 0 },
+			{ -1, 0 },
+			{ 0, 1 },
+			{ 0, -1 },
+		};
+
+		while (!open.empty()) {
+			int currentIndex = open.top().second;
+			open.pop();
+
+			if (currentIndex == goalIndex) {
+				break;
+			}
+
+			int currentX = currentIndex % level.width;
+			int currentZ = currentIndex / level.width;
+
+			for (const auto &dir : dirs) {
+				int nextX = currentX + dir[0];
+				int nextZ = currentZ + dir[1];
+				if (!IsWalkableTile(level, nextX, nextZ)) {
+					continue;
+				}
+
+				int nextIndex = TileIndex(level, nextX, nextZ);
+				int nextCost = cost[currentIndex] + 10;
+				if (nextCost >= cost[nextIndex]) {
+					continue;
+				}
+
+				cost[nextIndex] = nextCost;
+				parent[nextIndex] = currentIndex;
+				open.push({ nextCost + Heuristic(nextX, nextZ), nextIndex });
+			}
+		}
+
+		if (cost[goalIndex] == unreachable) {
+			return false;
+		}
+
+		int nextIndex = goalIndex;
+		while (parent[nextIndex] != -1 && parent[nextIndex] != startIndex) {
+			nextIndex = parent[nextIndex];
+		}
+
+		if (nextIndex == startIndex) {
+			outTarget = to;
+			return true;
+		}
+
+		int nextX = nextIndex % level.width;
+		int nextZ = nextIndex / level.width;
+		outTarget = TileToWorld(level, nextX, nextZ, from.y);
+		return true;
 	}
 
-	Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	switch (rangeType) {
-	case CardAttackRangeType::Melee:
-		color = { 1.0f, 0.18f, 0.12f, 1.0f };
-		break;
-	case CardAttackRangeType::Mid:
-		color = { 1.0f, 0.9f, 0.12f, 1.0f };
-		break;
-	case CardAttackRangeType::Long:
-		color = { 0.18f, 0.62f, 1.0f, 1.0f };
-		break;
-	default:
-		break;
+	Vector4 GetEnemyDisplayColor(const Enemy &enemy) {
+		Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+		switch (enemy.GetType()) {
+		case Enemy::Type::Fast:
+			baseColor = { 0.85f, 1.0f, 0.7f, 1.0f };
+			break;
+		case Enemy::Type::Ranged:
+			baseColor = { 0.75f, 0.9f, 1.0f, 1.0f };
+			break;
+		case Enemy::Type::Heavy:
+			baseColor = { 1.0f, 0.78f, 0.58f, 1.0f };
+			break;
+		case Enemy::Type::Normal:
+		default:
+			break;
+		}
+
+		if (enemy.IsFrozen()) {
+			Vector4 freezeColor = { 0.45f, 0.85f, 1.25f, 1.0f };
+			return {
+				baseColor.x * 0.35f + freezeColor.x * 0.65f,
+				baseColor.y * 0.35f + freezeColor.y * 0.65f,
+				baseColor.z * 0.35f + freezeColor.z * 0.65f,
+				1.0f
+			};
+		}
+
+		if (enemy.IsAttackDebuffed()) {
+			Vector4 debuffColor = { 0.65f, 0.35f, 0.9f, 1.0f };
+			return {
+				baseColor.x * 0.45f + debuffColor.x * 0.55f,
+				baseColor.y * 0.45f + debuffColor.y * 0.55f,
+				baseColor.z * 0.45f + debuffColor.z * 0.55f,
+				1.0f
+			};
+		}
+
+		return baseColor;
 	}
 
-	if (useReadyFlash && enemy.GetCastProgress() >= 0.85f) {
-		const float flash = 1.0f + (enemy.GetCastProgress() - 0.85f) / 0.15f * 0.45f;
-		color.x = (std::min)(color.x * flash, 1.45f);
-		color.y = (std::min)(color.y * flash, 1.45f);
-		color.z = (std::min)(color.z * flash, 1.45f);
+	bool ShouldShowEnemyCardRing(const Enemy &enemy) {
+		return enemy.GetBaseCard().id != -1 || enemy.HasPickupCard() || enemy.IsCasting();
 	}
 
-	return color;
-}
+	Vector4 GetEnemyCardRingColor(const Enemy &enemy, bool useReadyFlash = false) {
+		CardAttackRangeType rangeType = enemy.GetCurrentAttackRangeType();
+		if (enemy.IsCasting() && enemy.GetCurrentUseCard().id != -1) {
+			rangeType = enemy.GetCurrentUseCard().attackRangeType;
+		}
 
-void HideEnemyCardRingPart(Obj3d* obj) {
-	if (!obj) {
-		return;
+		Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		switch (rangeType) {
+		case CardAttackRangeType::Melee:
+			color = { 1.0f, 0.18f, 0.12f, 1.0f };
+			break;
+		case CardAttackRangeType::Mid:
+			color = { 1.0f, 0.9f, 0.12f, 1.0f };
+			break;
+		case CardAttackRangeType::Long:
+			color = { 0.18f, 0.62f, 1.0f, 1.0f };
+			break;
+		default:
+			break;
+		}
+
+		if (useReadyFlash && enemy.GetCastProgress() >= 0.85f) {
+			const float flash = 1.0f + (enemy.GetCastProgress() - 0.85f) / 0.15f * 0.45f;
+			color.x = (std::min)(color.x * flash, 1.45f);
+			color.y = (std::min)(color.y * flash, 1.45f);
+			color.z = (std::min)(color.z * flash, 1.45f);
+		}
+
+		return color;
 	}
 
-	obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
-	obj->SetScale({ 0.01f, 0.01f, 0.01f });
-	obj->Update();
-}
+	void HideEnemyCardRingPart(Obj3d *obj) {
+		if (!obj) {
+			return;
+		}
 
-void SetEnemyObjectPipeline() {
-	auto* dxCommon = Obj3dCommon::GetInstance()->GetDxCommon();
-	if (!dxCommon) {
-		return;
+		obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+		obj->SetScale({ 0.01f, 0.01f, 0.01f });
+		obj->Update();
 	}
 
-	auto* commandList = dxCommon->GetCommandList();
-	if (!commandList) {
-		return;
+	void SetEnemyObjectPipeline() {
+		auto *dxCommon = Obj3dCommon::GetInstance()->GetDxCommon();
+		if (!dxCommon) {
+			return;
+		}
+
+		auto *commandList = dxCommon->GetCommandList();
+		if (!commandList) {
+			return;
+		}
+
+		PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
 	}
 
-	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
-}
-
-const char* GetEnemyModelName(Enemy::Type type) {
-	switch (type) {
-	case Enemy::Type::Heavy:
-	case Enemy::Type::Ranged:
-		return "wallEnemy";
-	case Enemy::Type::Fast:
-		return "cornerEnemy";
-	case Enemy::Type::Normal:
-	default:
-		return "happyEnemy";
+	const char *GetEnemyModelName(Enemy::Type type) {
+		switch (type) {
+		case Enemy::Type::Heavy:
+		case Enemy::Type::Ranged:
+			return "wallEnemy";
+		case Enemy::Type::Fast:
+			return "cornerEnemy";
+		case Enemy::Type::Normal:
+		default:
+			return "happyEnemy";
+		}
 	}
-}
 }
 
 
@@ -351,15 +349,15 @@ void EnemyManager::Initialize() {
 
 
 	castCardObjs_.clear();
-	
+
 }
 
-EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera* camera, bool useBossMinionModel) const {
+EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Camera *camera, bool useBossMinionModel) const {
 	EnemyVisual visual;
 
 	if (type == Enemy::Type::Normal) {
-		const char* modelName = useBossMinionModel ? "normalEnemy" : "happyEnemy";
-		const char* filename = useBossMinionModel ? "normalEnemy.gltf" : "happyEnemy.gltf";
+		const char *modelName = useBossMinionModel ? "normalEnemy" : "happyEnemy";
+		const char *filename = useBossMinionModel ? "normalEnemy.gltf" : "happyEnemy.gltf";
 		visual.skinned = SkinnedObj3d::Create(modelName, "resources/enemy", filename);
 		if (visual.skinned) {
 			visual.skinned->SetCamera(camera);
@@ -389,10 +387,21 @@ EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Came
 	if (visual.cardRingFill) {
 		visual.cardRingFill->SetCamera(camera);
 	}
+
+	for (int i = 0; i < 5; i++) {
+		auto preview = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
+		if (preview) {
+			preview->SetCamera(camera);
+			preview->SetScale({ 1.0f, 0.05f, 1.5f });
+			preview->SetColor({ 1.0f, 0.0f, 0.0f, 0.35f });
+			preview->Update();
+		}
+		visual.fangPreviews.push_back(std::move(preview));
+	}
 	return visual;
 }
 
-void EnemyManager::UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const {
+void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, const Vector3 &previousPosition) const {
 	if (ShouldShowEnemyCardRing(enemy)) {
 		Vector3 ringPosition = enemy.GetPosition();
 		ringPosition.y -= enemy.GetScale().y;
@@ -456,7 +465,7 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, co
 	}
 }
 
-void EnemyManager::DrawEnemyVisual(const EnemyVisual& visual) const {
+void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual) const {
 	if (visual.cardRing) {
 		SetEnemyObjectPipeline();
 		visual.cardRing->Draw();
@@ -477,13 +486,13 @@ void EnemyManager::DrawEnemyVisual(const EnemyVisual& visual) const {
 	}
 }
 
-void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, MapManager* mapManager,Boss *boss, const Vector3 &targetPos) {
+void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, MapManager *mapManager, Boss *boss, const Vector3 &targetPos) {
 	if (!player || !cardPickupManager || !mapManager) return;
 
 	const LevelData &level = mapManager->GetLevelData();
 
 	// 敵が壁に触れているかを簡易的に判定する
-	auto IsEnemyHitWall = [&](const Vector3& pos) -> bool {
+	auto IsEnemyHitWall = [&](const Vector3 &pos) -> bool {
 		AABB enemyAABB;
 		enemyAABB.min = { pos.x - 0.5f, pos.y - 0.5f, pos.z - 0.5f };
 		enemyAABB.max = { pos.x + 0.5f, pos.y + 0.5f, pos.z + 0.5f };
@@ -514,11 +523,11 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 		}
 
 		return false;
-	};
+		};
 
 	// 敵全員分ループ
 	for (size_t i = 0; i < enemies_.size(); ++i) {
-		auto& enemy = enemies_[i];
+		auto &enemy = enemies_[i];
 		if (!enemy) {
 			continue;
 		}
@@ -633,12 +642,10 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				if (std::abs(moveDelta.x) > 0.0001f && !IsEnemyHitWall(slideX)) {
 					enemy->SetPositionOnly(slideX);
 					moved = true;
-				}
-				else if (std::abs(moveDelta.z) > 0.0001f && !IsEnemyHitWall(slideZ)) {
+				} else if (std::abs(moveDelta.z) > 0.0001f && !IsEnemyHitWall(slideZ)) {
 					enemy->SetPositionOnly(slideZ);
 					moved = true;
-				}
-				else if (Length(moveDelta) > 0.0001f) {
+				} else if (Length(moveDelta) > 0.0001f) {
 					Vector3 moveDir = Normalize(moveDelta);
 					Vector3 sideDirA = { moveDir.z, 0.0f, -moveDir.x };
 					Vector3 sideDirB = { -moveDir.z, 0.0f, moveDir.x };
@@ -649,8 +656,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 					if (!IsEnemyHitWall(sidePosA)) {
 						enemy->SetPositionOnly(sidePosA);
 						moved = true;
-					}
-					else if (!IsEnemyHitWall(sidePosB)) {
+					} else if (!IsEnemyHitWall(sidePosB)) {
 						enemy->SetPositionOnly(sidePosB);
 						moved = true;
 					}
@@ -801,7 +807,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 }
 
 
-void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
+void EnemyManager::Draw(Camera *camera, Minimap *minimap) {
 	std::vector<Vector3> enemyPositions;
 
 	for (size_t i = 0; i < enemies_.size(); ++i) {
@@ -810,14 +816,51 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
 			// 点滅中は表示するフレームだけ描画
 			if (i < enemyVisuals_.size() && enemies_[i]->IsVisible()) {
 				DrawEnemyVisual(enemyVisuals_[i]);
+
+				Enemy *enemy = enemies_[i].get();
+				EnemyVisual &visual = enemyVisuals_[i];
+
+				Card currentCard = enemy->GetCurrentUseCard();
+
+				if (enemy->IsCasting() && currentCard.id == 7) {
+					Vector3 ePos = enemy->GetPosition();
+					float yaw = enemy->GetRotation().y;
+
+					Vector3 forward = {
+						std::sinf(yaw),
+						0.0f,
+						std::cosf(yaw)
+					};
+
+					SetEnemyObjectPipeline();
+					for (int j = 0; j < 5; j++) {
+						if (j >= visual.fangPreviews.size()) break;
+						if (!visual.fangPreviews[j]) continue;
+
+						Vector3 pos = {
+							ePos.x + forward.x * (0.5f + j * 2.0f),
+							ePos.y + 0.05f,
+							ePos.z + forward.z * (0.5f + j * 2.0f)
+						};
+
+						visual.fangPreviews[j]->SetCamera(camera);
+						visual.fangPreviews[j]->SetTranslation(pos);
+						visual.fangPreviews[j]->SetRotation({ 0.0f, yaw, 0.0f });
+						visual.fangPreviews[j]->SetScale({ 1.0f, 0.05f, 1.5f });
+						visual.fangPreviews[j]->SetColor({ 1.0f, 0.0f, 0.0f, 0.35f });
+						visual.fangPreviews[j]->Update();
+						visual.fangPreviews[j]->Draw();
+					}
+				}
 			}
 
 			enemyPositions.push_back(enemies_[i]->GetPosition());
 		}
 	}
 
-	for (auto& cardSystem : enemyCardSystems_) {
+	for (auto &cardSystem : enemyCardSystems_) {
 		if (cardSystem) {
+			SetEnemyObjectPipeline();
 			cardSystem->Draw();
 		}
 	}
@@ -849,6 +892,7 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap) {
 			if (castCardObjs_.count(currentCardId) && castCardObjs_[currentCardId]) {
 				// 使うモデルを取り出す
 				auto &cardObj = castCardObjs_[currentCardId];
+				SetEnemyObjectPipeline();
 
 				// --- 演出パラメータの設定 ---
 				float height = 3.5f;   // 敵の頭からの高さ
@@ -981,27 +1025,27 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 	}
 }
 
-void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera, int maxAliveEnemies) {
+void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager *mapManager, const Vector3 &playerPos, Camera *camera, int maxAliveEnemies) {
 	// ポインタが有効かチェック
-	if ( !spawnManager || !mapManager || !spawnManager->HasLevelData() ) {
+	if (!spawnManager || !mapManager || !spawnManager->HasLevelData()) {
 		return;
 	}
 
-	const LevelData& level = mapManager->GetLevelData();
+	const LevelData &level = mapManager->GetLevelData();
 
 	// spawnManager-> に変更
 	std::vector<std::pair<int, int>> candidates = spawnManager->FindEnemySpawnCandidates(margin);
 
-	if ( candidates.empty() ) {
+	if (candidates.empty()) {
 		return;
 	}
 
 	// プレイヤーの現在位置をタイル座標に変換
-	int playerTileX = static_cast< int >( std::round(playerPos.x / level.tileSize) );
-	int playerTileZ = static_cast< int >( std::round(playerPos.z / level.tileSize) );
+	int playerTileX = static_cast<int>(std::round(playerPos.x / level.tileSize));
+	int playerTileZ = static_cast<int>(std::round(playerPos.z / level.tileSize));
 
 	std::vector<std::pair<int, int>> filtered;
-	for ( const auto& c : candidates ) {
+	for (const auto &c : candidates) {
 		int x = c.first;
 		int z = c.second;
 
@@ -1009,8 +1053,8 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		// if (IsNearStairsTile(x, z)) { continue; } 
 
 		// マップの範囲内かチェック
-		if ( x >= 0 && x < level.width && z >= 0 && z < level.height ) {
-			if ( level.tiles[z][x] != 0 ) {
+		if (x >= 0 && x < level.width && z >= 0 && z < level.height) {
+			if (level.tiles[z][x] != 0) {
 				continue;
 			}
 		}
@@ -1018,16 +1062,16 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		// プレイヤーから近すぎるマスを除外
 		int dx = x - playerTileX;
 		int dz = z - playerTileZ;
-		float distanceToPlayer = std::sqrt(static_cast< float >(dx * dx + dz * dz));
+		float distanceToPlayer = std::sqrt(static_cast<float>(dx * dx + dz * dz));
 
-		if ( distanceToPlayer < 5.0f ) {
+		if (distanceToPlayer < 5.0f) {
 			continue;
 		}
 
 		filtered.push_back(c);
 	}
 
-	if ( filtered.empty() ) {
+	if (filtered.empty()) {
 		return;
 	}
 
@@ -1039,22 +1083,22 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 
 	// 生きている敵の数を数える
 	int aliveCount = 0;
-	for ( const auto& enemy : enemies_ ) {
-		if ( enemy && !enemy->IsDead() ) {
+	for (const auto &enemy : enemies_) {
+		if (enemy && !enemy->IsDead()) {
 			aliveCount++;
 		}
 	}
 
 	int availableSpace = kMaxEnemies - aliveCount;
 
-	if ( availableSpace <= 0 ) {
+	if (availableSpace <= 0) {
 		return;
 	}
 
-	int actualSpawnCount = ( std::min ) ( enemyCount, static_cast< int >( filtered.size() ) );
-	actualSpawnCount = ( std::min ) ( actualSpawnCount, availableSpace );
+	int actualSpawnCount = (std::min)(enemyCount, static_cast<int>(filtered.size()));
+	actualSpawnCount = (std::min)(actualSpawnCount, availableSpace);
 
-	for ( int i = 0; i < actualSpawnCount; ++i ) {
+	for (int i = 0; i < actualSpawnCount; ++i) {
 		int tileX = filtered[i].first;
 		int tileZ = filtered[i].second;
 
@@ -1069,22 +1113,22 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 
 		// スポーンエフェクト
 		// ① 足元から湧き上がる黒煙
-		for ( int j = 0; j < 15; j++ ) {
+		for (int j = 0; j < 15; j++) {
 			Vector3 smokePos = {
-				worldPos.x + ( rand() % 11 - 5 ) * 0.1f,
-				worldPos.y + ( rand() % 6 ) * 0.1f,
-				worldPos.z + ( rand() % 11 - 5 ) * 0.1f
+				worldPos.x + (rand() % 11 - 5) * 0.1f,
+				worldPos.y + (rand() % 6) * 0.1f,
+				worldPos.z + (rand() % 11 - 5) * 0.1f
 			};
 			Vector3 smokeVel = {
-				( rand() % 11 - 5 ) * 0.04f,
-				0.06f + ( rand() % 8 ) * 0.02f,
-				( rand() % 11 - 5 ) * 0.04f
+				(rand() % 11 - 5) * 0.04f,
+				0.06f + (rand() % 8) * 0.02f,
+				(rand() % 11 - 5) * 0.04f
 			};
 			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 0.8f, 0.55f, { 0.15f, 0.15f, 0.15f, 0.85f });
 		}
 		// ② 外側に広がるリング
-		for ( int j = 0; j < 10; j++ ) {
-			float ringAngle = ( 3.14159f * 2.0f / 10.0f ) * j;
+		for (int j = 0; j < 10; j++) {
+			float ringAngle = (3.14159f * 2.0f / 10.0f) * j;
 			float speed = 0.18f;
 			Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
 			GPUParticleManager::GetInstance()->Emit(
@@ -1099,7 +1143,7 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 		);
 
 		auto enemyVisual = CreateEnemyVisual(enemy->GetType(), camera);
-		if ( enemyVisual.obj || enemyVisual.skinned ) {
+		if (enemyVisual.obj || enemyVisual.skinned) {
 			UpdateEnemyVisual(enemyVisual, *enemy, worldPos);
 		}
 
@@ -1115,7 +1159,7 @@ void EnemyManager::SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *
 void EnemyManager::Clear() {
 	enemies_.clear();
 	enemyVisuals_.clear();
-	enemyCardSystems_.clear(); 
+	enemyCardSystems_.clear();
 	enemyDeadHandled_.clear();
 }
 
@@ -1136,19 +1180,19 @@ void EnemyManager::DefeatAllWithoutRewards() {
 	}
 }
 
-void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
+void EnemyManager::CheckCollisions(Player *player, MapManager *mapManager) {
 	if (!player || player->IsDead() || !mapManager) {
 		return;
 	}
 
-	const LevelData& level = mapManager->GetLevelData();
+	const LevelData &level = mapManager->GetLevelData();
 
 	const float playerRadius = 0.6f;
 	const float enemyBaseRadius = 0.9f;
 	const float enemyWallBaseHalfSize = 0.7f;
 
 	// 指定位置の敵が壁に当たるか
-	auto IsEnemyHitWall = [&](const Vector3& pos, float radiusScale) -> bool {
+	auto IsEnemyHitWall = [&](const Vector3 &pos, float radiusScale) -> bool {
 		const float enemyWallHalfSize = enemyWallBaseHalfSize * radiusScale;
 		AABB enemyAABB;
 		enemyAABB.min = { pos.x - enemyWallHalfSize, pos.y - 0.5f, pos.z - enemyWallHalfSize };
@@ -1184,7 +1228,7 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 		};
 
 	// 指定位置のプレイヤーが壁に当たるか
-	auto IsPlayerHitWall = [&](const Vector3& pos) -> bool {
+	auto IsPlayerHitWall = [&](const Vector3 &pos) -> bool {
 		AABB playerAABB;
 		playerAABB.min = { pos.x - 0.5f, pos.y - 0.5f, pos.z - 0.5f };
 		playerAABB.max = { pos.x + 0.5f, pos.y + 0.5f, pos.z + 0.5f };
@@ -1221,7 +1265,7 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 	Vector3 playerPos = player->GetPosition();
 
 	// プレイヤーと敵の押し出し
-	for (auto& enemy : enemies_) {
+	for (auto &enemy : enemies_) {
 		if (!enemy || enemy->IsDead()) {
 			continue;
 		}
@@ -1332,7 +1376,7 @@ void EnemyManager::CheckCollisions(Player* player, MapManager* mapManager) {
 }
 
 // 指定したワールド座標に敵をスポーンさせる
-void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int floor){
+void EnemyManager::SpawnEnemyAt(const Vector3 &worldPos, Camera *camera, int floor) {
 	auto enemy = std::make_unique<Enemy>();
 	enemy->Initialize();
 	enemy->SetType(GetRandomEnemyTypeForFloor(floor));
@@ -1340,22 +1384,22 @@ void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int flo
 
 	// スポーンエフェクト
 	// ① 足元から湧き上がる黒煙
-	for ( int j = 0; j < 15; j++ ) {
+	for (int j = 0; j < 15; j++) {
 		Vector3 smokePos = {
-			worldPos.x + ( rand() % 11 - 5 ) * 0.1f,
-			worldPos.y + ( rand() % 6 ) * 0.1f,
-			worldPos.z + ( rand() % 11 - 5 ) * 0.1f
+			worldPos.x + (rand() % 11 - 5) * 0.1f,
+			worldPos.y + (rand() % 6) * 0.1f,
+			worldPos.z + (rand() % 11 - 5) * 0.1f
 		};
 		Vector3 smokeVel = {
-			( rand() % 11 - 5 ) * 0.04f,
-			0.06f + ( rand() % 8 ) * 0.02f,
-			( rand() % 11 - 5 ) * 0.04f
+			(rand() % 11 - 5) * 0.04f,
+			0.06f + (rand() % 8) * 0.02f,
+			(rand() % 11 - 5) * 0.04f
 		};
 		GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 0.8f, 0.55f, { 0.15f, 0.15f, 0.15f, 0.85f });
 	}
 	// ② 外側に広がるリング
-	for ( int j = 0; j < 10; j++ ) {
-		float ringAngle = ( 3.14159f * 2.0f / 10.0f ) * j;
+	for (int j = 0; j < 10; j++) {
+		float ringAngle = (3.14159f * 2.0f / 10.0f) * j;
 		float speed = 0.18f;
 		Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
 		GPUParticleManager::GetInstance()->Emit(
@@ -1371,7 +1415,7 @@ void EnemyManager::SpawnEnemyAt(const Vector3& worldPos, Camera* camera, int flo
 
 	// 敵の見た目（3Dモデル）を生成
 	auto enemyVisual = CreateEnemyVisual(enemy->GetType(), camera);
-	if ( enemyVisual.obj || enemyVisual.skinned ) {
+	if (enemyVisual.obj || enemyVisual.skinned) {
 		UpdateEnemyVisual(enemyVisual, *enemy, worldPos);
 	}
 

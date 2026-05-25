@@ -53,6 +53,7 @@ private:
 		std::unique_ptr<SkinnedObj3d> skinned;
 		std::unique_ptr<Obj3d> cardRing;
 		std::unique_ptr<Obj3d> cardRingFill;
+		std::vector<std::unique_ptr<Obj3d>> fangPreviews;  // トゲ予測線
 		bool useHeadIdleAnimation = false;
 		float headIdleTimer = 0.0f;
 	};
@@ -65,7 +66,6 @@ private:
 	std::vector<std::unique_ptr<Enemy>> enemies_;
 	std::vector<EnemyVisual> enemyVisuals_;
 	std::vector<bool> enemyDeadHandled_;
-
 
 	// 魔法システムのリストもこちらで持つ
 	std::vector<std::unique_ptr<CardUseSystem>> enemyCardSystems_;
