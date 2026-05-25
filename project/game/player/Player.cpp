@@ -186,20 +186,18 @@ void Player::Update() {
         // 死亡時 → グレースケール
         pe->SetEffectActive(PostEffectType::Grayscale, isDead_);
 
-        // 回避中 or スピードバフ中 → ラジアルブラー
+        // スピードバフ中 → ラジアルブラー（回避中は視認性のため無効）
         bool hasSpeedBuff = speedMultiplier_ > 1.0f && speedBuffTimer_ > 0;
-        pe->SetEffectActive(PostEffectType::RadialBlur, isDodging_ || hasSpeedBuff);
-        if ( isDodging_ ) {
-            pe->SetRadialBlurStrength(0.7f);
-        } else if ( hasSpeedBuff ) {
+        pe->SetEffectActive(PostEffectType::RadialBlur, hasSpeedBuff);
+        if ( hasSpeedBuff ) {
             pe->SetRadialBlurStrength(0.35f);
         } else {
             pe->SetRadialBlurStrength(1.0f);
         }
 
-        // 低HP（残り3以下）→ 赤いビネット / 被弾直後 → 赤フラッシュ
+        // 低HP（残り3以下）→ 赤いビネット / 被弾直後 → 赤フラッシュ（死亡時はどちらも消す）
         bool isLowHp = !isDead_ && hp_ > 0 && hp_ <= 3;
-        bool isHitFlash = isHit_ && hitTimer_ > hitDuration_ - 4;
+        bool isHitFlash = !isDead_ && isHit_ && hitTimer_ > hitDuration_ - 4;
         pe->SetEffectActive(PostEffectType::Vignetting, isLowHp || isHitFlash);
         if ( isHitFlash ) {
             float ratio = static_cast<float>(hitTimer_ - (hitDuration_ - 4)) / 4.0f;
@@ -667,7 +665,7 @@ void Player::DrawAnimationDebugUI() {
 #endif
 }
 
-void Player::SetCamera(const Camera* camera) {
+void Player::SetCamera(Camera* camera) {
     camera_ = camera;
 
     if (model_) {
@@ -856,7 +854,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
     // 被弾エフェクト
     Vector3 particleDir = ( Length(hitDir) > 0.01f ) ? Normalize(hitDir) : Vector3 { 0, 0, 1 };
 
-    // ① メインの衝撃飛び散り（白〜水色：攻撃の赤と区別）
+    // ① メインの衝撃飛び散り（赤〜オレンジ）
     for ( int i = 0; i < 20; i++ ) {
         Vector3 sparkVel = {
             particleDir.x * ( 0.5f + ( rand() % 10 ) * 0.08f ) + ( rand() % 11 - 5 ) * 0.12f,
@@ -869,33 +867,34 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
             pos_.z + ( rand() % 7 - 3 ) * 0.12f
         };
         float scale = 0.3f + ( rand() % 5 ) * 0.08f;
-        GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.35f, scale, { 0.85f, 0.95f, 1.0f, 1.0f });
+        float orange = 0.15f + ( rand() % 10 ) * 0.04f; // 0.15〜0.55 でオレンジ〜赤
+        GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.35f, scale, { 1.0f, orange, 0.05f, 1.0f });
     }
 
-    // ② 衝撃波リング（銀白色）
+    // ② 衝撃波リング（暗い赤）
     for ( int i = 0; i < 12; i++ ) {
         float ringAngle = ( 3.14159f * 2.0f / 12.0f ) * i;
         float speed = 0.35f;
         Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
         GPUParticleManager::GetInstance()->Emit(
             { pos_.x, pos_.y + 0.5f, pos_.z },
-            ringVel, 0.2f, 0.9f, { 0.75f, 0.88f, 1.0f, 0.9f }
+            ringVel, 0.2f, 0.9f, { 1.0f, 0.12f, 0.05f, 0.9f }
         );
     }
 
-    // ③ 大きな白フラッシュ
+    // ③ 大きな赤フラッシュ
     GPUParticleManager::GetInstance()->Emit(
         { pos_.x, pos_.y + 0.8f, pos_.z },
-        { 0, 0, 0 }, 0.1f, 2.5f, { 1.0f, 1.0f, 1.0f, 0.95f }
+        { 0, 0, 0 }, 0.1f, 2.5f, { 1.0f, 0.25f, 0.08f, 0.95f }
     );
 
-    // ④ 水色コアフラッシュ（少し長く残る）
+    // ④ オレンジコアフラッシュ（少し長く残る）
     GPUParticleManager::GetInstance()->Emit(
         { pos_.x, pos_.y + 0.7f, pos_.z },
-        { 0, 0, 0 }, 0.2f, 1.8f, { 0.5f, 0.8f, 1.0f, 0.8f }
+        { 0, 0, 0 }, 0.2f, 1.8f, { 1.0f, 0.45f, 0.1f, 0.8f }
     );
 
-    // ⑤ ふわっと上に浮かぶ残滓（薄い水色）
+    // ⑤ ふわっと上に浮かぶ残滓（薄い赤）
     for ( int i = 0; i < 8; i++ ) {
         Vector3 driftPos = {
             pos_.x + ( rand() % 9 - 4 ) * 0.15f,
@@ -905,8 +904,13 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
         GPUParticleManager::GetInstance()->Emit(
             driftPos,
             { ( rand() % 7 - 3 ) * 0.03f, 0.08f + ( rand() % 5 ) * 0.02f, ( rand() % 7 - 3 ) * 0.03f },
-            0.6f, 0.35f, { 0.6f, 0.82f, 1.0f, 0.7f }
+            0.6f, 0.35f, { 1.0f, 0.22f, 0.08f, 0.7f }
         );
+    }
+
+    // カメラシェイク
+    if ( camera_ ) {
+        camera_->TriggerShake(0.12f, 8);
     }
 
     if ( hp_ <= 0 ) {

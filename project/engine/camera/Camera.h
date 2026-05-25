@@ -35,6 +35,8 @@ public:
 	void SetNearClip(float nearClip){ this->nearClip = nearClip; } // ニアクリップ距離をセット
 	void SetFarClip(float farClip){ this->farClip = farClip; } // ファークリップ距離をセット
 
+	void TriggerShake(float amplitude, int duration);
+
 	const Matrix4x4& GetWorldMatrix() const{ return worldMatrix; } // ワールド行列のgetter
 	const Matrix4x4& GetViewMatrix() const{ return viewMatrix; } // ビュー行列のgetter
 	const Matrix4x4& GetProjectionMatrix() const{ return projectionMatrix; } // 射影行列のgetter
@@ -64,7 +66,12 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource_; // カメラ用リソース
 	CameraForGPU* cameraData_ = nullptr; // カメラデータのポインタ
-	
+
+	float shakeAmplitude_ = 0.0f;
+	int   shakeTimer_     = 0;
+	int   shakeDuration_  = 1;
+	Vector3 shakeOffset_  = {};
+
 
 };
 

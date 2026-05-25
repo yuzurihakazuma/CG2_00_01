@@ -39,7 +39,7 @@ public:
 	void DrawAfterimage(); // 残像の描画
     void DrawAnimationDebugUI(); // プレイヤーアニメGUIの描画
 
-    void SetCamera(const Camera* camera); // カメラ設定
+    void SetCamera(Camera* camera); // カメラ設定
 
     // 各Transform取得
     const Vector3& GetPosition() const { return pos_; }
@@ -146,7 +146,7 @@ private:
     Vector3 scale_{ 1.0f, 1.0f, 1.0f };   // スケール
 
     std::unique_ptr<SkinnedObj3d> model_ = nullptr; // プレイヤーのアニメーションモデル
-    const Camera* camera_ = nullptr;                // 使用カメラ
+    Camera* camera_ = nullptr;                // 使用カメラ
 
     float moveSpeed_ = 0.2f; // 通常移動速度
 

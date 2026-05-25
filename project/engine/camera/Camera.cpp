@@ -1,6 +1,7 @@
 #include "Camera.h"
 // --- 標準ライブラリ ---
 #include <d3d12.h>
+#include <cstdlib>
 
 // --- エンジン側のファイル ---
 #include "engine/base/WindowProc.h"
@@ -63,13 +64,30 @@ Camera::Camera(int windowWidth, int windowHeight, DirectXCommon* dxcmmon)
 
 void Camera::Update(){
 
+	// シェイク更新
+	if ( shakeTimer_ > 0 ) {
+		--shakeTimer_;
+		float progress = static_cast<float>( shakeTimer_ ) / static_cast<float>( shakeDuration_ );
+		float amp = shakeAmplitude_ * progress;
+		shakeOffset_.x = ( ( rand() % 201 ) - 100 ) * 0.01f * amp;
+		shakeOffset_.y = ( ( rand() % 201 ) - 100 ) * 0.005f * amp;
+		shakeOffset_.z = 0.0f;
+	} else {
+		shakeOffset_ = {};
+	}
+
 	// アスペクト比を計算
 	aspectRatio = static_cast< float >( WindowProc::GetInstance()->GetClientWidth() ) /
 		static_cast< float >( WindowProc::GetInstance()->GetClientHeight() );
 
+	Vector3 shakedPos = {
+		transform.translate.x + shakeOffset_.x,
+		transform.translate.y + shakeOffset_.y,
+		transform.translate.z + shakeOffset_.z
+	};
 
 	// 1. ワールド行列の更新 (カメラの場所・角度)
-	worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
+	worldMatrix = MakeAffine(transform.scale, transform.rotate, shakedPos);
 
 	// 2. ビュー行列の更新 (ワールドの逆行列)
 	viewMatrix = Inverse(worldMatrix);
@@ -79,8 +97,14 @@ void Camera::Update(){
 
 	// 4. 合成行列の更新
 	viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
-	// 5. GPU転送用データの更新
+	// 5. GPU転送用データの更新（ライティング用は元の位置）
 	cameraData_->worldPosition = transform.translate;
 
 
+}
+
+void Camera::TriggerShake(float amplitude, int duration){
+	shakeAmplitude_ = amplitude;
+	shakeDuration_  = ( duration > 0 ) ? duration : 1;
+	shakeTimer_     = shakeDuration_;
 }

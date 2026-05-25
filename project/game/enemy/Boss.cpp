@@ -1106,22 +1106,35 @@ void Boss::TakeDamage(int damage) {
 
 	hp_ -= damage;
 
-	for (int i = 0; i < 20; i++) {
+	Vector3 bossHitCenter = { pos_.x, pos_.y + 1.2f, pos_.z };
+
+	// 中心フラッシュ
+	GPUParticleManager::GetInstance()->Emit(bossHitCenter, { 0, 0, 0 }, 0.08f, 4.5f, { 1.0f, 1.0f, 0.9f, 1.0f });
+	GPUParticleManager::GetInstance()->Emit(bossHitCenter, { 0, 0, 0 }, 0.15f, 2.8f, { 1.0f, 0.8f, 0.2f, 1.0f });
+
+	// 衝撃波リング
+	for (int i = 0; i < 24; i++) {
+		float angle = (3.141592f * 2.0f / 24.0f) * i;
+		float speed = 0.6f + (rand() % 5) * 0.05f;
+		Vector3 ringVel = { std::sinf(angle) * speed, 0.02f, std::cosf(angle) * speed };
+		GPUParticleManager::GetInstance()->Emit(bossHitCenter, ringVel, 0.2f, 1.4f, { 1.0f, 1.0f, 0.7f, 1.0f });
+	}
+
+	// 飛び散りスパーク（ボスは広範囲）
+	for (int i = 0; i < 30; i++) {
 		Vector3 sparkVel = {
-			(rand() % 11 - 5) * 0.2f,      // 散らばる速度を抑えめに
-			(rand() % 11 - 5) * 0.2f + 0.1f,
-			(rand() % 11 - 5) * 0.2f
+			(rand() % 11 - 5) * 0.18f,
+			(rand() % 10) * 0.08f + 0.1f,
+			(rand() % 11 - 5) * 0.18f
 		};
 		Vector3 sparkPos = {
-			pos_.x + (rand() % 21 - 10) * 0.1f, // 発生位置もボスの中心付近に絞る
-			pos_.y + 1.0f + (rand() % 21) * 0.1f,
-			pos_.z + (rand() % 21 - 10) * 0.1f
+			pos_.x + (rand() % 11 - 5) * 0.12f,
+			pos_.y + 0.8f + (rand() % 10) * 0.12f,
+			pos_.z + (rand() % 11 - 5) * 0.12f
 		};
-
-		// サイズを 0.8~1.7 -> 0.4~0.7 に縮小
-		float scale = 0.4f + (rand() % 4) * 0.1f;
-
-		GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, scale, { 1.0f, 0.8f, 0.2f, 1.0f });
+		float scale = 0.4f + (rand() % 5) * 0.09f;
+		float orange = 0.35f + (rand() % 8) * 0.06f;
+		GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, scale, { 1.0f, orange, 0.05f, 1.0f });
 	}
 
 	isHit_ = true;

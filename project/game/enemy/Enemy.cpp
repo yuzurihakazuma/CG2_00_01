@@ -649,28 +649,30 @@ void Enemy::TakeDamage(int damage){
 		knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
 	}
 
-	Vector3 hitCenter = { pos_.x, pos_.y + 0.5f, pos_.z };
+	Vector3 hitCenter = { pos_.x, pos_.y + 0.8f, pos_.z };
 
-	// ① ヒット時の「光の波紋（衝撃波）」
-	for ( int i = 0; i < 16; i++ ) {
-		float angle = ( 3.141592f * 2.0f / 16.0f ) * i;
-		float speed = 0.35f;
-		Vector3 ringVel = { std::sinf(angle) * speed, 0.0f, std::cosf(angle) * speed };
+	// ① 中心の白い衝撃フラッシュ（瞬間的に大きく光る）
+	GPUParticleManager::GetInstance()->Emit(hitCenter, { 0, 0, 0 }, 0.08f, 3.5f, { 1.0f, 1.0f, 0.9f, 1.0f });
+	GPUParticleManager::GetInstance()->Emit(hitCenter, { 0, 0, 0 }, 0.14f, 2.0f, { 1.0f, 0.85f, 0.3f, 1.0f });
 
-		// 🌟 サイズを 0.6f -> 1.0f に拡大！
-		GPUParticleManager::GetInstance()->Emit(hitCenter, ringVel, 0.15f, 1.0f, { 1.0f, 1.0f, 0.6f, 1.0f });
+	// ② 衝撃波リング（白→黄色、速く広がる）
+	for ( int i = 0; i < 20; i++ ) {
+		float angle = ( 3.141592f * 2.0f / 20.0f ) * i;
+		float speed = 0.55f + ( rand() % 5 ) * 0.04f;
+		Vector3 ringVel = { std::sinf(angle) * speed, 0.02f, std::cosf(angle) * speed };
+		GPUParticleManager::GetInstance()->Emit(hitCenter, ringVel, 0.18f, 1.2f, { 1.0f, 1.0f, 0.8f, 1.0f });
 	}
 
-	// ② 殴られた方向（後ろ）へ向かって、鋭く飛び散る火花！
-	for ( int i = 0; i < 15; i++ ) {
+	// ③ 鋭い火花（攻撃方向に多く飛ぶ）
+	for ( int i = 0; i < 25; i++ ) {
 		Vector3 sparkVel = {
-			hitDir.x * 0.3f + ( rand() % 11 - 5 ) * 0.05f,
-			0.15f + ( rand() % 10 ) * 0.03f,
-			hitDir.z * 0.3f + ( rand() % 11 - 5 ) * 0.05f
+			hitDir.x * ( 0.4f + ( rand() % 8 ) * 0.06f ) + ( rand() % 11 - 5 ) * 0.06f,
+			0.2f + ( rand() % 12 ) * 0.04f,
+			hitDir.z * ( 0.4f + ( rand() % 8 ) * 0.06f ) + ( rand() % 11 - 5 ) * 0.06f
 		};
-		// 🌟 サイズを 0.3~0.5 -> 0.6~0.9 に拡大！
-		float scale = 0.6f + ( rand() % 4 ) * 0.1f;
-		GPUParticleManager::GetInstance()->Emit(hitCenter, sparkVel, 0.35f, scale, { 1.0f, 0.4f, 0.0f, 1.0f });
+		float scale = 0.35f + ( rand() % 5 ) * 0.08f;
+		float orange = 0.3f + ( rand() % 8 ) * 0.06f;
+		GPUParticleManager::GetInstance()->Emit(hitCenter, sparkVel, 0.3f, scale, { 1.0f, orange, 0.0f, 1.0f });
 	}
 
 
@@ -690,37 +692,62 @@ void Enemy::TakeDamage(int damage){
 		hp_ = 0;
 		isDead_ = true;
 
-		// ① 炎の爆発 (20発)
-		for ( int i = 0; i < 20; i++ ) {
-			Vector3 expPos = {
-				pos_.x + ( rand() % 21 - 10 ) * 0.05f,
-				pos_.y + 0.5f + ( rand() % 21 - 10 ) * 0.05f,
-				pos_.z + ( rand() % 21 - 10 ) * 0.05f
-			};
-			Vector3 expVel = {
-				( rand() % 21 - 10 ) * 0.15f,
-				( rand() % 21 - 10 ) * 0.15f + 0.1f,
-				( rand() % 21 - 10 ) * 0.15f
-			};
-			Vector4 color = ( rand() % 2 == 0 ) ? Vector4 { 1.0f, 0.4f, 0.0f, 1.0f } : Vector4 { 1.0f, 0.8f, 0.0f, 1.0f };
-			float scale = 0.5f + ( rand() % 4 ) * 0.1f;
-			GPUParticleManager::GetInstance()->Emit(expPos, expVel, 0.6f, scale, color);
+		Vector3 deathCenter = { pos_.x, pos_.y + 0.6f, pos_.z };
+
+		// ① 中心の白い衝撃フラッシュ（瞬間爆発感）
+		GPUParticleManager::GetInstance()->Emit(deathCenter, { 0, 0, 0 }, 0.06f, 6.0f, { 1.0f, 1.0f, 0.9f, 1.0f });
+		GPUParticleManager::GetInstance()->Emit(deathCenter, { 0, 0, 0 }, 0.14f, 4.0f, { 1.0f, 0.7f, 0.2f, 1.0f });
+
+		// ② 爆発リング（全方向に素早く広がる）
+		for ( int i = 0; i < 24; i++ ) {
+			float angle = ( 3.141592f * 2.0f / 24.0f ) * i;
+			float speed = 0.7f + ( rand() % 6 ) * 0.05f;
+			Vector3 ringVel = { std::sinf(angle) * speed, 0.05f, std::cosf(angle) * speed };
+			GPUParticleManager::GetInstance()->Emit(deathCenter, ringVel, 0.22f, 1.5f, { 1.0f, 0.9f, 0.5f, 1.0f });
 		}
 
-		// ② 黒煙 (10発)
-		for ( int i = 0; i < 10; i++ ) {
+		// ③ 炎の爆散（多数・広範囲）
+		for ( int i = 0; i < 50; i++ ) {
+			Vector3 expPos = {
+				pos_.x + ( rand() % 21 - 10 ) * 0.08f,
+				pos_.y + 0.4f + ( rand() % 16 ) * 0.07f,
+				pos_.z + ( rand() % 21 - 10 ) * 0.08f
+			};
+			Vector3 expVel = {
+				( rand() % 21 - 10 ) * 0.22f,
+				( rand() % 15 ) * 0.1f + 0.05f,
+				( rand() % 21 - 10 ) * 0.22f
+			};
+			float g = 0.1f + ( rand() % 7 ) * 0.08f;
+			float scale = 0.4f + ( rand() % 6 ) * 0.1f;
+			GPUParticleManager::GetInstance()->Emit(expPos, expVel, 0.55f, scale, { 1.0f, g, 0.0f, 1.0f });
+		}
+
+		// ④ 高速飛散スパーク（鋭く遠くへ飛ぶ）
+		for ( int i = 0; i < 20; i++ ) {
+			Vector3 sparkVel = {
+				( rand() % 21 - 10 ) * 0.3f,
+				( rand() % 15 ) * 0.15f + 0.1f,
+				( rand() % 21 - 10 ) * 0.3f
+			};
+			float scale = 0.2f + ( rand() % 4 ) * 0.06f;
+			GPUParticleManager::GetInstance()->Emit(deathCenter, sparkVel, 0.4f, scale, { 1.0f, 0.8f, 0.3f, 1.0f });
+		}
+
+		// ⑤ 黒煙（増量・大きく・ゆっくり上昇）
+		for ( int i = 0; i < 18; i++ ) {
 			Vector3 smokePos = {
-				pos_.x + ( rand() % 21 - 10 ) * 0.1f,
-				pos_.y + 0.5f + ( rand() % 11 ) * 0.1f,
-				pos_.z + ( rand() % 21 - 10 ) * 0.1f
+				pos_.x + ( rand() % 21 - 10 ) * 0.12f,
+				pos_.y + 0.3f + ( rand() % 11 ) * 0.12f,
+				pos_.z + ( rand() % 21 - 10 ) * 0.12f
 			};
 			Vector3 smokeVel = {
-				( rand() % 21 - 10 ) * 0.1f,
-				0.05f + ( rand() % 11 ) * 0.05f, // 上にフワッと昇る
-				( rand() % 21 - 10 ) * 0.1f
+				( rand() % 21 - 10 ) * 0.06f,
+				0.08f + ( rand() % 11 ) * 0.04f,
+				( rand() % 21 - 10 ) * 0.06f
 			};
-			float scale = 0.6f + ( rand() % 4 ) * 0.1f;
-			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.0f, scale, { 0.3f, 0.3f, 0.3f, 0.8f });
+			float scale = 0.9f + ( rand() % 5 ) * 0.15f;
+			GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.3f, scale, { 0.18f, 0.18f, 0.18f, 0.78f });
 		}
 
 	}
