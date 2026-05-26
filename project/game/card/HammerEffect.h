@@ -35,6 +35,7 @@ private:
 
     float casterYaw_ = 0.0f;
     Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
+    Camera* camera_ = nullptr;
 
     // 🌟 ハンマーの残像設定（剣よりも少なく、短くして「ブラー（ブレ）」を表現）
     static const int maxAfterimageCount_ = 4;

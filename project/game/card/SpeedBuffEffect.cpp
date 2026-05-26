@@ -1,6 +1,7 @@
 ﻿#include "SpeedBuffEffect.h"
 #include "game/player/Player.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/postEffect/PostEffect.h"
 
 void SpeedBuffEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPLayerCaster, Camera *camera, Boss* casterBoss) {
 	// この効果は発動元ボスを使わない
@@ -21,6 +22,14 @@ void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *b
 	if ( isPlayerCaster_ && player ) {
         Vector3 playerPos = player->GetPosition();
         currentPos_ = playerPos;
+
+        // 発動瞬間（0〜3フレーム）：速度感を演出するラジアルブラー
+        if ( timer_ == 0 ) {
+            PostEffect::GetInstance()->SetRadialBlurStrength(0.75f);
+            PostEffect::GetInstance()->SetEffectActive(PostEffectType::RadialBlur, true);
+        } else if ( timer_ == 4 ) {
+            PostEffect::GetInstance()->SetEffectActive(PostEffectType::RadialBlur, false);
+        }
 
 
         if ( timer_ % 2 == 0 ) { // 2フレームに1回（疾走感を出すため高頻度）
@@ -90,6 +99,7 @@ void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *b
     // タイマー減算
     durationTimer_--;
     if ( durationTimer_ <= 0 ) {
+        PostEffect::GetInstance()->SetEffectActive(PostEffectType::RadialBlur, false);
         isFinished_ = true;
     }
 

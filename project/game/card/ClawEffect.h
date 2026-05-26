@@ -40,6 +40,7 @@ private:
 	float casterYaw_ = 0.0f;
 
 	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
+	Camera* camera_ = nullptr;
 
 };
 

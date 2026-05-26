@@ -1,7 +1,7 @@
 id,name,cost,effectType,sffectValue,description,modelName,effectName,seName,rarity,canEnemyUse,attackRangeType
 1,殴り,0,0,1,１～２ダメージ与える,cardF,nullptr,nullptr,0,0,0
 2,ファイヤーボール,2,0,1,1～3ダメージ与える,cardFire,nullptr,nullptr,0,1,2
-3,ポーション,3,1,6,HP6回復,cardPotion,nullptr,nullptr,0,0,1
+3,ポーション,3,1,6,HP最大体力の半分回復,cardPotion,nullptr,nullptr,0,0,1
 4,スピードアップ,2,3,2,速度を2倍にする,cardSpeedUp,nullptr,nullptr,0,0,1
 5,シールド,5,2,3,シールド展開\n3回まで守れる,CardShield,nullptr,nullptr,0,0,1
 6,アイス,4,0,2,2ダメージ与えて\n敵は５秒間動けなくなる,CardIce,nullptr,nullptr,0,0,2

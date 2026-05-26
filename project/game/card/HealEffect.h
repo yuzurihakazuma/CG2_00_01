@@ -28,6 +28,7 @@ private:
 	int effectTimer_ = 0;                 // エフェクトの経過フレーム
 	const int kEffectDuration = 20;       // エフェクトを出し続ける長さ（20フレーム ＝ 約0.3秒）
 	Vector3 currentPos_ = { 0.0f, 0.0f, 0.0f }; // 毎フレーム更新する発生位置
+	Camera* camera_ = nullptr;
 
 };
 

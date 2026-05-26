@@ -255,22 +255,26 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 }
             }
             // ボスへの判定
+            // 剣は360°スイングなのでプレイヤー中心からの距離で判定する
             if ( boss && !boss->IsDead() ) {
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), boss);
                 if ( it == hitTargets_.end() ) {
-                    Vector3 distanceVector = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                    if ( Length(distanceVector) < 5.0f ) {
+                    Vector3 playerPos = player->GetPosition();
+                    Vector3 distanceVector = { bossPos.x - playerPos.x, 0.0f, bossPos.z - playerPos.z };
+                    if ( Length(distanceVector) < 5.5f ) { // スイング半径(1.5) + 判定半径(4.0)
                         boss->TakeDamage(randomDamage);
                         hitTargets_.push_back(boss);
                     }
                 }
             }
-            // 🌟 追加：分裂ボス (extraBoss) への判定
+            // 分裂ボス (extraBoss) への判定
             if ( extraBoss && !extraBoss->IsDead() ) {
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), extraBoss);
                 if ( it == hitTargets_.end() ) {
-                    Vector3 distanceVector = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z }; // extraBossの座標があればそれに変更してください
-                    if ( Length(distanceVector) < 5.0f ) {
+                    Vector3 playerPos = player->GetPosition();
+                    Vector3 extraBossPos = extraBoss->GetPosition(); // 正しいextraBossの座標を使用
+                    Vector3 distanceVector = { extraBossPos.x - playerPos.x, 0.0f, extraBossPos.z - playerPos.z };
+                    if ( Length(distanceVector) < 5.5f ) {
                         extraBoss->TakeDamage(randomDamage);
                         hitTargets_.push_back(extraBoss);
                     }

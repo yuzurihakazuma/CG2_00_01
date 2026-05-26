@@ -4,7 +4,8 @@
 #include "engine/particle/GPUParticleManager.h"
 #include "game/player/Player.h"
 #include "game/card/BossTargetUtils.h"
-#include <cmath> 
+#include "engine/postEffect/PostEffect.h"
+#include <cmath>
 
 void AttackDebuffEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
 	// この効果は発動元ボスを使わない
@@ -34,6 +35,14 @@ void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss
 		}
 		// 分裂戦では生きている個体それぞれへデバフを入れる
 		BossTargetUtils::ApplyAttackDebuffToAliveBosses(duration_, boss, extraBoss);
+
+		// 発動の瞬間：ランダムノイズで「呪い」の演出
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::RandomNoise, true);
+	}
+
+	// 発動から12フレーム後にノイズを消す
+	if (timer_ == duration_ - 12) {
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::RandomNoise, false);
 	}
 
 	// 継続エフェクト：処理を軽くするため、3フレームに1回のペースで敵の体から毒を発生させる
@@ -80,6 +89,7 @@ void AttackDebuffEffect::Update(Player* player, EnemyManager* enemyManager, Boss
 
 	// 効果時間が切れたらエフェクト終了
 	if (timer_ <= 0) {
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::RandomNoise, false);
 		isFinished_ = true;
 	}
 }

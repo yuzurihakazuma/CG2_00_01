@@ -28,5 +28,6 @@ private:
 	bool isFinished_ = false;
 
 	float rotAngle_ = 0.0f;
+	int breakFlashTimer_ = 0;
 };
 

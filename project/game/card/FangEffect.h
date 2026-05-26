@@ -45,6 +45,8 @@ private:
 	int damage_ = 0;
 
 	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f }; //魔法を撃った人の位置を保存する変数
+	Camera* camera_ = nullptr;
+	bool hasShaken_ = false; // カメラシェイクを1回だけ発生させるフラグ
 
 	// 各トゲの予兆円を管理する配列
 	std::vector<std::unique_ptr<Obj3d>> indicators_;
