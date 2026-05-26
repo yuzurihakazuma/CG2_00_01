@@ -218,7 +218,8 @@ private:
 
 
     bool isStunned_ = false;       // スタン中か
-    int stunTimer_ = 0;            // スキャンの残り時間
+    int stunTimer_ = 0;            // スタンの残り時間
+    float preStunYaw_ = 0.0f;     // スタン前の向き（解除後に復元）
     int animationTimer_ = 0;       // ★ 演出計算用の汎用カウンター
 
     int attackIntervalMinFrames_ = 120; // 攻撃間隔の最小値。60fpsで2秒

@@ -43,6 +43,12 @@ void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
         return;
     }
 
+    // ボスがスタン中なら召喚をキャンセル
+    if ( casterBoss_ && casterBoss_->IsStunned() ) {
+        isFinished_ = true;
+        return;
+    }
+
     timer_--;
 
     if (obj_) {
