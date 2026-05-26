@@ -823,6 +823,7 @@ void GamePlayScene::Update() {
 			if (level.tiles[gridZ][gridX] == 3) {
 				const bool tutorialActive = tutorial_ && tutorial_->IsActive();
 				if (!tutorialActive && transitionState_ == TransitionState::None) {
+					ResetFloorTransitionActionState();
 					transitionState_ = TransitionState::FadeOut;
 					fadeAlpha_ = 0.0f;
 					isFloorTransitionTextVisible_ = false;
@@ -2367,6 +2368,7 @@ void GamePlayScene::ResetBattleDebug() {
 	// プレイヤー状態をリセット
 	if (playerManager_) {
 		playerManager_->Reset();
+		playerManager_->ResetTransientActionState();
 		playerPos_ = playerManager_->GetPosition();
 		playerScale_ = playerManager_->GetScale();
 
@@ -2401,6 +2403,9 @@ void GamePlayScene::ResetBattleDebug() {
 
 	// ダンジョン生成 + プレイヤー再配置 + 敵/カード再生成 + ボス再配置
 	RegenerateDungeonAndRespawnPlayer(5);
+	if (playerManager_) {
+		playerManager_->ResetTransientActionState();
+	}
 
 	// 再配置後のプレイヤー位置とスケールを取り直す
 	if (playerManager_) {
@@ -2423,6 +2428,35 @@ void GamePlayScene::ResetBattleDebug() {
 	isBossDeathCinematicPlaying_ = false;
 	bossDeathCinematicPlayed_ = false;
 	bossDeathCinematicTimer_ = 0;
+}
+
+void GamePlayScene::ResetFloorTransitionActionState() {
+	if (isCardReady_) {
+		EndMagicCast(false);
+	}
+	isCardReady_ = false;
+	isMagicCastPausedForSwap_ = false;
+	cardReadyTimer_ = 0;
+	readiedCard_ = Card{};
+	readiedCardIndex_ = -1;
+	handManager_.SetCastDisplay(-1, 0, 0, -1);
+	TextManager::GetInstance()->SetText("ReadyCardT", "");
+
+	ResetFireballPredictionAttack();
+	cardUseFlashObj_.reset();
+	cardUseFlashTimer_ = 0;
+	cardUseFlashPersistent_ = false;
+	cardUseFlashDissolving_ = false;
+	cardUseFlashDissolveEnabled_ = true;
+
+	if (playerCardSystem_) {
+		playerCardSystem_->CancelCasting();
+	}
+	if (playerManager_) {
+		playerManager_->ResetTransientActionState();
+		playerPos_ = playerManager_->GetPosition();
+		playerScale_ = playerManager_->GetScale();
+	}
 }
 
 

@@ -49,6 +49,7 @@ private:
     std::unique_ptr<Sprite> choiceVisuals_[(int)Choice::Count];
     // UI
     std::unique_ptr<Sprite> UISprite_;
+    std::unique_ptr<Sprite> choiceArrowSprite_ = nullptr; // 現在選択中のボーナスを指す矢印
     std::unique_ptr<Sprite> leftTextSprite_ = nullptr;  // 左の選択肢のテキスト画像
     std::unique_ptr<Sprite> rightTextSprite_ = nullptr; // 右の選択肢のテキスト画像
 

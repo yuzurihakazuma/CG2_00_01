@@ -149,6 +149,7 @@ private: // メンバ変数
 	void StartFireballPredictionAttack(const Card& card);
 	void UpdateFireballPredictionAttack(Player* player);
 	void ResetFireballPredictionAttack();
+	void ResetFloorTransitionActionState();
 	void DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const;
 	void DrawDebugCircleXZ(const Vector3& center, float radius, unsigned int color, float thickness) const;
 	void DrawDebugOrientedRectXZ(const Vector3& center, float yaw, float halfWidth, float halfLength, unsigned int color, float thickness) const;

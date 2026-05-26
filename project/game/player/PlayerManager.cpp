@@ -302,3 +302,13 @@ void PlayerManager::Reset() {
     // 保存位置を現在のプレイヤー座標に合わせる
     playerPos_ = player_->GetPosition();
 }
+
+void PlayerManager::ResetTransientActionState() {
+    if (!player_) {
+        return;
+    }
+
+    player_->ResetTransientActionState();
+    playerPos_ = player_->GetPosition();
+    playerScale_ = player_->GetScale();
+}

@@ -530,7 +530,6 @@ void Player::Update(bool isMagicCasting) {
             }
         } else {
             footDustTimer_ = 0; // 止まったらリセット（再び動き出した直後に即出る）
-            rot_.y = std::atan2f(move.x, move.z);
         }
     }
 
@@ -1252,6 +1251,48 @@ void Player::PlayCardUsePose(int durationFrames) {
         return; // 死亡中はカード使用ポーズへ遷移させない
     }
     StartPoseBlendByName(cardUsePoseNameBuffer_, durationFrames);
+}
+
+void Player::ResetTransientActionState() {
+    if (isDead_) {
+        return;
+    }
+
+    isDodging_ = false;
+    dodgeTimer_ = 0;
+    dodgeInvincibleTimer_ = 0;
+    dodgeCooldownTimer_ = 0;
+    dodgeDirection_ = { 0.0f, 0.0f, 0.0f };
+
+    isActionLocked_ = false;
+    actionLockTimer_ = 0;
+
+    isKnockback_ = false;
+    knockbackTimer_ = 0;
+    knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+
+    isHit_ = false;
+    hitTimer_ = 0;
+
+    rot_.x = 0.0f;
+    rot_.z = 0.0f;
+
+    for (auto& ai : afterimages_) {
+        ai.isActive = false;
+    }
+    afterimageSpawnTimer_ = 0;
+    lastAfterimagePos_ = { 9999.0f, 9999.0f, 9999.0f };
+
+    ApplyPoseByName(idlePoseNameBuffer_);
+
+    if (model_) {
+        model_->SetIsWalking(false);
+        model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+        model_->SetTranslation(pos_);
+        model_->SetRotation(rot_);
+        model_->SetScale(scale_);
+        model_->Update();
+    }
 }
 
 // 通常姿勢へ戻す
