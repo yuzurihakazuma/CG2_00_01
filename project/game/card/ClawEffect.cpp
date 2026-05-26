@@ -71,7 +71,8 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				casterPos_.y + 1.2f,
 				casterPos_.z + std::cosf(currentYaw) * 2.0f
 			};
-			obj_->SetRotation({ 0.0f, currentYaw, 0.0f });
+			// クローのモデル正面が攻撃方向と逆なので、表示だけ半回転させる
+			obj_->SetRotation({ 0.0f, currentYaw + 3.14159265f, 0.0f });
 			obj_->SetTranslation(pos_);
 		}
 		//  2撃目 (10〜20フレーム)：超高速・斬り上げ（下→上）
@@ -85,7 +86,8 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				casterPos_.y + 1.2f + slashPitch,
 				casterPos_.z + std::cosf(casterYaw_) * 2.0f
 			};
-			obj_->SetRotation({ slashPitch, casterYaw_, slashRoll });
+			// クローのモデル正面が攻撃方向と逆なので、表示だけ半回転させる
+			obj_->SetRotation({ slashPitch, casterYaw_ + 3.14159265f, slashRoll });
 			obj_->SetTranslation(pos_);
 		}
 

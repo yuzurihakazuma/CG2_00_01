@@ -680,10 +680,10 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 
 			if (enemyCardSystems_[i]) {
 				Card useCard = enemy->GetCurrentUseCard();
-				// 敵の基本攻撃カードはコストなしで繰り返し使えるので、各Effect側で1ダメージ固定にする。
+				// 敵の基本攻撃カードはコストなしで繰り返し使えるので、最低1を保証しつつ威力を半分に抑える。
 				// 拾ったカードは1回限りのため、カード本来の威力をそのまま使う。
 				if (!usedPickupCard && useCard.effectType == CardEffectType::Attack && useCard.id < 100) {
-					useCard.effectValue = 0;
+					useCard.effectValue = (std::max)(1, useCard.effectValue / 2);
 				}
 				enemyCardSystems_[i]->UseCard(
 					useCard,
