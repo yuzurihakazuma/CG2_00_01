@@ -185,7 +185,7 @@ void Player::Initialize() {
     dodgeParticle_->Initialize();
 }
 
-void Player::Update() {
+void Player::Update(bool isMagicCasting) {
    
     // ---- ポストエフェクト（Player 管轄分）----
     {
@@ -382,10 +382,15 @@ void Player::Update() {
         move = Normalize(move);
     }
 
+    // 詠唱中にShift/Bを押している間だけ、回避ではなく向き固定のスライド移動にする
+    const bool isCastingDirectionLocked =
+        isMagicCasting &&
+        (input->Pushkey(DIK_LSHIFT) || input->PushJoystickButton(XINPUT_GAMEPAD_B));
+
     // 回避開始
    // Shift に加えて B ボタンでも回避できるようにする
     if (!isDodging_ && dodgeCooldownTimer_ <= 0 &&
-        (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
+        (!isMagicCasting && (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B)))) {
         isDodging_ = true;
         dodgeTimer_ = dodgeDuration_;
         dodgeInvincibleTimer_ = dodgeInvincibleDuration_;
@@ -498,6 +503,33 @@ void Player::Update() {
 
         if ( Length(move) > 0.0f ) {
             pos_ += move * ( moveSpeed_ * speedMultiplier_ );
+            if (!isCastingDirectionLocked) {
+                rot_.y = std::atan2f(move.x, move.z);
+            }
+
+            // 足元ほこり
+            footDustTimer_--;
+            if ( footDustTimer_ <= 0 ) {
+                footDustTimer_ = footDustInterval_;
+                for ( int i = 0; i < 2; i++ ) {
+                    Vector3 dp = {
+                        pos_.x + ( rand() % 7 - 3 ) * 0.08f,
+                        pos_.y + 0.05f,
+                        pos_.z + ( rand() % 7 - 3 ) * 0.08f
+                    };
+                    // 移動方向の逆へ少し流れる
+                    Vector3 dv = {
+                        -move.x * 0.03f + ( rand() % 5 - 2 ) * 0.015f,
+                        0.03f + ( rand() % 4 ) * 0.01f,
+                        -move.z * 0.03f + ( rand() % 5 - 2 ) * 0.015f
+                    };
+                    float sc = 0.22f + ( rand() % 4 ) * 0.06f;
+                    float br = 0.55f + ( rand() % 5 ) * 0.04f; // グレー
+                    GPUParticleManager::GetInstance()->Emit(dp, dv, 0.5f, sc, { br, br, br, 0.5f });
+                }
+            }
+        } else {
+            footDustTimer_ = 0; // 止まったらリセット（再び動き出した直後に即出る）
             rot_.y = std::atan2f(move.x, move.z);
         }
     }

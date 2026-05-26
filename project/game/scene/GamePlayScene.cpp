@@ -794,7 +794,8 @@ void GamePlayScene::Update() {
 		}
 
 		// intro中もUpdateは通す
-		playerManager_->Update(input, mapManager_.get(), debugCamera_.get(), bossManager_.get());
+		const bool isPlayerMagicCasting = isCardReady_ && cardReadyTimer_ > 0;
+		playerManager_->Update(input, mapManager_.get(), debugCamera_.get(), bossManager_.get(), isPlayerMagicCasting);
 
 		playerPos_ = playerManager_->GetPosition();
 		playerScale_ = playerManager_->GetScale();

@@ -30,7 +30,8 @@ void PlayerManager::Update(
     Input* input,
     MapManager* mapManager,
     DebugCamera* debugCamera,
-    BossManager* bossManager
+    BossManager* bossManager,
+    bool isMagicCasting
 ) {
     // 必要なものが無ければ更新しない
     if (!player_ || !mapManager || !input) {
@@ -51,7 +52,7 @@ void PlayerManager::Update(
     Vector3 oldPos = player_->GetPosition();
 
     // プレイヤー本体を更新
-    player_->Update();
+    player_->Update(isMagicCasting);
     playerPos_ = player_->GetPosition();
 
     // プレイヤーの当たり判定を作成

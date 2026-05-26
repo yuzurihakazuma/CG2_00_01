@@ -25,7 +25,8 @@ public:
         Input* input,
         MapManager* mapManager,
         DebugCamera* debugCamera,
-        BossManager* bossManager
+        BossManager* bossManager,
+        bool isMagicCasting = false
     );
 
     // プレイヤー描画

@@ -97,18 +97,25 @@ ScreenRect GetCardScreenRect(const Camera* camera, const Obj3d* cardObj) {
 	};
 }
 
-void ApplyCardDissolveColor(Obj3d* model, CardEffectType effectType) {
+bool IsPlayerMagicCastCard(int cardId) {
+	return cardId == 2 || cardId == 6 || cardId == 7;
+}
+
+void ApplyCardDissolveColor(Obj3d* model, const Card& card) {
 	if (model == nullptr) {
 		return;
 	}
 
-	if (effectType == CardEffectType::Attack) {
-		model->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
-	} else if (effectType == CardEffectType::Heal) {
+	if (card.effectType == CardEffectType::Attack) {
+		if (IsPlayerMagicCastCard(card.id)) {
+			model->SetDissolveColor({ 0.0f, 0.12f, 1.0f });
+		} else {
+			model->SetDissolveColor({ 1.0f, 0.0f, 0.0f });
+		}
+	} else if (card.effectType == CardEffectType::Heal) {
 		model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-	} else if (effectType == CardEffectType::Defense) {
-		model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-	} else if (effectType == CardEffectType::Special) {
+	} else if (card.effectType == CardEffectType::Defense ||
+		card.effectType == CardEffectType::Special) {
 		model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
 	}
 }
@@ -162,7 +169,7 @@ bool HandManager::AddCard(const Card& newCard) {
 			model->SetCamera(camera_);
 			model->SetNoiseTexture(noiseTextureIndex_);
 			model->SetDissolveThreshold(0.0f);
-			ApplyCardDissolveColor(model.get(), newCard.effectType);
+			ApplyCardDissolveColor(model.get(), newCard);
 
 			handModels_[i] = std::move(model);
 			cooldownOverlays_[i] = CreateCooldownOverlay();
@@ -190,7 +197,7 @@ bool HandManager::AddCard(const Card& newCard) {
 		model->SetCamera(camera_);
 		model->SetNoiseTexture(noiseTextureIndex_);
 		model->SetDissolveThreshold(0.0f);
-		ApplyCardDissolveColor(model.get(), newCard.effectType);
+		ApplyCardDissolveColor(model.get(), newCard);
 
 		handModels_.push_back(std::move(model));
 		cooldownOverlays_.push_back(CreateCooldownOverlay());
@@ -432,8 +439,8 @@ void HandManager::Update() {
 					}
 					break;
 				case CardEffectType::Heal:    sparkColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break; // 緑
-				case CardEffectType::Defense: sparkColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break; // 青
-				case CardEffectType::Special: sparkColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 紫
+				case CardEffectType::Defense:
+				case CardEffectType::Special: sparkColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 特殊枠：紫
 				default: break;
 				}
 			}
@@ -481,8 +488,8 @@ void HandManager::Update() {
 					}
 					break;
 				case CardEffectType::Heal:    burstColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break; // 緑
-				case CardEffectType::Defense: burstColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break; // 青
-				case CardEffectType::Special: burstColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 紫
+				case CardEffectType::Defense:
+				case CardEffectType::Special: burstColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 特殊枠：紫
 				default: break;
 				}
 			}
@@ -514,8 +521,8 @@ void HandManager::Update() {
 						}
 						break;
 					case CardEffectType::Heal:    tickColor = { 0.3f, 1.0f, 0.5f,  0.85f }; break; // 緑
-					case CardEffectType::Defense: tickColor = { 0.3f, 0.7f, 1.0f,  0.85f }; break; // 青
-					case CardEffectType::Special: tickColor = { 0.8f, 0.3f, 1.0f,  0.85f }; break; // 紫
+					case CardEffectType::Defense:
+					case CardEffectType::Special: tickColor = { 0.8f, 0.3f, 1.0f,  0.85f }; break; // 特殊枠：紫
 					default: break;
 					}
 				}
@@ -644,15 +651,7 @@ bool HandManager::SwapSelectedCard(const Card& newCard) {
 	model->SetNoiseTexture(noiseTextureIndex_);
 	model->SetDissolveThreshold(0.0f);
 
-	if (newCard.effectType == CardEffectType::Attack) {
-		model->SetDissolveColor({ 1.0f, 0.2f, 0.05f });
-	} else if (newCard.effectType == CardEffectType::Heal) {
-		model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-	} else if (newCard.effectType == CardEffectType::Defense) {
-		model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-	} else if (newCard.effectType == CardEffectType::Special) {
-		model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
-	}
+	ApplyCardDissolveColor(model.get(), newCard);
 
 	handModels_[selectedCardIndex_] = std::move(model);
 	cooldownOverlays_[selectedCardIndex_] = CreateCooldownOverlay();
@@ -727,7 +726,7 @@ void HandManager::StartDissolveSelectedCard() {
 	manualSelectionAfterUse_ = false;
 
 	if (handModels_[selectedCardIndex_]) {
-		ApplyCardDissolveColor(handModels_[selectedCardIndex_].get(), hand_[selectedCardIndex_].effectType);
+		ApplyCardDissolveColor(handModels_[selectedCardIndex_].get(), hand_[selectedCardIndex_]);
 		handModels_[selectedCardIndex_]->SetDissolveThreshold(0.0f);
 	}
 }
@@ -761,15 +760,7 @@ void HandManager::AddPendingCard(const Card &pendingCard) {
 	model->SetDissolveThreshold(0.0f);
 
 	// カードの種類による色設定
-	if (pendingCard.effectType == CardEffectType::Attack) {
-		model->SetDissolveColor({ 1.0f,0.2f,0.05f });
-	} else if (pendingCard.effectType == CardEffectType::Heal) {
-		model->SetDissolveColor({ 0.1f, 1.0f, 0.2f });
-	} else if (pendingCard.effectType == CardEffectType::Defense) {
-		model->SetDissolveColor({ 0.0f, 0.5f, 1.0f });
-	} else if (pendingCard.effectType == CardEffectType::Special) {
-		model->SetDissolveColor({ 0.7f, 0.2f, 1.0f });
-	}
+	ApplyCardDissolveColor(model.get(), pendingCard);
 
 	handModels_.push_back(std::move(model));
 	cooldownOverlays_.push_back(CreateCooldownOverlay());
