@@ -2857,16 +2857,17 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 }
 
 void GamePlayScene::UpdatePause(Input* input) {
-	// 左スティックの上下を1回入力として扱う
-	static bool wasStickUp = false;
-	static bool wasStickDown = false;
-	bool isStickUp = input->GetLeftStickY() > 0.5f;
-	bool isStickDown = input->GetLeftStickY() < -0.5f;
-	// 上入力は W / 上キー / 上スティック
+	// 横スティックの前フレーム状態を保持して、1回だけ入力を拾う
+	static bool wasStickLeft = false;
+	static bool wasStickRight = false;
+	bool isStickLeft = input->GetLeftStickX() < -0.5f;
+	bool isStickRight = input->GetLeftStickX() > 0.5f;
+
+	// 左入力で左の項目へ移動する
 	if (
-		input->Triggerkey(DIK_W) ||
-		input->Triggerkey(DIK_UP) ||
-		(isStickUp && !wasStickUp)
+		input->Triggerkey(DIK_A) ||
+		input->Triggerkey(DIK_LEFT) ||
+		(isStickLeft && !wasStickLeft)
 		) {
 		pauseSelection_--;
 		if (pauseSelection_ < 0) {
@@ -2874,20 +2875,21 @@ void GamePlayScene::UpdatePause(Input* input) {
 		}
 	}
 
-	// 下入力は S / 下キー / 下スティック
+	// 右入力で右の項目へ移動する
 	if (
-		input->Triggerkey(DIK_S) ||
-		input->Triggerkey(DIK_DOWN) ||
-		(isStickDown && !wasStickDown)
+		input->Triggerkey(DIK_D) ||
+		input->Triggerkey(DIK_RIGHT) ||
+		(isStickRight && !wasStickRight)
 		) {
 		pauseSelection_++;
 		if (pauseSelection_ > 1) {
 			pauseSelection_ = 0;
 		}
 	}
-	// 次フレーム比較用に左スティック状態を保存する
-	wasStickUp = isStickUp;
-	wasStickDown = isStickDown;
+
+	// 次フレーム比較用に、今フレームの横スティック状態を保存する
+	wasStickLeft = isStickLeft;
+	wasStickRight = isStickRight;
 	// 決定
 	// SPACE と Enter に加えて A ボタンでも決定できるようにする
 	if (

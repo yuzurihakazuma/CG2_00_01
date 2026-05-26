@@ -197,13 +197,65 @@ void Minimap::BuildChunkSprites() {
 				drawPos.x = mapLeftTop_.x + x * drawTileSize_;
 				drawPos.y = mapLeftTop_.y + (levelData_->height - 1 - z) * drawTileSize_;
 
-				auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", drawPos));
-				sprite->SetAnchorPoint({ 0.0f, 0.0f });
-				sprite->SetSize({ drawTileSize_, drawTileSize_ });
-				sprite->SetColor({ 0.0f, 1.0f, 0.8f, 0.3f }); // 階段マスを少し強めの色で表示する
-				sprite->Update();
+				const float borderThickness = std::max(2.0f, drawTileSize_ * 0.28f); // 枠線をさらに太くする
 
-				chunk.stairsSprites.push_back(std::move(sprite));
+				// 枠全体を外側へ広げて、中央の空白を保ったまま大きく見せる
+				const float outlineExpand = drawTileSize_ * 0.25f;
+
+				// 階段マークの色
+				const Vector4 stairsColor = { 0.0f, 1.0f, 0.8f, 0.3f };
+
+				// 上
+				{
+					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
+						"resources/white1x1.png",
+						{ drawPos.x - outlineExpand, drawPos.y - outlineExpand }
+					));
+					sprite->SetAnchorPoint({ 0.0f, 0.0f });
+					sprite->SetSize({ drawTileSize_ + outlineExpand * 2.0f, borderThickness });
+					sprite->SetColor(stairsColor);
+					sprite->Update();
+					chunk.stairsSprites.push_back(std::move(sprite));
+				}
+
+				// 下
+				{
+					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
+						"resources/white1x1.png",
+						{ drawPos.x - outlineExpand, drawPos.y + drawTileSize_ + outlineExpand - borderThickness }
+					));
+					sprite->SetAnchorPoint({ 0.0f, 0.0f });
+					sprite->SetSize({ drawTileSize_ + outlineExpand * 2.0f, borderThickness });
+					sprite->SetColor(stairsColor);
+					sprite->Update();
+					chunk.stairsSprites.push_back(std::move(sprite));
+				}
+
+				// 左
+				{
+					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
+						"resources/white1x1.png",
+						{ drawPos.x - outlineExpand, drawPos.y - outlineExpand }
+					));
+					sprite->SetAnchorPoint({ 0.0f, 0.0f });
+					sprite->SetSize({ borderThickness, drawTileSize_ + outlineExpand * 2.0f });
+					sprite->SetColor(stairsColor);
+					sprite->Update();
+					chunk.stairsSprites.push_back(std::move(sprite));
+				}
+
+				// 右
+				{
+					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
+						"resources/white1x1.png",
+						{ drawPos.x + drawTileSize_ + outlineExpand - borderThickness, drawPos.y - outlineExpand }
+					));
+					sprite->SetAnchorPoint({ 0.0f, 0.0f });
+					sprite->SetSize({ borderThickness, drawTileSize_ + outlineExpand * 2.0f });
+					sprite->SetColor(stairsColor);
+					sprite->Update();
+					chunk.stairsSprites.push_back(std::move(sprite));
+				}
 			}
 		}
 	}
