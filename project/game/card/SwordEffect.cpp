@@ -141,6 +141,89 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 GPUParticleManager::GetInstance()->Emit(particlePosition, zeroVelocity, 0.25f, 0.4f, cyanColor);
             }
         }
+    } else if ( !isPlayerCaster_ ) {
+        // ===================================================
+        // 敵・ボスが剣を使う場合：casterPos_ を軸に同様の回転振りを再現
+        // ===================================================
+        if ( obj_ ) {
+            float swingProgress = static_cast< float >( timer_ ) / 15.0f;
+            if ( swingProgress > 1.0f ) swingProgress = 1.0f;
+
+            float easeT = swingProgress < 0.5f
+                ? 2.0f * swingProgress * swingProgress
+                : 1.0f - std::powf(-2.0f * swingProgress + 2.0f, 2.0f) / 2.0f;
+
+            float startYawOffset = -3.14159f;
+            float endYawOffset   =  3.14159f;
+            float currentRotationYaw = casterYaw_ + startYawOffset + ( endYawOffset - startYawOffset ) * easeT;
+
+            Vector3 pivotPos = {
+                casterPos_.x,
+                casterPos_.y + 1.2f,
+                casterPos_.z
+            };
+
+            float swingRadius = 1.5f;
+
+            pos_ = {
+                pivotPos.x + std::sinf(currentRotationYaw) * swingRadius,
+                pivotPos.y,
+                pivotPos.z + std::cosf(currentRotationYaw) * swingRadius
+            };
+
+            obj_->SetRotation({ 1.57f, currentRotationYaw, 0.0f });
+            obj_->SetTranslation(pos_);
+            obj_->Update();
+
+            // 振り始め1フレーム目：衝撃波バースト
+            if ( timer_ == 1 ) {
+                for ( int i = 0; i < 12; i++ ) {
+                    float angle = (3.14159f * 2.0f / 12.0f) * static_cast< float >(i);
+                    Vector3 vel = { std::sinf(angle) * 0.6f, 0.05f, std::cosf(angle) * 0.6f };
+                    GPUParticleManager::GetInstance()->Emit(pos_, vel, 0.2f, 0.25f, { 0.5f, 0.9f, 1.0f, 0.8f });
+                }
+            }
+
+            // 残像を登録
+            if ( timer_ < 15 ) {
+                for ( auto& afterimage : afterimages_ ) {
+                    if ( !afterimage.isActive ) {
+                        afterimage.isActive = true;
+                        afterimage.lifeTimer = defaultAfterimageLife_;
+                        CopyTransform(obj_, afterimage.object);
+                        afterimage.object->Update();
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 残像フェードアウト
+        for ( auto& afterimage : afterimages_ ) {
+            if ( afterimage.isActive ) {
+                afterimage.lifeTimer--;
+                float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
+                Vector4 afterimageColor = { 0.2f, 0.9f, 1.0f, alphaRatio * 0.4f };
+                afterimage.object->SetColor(afterimageColor);
+                afterimage.object->Update();
+
+                if ( afterimage.lifeTimer <= 0 ) {
+                    afterimage.isActive = false;
+                }
+            }
+        }
+
+        // パーティクルトレイル
+        if ( timer_ < 15 ) {
+            for ( int index = 0; index < 5; index++ ) {
+                Vector3 particlePosition = {
+                    pos_.x + static_cast< float >(rand() % 11 - 5) * 0.08f,
+                    pos_.y + static_cast< float >(rand() % 11 - 5) * 0.08f,
+                    pos_.z + static_cast< float >(rand() % 11 - 5) * 0.08f
+                };
+                GPUParticleManager::GetInstance()->Emit(particlePosition, { 0.0f, 0.0f, 0.0f }, 0.25f, 0.4f, { 0.4f, 0.9f, 1.0f, 1.0f });
+            }
+        }
     }
 
     bool isAttacking = ( timer_ >= 2 && timer_ <= 15 );
