@@ -82,6 +82,12 @@ public:
 	void SetDissolveColor(const Vector3& color);
 	void SetNoiseTexture(uint32_t textureIndex);
 	void SetColor(const Vector4& color);
+	// マテリアルごとに個別の色を上書きする（マルチマテリアル用）
+	void SetColor(const Vector4& color, uint32_t materialIndex);
+	// マテリアルごとに発光強度を設定する（マルチマテリアル用）
+	void SetEmissive(float emissive, uint32_t materialIndex);
+	// 特定マテリアルの個別上書きを解除する
+	void ClearMaterialOverride(uint32_t materialIndex);
 	void ClearColorOverride();
 
 	// 座標変換行列を取得する関数
@@ -123,6 +129,14 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialOverrideResource_;
 	Model::Material* materialOverrideData_ = nullptr;
 	bool useMaterialOverride_ = false;
+
+	// per-material 個別上書き（SetColor(color, materialIndex) / SetEmissive 用）
+	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> perMaterialOverrideResources_;
+	std::vector<Model::Material*> perMaterialOverrideDatas_;
+	std::vector<bool> perMaterialOverrideActive_;
+
+	// per-material バッファの作成・初期化をまとめたヘルパー（内部使用）
+	void EnsurePerMaterialBuffer(uint32_t materialIndex);
 
 	// 再生中のアニメーションデータ
 	Animation* currentAnimation_ = nullptr; 

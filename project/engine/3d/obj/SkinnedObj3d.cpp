@@ -243,16 +243,22 @@ void SkinnedObj3d::Draw() {
 
     // モデル描画
     if ( model_ ) {
-        D3D12_GPU_VIRTUAL_ADDRESS overrideAddress = 0;
-
-        // もし「自分専用の絵の具」を持っていたら、そのアドレスをセット
-        if ( materialOverrideResource_ ) {
-            overrideAddress = materialOverrideResource_->GetGPUVirtualAddress();
+        if (materialOverrideResource_) {
+            // 全マテリアル一括上書き（既存の SetColor(color) を使った場合）
+            model_->Draw(1, materialOverrideResource_->GetGPUVirtualAddress());
+        } else if (!perMaterialOverrideResources_.empty()) {
+            // per-material 上書き（SetColor(color, materialIndex) を使った場合）
+            std::vector<D3D12_GPU_VIRTUAL_ADDRESS> addrs(perMaterialOverrideResources_.size(), 0);
+            for (size_t i = 0; i < perMaterialOverrideResources_.size(); ++i) {
+                if (i < perMaterialOverrideActive_.size() && perMaterialOverrideActive_[i]
+                    && perMaterialOverrideResources_[i]) {
+                    addrs[i] = perMaterialOverrideResources_[i]->GetGPUVirtualAddress();
+                }
+            }
+            model_->Draw(1, addrs);
+        } else {
+            model_->Draw(1, 0);
         }
-
-        // アドレスを渡して描画！
-        // (持っていればそれが使われ、持っていなければ 0 が渡されて白になる)
-        model_->Draw(1, overrideAddress);
     }
 }
 
@@ -373,5 +379,69 @@ void SkinnedObj3d::SetColor(const Vector4& color){
     // 2. 自分の絵の具の色だけを書き換える
     if ( materialOverrideData_ ) {
         materialOverrideData_->color = color;
+    }
+}
+
+// per-material バッファの作成・初期化をまとめたヘルパー（内部使用）
+void SkinnedObj3d::EnsurePerMaterialBuffer(uint32_t materialIndex) {
+    // 必要に応じてベクターを拡張
+    if (materialIndex >= perMaterialOverrideResources_.size()) {
+        perMaterialOverrideResources_.resize(materialIndex + 1);
+        perMaterialOverrideDatas_.resize(materialIndex + 1, nullptr);
+        perMaterialOverrideActive_.resize(materialIndex + 1, false);
+    }
+
+    // 初回のみバッファを作成
+    if (!perMaterialOverrideResources_[materialIndex]) {
+        perMaterialOverrideResources_[materialIndex] =
+            obj3dCommon_->GetDxCommon()->GetResourceFactory()->CreateBufferResource(sizeof(Model::Material));
+        perMaterialOverrideResources_[materialIndex]->Map(
+            0, nullptr, reinterpret_cast<void**>(&perMaterialOverrideDatas_[materialIndex]));
+
+        // 元のマテリアルの設定値（ライティング・UV・shininess 等）をコピー
+        if (perMaterialOverrideDatas_[materialIndex]) {
+            if (Model::Material* source = model_->GetMaterial(materialIndex)) {
+                *perMaterialOverrideDatas_[materialIndex] = *source;
+            } else {
+                perMaterialOverrideDatas_[materialIndex]->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+                perMaterialOverrideDatas_[materialIndex]->enableLighting = true;
+                perMaterialOverrideDatas_[materialIndex]->uvTransform = MatrixMath::MakeIdentity4x4();
+                perMaterialOverrideDatas_[materialIndex]->shininess = 32.0f;
+                perMaterialOverrideDatas_[materialIndex]->emissive = 0.0f;
+            }
+        }
+    }
+}
+
+// マテリアルごとに個別の色を上書きする（マルチマテリアル用）
+void SkinnedObj3d::SetColor(const Vector4& color, uint32_t materialIndex) {
+    if (!model_) return;
+    if (materialIndex >= model_->GetMaterialCount()) return;
+
+    EnsurePerMaterialBuffer(materialIndex);
+
+    if (perMaterialOverrideDatas_[materialIndex]) {
+        perMaterialOverrideDatas_[materialIndex]->color = color;
+        perMaterialOverrideActive_[materialIndex] = true;
+    }
+}
+
+// マテリアルごとに発光強度を設定する（マルチマテリアル用）
+void SkinnedObj3d::SetEmissive(float emissive, uint32_t materialIndex) {
+    if (!model_) return;
+    if (materialIndex >= model_->GetMaterialCount()) return;
+
+    EnsurePerMaterialBuffer(materialIndex);
+
+    if (perMaterialOverrideDatas_[materialIndex]) {
+        perMaterialOverrideDatas_[materialIndex]->emissive = emissive;
+        perMaterialOverrideActive_[materialIndex] = true;
+    }
+}
+
+// 特定マテリアルの個別上書きを解除する
+void SkinnedObj3d::ClearMaterialOverride(uint32_t materialIndex) {
+    if (materialIndex < perMaterialOverrideActive_.size()) {
+        perMaterialOverrideActive_[materialIndex] = false;
     }
 }
