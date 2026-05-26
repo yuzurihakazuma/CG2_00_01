@@ -418,14 +418,22 @@ void HandManager::Update() {
 
 		// ドロー時きらめき発行（プレイヤーのワールド座標で出す）
 		if ( drawSparkFrames_ > 0 && i == drawSparkCardIdx_ ) {
-			// カードの属性によって色を変える
+			// Attack は距離タイプで色分け、それ以外は属性色を使用
 			Vector4 sparkColor = { 1.0f, 1.0f, 0.6f, 1.0f }; // デフォルト：金色
 			if ( i < static_cast<int>(hand_.size()) ) {
-				switch ( hand_[i].effectType ) {
-				case CardEffectType::Attack:   sparkColor = { 1.0f, 0.5f, 0.2f, 1.0f }; break; // オレンジ
-				case CardEffectType::Heal:     sparkColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break; // 緑
-				case CardEffectType::Defense:  sparkColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break; // 青
-				case CardEffectType::Special:  sparkColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 紫
+				const Card& c = hand_[i];
+				switch ( c.effectType ) {
+				case CardEffectType::Attack:
+					switch ( c.attackRangeType ) {
+					case CardAttackRangeType::Melee: sparkColor = { 1.0f, 0.18f, 0.12f, 1.0f }; break; // 近距離：赤
+					case CardAttackRangeType::Mid:   sparkColor = { 1.0f, 0.9f,  0.12f, 1.0f }; break; // 中距離：黄
+					case CardAttackRangeType::Long:  sparkColor = { 0.18f, 0.62f, 1.0f, 1.0f }; break; // 遠距離：青
+					default: break;
+					}
+					break;
+				case CardEffectType::Heal:    sparkColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break; // 緑
+				case CardEffectType::Defense: sparkColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break; // 青
+				case CardEffectType::Special: sparkColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 紫
 				default: break;
 				}
 			}
@@ -459,14 +467,22 @@ void HandManager::Update() {
 
 		// 選択が変わった瞬間：バーストを1回出す
 		if ( selectionChanged && prevSelectedIndex_ >= 0 ) {
-			// 選択中カードの色を取得
+			// Attack は距離タイプで色分け、それ以外は属性色を使用
 			Vector4 burstColor = { 1.0f, 1.0f, 0.6f, 1.0f };
 			if ( selectedCardIndex_ < static_cast<int>(hand_.size()) ) {
-				switch ( hand_[selectedCardIndex_].effectType ) {
-				case CardEffectType::Attack:  burstColor = { 1.0f, 0.5f, 0.2f, 1.0f }; break;
-				case CardEffectType::Heal:    burstColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break;
-				case CardEffectType::Defense: burstColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break;
-				case CardEffectType::Special: burstColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break;
+				const Card& c = hand_[selectedCardIndex_];
+				switch ( c.effectType ) {
+				case CardEffectType::Attack:
+					switch ( c.attackRangeType ) {
+					case CardAttackRangeType::Melee: burstColor = { 1.0f, 0.18f, 0.12f, 1.0f }; break; // 近距離：赤
+					case CardAttackRangeType::Mid:   burstColor = { 1.0f, 0.9f,  0.12f, 1.0f }; break; // 中距離：黄
+					case CardAttackRangeType::Long:  burstColor = { 0.18f, 0.62f, 1.0f, 1.0f }; break; // 遠距離：青
+					default: break;
+					}
+					break;
+				case CardEffectType::Heal:    burstColor = { 0.3f, 1.0f, 0.5f, 1.0f }; break; // 緑
+				case CardEffectType::Defense: burstColor = { 0.3f, 0.7f, 1.0f, 1.0f }; break; // 青
+				case CardEffectType::Special: burstColor = { 0.8f, 0.3f, 1.0f, 1.0f }; break; // 紫
 				default: break;
 				}
 			}
@@ -484,7 +500,25 @@ void HandManager::Update() {
 		if ( selectionTickTimer_ <= 0 ) {
 			selectionTickTimer_ = 6;
 			if ( selectedCardIndex_ < static_cast<int>(hand_.size()) ) {
-				Vector4 tickColor = { 1.0f, 1.0f, 0.7f, 0.85f };
+				// Attack は距離タイプで色分け、それ以外は属性色を使用
+				Vector4 tickColor = { 1.0f, 1.0f, 0.7f, 0.85f }; // デフォルト：金色
+				{
+					const Card& c = hand_[selectedCardIndex_];
+					switch ( c.effectType ) {
+					case CardEffectType::Attack:
+						switch ( c.attackRangeType ) {
+						case CardAttackRangeType::Melee: tickColor = { 1.0f, 0.18f, 0.12f, 0.85f }; break; // 近距離：赤
+						case CardAttackRangeType::Mid:   tickColor = { 1.0f, 0.9f,  0.12f, 0.85f }; break; // 中距離：黄
+						case CardAttackRangeType::Long:  tickColor = { 0.18f, 0.62f, 1.0f, 0.85f }; break; // 遠距離：青
+						default: break;
+						}
+						break;
+					case CardEffectType::Heal:    tickColor = { 0.3f, 1.0f, 0.5f,  0.85f }; break; // 緑
+					case CardEffectType::Defense: tickColor = { 0.3f, 0.7f, 1.0f,  0.85f }; break; // 青
+					case CardEffectType::Special: tickColor = { 0.8f, 0.3f, 1.0f,  0.85f }; break; // 紫
+					default: break;
+					}
+				}
 				Vector3 sv = {
 					( rand() % 9 - 4 ) * 0.06f,
 					0.08f + ( rand() % 5 ) * 0.03f,
