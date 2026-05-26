@@ -128,7 +128,7 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
     // ==========================================
     if ( timer_ >= 14 && !hasHit_ ) {
 
-        int randomDamage = damage_;
+        int randomDamage = damage_ <= 0 ? 1 : damage_;
 
         if ( isPlayerCaster_ ) {
             // 💥 1. 中心の強烈な閃光（白黄色の爆発コア）

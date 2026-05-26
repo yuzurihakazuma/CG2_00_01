@@ -207,9 +207,9 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			Vector3 diff = { playerPos.x - pos_.x, 0.0f, playerPos.z - pos_.z };
 
 			if ( Length(diff) < 1.8f ) {
-				int randomDamage = damage_ + ( rand() % 2 );
+				int randomDamage = damage_ <= 0 ? 1 : damage_ + ( rand() % 2 );
 				if ( boss && boss->IsAttackDebuffed() ) {
-					randomDamage = damage_ + ( rand() % 2 );
+					randomDamage = damage_ <= 0 ? 1 : damage_ + ( rand() % 2 );
 				}
 				player->TakeDamage(randomDamage, pos_);
 
