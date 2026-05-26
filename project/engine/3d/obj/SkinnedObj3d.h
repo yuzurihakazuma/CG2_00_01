@@ -70,6 +70,12 @@ public:
     }
     void SetNoiseTexture(uint32_t index) { noiseTextureIndex_ = index; }
     void SetColor(const Vector4& color);
+    // マテリアルごとに個別の色を上書きする（マルチマテリアル用）
+    void SetColor(const Vector4& color, uint32_t materialIndex);
+    // マテリアルごとに発光強度を設定する（マルチマテリアル用）
+    void SetEmissive(float emissive, uint32_t materialIndex);
+    // 特定マテリアルの個別上書きを解除する
+    void ClearMaterialOverride(uint32_t materialIndex);
     void SetDissolveThreshold(float threshold);
 
     const Vector3& GetTranslation() const override { return translate_; }
@@ -144,4 +150,12 @@ private:
     Model::Material* materialOverrideData_ = nullptr;
 
     bool isPoseFrozen_ = false; // ポーズを固定するかどうかのフラグ
+
+    // per-material 個別上書き（SetColor(color, materialIndex) / SetEmissive 用）
+    std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> perMaterialOverrideResources_;
+    std::vector<Model::Material*> perMaterialOverrideDatas_;
+    std::vector<bool> perMaterialOverrideActive_;
+
+    // per-material バッファの作成・初期化をまとめたヘルパー（内部使用）
+    void EnsurePerMaterialBuffer(uint32_t materialIndex);
 };

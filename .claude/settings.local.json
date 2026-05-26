@@ -11,7 +11,9 @@
       "Bash(Select-Object FullName)",
       "PowerShell(head -100)",
       "Bash(msbuild CG2_00_01.sln /p:Configuration=Debug /p:Platform=x64 /t:Build /m /nologo /v:minimal)",
-      "PowerShell(cd \"C:\\\\Game\\\\CG2\\\\CG2_00_01\"; $msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild CG2_00_01.sln /p:Configuration=Debug /p:Platform=x64 /t:Build /m /nologo /v:minimal 2>&1 | Select-Object -Last 30)"
+      "PowerShell(cd \"C:\\\\Game\\\\CG2\\\\CG2_00_01\"; $msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild CG2_00_01.sln /p:Configuration=Debug /p:Platform=x64 /t:Build /m /nologo /v:minimal 2>&1 | Select-Object -Last 30)",
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

@@ -27,7 +27,9 @@ void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
 
         Model* model = obj_->GetModel();
         if ( model && model->GetMaterial() ) {
+            model->SetTexture("resources/white1x1.png");
             Model::Material* material = model->GetMaterial();
+            material->color = { 0.2f, 0.9f, 1.0f, 1.0f }; // 残像に合わせたシアン
             material->emissive = 2.0f;
         }
     }

@@ -38,9 +38,26 @@ void Model::Initialize(ModelCommon* modelCommon, const std::string& directoryPat
 	if (modelData_.boneOrder.empty()) {
 		AdjustModelCenter();
 	}
-	// 4. マテリアルデータの読み込み (.mtlファイル)
-	if ( modelData_.material.textureFilePath.empty() ) {
-		modelData_.material.textureFilePath = "resources/uvChecker.png";
+	// 4. マテリアルデータの読み込み
+// テクスチャパスが空のマテリアルにデフォルトを設定
+	for ( auto& mat : modelData_.materials ) {
+		if ( mat.textureFilePath.empty() ) {
+			mat.textureFilePath = "resources/uvChecker.png";
+		}
+	}
+	// マテリアルが一つもない場合はデフォルトを追加
+	if ( modelData_.materials.empty() ) {
+		MaterialData defaultMat;
+		defaultMat.textureFilePath = "resources/uvChecker.png";
+		modelData_.materials.push_back(defaultMat);
+	}
+	// サブメッシュが一つもない場合は全インデックスをまとめて一つのサブメッシュとする
+	if ( modelData_.subMeshes.empty() ) {
+		SubMesh defaultSub;
+		defaultSub.indexOffset = 0;
+		defaultSub.indexCount = static_cast< uint32_t >( modelData_.indices.size() );
+		defaultSub.materialIndex = 0;
+		modelData_.subMeshes.push_back(defaultSub);
 	}
 
 	// 5. バッファの作成
@@ -100,7 +117,19 @@ void Model::InitializeSphere(ModelCommon* modelCommon, int subdivision){
 		}
 	}
 	// テクスチャファイルパスはデフォルトのチェッカーテクスチャにしておく
-	modelData_.material.textureFilePath = "resources/monsterBall.png";
+	{
+		MaterialData matData;
+		matData.textureFilePath = "resources/monsterBall.png";
+		modelData_.materials.push_back(matData);
+	}
+	// 全インデックスを一つのサブメッシュとして登録
+	{
+		SubMesh subMesh;
+		subMesh.indexOffset = 0;
+		subMesh.indexCount = static_cast<uint32_t>(modelData_.indices.size());
+		subMesh.materialIndex = 0;
+		modelData_.subMeshes.push_back(subMesh);
+	}
 
 	CreateBuffers(); // バッファの作成
 }
@@ -147,7 +176,18 @@ void Model::InitializeRing(ModelCommon* modelCommon, int subdivision) {
 		modelData_.indices.push_back(innerNext);
 	}
 
-	modelData_.material.textureFilePath = "resources/white1x1.png";
+	{
+		MaterialData matData;
+		matData.textureFilePath = "resources/white1x1.png";
+		modelData_.materials.push_back(matData);
+	}
+	{
+		SubMesh subMesh;
+		subMesh.indexOffset = 0;
+		subMesh.indexCount = static_cast<uint32_t>(modelData_.indices.size());
+		subMesh.materialIndex = 0;
+		modelData_.subMeshes.push_back(subMesh);
+	}
 
 	CreateBuffers();
 }
@@ -163,63 +203,110 @@ void Model::Draw(uint32_t instanceCount, D3D12_GPU_VIRTUAL_ADDRESS materialAddre
 	// 3. インデックスバッファビュー(IBV)の設定
 	commandList->IASetIndexBuffer(&indexBufferView_);
 
-	// 4. マテリアル定数バッファの設定 (RootParameter 0番)
-	// ※元のObj3d.cppで 0番 に設定していたものです
-	commandList->SetGraphicsRootConstantBufferView(
-		0,
-		materialAddress != 0 ? materialAddress : materialResource_->GetGPUVirtualAddress()
-	);
 	// プリミティブトポロジの設定（三角形リスト）
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+	// 4. サブメッシュごとにマテリアルとテクスチャを切り替えながら描画
+	for (const auto& subMesh : modelData_.subMeshes) {
+		uint32_t matIdx = subMesh.materialIndex;
 
-	// 5. テクスチャの設定 (RootParameter 2番)
-	// ※元のObj3d.cppで 2番 に設定していたものです
-	if ( textureHandle_.ptr != 0 ) {
-		commandList->SetGraphicsRootDescriptorTable(2, textureHandle_);
+		// マテリアル定数バッファの設定 (RootParameter 0番)
+		// ※元のObj3d.cppで 0番 に設定していたものです
+		D3D12_GPU_VIRTUAL_ADDRESS matAddr = (materialAddress != 0)
+			? materialAddress
+			: materialResources_[matIdx]->GetGPUVirtualAddress();
+		commandList->SetGraphicsRootConstantBufferView(0, matAddr);
+
+		// 5. テクスチャの設定 (RootParameter 2番)
+		// ※元のObj3d.cppで 2番 に設定していたものです
+		if (textureHandles_[matIdx].ptr != 0) {
+			commandList->SetGraphicsRootDescriptorTable(2, textureHandles_[matIdx]);
+		}
+
+		// 6. 描画コマンドの発行
+		// このサブメッシュ分のインデックスのみ描画
+		commandList->DrawIndexedInstanced(
+			subMesh.indexCount,   // このサブメッシュのインデックス数
+			instanceCount,
+			subMesh.indexOffset,  // インデックスバッファの開始オフセット
+			0, 0
+		);
 	}
-	
-	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	// 6. 描画コマンドの発行
-	// インデックスを使って描画
-	commandList->DrawIndexedInstanced(static_cast< UINT >( modelData_.indices.size() ), instanceCount, 0, 0, 0);
-
 
 }
 
-void Model::SetColor(const Vector4& color){
+// per-material 上書き用 Draw（Obj3d の個別色変更から呼ばれる）
+void Model::Draw(uint32_t instanceCount, const std::vector<D3D12_GPU_VIRTUAL_ADDRESS>& perMaterialAddresses) {
+	ID3D12GraphicsCommandList* commandList = modelCommon_->GetDxCommon()->GetCommandList();
+
+	// 2. 頂点バッファビュー(VBV)の設定
+	commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
+
+	// 3. インデックスバッファビュー(IBV)の設定
+	commandList->IASetIndexBuffer(&indexBufferView_);
+
+	// プリミティブトポロジの設定（三角形リスト）
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// サブメッシュごとに per-material アドレスを選択して描画
+	for (const auto& subMesh : modelData_.subMeshes) {
+		uint32_t matIdx = subMesh.materialIndex;
+
+		// per-material 上書きがあればそれを使い、なければ元のマテリアル
+		D3D12_GPU_VIRTUAL_ADDRESS matAddr =
+			(matIdx < perMaterialAddresses.size() && perMaterialAddresses[matIdx] != 0)
+			? perMaterialAddresses[matIdx]
+			: materialResources_[matIdx]->GetGPUVirtualAddress();
+
+		// マテリアル定数バッファの設定 (RootParameter 0番)
+		commandList->SetGraphicsRootConstantBufferView(0, matAddr);
+
+		// テクスチャの設定 (RootParameter 2番)
+		if (textureHandles_[matIdx].ptr != 0) {
+			commandList->SetGraphicsRootDescriptorTable(2, textureHandles_[matIdx]);
+		}
+
+		// 描画コマンドの発行
+		commandList->DrawIndexedInstanced(subMesh.indexCount, instanceCount, subMesh.indexOffset, 0, 0);
+	}
+}
+
+void Model::SetColor(const Vector4& color, uint32_t materialIndex){
 	// マテリアルデータがGPUに作られていれば色を上書きする
-	if ( materialData_ ) {
-		materialData_->color = color;
+	if (materialIndex < materialDatas_.size() && materialDatas_[materialIndex]) {
+		materialDatas_[materialIndex]->color = color;
 	}
 }
 // インデックスを指定して変更（すでにTextureManagerで読み込み済みのものを使う場合に高速）
-void Model::SetTexture(uint32_t textureIndex){
-	// インデックスを更新
-	modelData_.material.textureIndex = textureIndex;
+void Model::SetTexture(uint32_t textureIndex, uint32_t materialIndex){
+	if (materialIndex >= modelData_.materials.size()) return;
 
-	// SrvManagerから新しいGPUハンドルを取得して、描画用の textureHandle_ を上書きする
-	textureHandle_ = modelCommon_->GetDxCommon()->GetSrvManager()->GetGPUDescriptorHandle(textureIndex);
+	// インデックスを更新
+	modelData_.materials[materialIndex].textureIndex = textureIndex;
+
+	// SrvManagerから新しいGPUハンドルを取得して、描画用の textureHandles_ を上書きする
+	textureHandles_[materialIndex] = modelCommon_->GetDxCommon()->GetSrvManager()->GetGPUDescriptorHandle(textureIndex);
 }
 
 // ファイルパスを指定して変更（新しく読み込む、またはパス指定で楽をしたい場合）
-void Model::SetTexture(const std::string& textureFilePath){
+void Model::SetTexture(const std::string& textureFilePath, uint32_t materialIndex){
+	if (materialIndex >= modelData_.materials.size()) return;
+
 	// ファイルパスを更新
-	modelData_.material.textureFilePath = textureFilePath;
+	modelData_.materials[materialIndex].textureFilePath = textureFilePath;
 
 	auto dxCommon = modelCommon_->GetDxCommon();
 	auto commandList = dxCommon->GetCommandList();
 
 	// TextureManagerを使ってテクスチャを読み込み、新しいインデックスを取得
-	modelData_.material.textureIndex = TextureManager::GetInstance()->LoadTextureAndCreateSRV(
+	modelData_.materials[materialIndex].textureIndex = TextureManager::GetInstance()->LoadTextureAndCreateSRV(
 		textureFilePath,
 		commandList
 	).srvIndex;
 
-	// SrvManagerから新しいGPUハンドルを取得して、描画用の textureHandle_ を上書きする
-	textureHandle_ = dxCommon->GetSrvManager()->GetGPUDescriptorHandle(
-		modelData_.material.textureIndex
+	// SrvManagerから新しいGPUハンドルを取得して、描画用の textureHandles_ を上書きする
+	textureHandles_[materialIndex] = dxCommon->GetSrvManager()->GetGPUDescriptorHandle(
+		modelData_.materials[materialIndex].textureIndex
 	);
 }
 
@@ -269,6 +356,10 @@ Model::ModelData Model::LoadModelFile(const std::string& directoryPath, const st
 		assert(mesh->HasNormals()); // 法線がないモデルは今回は非対応
 		assert(mesh->HasTextureCoords(0)); // UVがないモデルは今回は非対応
 
+		// サブメッシュの開始位置をここで記録（インデックスを追加する前）
+		SubMesh subMesh;
+		subMesh.indexOffset = static_cast<uint32_t>(modelData.indices.size());
+		subMesh.materialIndex = mesh->mMaterialIndex; // Assimpのマテリアルインデックス
 
 		// --- スキンデータの収集 ---
 		std::vector<VertexInfluence> influences(mesh->mNumVertices);
@@ -378,21 +469,46 @@ Model::ModelData Model::LoadModelFile(const std::string& directoryPath, const st
 				modelData.indices.push_back(baseVertex + face.mIndices[element]);
 			}
 		}
+
+		// インデックスを追加し終わったのでindexCountを確定してサブメッシュを登録
+		subMesh.indexCount = static_cast<uint32_t>(modelData.indices.size()) - subMesh.indexOffset;
+		modelData.subMeshes.push_back(subMesh);
 	}
 
 	// 5. Material(マテリアル)の解析
-	for (uint32_t materialIndex = 0; materialIndex < scene->mNumMaterials; ++materialIndex) {
-		aiMaterial* material = scene->mMaterials[materialIndex];
+	// Assimpが内部でデフォルト素材を index 0 に挿入することがあるため、
+	// 「実際にサブメッシュが参照しているマテリアル」だけを登録し、
+	// インデックスを 0 番から詰め直す（リマップ）
+	// ※これにより GetMaterial(0) / SetTexture(path,0) が正しく機能する
 
-		// テクスチャ（ディフューズマップ）があるか確認
-		if (material->GetTextureCount(aiTextureType_DIFFUSE) != 0) {
-			aiString textureFilePath;
-			material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
+	// Assimpのマテリアルインデックス → 自分たちのインデックス
+	std::vector<uint32_t> assimpToOurIndex(scene->mNumMaterials, UINT32_MAX);
 
-			// パスを結合して自分たちの構造体に保存
-			modelData.material.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
-			break; // 複数のマテリアルがあっても、一旦最初のものだけ使う
+	for (const auto& subMesh : modelData.subMeshes) {
+		uint32_t ai_idx = subMesh.materialIndex; // この時点はまだ Assimp のインデックス
+
+		if (assimpToOurIndex[ai_idx] == UINT32_MAX) {
+			// 初登場のマテリアル → 自分たちの配列に追加
+			assimpToOurIndex[ai_idx] = static_cast<uint32_t>(modelData.materials.size());
+
+			aiMaterial* material = scene->mMaterials[ai_idx];
+			MaterialData matData;
+
+			// テクスチャ（ディフューズマップ）があるか確認
+			if (material->GetTextureCount(aiTextureType_DIFFUSE) != 0) {
+				aiString textureFilePath;
+				material->GetTexture(aiTextureType_DIFFUSE, 0, &textureFilePath);
+
+				// パスを結合して自分たちの構造体に保存
+				matData.textureFilePath = directoryPath + "/" + textureFilePath.C_Str();
+			}
+			modelData.materials.push_back(matData);
 		}
+	}
+
+	// SubMeshのmaterialIndexをリマップ後のインデックスに変換
+	for (auto& subMesh : modelData.subMeshes) {
+		subMesh.materialIndex = assimpToOurIndex[subMesh.materialIndex];
 	}
 	// ノード階層の解析
 	modelData.rootNode = ParseNode(scene->mRootNode);
@@ -439,17 +555,38 @@ void Model::CreateBuffers(){
 	auto commandList = dxCommon->GetCommandList();
 	auto resourceFactory = dxCommon->GetResourceFactory();
 
+	// 1. マテリアルの数だけテクスチャ読み込み・定数バッファを作成
+	uint32_t matCount = static_cast<uint32_t>(modelData_.materials.size());
+	materialResources_.resize(matCount);
+	materialDatas_.resize(matCount, nullptr);
+	textureHandles_.resize(matCount);
+
+	for (uint32_t i = 0; i < matCount; ++i) {
 		// SRV作成とインデックス取得
-	modelData_.material.textureIndex = TextureManager::GetInstance()->LoadTextureAndCreateSRV(
-		modelData_.material.textureFilePath,
-		commandList
-	).srvIndex;
+		modelData_.materials[i].textureIndex = TextureManager::GetInstance()->LoadTextureAndCreateSRV(
+			modelData_.materials[i].textureFilePath,
+			commandList
+		).srvIndex;
 
-	// テクスチャハンドルを取得
-	textureHandle_ = dxCommon->GetSrvManager()->GetGPUDescriptorHandle(
-		modelData_.material.textureIndex
-	);
+		// テクスチャハンドルを取得
+		textureHandles_[i] = dxCommon->GetSrvManager()->GetGPUDescriptorHandle(
+			modelData_.materials[i].textureIndex
+		);
 
+		// マテリアル用のリソースを作る
+		materialResources_[i] = resourceFactory->CreateBufferResource(sizeof(Material));
+		assert(materialResources_[i] != nullptr);
+
+		// データを書き込むためのポインタを取得（Unmapしない実装）
+		materialResources_[i]->Map(0, nullptr, reinterpret_cast<void**>(&materialDatas_[i]));
+
+		// デフォルト値
+		materialDatas_[i]->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+		materialDatas_[i]->enableLighting = true;
+		materialDatas_[i]->uvTransform = MakeIdentity4x4();
+		materialDatas_[i]->shininess = 32.0f;
+		materialDatas_[i]->emissive = 0.0f;
+	}
 
 	// 2. 頂点リソースを作る
 	vertexResource_ = resourceFactory->CreateBufferResource(sizeof(VertexData) * modelData_.vertices.size());
@@ -464,7 +601,7 @@ void Model::CreateBuffers(){
 	VertexData* vertexMap = nullptr;
 	vertexResource_->Map(0, nullptr, reinterpret_cast< void** >( &vertexMap ));
 	std::copy(modelData_.vertices.begin(), modelData_.vertices.end(), vertexMap);
-	
+
 	// 3. インデックスリソースを作る
 	indexResource_ = resourceFactory->CreateBufferResource(sizeof(uint32_t) * modelData_.indices.size());
 	assert(indexResource_ != nullptr);
@@ -478,20 +615,5 @@ void Model::CreateBuffers(){
 	uint32_t* indexMap = nullptr;
 	indexResource_->Map(0, nullptr, reinterpret_cast< void** >( &indexMap ));
 	std::copy(modelData_.indices.begin(), modelData_.indices.end(), indexMap);
-	
-	// 4. マテリアル用のリソースを作る
-	materialResource_ = resourceFactory->CreateBufferResource(sizeof(Material));
-	assert(materialResource_ != nullptr);
-
-	// データ書き込み（ここは書き換え頻度が高いのでMapしっぱなしでもOKですが、今回はUnmapしない実装にします）
-	// クラスメンバに Material* materialData_ がある前提です
-	materialResource_->Map(0, nullptr, reinterpret_cast< void** >( &materialData_ ));
-
-	// デフォルト値
-	materialData_->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-	materialData_->enableLighting = true;
-	materialData_->uvTransform = MakeIdentity4x4();
-	materialData_->shininess = 32.0f;
-	materialData_->emissive = 0.0f;
 
 }

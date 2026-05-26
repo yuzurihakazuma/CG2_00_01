@@ -86,8 +86,8 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 			model->SetTexture("resources/white1x1.png"); // 無地にする
 			Model::Material* material = model->GetMaterial();
 			if ( material ) {
-				material->color = { 0.8f, 0.5f, 0.1f, 0.6f }; // 半透明のオレンジ/茶色
-				material->emissive = 2.0f; // Bloom条件を超えるように強く光らせる
+				material->color = { 0.55f, 0.38f, 0.15f, 1.0f }; // 岩・土の茶色（不透明）
+				material->emissive = 0.5f; // 地面っぽく控えめに発光
 			}
 		}
 	}
