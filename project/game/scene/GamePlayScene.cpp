@@ -136,12 +136,12 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("CardHammer", "resources/card", "hammerCard.obj");
 	ModelManager::GetInstance()->LoadModel("CardKick", "resources/card", "kickCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossClaw", "resources/card", "BossClawCard.obj");
-	ModelManager::GetInstance()->LoadModel("bossFier", "resources/card", "CardFire.obj");
+	ModelManager::GetInstance()->LoadModel("bossFier", "resources/card", "BossFireCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossSummon", "resources/card", "BossSummonCard.obj");
 	ModelManager::GetInstance()->LoadModel("ruinBeam", "resources/card", "BossBeamCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossCharge", "resources/card", "BossRushCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossKick", "resources/card", "kickCard.obj");
-	ModelManager::GetInstance()->LoadModel("bossSpear", "resources/card", "spearCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossSpear", "resources/card", "BossSpearCard.obj");
 
 
 	// 追加のカード用棘モデル
@@ -355,14 +355,7 @@ void GamePlayScene::Initialize() {
 	// 初期状態は透明の黒
 	fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
-	// ポーズ画面用の文字位置
-	/*TextManager::GetInstance()->SetPosition("PauseTitle", screenW * 0.5f, screenH * 0.5f - 140.0f);
-	TextManager::GetInstance()->SetPosition("PauseResume", screenW * 0.5f, screenH * 0.5f - 40.0f);
-	TextManager::GetInstance()->SetPosition("PauseToTitle", screenW * 0.5f, screenH * 0.5f);
-	TextManager::GetInstance()->SetCentered("PauseTitle", true);
-	TextManager::GetInstance()->SetCentered("PauseResume", true);
-	TextManager::GetInstance()->SetCentered("PauseToTitle", true);*/
-
+	
 	// ポーズ中の半透明背景
 	pauseBgSprite_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH * 0.5f });
 	pauseBgSprite_->SetSize({ screenW, screenH });
