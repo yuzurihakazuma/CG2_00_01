@@ -1601,3 +1601,11 @@ int Player::FindPoseIndex(const std::string& poseName) const {
 
     return -1;
 }
+
+void Player::PlayClearPose(int durationFrames) {
+    if (isDead_) {
+        return;
+    }
+
+    StartPoseBlendByName("clear", durationFrames);
+}

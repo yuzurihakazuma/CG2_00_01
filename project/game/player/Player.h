@@ -118,7 +118,7 @@ public:
     void SetStun(int durationFrames); // スタンさせる関数
 
     bool IsStunned() const{ return isStunned_;}
-
+    void PlayClearPose(int durationFrames); // クリア画面用の喜びポーズ
 private:
     void LevelUp();      // レベルアップ処理
     void UpdateCost();   // コスト自然回復
@@ -139,6 +139,8 @@ private:
     void PreviewPoseBlend(const std::string& startPoseName, const std::string& targetPoseName, int duration); // 開始姿勢を揃えてから補間を再生する
     void UpdatePoseBlend(); // 補間中のポーズを更新する
     bool IsPoseBlendPlaying() const { return poseBlendTimer_ > 0; } // 補間中か
+   
+
 
 private:
     Vector3 pos_{ 0.0f, 0.0f, 0.0f };     // 位置
