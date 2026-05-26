@@ -681,9 +681,16 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 			if (enemyCardSystems_[i]) {
 				Card useCard = enemy->GetCurrentUseCard();
 				// 敵の基本攻撃カードはコストなしで繰り返し使えるので、最低1を保証しつつ威力を半分に抑える。
+				// 6階以降は後半の圧を出すために少し強めるが、カード本来の威力は超えない。
 				// 拾ったカードは1回限りのため、カード本来の威力をそのまま使う。
 				if (!usedPickupCard && useCard.effectType == CardEffectType::Attack && useCard.id < 100) {
-					useCard.effectValue = (std::max)(1, useCard.effectValue / 2);
+					const int originalValue = useCard.effectValue;
+					int adjustedValue = (std::max)(1, originalValue / 2);
+					const int currentFloor = mapManager ? mapManager->GetCurrentFloor() : 1;
+					if (currentFloor >= 6) {
+						adjustedValue += 1 + (rand() % 2);
+					}
+					useCard.effectValue = (std::min)(originalValue, adjustedValue);
 				}
 				enemyCardSystems_[i]->UseCard(
 					useCard,
