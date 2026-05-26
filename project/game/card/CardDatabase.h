@@ -38,7 +38,7 @@ struct Card {
 	std::string seName;        // 効果音名
 	CardRarity rarity;         // レア度
 	bool canEnemyUse;          // 敵も使用可能か
-	CardAttackRangeType attackRangeType;
+	CardAttackRangeType attackRangeType; // 攻撃距離の種類 (近距離、中距離、遠距離)
 };
 
 class CardDatabase {
