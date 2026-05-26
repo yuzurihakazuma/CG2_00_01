@@ -1820,6 +1820,8 @@ void GamePlayScene::Update() {
 	}
 
 	// プレイヤー用カードシステム更新
+	UpdateFireballPredictionAttack(player);
+
 	const bool shouldUpdatePlayerCardSystem =
 		playerCardSystem_ &&
 		!isBossDeathCinematicPlaying_ &&
@@ -2117,6 +2119,7 @@ void GamePlayScene::Draw() {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
+	DrawFireballPredictionLines();
 	DrawCharacterHitboxesDebug();
 	DrawBossIntroLetterbox();
 }
@@ -2605,6 +2608,60 @@ void GamePlayScene::EndMagicCast(bool consumeReadiedCard) {
 	TextManager::GetInstance()->SetText("ReadyCardT", "");
 }
 
+void GamePlayScene::StartFireballPredictionAttack(const Card& card) {
+	if (!playerManager_ || !playerManager_->GetPlayer()) {
+		return;
+	}
+
+	Player* player = playerManager_->GetPlayer();
+	pendingFireballCard_ = card;
+	fireballPredictionCasterPos_ = playerPos_;
+	fireballPredictionYaw_ = playerManager_->GetRotationY();
+	fireballPredictionTimer_ = kFireballPredictionDuration;
+	isFireballPredictionActive_ = true;
+
+	EndMagicCast(true);
+	player->LockAction(kFireballPredictionDuration);
+	player->PlayCardUsePose(kFireballPredictionDuration);
+}
+
+void GamePlayScene::UpdateFireballPredictionAttack(Player* player) {
+	if (!isFireballPredictionActive_) {
+		return;
+	}
+
+	if (!player || player->IsDead() || !playerCardSystem_) {
+		ResetFireballPredictionAttack();
+		return;
+	}
+
+	fireballPredictionTimer_--;
+	if (fireballPredictionTimer_ > 0) {
+		return;
+	}
+
+	playerCardSystem_->UseCardImmediately(
+		pendingFireballCard_,
+		fireballPredictionCasterPos_,
+		fireballPredictionYaw_,
+		true,
+		player,
+		nullptr,
+		false
+	);
+
+	magicRepeatCooldownTimer_ = kMagicRepeatCooldownDuration;
+	ResetFireballPredictionAttack();
+}
+
+void GamePlayScene::ResetFireballPredictionAttack() {
+	isFireballPredictionActive_ = false;
+	pendingFireballCard_ = Card{};
+	fireballPredictionCasterPos_ = {};
+	fireballPredictionYaw_ = 0.0f;
+	fireballPredictionTimer_ = 0;
+}
+
 void GamePlayScene::StartCardUseFlash(const Card& card, bool persistent, bool dissolveEnabled) {
 	if (!camera_ || card.modelName.empty()) {
 		return;
@@ -2884,7 +2941,11 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	}
 
 	if (isCardReady_) {
-		if (magicRepeatCooldownTimer_ > 0) {
+		if (magicRepeatCooldownTimer_ > 0 || isFireballPredictionActive_) {
+			return;
+		}
+		if (readiedCard_.id == 2) {
+			StartFireballPredictionAttack(readiedCard_);
 			return;
 		}
 		if (playerCardSystem_) {
@@ -3480,6 +3541,147 @@ void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, fl
 			color,
 			thickness
 		);
+	}
+}
+
+void GamePlayScene::DrawFireballPredictionLines() const {
+	const bool shouldDrawPlayerPrediction = isFireballPredictionActive_;
+
+	ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+	if (!drawList) {
+		return;
+	}
+
+	if (shouldDrawPlayerPrediction) {
+
+	float progress = 1.0f;
+	if (kFireballPredictionDuration > 0) {
+		progress = 1.0f - static_cast<float>(fireballPredictionTimer_) / static_cast<float>(kFireballPredictionDuration);
+	}
+	progress = std::clamp(progress, 0.0f, 1.0f);
+
+	float yaw = fireballPredictionYaw_;
+	Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+	Vector3 start = fireballPredictionCasterPos_ + forward * kFireballSpawnOffset;
+	start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+	Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
+	
+	// ファイヤーボールの当たり判定（半径2.3f程度）に基づき幅を設定
+	float halfWidth = kFireballPredictionHalfWidth;
+	float length = kFireballPredictionLength;
+
+	std::array<Vector3, 4> corners = {
+		start - right * halfWidth, // 手前左
+		start + right * halfWidth, // 手前右
+		start + right * halfWidth + forward * length, // 奥右
+		start - right * halfWidth + forward * length // 奥左
+	};
+
+	std::array<Vector2, 4> screenCorners{};
+	std::array<bool, 4> visible{};
+	for (size_t i = 0; i < 4; ++i) {
+		visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+	}
+
+	const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
+	const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
+	const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
+	const unsigned int fillColor = IM_COL32(255, 70, 25, fillAlpha);
+	const unsigned int lineColor = IM_COL32(255, 90, 35, lineAlpha);
+	if (allVisible) {
+		const ImVec2 fillPoints[4] = {
+			ImVec2(screenCorners[0].x, screenCorners[0].y),
+			ImVec2(screenCorners[1].x, screenCorners[1].y),
+			ImVec2(screenCorners[2].x, screenCorners[2].y),
+			ImVec2(screenCorners[3].x, screenCorners[3].y),
+		};
+		drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
+	}
+
+	for (int i = 0; i < 4; ++i) {
+		const int next = (i + 1) % 4;
+		if (visible[i] && visible[next]) {
+			// 外枠を描画する
+			drawList->AddLine(
+				ImVec2(screenCorners[i].x, screenCorners[i].y),
+				ImVec2(screenCorners[next].x, screenCorners[next].y),
+				lineColor,
+				3.0f
+			);
+		}
+	}
+
+	}
+
+	if (!enemyManager_) {
+		return;
+	}
+
+	for (const auto& enemy : enemyManager_->GetEnemies()) {
+		if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
+			continue;
+		}
+		if (enemy->GetCurrentUseCard().id != 2) {
+			continue;
+		}
+		if (enemy->GetCastTimer() > kFireballPredictionDuration) {
+			continue;
+		}
+
+		float progress = enemy->GetCastProgress();
+		progress = std::clamp(progress, 0.0f, 1.0f);
+
+		float yaw = enemy->GetRotation().y;
+		Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+		Vector3 start = enemy->GetPosition() + forward * kFireballSpawnOffset;
+		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+		Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
+		float halfWidth = kEnemyFireballPredictionHalfWidth;
+		float length = kFireballPredictionLength;
+
+		std::array<Vector3, 4> corners = {
+			start - right * halfWidth,
+			start + right * halfWidth,
+			start + right * halfWidth + forward * length,
+			start - right * halfWidth + forward * length
+		};
+
+		std::array<Vector2, 4> screenCorners{};
+		std::array<bool, 4> visible{};
+		for (size_t i = 0; i < corners.size(); ++i) {
+			visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+		}
+
+		const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
+		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
+		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
+		const unsigned int fillColor = IM_COL32(255, 70, 25, fillAlpha);
+		const unsigned int lineColor = IM_COL32(255, 90, 35, lineAlpha);
+		if (allVisible) {
+			const ImVec2 fillPoints[4] = {
+				ImVec2(screenCorners[0].x, screenCorners[0].y),
+				ImVec2(screenCorners[1].x, screenCorners[1].y),
+				ImVec2(screenCorners[2].x, screenCorners[2].y),
+				ImVec2(screenCorners[3].x, screenCorners[3].y),
+			};
+			drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
+		}
+
+		for (int i = 0; i < 4; ++i) {
+			const int next = (i + 1) % 4;
+			if (!visible[i] || !visible[next]) {
+				continue;
+			}
+
+			drawList->AddLine(
+				ImVec2(screenCorners[i].x, screenCorners[i].y),
+				ImVec2(screenCorners[next].x, screenCorners[next].y),
+				lineColor,
+				3.0f
+			);
+		}
 	}
 }
 
