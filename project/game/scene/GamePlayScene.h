@@ -282,7 +282,7 @@ private: // メンバ変数
 	Card readiedCard_{};             // 構えているカードの情報
 	int cardReadyTimer_ = 0;         // 構えていられる残り時間
 	int readiedCardIndex_ = -1;
-	static constexpr int kMagicCastDuration = 120;
+	static constexpr int kMagicCastDuration = 180;
 	bool isMagicCastPausedForSwap_ = false;
 	int magicRepeatCooldownTimer_ = 0;
 	static constexpr int kMagicRepeatCooldownDuration = 24;

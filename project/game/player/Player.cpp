@@ -185,7 +185,7 @@ void Player::Initialize() {
     dodgeParticle_->Initialize();
 }
 
-void Player::Update() {
+void Player::Update(bool isMagicCasting) {
    
     // ---- ポストエフェクト（Player 管轄分）----
     {
@@ -382,10 +382,15 @@ void Player::Update() {
         move = Normalize(move);
     }
 
+    // 詠唱中にShift/Bを押している間だけ、回避ではなく向き固定のスライド移動にする
+    const bool isCastingDirectionLocked =
+        isMagicCasting &&
+        (input->Pushkey(DIK_LSHIFT) || input->PushJoystickButton(XINPUT_GAMEPAD_B));
+
     // 回避開始
    // Shift に加えて B ボタンでも回避できるようにする
     if (!isDodging_ && dodgeCooldownTimer_ <= 0 &&
-        (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
+        (!isMagicCasting && (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B)))) {
         isDodging_ = true;
         dodgeTimer_ = dodgeDuration_;
         dodgeInvincibleTimer_ = dodgeInvincibleDuration_;
@@ -498,7 +503,9 @@ void Player::Update() {
 
         if ( Length(move) > 0.0f ) {
             pos_ += move * ( moveSpeed_ * speedMultiplier_ );
-            rot_.y = std::atan2f(move.x, move.z);
+            if (!isCastingDirectionLocked) {
+                rot_.y = std::atan2f(move.x, move.z);
+            }
 
             // 足元ほこり
             footDustTimer_--;
