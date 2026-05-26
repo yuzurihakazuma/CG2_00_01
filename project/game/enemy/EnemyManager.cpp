@@ -679,8 +679,14 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				enemy->GetCurrentUseCard().id == enemy->GetPickupCard().id;
 
 			if (enemyCardSystems_[i]) {
+				Card useCard = enemy->GetCurrentUseCard();
+				// 敵の基本攻撃カードはコストなしで繰り返し使えるので、各Effect側で1ダメージ固定にする。
+				// 拾ったカードは1回限りのため、カード本来の威力をそのまま使う。
+				if (!usedPickupCard && useCard.effectType == CardEffectType::Attack && useCard.id < 100) {
+					useCard.effectValue = 0;
+				}
 				enemyCardSystems_[i]->UseCard(
-					enemy->GetCurrentUseCard(),
+					useCard,
 					enemy->GetPosition(),
 					enemy->GetRotation().y,
 					false // プレイヤーではないので false

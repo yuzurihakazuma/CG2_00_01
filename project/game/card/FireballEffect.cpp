@@ -306,10 +306,10 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 			};
 
 			if ( Length(diff) < 1.5f ) {
-				int randomDamage = damage_ + (rand() % 2);
+				int randomDamage = damage_ <= 0 ? 1 : damage_ + (rand() % 2);
 
 				if ( boss && boss->IsAttackDebuffed() ) {
-					int randomDamage = damage_ + (rand() % 2);
+					randomDamage = damage_ <= 0 ? 1 : damage_ + (rand() % 2);
 				}
 
 				player->TakeDamage(randomDamage, pos_);

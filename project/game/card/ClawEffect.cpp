@@ -113,7 +113,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	if ( isAttacking && !hasHit_ ) {
 
 		// ImGuiで設定したダメージをここで使う！
-		int randomDamage = damage_ + (rand() % 2);
+		int randomDamage = damage_ <= 0 ? 1 : damage_ + (rand() % 2);
 		if ( isPlayerCaster_ ) {
 			// 敵への判定（略：既存のダメージロジックと同じ）
 			if ( enemyManager ) {
