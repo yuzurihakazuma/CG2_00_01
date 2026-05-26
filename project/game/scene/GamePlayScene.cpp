@@ -482,17 +482,13 @@ void GamePlayScene::Update() {
 
 	// ポーズ切り替え
 	// ESC に加えて START ボタンでもポーズできるようにする
-	if (
-		!isEditingDebugText &&
-		(
-			input->Triggerkey(DIK_ESCAPE) ||
-			input->TriggerJoystickButton(XINPUT_GAMEPAD_START)
-			)
-		) {
 	if (shouldBlockPause) {
 		isPaused_ = false;
 	}
-	if (!shouldBlockPause && !isEditingDebugText && input->Triggerkey(DIK_ESCAPE)) {
+	if (!shouldBlockPause &&
+		!isEditingDebugText &&
+		(input->Triggerkey(DIK_ESCAPE) ||
+		 input->TriggerJoystickButton(XINPUT_GAMEPAD_START))) {
 		isPaused_ = !isPaused_;
 		pauseSelection_ = 0; // 開くたびに先頭へ戻す
 	}

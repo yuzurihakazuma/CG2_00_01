@@ -12,6 +12,6 @@ id,name,cost,effectType,sffectValue,description,modelName,effectName,seName,rari
 11,マップ表示,3,3,0,ミニマップを全て表示する,CardScanner,nullptr,nullptr,0,0,0
 12,コストブースト,3,2,3,10秒間コストの\n上限上昇と自動回復倍,CardCostBoost,nullptr,nullptr,0,0,1
 13,蹴り,2,0,1,1～2ダメージ与えて\n敵を後方へ吹き飛ばす,CardKick,nullptr,nullptr,0,0,0
-14,剣,4,0,3,プレイヤーを中心に\n回転攻撃を行う,CardSword,nullptr,nullptr,0,1,2
-15,ハンマー,5,0,2,力強く叩きつけ\nスタンさせる,CardHammer,nullptr,nullptr,0,1,2
+14,剣,4,0,3,プレイヤーを中心に\n回転攻撃を行う,CardSword,nullptr,nullptr,0,1,1
+15,ハンマー,5,0,2,力強く叩きつけ\nスタンさせる,CardHammer,nullptr,nullptr,0,1,1
 16,槍,7,0,3,3連続で突き攻撃をする,CardSpear,nullptr,nullptr,0,1,2
