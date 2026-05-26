@@ -96,6 +96,7 @@ void BossManager::Initialize(Camera* camera) {
     }
 
     bossDeadHandled_ = false;
+    splitBossFirstDefeatExpAwarded_ = false;
     bossIntroCameraState_ = IntroCameraState::None;
     bossIntroTimer_ = 0;
     isBossIntroPlaying_ = false;
@@ -145,6 +146,7 @@ void BossManager::Reset() {
     bossCastCardObjs_.clear();
 
     bossDeadHandled_ = false;
+    splitBossFirstDefeatExpAwarded_ = false;
     EndBossIntro();
 }
 
@@ -157,6 +159,7 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
     if (!mapManager->IsBossMap()) {
         boss_->Initialize();
         bossDeadHandled_ = false;
+        splitBossFirstDefeatExpAwarded_ = false;
 
         // 画面外に逃がしておく
         boss_->SetPosition({ 9999.0f, -9999.0f, 9999.0f });
@@ -183,6 +186,7 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 	splitBossTargetPositions_[1].x += splitBossOffset_;
 
 	bossDeadHandled_ = false;
+	splitBossFirstDefeatExpAwarded_ = false;
 
 	if (bossType_ == BossType::Split) {
 		// 通常ボスは画面外へ逃がしておく
@@ -832,6 +836,21 @@ void BossManager::Update(
 	// =========================================================
 // ボス死亡時の処理
 // =========================================================
+	if (bossType_ == BossType::Split && player && !splitBossFirstDefeatExpAwarded_) {
+		int deadCount = 0;
+		for (const auto& splitBoss : splitBosses_) {
+			if (splitBoss && splitBoss->IsDead()) {
+				++deadCount;
+			}
+		}
+
+		// 分裂ボスは戦闘中に1体目を倒した時だけ経験値を渡し、最後の1体ではゲームクリアを優先する。
+		if (deadCount == 1) {
+			player->AddExp(15);
+			splitBossFirstDefeatExpAwarded_ = true;
+		}
+	}
+
 	bool isBossBattleFinished = false;
 
 	if (bossType_ == BossType::Split) {
@@ -845,8 +864,8 @@ void BossManager::Update(
 	}
 
 	if (isBossBattleFinished && !bossDeadHandled_) {
-		// 経験値付与
-		if (player) {
+		// 分裂ボスの経験値は1体目撃破時に渡すので、戦闘終了時は通常ボスだけ処理する。
+		if (player && bossType_ != BossType::Split) {
 			player->AddExp(15);
 		}
 

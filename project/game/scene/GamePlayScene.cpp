@@ -369,6 +369,14 @@ void GamePlayScene::Initialize() {
 	fadeSprite_->SetSize({ screenW, screenH });
 	// 初期状態は透明の黒
 	fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f });
+	floorTransitionCurtainSprites_.clear();
+	floorTransitionCurtainSprites_.resize(8);
+	for (auto& curtainSprite : floorTransitionCurtainSprites_) {
+		curtainSprite = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH * 0.5f });
+		if (curtainSprite) {
+			curtainSprite->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f });
+		}
+	}
 
 	
 	// ポーズ中の半透明背景
@@ -562,8 +570,57 @@ void GamePlayScene::Update() {
 
 	// フェードスプライトの更新（FadeOutでもFadeInでも絶対に実行する！）
 	if (fadeSprite_) {
-		fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, fadeAlpha_ });
+		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+		fadeSprite_->SetPosition({ screenW * 0.5f, screenH * 0.5f });
+		fadeSprite_->SetSize({ screenW, screenH });
+		fadeSprite_->SetColor({ 0.0f, 0.0f, 0.0f, transitionState_ == TransitionState::BlackHold ? 1.0f : 0.0f });
 		fadeSprite_->Update();
+	}
+	if (!floorTransitionCurtainSprites_.empty()) {
+		const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+		const int curtainCount = static_cast<int>(floorTransitionCurtainSprites_.size());
+		const float stepH = screenH / static_cast<float>(curtainCount);
+		const float delayStep = 0.055f;
+		for (int i = 0; i < curtainCount; ++i) {
+			auto& curtainSprite = floorTransitionCurtainSprites_[i];
+			if (!curtainSprite) {
+				continue;
+			}
+
+			float width = screenW + stepH * static_cast<float>(curtainCount);
+			float height = stepH + 3.0f;
+			float offsetX = -width;
+			float alpha = 0.0f;
+			const float stairOffset = stepH * 0.48f * static_cast<float>(i);
+			const float baseY = stepH * (static_cast<float>(i) + 0.5f);
+			const float delay = delayStep * static_cast<float>(transitionState_ == TransitionState::FadeIn ? curtainCount - 1 - i : i);
+
+			// 斜めにずれた段差が階段のように閉じて、到着時は下の段から視界が戻る。
+			if (transitionState_ == TransitionState::FadeOut) {
+				float localT = (fadeAlpha_ - delay) / (1.0f - delay);
+				localT = std::clamp(localT, 0.0f, 1.0f);
+				localT = localT * localT * (3.0f - 2.0f * localT);
+				offsetX = -width * (1.0f - localT);
+				alpha = localT;
+			} else if (transitionState_ == TransitionState::BlackHold) {
+				offsetX = 0.0f;
+				alpha = 1.0f;
+			} else if (transitionState_ == TransitionState::FadeIn) {
+				const float revealT = 1.0f - fadeAlpha_;
+				float localT = (revealT - delay) / (1.0f - delay);
+				localT = std::clamp(localT, 0.0f, 1.0f);
+				localT = localT * localT * (3.0f - 2.0f * localT);
+				offsetX = width * localT;
+				alpha = 1.0f - localT;
+			}
+
+			curtainSprite->SetPosition({ screenW * 0.5f + stairOffset + offsetX, baseY });
+			curtainSprite->SetSize({ width, height });
+			curtainSprite->SetColor({ 0.0f, 0.0f, 0.0f, alpha });
+			curtainSprite->Update();
+		}
 	}
 
 	// ★ FadeOut中（真っ黒に向かっている最中）だけ、ゲームの進行を止める
@@ -597,6 +654,11 @@ void GamePlayScene::Update() {
 			}
 		}
 
+		return;
+	}
+
+	// ゲームクリアなどのシーン遷移フェード中は、レベルアップ画面などの新しいUIを開かない。
+	if (isSceneTransitionFading) {
 		return;
 	}
 
@@ -2019,7 +2081,9 @@ void GamePlayScene::Draw() {
 			floorBgSprite_->Draw();
 		}
 
-		levelUpBonusManager_.Draw();
+		if (!SceneManager::GetInstance()->IsFading()) {
+			levelUpBonusManager_.Draw();
+		}
 
 		
 		DrawPauseUI();
@@ -2038,6 +2102,13 @@ void GamePlayScene::Draw() {
 	// =========================================
 	if (fadeSprite_ && transitionState_ != TransitionState::None) {
 		fadeSprite_->Draw();
+	}
+	if (transitionState_ != TransitionState::None) {
+		for (auto& curtainSprite : floorTransitionCurtainSprites_) {
+			if (curtainSprite) {
+				curtainSprite->Draw();
+			}
+		}
 	}
 	if (isFloorTransitionTextVisible_ &&
 		transitionState_ == TransitionState::BlackHold &&
