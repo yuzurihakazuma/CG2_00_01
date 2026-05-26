@@ -475,6 +475,10 @@ void GamePlayScene::Update() {
 
 	UpdatePostEffects();
 
+	const bool isLocalTransitionFading = transitionState_ != TransitionState::None;
+	const bool isSceneTransitionFading = SceneManager::GetInstance()->IsFading();
+	const bool shouldBlockPause = isLocalTransitionFading || isSceneTransitionFading;
+
 
 	// ポーズ切り替え
 	// ESC に加えて START ボタンでもポーズできるようにする
@@ -485,6 +489,10 @@ void GamePlayScene::Update() {
 			input->TriggerJoystickButton(XINPUT_GAMEPAD_START)
 			)
 		) {
+	if (shouldBlockPause) {
+		isPaused_ = false;
+	}
+	if (!shouldBlockPause && !isEditingDebugText && input->Triggerkey(DIK_ESCAPE)) {
 		isPaused_ = !isPaused_;
 		pauseSelection_ = 0; // 開くたびに先頭へ戻す
 	}
