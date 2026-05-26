@@ -241,6 +241,9 @@ void Enemy::Freeze(int durationFrames){
 }
 
 void Enemy::SetStun(int durationFrames){
+	// スタン中は新たなスタンを受け付けない（無限スタン防止）
+	if ( isStunned_ || durationFrames <= 0 ) return;
+
 	isStunned_ = true;
 	stunTimer_ = durationFrames;
 

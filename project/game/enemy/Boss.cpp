@@ -318,6 +318,9 @@ void Boss::Update() {
 		stunTimer_--;
 		if (stunTimer_ <= 0) {
 			isStunned_ = false;
+			// 向き・ポーズを復元（StunEffect が rot_.x を上書きしていた分を戻す）
+			rot_.y = preStunYaw_;
+			ResetPose(); // rot_.x / rot_.z / scale_ をリセット
 		}
 
 		StunEffectManager::Update(pos_, rot_, stunTimer_, 4.5f);
@@ -545,11 +548,28 @@ void Boss::UpdateAppear() {
 	}
 }
 void Boss::SetStun(int durationFrames) {
-	isStunned_ = true;
-	stunTimer_ = durationFrames;
+	// スタン中は新たなスタンを受け付けない（無限スタン防止）
+	if ( isStunned_ || durationFrames <= 0 ) return;
 
-	isCasting_ = false;
-	castTimer_ = 0;
+	// ---- 攻撃を完全中断 ----
+	isCasting_       = false;
+	castTimer_       = 0;
+	isActionLocked_  = false;  // ビーム追跡など「行動ロック」も解除
+	actionLockTimer_ = 0;
+	cardUseRequest_  = false;  // 発動リクエストが残っていても無効化
+
+	// UseCard ステートのまま解除されると再発動するので Chase に戻す
+	if ( state_ == State::UseCard ) {
+		state_       = State::Chase;
+		thinkTimer_  = 15;       // 少し待ってから次の行動を選ぶ
+	}
+
+	// ---- ポーズ・スケールをリセット ----
+	ResetPose();                 // rot_.x / rot_.z / scale_ を基準値に戻す
+	preStunYaw_ = rot_.y;        // 現在の向きを保存（解除後に復元）
+
+	isStunned_  = true;
+	stunTimer_  = durationFrames;
 }
 void Boss::DecideNextState() {
 	if (state_ == State::Appear) {
