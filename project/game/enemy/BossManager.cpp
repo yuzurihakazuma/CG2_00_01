@@ -506,17 +506,13 @@ void BossManager::Update(
 	if (mapManager->IsBossMap()) {
 		if (bossType_ == BossType::Split) {
 
-			bool leftAlive = splitBosses_[0] && !splitBosses_[0]->IsDead();
-			bool rightAlive = splitBosses_[1] && !splitBosses_[1]->IsDead();
-			bool oneDefeated = (leftAlive != rightAlive);
-
 			for (int i = 0; i < 2; ++i) {
 				if (!splitBosses_[i] || splitBosses_[i]->IsDead()) {
 					continue;
 				}
 
-				// 片方が倒れたら残った側も近距離型にする
-				splitBosses_[i]->SetForceMeleeMode(oneDefeated);
+				// 10階ボスは片方撃破後も元の役割を維持する
+				splitBosses_[i]->SetForceMeleeMode(false);
 
 				// 相方の位置を渡して、重ならないようにする
 				int partnerIndex = (i == 0) ? 1 : 0;
