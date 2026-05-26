@@ -4,6 +4,8 @@
 #include "game/enemy/Boss.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/camera/Camera.h"
+#include "engine/postEffect/PostEffect.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -15,6 +17,7 @@ void HammerEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlaye
     hasHit_ = false;
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
+    camera_ = camera;
 
     obj_ = Obj3d::Create("hammer_model"); // ※ハンマーのモデル名
     if ( obj_ ) {
@@ -130,7 +133,24 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
 
         int randomDamage = damage_ <= 0 ? 1 : damage_;
 
+        // カメラシェイク
+        if ( camera_ ) {
+            camera_->TriggerShake(0.3f, 15);
+        }
+
         if ( isPlayerCaster_ ) {
+            // 着弾点のゆがみエフェクト
+            if ( camera_ ) {
+                const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+                float cx = pos_.x*vp.m[0][0] + pos_.y*vp.m[1][0] + pos_.z*vp.m[2][0] + vp.m[3][0];
+                float cy = pos_.x*vp.m[0][1] + pos_.y*vp.m[1][1] + pos_.z*vp.m[2][1] + vp.m[3][1];
+                float cw = pos_.x*vp.m[0][3] + pos_.y*vp.m[1][3] + pos_.z*vp.m[2][3] + vp.m[3][3];
+                if ( std::abs(cw) > 0.0001f ) {
+                    PostEffect::GetInstance()->TriggerDistortion(
+                        cx/cw * 0.5f + 0.5f, -cy/cw * 0.5f + 0.5f, 0.28f, 14);
+                }
+            }
+
             // 💥 1. 中心の強烈な閃光（白黄色の爆発コア）
             GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.15f, 4.0f, { 1.0f, 1.0f, 0.6f, 1.0f });
 

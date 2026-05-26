@@ -7,6 +7,7 @@
 #include "engine/collision/Collision.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/camera/Camera.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -22,6 +23,8 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 
 	// 撃った人（敵）の位置を記憶しておく
 	casterPos_ = casterPos;
+	camera_ = camera;
+	hasShaken_ = false;
 
 	// 正面方向を計算
 	Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
@@ -156,6 +159,12 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				}
 				if ( !fang.hasEmergedParticle && fang.currentY >= fang.pos.y ) {
 					fang.hasEmergedParticle = true;
+
+					// カメラシェイクは全体で1回だけ（最初のトゲ出現時のみ）
+					if ( camera_ && !hasShaken_ ) {
+						camera_->TriggerShake(0.18f, 10);
+						hasShaken_ = true;
+					}
 
 					// 【地面から爆散】下から上に勢いよく飛び出す破片
 					for ( int i = 0; i < 40; i++ ) {

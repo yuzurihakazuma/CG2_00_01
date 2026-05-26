@@ -4,6 +4,8 @@
 #include "game/enemy/Boss.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/camera/Camera.h"
+#include "engine/postEffect/PostEffect.h"
 #include <cmath>
 #include <algorithm>
 
@@ -16,6 +18,7 @@ void SpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
     hitTargets_.clear();
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
+    camera_ = camera;
 
     obj_ = Obj3d::Create("spear_model");
     if ( obj_ ) {
@@ -183,6 +186,19 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
 
         int currentDamage = damage_ + ( rand() % 2 ) + ( cycle == 2 ? 1 : 0 );
 
+        // 3段目命中時の歪みエフェクト用ヘルパー
+        auto TriggerSpearDistortion = [&](const Vector3& hitPos) {
+            if ( cycle != 2 || !camera_ ) return;
+            const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+            float cx = hitPos.x*vp.m[0][0] + hitPos.y*vp.m[1][0] + hitPos.z*vp.m[2][0] + vp.m[3][0];
+            float cy = hitPos.x*vp.m[0][1] + hitPos.y*vp.m[1][1] + hitPos.z*vp.m[2][1] + vp.m[3][1];
+            float cw = hitPos.x*vp.m[0][3] + hitPos.y*vp.m[1][3] + hitPos.z*vp.m[2][3] + vp.m[3][3];
+            if ( std::abs(cw) > 0.0001f ) {
+                PostEffect::GetInstance()->TriggerDistortion(
+                    cx/cw * 0.5f + 0.5f, -cy/cw * 0.5f + 0.5f, 0.20f, 10);
+            }
+        };
+
         if ( isPlayerCaster_ ) {
             if ( enemyManager ) {
                 for ( auto& enemy : enemyManager->GetEnemies() ) {
@@ -197,6 +213,7 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                     if ( Length(diff) < 2.0f ) {
                         enemy->TakeDamage(currentDamage);
                         hitTargets_.push_back(enemy.get());
+                        TriggerSpearDistortion(ePos);
 
                         for ( int i = 0; i < 8; i++ ) {
                             Vector3 sparkDir = forwardVec * 1.5f + rightVec * ( ( rand() % 11 - 5 ) * 0.1f );
@@ -207,23 +224,38 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                     }
                 }
             }
+            // 槍はキャスター→穂先の軸線に対する最短距離でチェック（見た目通りの判定）
+            auto SpearShaftDist = [&](const Vector3& targetPos) -> float {
+                float sx = pos_.x - casterPos_.x, sz = pos_.z - casterPos_.z;
+                float lenSq = sx * sx + sz * sz;
+                if ( lenSq < 0.0001f ) {
+                    float dx = targetPos.x - casterPos_.x, dz = targetPos.z - casterPos_.z;
+                    return std::sqrtf(dx * dx + dz * dz);
+                }
+                float bx = targetPos.x - casterPos_.x, bz = targetPos.z - casterPos_.z;
+                float t = std::max(0.0f, std::min(1.0f, (bx * sx + bz * sz) / lenSq));
+                float cx = casterPos_.x + sx * t - targetPos.x;
+                float cz = casterPos_.z + sz * t - targetPos.z;
+                return std::sqrtf(cx * cx + cz * cz);
+            };
+
             if ( boss && !boss->IsDead() ) {
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), boss);
                 if ( it == hitTargets_.end() ) {
-                    Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                    if ( Length(diff) < 3.0f ) {
+                    if ( SpearShaftDist(bossPos) < 1.8f ) {
                         boss->TakeDamage(currentDamage);
                         hitTargets_.push_back(boss);
+                        TriggerSpearDistortion(bossPos);
                     }
                 }
             }
             if ( extraBoss && !extraBoss->IsDead() ) {
                 auto it = std::find(hitTargets_.begin(), hitTargets_.end(), extraBoss);
                 if ( it == hitTargets_.end() ) {
-                    Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
-                    if ( Length(diff) < 3.0f ) {
+                    if ( SpearShaftDist(extraBoss->GetPosition()) < 1.8f ) {
                         extraBoss->TakeDamage(currentDamage);
                         hitTargets_.push_back(extraBoss);
+                        TriggerSpearDistortion(extraBoss->GetPosition());
                     }
                 }
             }

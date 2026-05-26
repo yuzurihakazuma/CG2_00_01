@@ -519,12 +519,22 @@ void HandManager::Update() {
 					default: break;
 					}
 				}
-				Vector3 sv = {
-					( rand() % 9 - 4 ) * 0.06f,
-					0.08f + ( rand() % 5 ) * 0.03f,
-					( rand() % 9 - 4 ) * 0.06f
-				};
-				GPUParticleManager::GetInstance()->Emit(emitPos, sv, 0.55f, 0.3f, tickColor);
+					// 中心のコア（小さく鋭く光る）
+				GPUParticleManager::GetInstance()->Emit(
+					emitPos,
+					{ ( rand() % 5 - 2 ) * 0.03f, 0.06f + ( rand() % 3 ) * 0.02f, ( rand() % 5 - 2 ) * 0.03f },
+					0.35f, 0.22f, { tickColor.x, tickColor.y, tickColor.z, 1.0f });
+
+				// 周囲にふわっと散る小粒（2個）
+				for ( int s = 0; s < 2; s++ ) {
+					Vector3 sv = {
+						( rand() % 11 - 5 ) * 0.07f,
+						0.05f + ( rand() % 6 ) * 0.025f,
+						( rand() % 11 - 5 ) * 0.07f
+					};
+					float sc = 0.12f + ( rand() % 4 ) * 0.05f;
+					GPUParticleManager::GetInstance()->Emit(emitPos, sv, 0.6f, sc, tickColor);
+				}
 			}
 		}
 		if ( selectionTickTimer_ > 0 ) selectionTickTimer_--;

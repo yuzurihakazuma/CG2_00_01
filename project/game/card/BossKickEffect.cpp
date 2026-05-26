@@ -3,6 +3,7 @@
 #include "game/enemy/Boss.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/camera/Camera.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -12,6 +13,7 @@ void BossKickEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     (void)isPlayerCaster;
 
     casterBoss_ = casterBoss;
+    camera_ = camera;
     casterYaw_ = casterYaw;
     timer_ = 0;
     isFinished_ = false;
@@ -85,7 +87,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         obj_->SetTranslation(pos_);
         obj_->Update();
 
-        // ボスクローに寄せた紫の軌跡
+        // ボスクローに寄せた紫の軌跡（メインコア）
         GPUParticleManager::GetInstance()->Emit(
             pos_,
             { 0.0f, 0.0f, 0.0f },
@@ -93,6 +95,15 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             1.1f,
             { 0.7f, 0.2f, 1.0f, 0.35f }
         );
+        // 飛び散る小さな紫の粒
+        for ( int i = 0; i < 5; i++ ) {
+            Vector3 sparkVel = {
+                ( rand() % 11 - 5 ) * 0.06f,
+                ( rand() % 6 ) * 0.03f,
+                ( rand() % 11 - 5 ) * 0.06f
+            };
+            GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.15f, 0.22f, { 0.8f, 0.3f, 1.0f, 0.8f });
+        }
     }
 
     // 通常の蹴りと同じタイミングでヒット判定を出す
@@ -121,6 +132,9 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             if (Length(diff) < hitRadius) {
                 player->TakeDamage(finalDamage, pos_, 2.2f);
                 hasHit_ = true;
+
+                // 命中のカメラシェイク
+                if ( camera_ ) { camera_->TriggerShake(0.2f, 10); }
 
                 // ヒット時の火花も紫系にする
                 for (int i = 0; i < 20; i++) {

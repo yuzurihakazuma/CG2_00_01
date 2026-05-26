@@ -3,6 +3,7 @@
 #include "game/enemy/Boss.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/camera/Camera.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -14,6 +15,7 @@ void BossChargeEffect::Start(const Vector3& casterPos, float casterYaw, bool isP
 	// この突進を発動したボス本人を保持する
 	// 分裂ボス時に左右どちらの個体を前進させるかを失わないようにする
 	casterBoss_ = casterBoss;
+	camera_ = camera;
 
 	isFinished_ = false;
 	hasHit_ = false;
@@ -102,6 +104,8 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 			Vector3 v = { std::sinf(a) * 1.4f, 0.05f, std::cosf(a) * 1.4f };
 			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.3f, pos_.z }, v, 0.3f, 0.35f, { 1.0f, 0.5f, 0.2f, 1.0f });
 		}
+		// 壁衝突のカメラシェイク
+		if ( camera_ ) { camera_->TriggerShake(0.35f, 20); }
 		isFinished_ = true;
 		return;
 	}
@@ -178,6 +182,9 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 
 			player->TakeDamage(finalDamage, pos_);
 			hasHit_ = true;
+
+			// 命中のカメラシェイク
+			if ( camera_ ) { camera_->TriggerShake(0.25f, 12); }
 
 			// 命中エフェクト：全方向に赤白の小粒バースト
 			for (int i = 0; i < 35; ++i) {

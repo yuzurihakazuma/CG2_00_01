@@ -5,6 +5,8 @@
 #include "game/card/BossTargetUtils.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
+#include "engine/camera/Camera.h"
+#include "engine/postEffect/PostEffect.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -22,6 +24,7 @@ void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	casterYaw_ = casterYaw;
 
 	casterPos_ = casterPos;
+	camera_ = camera;
 
 	Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
 	pos_ = {
@@ -114,6 +117,19 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	bool isAttacking = ( timer_ >= 2 && timer_ <= 6 ) || ( timer_ >= 12 && timer_ <= 16 );
 	if ( isAttacking && !hasHit_ ) {
 
+		// 命中時の歪みエフェクト用ヘルパー
+		auto TriggerHitDistortion = [&](const Vector3& hitPos) {
+			if ( !camera_ ) return;
+			const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+			float cx = hitPos.x*vp.m[0][0] + hitPos.y*vp.m[1][0] + hitPos.z*vp.m[2][0] + vp.m[3][0];
+			float cy = hitPos.x*vp.m[0][1] + hitPos.y*vp.m[1][1] + hitPos.z*vp.m[2][1] + vp.m[3][1];
+			float cw = hitPos.x*vp.m[0][3] + hitPos.y*vp.m[1][3] + hitPos.z*vp.m[2][3] + vp.m[3][3];
+			if ( std::abs(cw) > 0.0001f ) {
+				PostEffect::GetInstance()->TriggerDistortion(
+					cx/cw * 0.5f + 0.5f, -cy/cw * 0.5f + 0.5f, 0.18f, 8);
+			}
+		};
+
 		// ImGuiで設定したダメージをここで使う！
 		int randomDamage = damage_ <= 0 ? 1 : damage_ + (rand() % 2);
 		if ( isPlayerCaster_ ) {
@@ -131,6 +147,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 							Vector3 sv = { (rand()%11-5)*0.5f, (rand()%11-5)*0.5f, (rand()%11-5)*0.5f };
 							GPUParticleManager::GetInstance()->Emit(ePos, sv, 0.2f, 0.18f, {0.5f, 1.0f, 1.0f, 1.0f});
 						}
+						TriggerHitDistortion(ePos);
 						hasHit_ = true; break;
 					}
 				}
@@ -145,6 +162,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 					Vector3 sv = { (rand()%11-5)*0.5f, (rand()%11-5)*0.5f, (rand()%11-5)*0.5f };
 					GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.2f, 0.18f, {0.5f, 1.0f, 1.0f, 1.0f});
 				}
+				TriggerHitDistortion(pos_);
 				hasHit_ = true;
 			}
 		} else {
@@ -160,6 +178,7 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 						Vector3 sv = { (rand()%11-5)*0.5f, (rand()%11-5)*0.5f, (rand()%11-5)*0.5f };
 						GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.2f, 0.18f, {0.5f, 1.0f, 1.0f, 1.0f});
 					}
+					TriggerHitDistortion(pPos);
 					hasHit_ = true;
 				}
 			}

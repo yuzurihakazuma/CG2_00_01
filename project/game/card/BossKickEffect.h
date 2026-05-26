@@ -27,4 +27,5 @@ private:
     float casterYaw_ = 0.0f;
 
     Boss* casterBoss_ = nullptr; // 発動したボス本人を保持する
+    Camera* camera_ = nullptr;
 };

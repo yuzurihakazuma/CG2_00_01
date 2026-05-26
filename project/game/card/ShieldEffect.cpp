@@ -17,6 +17,7 @@ void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlaye
 	isFinished_ = false;
 	isFirstFrame_ = true;
 	rotAngle_ = 0.0f;
+	breakFlashTimer_ = 0;
 
 	CreateShieldObject(casterPos, camera);
 }
@@ -26,6 +27,7 @@ void ShieldEffect::RestoreVisual(const Vector3 &casterPos, Camera *camera) {
 	isFinished_ = false;
 	isFirstFrame_ = false;
 	rotAngle_ = 0.0f;
+	breakFlashTimer_ = 0;
 
 	CreateShieldObject(casterPos, camera);
 }
@@ -71,6 +73,17 @@ void ShieldEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss
 	if (isFinished_) {
 		return;
 	}
+
+	// シールド破壊後の白フラッシュタイマー処理
+	if ( breakFlashTimer_ > 0 ) {
+		breakFlashTimer_--;
+		if ( breakFlashTimer_ <= 0 ) {
+			PostEffect::GetInstance()->SetEffectActive(PostEffectType::ColorTint, false);
+			isFinished_ = true;
+		}
+		return;
+	}
+
 	if ( isPlayerCaster_ && player != nullptr && !player->IsDead() ) {
 
 		// 最初の１フレーム目だけ、プレイヤー本体に「3回防ぐシールド」を付与
@@ -142,8 +155,11 @@ void ShieldEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss
 			// シールド破壊：被弾ビネットをプレイヤー経由で発動
 			player->TriggerHitFlash();
 
-			isFinished_ = true;
-			return;
+			// 白フラッシュ：全画面ホワイトアウト
+			PostEffect::GetInstance()->SetColorTint(0.85f, 1.0f, 1.0f, 1.0f);
+			PostEffect::GetInstance()->SetEffectActive(PostEffectType::ColorTint, true);
+			breakFlashTimer_ = 8;
+			return; // タイマーが切れるまで待つ
 		}
 
 

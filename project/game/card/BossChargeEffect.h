@@ -69,4 +69,6 @@ private:
 
 	// 衝撃波リングの発射タイマー（C案トレイル用）
 	int shockwaveTimer_       = 0;
+
+	Camera* camera_ = nullptr;
 };
