@@ -298,7 +298,7 @@ void SceneManager::Draw(){
 	}
 
 	// 最後にフェードを上から重ねる
-	if (fadeSprite_) {
+	if (fadeSprite_ && fadeState_ != FadeState::None) {
 		auto commandList = DirectXCommon::GetInstance()->GetCommandList();
 		SpriteCommon::GetInstance()->PreDraw(commandList);
 		fadeSprite_->Draw();
@@ -322,6 +322,7 @@ void SceneManager::ChangeScene(const std::string& sceneName) {
 	fadeState_ = FadeState::Out;
 	fadeAlpha_ = 0.0f;
 	fadeWaitTimer_ = 0;
+	UpdateFadeCardSprites();
 }
 
 // シーン変更（直接シーンを渡す）
@@ -336,6 +337,7 @@ void SceneManager::ChangeScene(std::unique_ptr<IScene> nextScene) {
 	fadeState_ = FadeState::Out;
 	fadeAlpha_ = 0.0f;
 	fadeWaitTimer_ = 0;
+	UpdateFadeCardSprites();
 }
 
 void SceneManager::SetFirstScene(std::unique_ptr<IScene> scene) {

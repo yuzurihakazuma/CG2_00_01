@@ -247,6 +247,7 @@ private: // メンバ変数
 
 	// 画面全体を覆う黒スプライト
 	std::unique_ptr<Sprite> fadeSprite_ = nullptr; // または std::unique_ptr<Sprite> fadeSprite_;
+	std::vector<std::unique_ptr<Sprite>> floorTransitionCurtainSprites_;
 
 	// プレイヤーステータスの背景
 	std::unique_ptr<Sprite> playerStatusBgSprite_ = nullptr;
