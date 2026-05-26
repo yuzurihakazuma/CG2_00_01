@@ -254,7 +254,7 @@ void GamePlayScene::Initialize() {
 	TextManager::GetInstance()->SetPosition("PlayerCost", 40, 600);
 	TextManager::GetInstance()->SetPosition("PlayerLevel", 40, 640);
 	TextManager::GetInstance()->SetPosition("PlayerEXP", 40, 680);
-	TextManager::GetInstance()->SetPosition("Floor", 40, 250);
+	TextManager::GetInstance()->SetPosition("Floor", 40, 40);
 	TextManager::GetInstance()->SetScale("Floor", 1.2f);
 
 	// 画面サイズ取得
@@ -276,6 +276,16 @@ void GamePlayScene::Initialize() {
 	TextManager::GetInstance()->SetPosition("CostLack", screenW * 0.5f - 100.0f, screenH * 0.5f - 50.0f);
 	TextManager::GetInstance()->SetScale("CostLack", 1.6f);
 	TextManager::GetInstance()->SetColor("CostLack", 1.0f, 0.2f, 0.2f, 1.0f);
+	TextManager::GetInstance()->SetText("PlayerHpOverhead", "");
+	TextManager::GetInstance()->SetScale("PlayerHpOverhead", 0.9f);
+	TextManager::GetInstance()->SetCentered("PlayerHpOverhead", true);
+	TextManager::GetInstance()->SetColor("PlayerHpOverhead", 0.92f, 1.0f, 0.94f, 1.0f);
+	TextManager::GetInstance()->SetOutline("PlayerHpOverhead", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
+	TextManager::GetInstance()->SetText("PlayerCostOverhead", "");
+	TextManager::GetInstance()->SetScale("PlayerCostOverhead", 0.9f);
+	TextManager::GetInstance()->SetCentered("PlayerCostOverhead", true);
+	TextManager::GetInstance()->SetColor("PlayerCostOverhead", 0.82f, 0.96f, 1.0f, 1.0f);
+	TextManager::GetInstance()->SetOutline("PlayerCostOverhead", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
 
 	// 左下のステータス背景
 	playerStatusBgSprite_ = Sprite::Create("resources/white1x1.png", { 170.0f, 625.0f });
@@ -285,6 +295,11 @@ void GamePlayScene::Initialize() {
 	if (handCountBgSprite_) {
 		handCountBgSprite_->SetSize({ 220.0f, 106.0f });
 		handCountBgSprite_->SetColor({ 0.02f, 0.04f, 0.06f, 0.58f });
+	}
+	floorBgSprite_ = Sprite::Create("resources/white1x1.png", { 190.0f, 75.0f });
+	if (floorBgSprite_) {
+		floorBgSprite_->SetSize({ 360.0f, 120.0f });
+		floorBgSprite_->SetColor({ 0.02f, 0.04f, 0.06f, 0.58f });
 	}
 	playerHpGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
@@ -1487,15 +1502,15 @@ void GamePlayScene::Update() {
 	// ステータス背景（黒い帯）の更新
 	if (playerStatusBgSprite_) {
 		// 1. サイズの決定
-	// 横幅を 800px、高さを 50px に変更する例
-		float bgW = 900.0f;
+	// 横幅を小さくして、左側の背景と被らないようにする
+		float bgW = 800.0f;
 		float bgH = 76.0f;
 		playerStatusBgSprite_->SetSize({ bgW, bgH });
 
 		// 2. 位置の決定 (アンカーポイントが中心 0.5 の場合)
-		// 左端に寄せるなら、中心座標は「横幅の半分」にする
-		float posX = bgW * 0.5f + 250.0f; // 左に 20px の余白
-		float posY = bgH * 0.5f + 10.0f; // 上に 10px の余白
+		// HPバーの中央に合わせる
+		float posX = currentScreenW * 0.5f; 
+		float posY = 57.0f; // HPバーとコストバーの中心あたりに合わせる
 
 		playerStatusBgSprite_->SetPosition({ posX, posY });
 		playerStatusBgSprite_->Update();
@@ -1574,7 +1589,14 @@ void GamePlayScene::Update() {
 
 		// ★ 横並びに配置するための計算
 		float topY = 28.0f;
-		float startX = 0.0f;   // 左端からのX座標
+		const float gaugeWidth = 330.0f;
+		const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+
+		// HPバーを画面中央に置いたときの左端X
+		float gaugeLeft = (screenW - gaugeWidth) * 0.5f;
+
+		// HP文字の位置 (背景の枠内に収まるようゲージに少し寄せる)
+		float startX = gaugeLeft - 150.0f;
 
 		// テキストの座標を最新のウィンドウ幅に合わせて更新
 		textMgr->SetPosition("PlayerHP", startX, topY);
@@ -1582,11 +1604,52 @@ void GamePlayScene::Update() {
 		textMgr->SetColor("PlayerHP", 0.92f, 1.0f, 0.94f, 1.0f);
 		textMgr->SetScale("PlayerCost", 0.68f);
 		textMgr->SetColor("PlayerCost", 0.82f, 0.96f, 1.0f, 1.0f);
-		textMgr->SetScale("PlayerLevel", 0.9f);
-		textMgr->SetScale("PlayerEXP", 0.9f);
+		textMgr->SetScale("PlayerLevel", 0.72f);
+		textMgr->SetScale("PlayerEXP", 0.68f);
 		textMgr->SetPosition("PlayerCost", startX, 58.0f);
-		textMgr->SetPosition("PlayerLevel", 770.0f, 30.0f);
-		textMgr->SetPosition("PlayerEXP", 870.0f, 30.0f);
+		
+		float rightX = gaugeLeft + gaugeWidth + 15.0f;
+		textMgr->SetPosition("PlayerLevel", rightX, topY);
+		textMgr->SetPosition("PlayerEXP", rightX, 58.0f);
+
+		Vector2 overheadScreenPos{};
+		Vector3 overheadWorldPos = playerManager_->GetPosition();
+		overheadWorldPos.y += 2.4f;
+		if (!playerManager_->IsDead() && playerManager_->IsVisible() && ProjectWorldToScreen(overheadWorldPos, overheadScreenPos)) {
+			const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+			const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+			const bool isInScreen =
+				overheadScreenPos.x >= -40.0f &&
+				overheadScreenPos.x <= screenW + 40.0f &&
+				overheadScreenPos.y >= -40.0f &&
+				overheadScreenPos.y <= screenH + 40.0f;
+
+			if (isInScreen) {
+				Vector4 hpColor = { 1.0f, 0.25f, 0.20f, 1.0f };
+				const float hpRatio = playerManager_->GetMaxHP() > 0
+					? static_cast<float>(playerManager_->GetHP()) / static_cast<float>(playerManager_->GetMaxHP())
+					: 0.0f;
+
+				if (hpRatio > 0.5f) {
+					hpColor = { 0.15f, 0.9f, 0.25f, 0.95f };
+				} else if (hpRatio > 0.25f) {
+					hpColor = { 1.0f, 0.86f, 0.25f, 1.0f };
+				}
+
+				Vector4 costColor = { 0.18f, 0.68f, 1.0f, 0.95f };
+
+				textMgr->SetText("PlayerHpOverhead", "HP " + std::to_string(playerManager_->GetHP()));
+				textMgr->SetColor("PlayerHpOverhead", hpColor.x, hpColor.y, hpColor.z, hpColor.w);
+				textMgr->SetPosition("PlayerHpOverhead", overheadScreenPos.x, overheadScreenPos.y);
+
+				textMgr->SetText("PlayerCostOverhead", "COST " + std::to_string(playerManager_->GetCost()));
+				textMgr->SetColor("PlayerCostOverhead", costColor.x, costColor.y, costColor.z, costColor.w);
+				textMgr->SetPosition("PlayerCostOverhead", overheadScreenPos.x, overheadScreenPos.y + 34.0f);
+			}
+		} else {
+			textMgr->SetText("PlayerHpOverhead", "");
+			textMgr->SetText("PlayerCostOverhead", "");
+		}
 	}
 
 	{
@@ -1604,6 +1667,11 @@ void GamePlayScene::Update() {
 			handCountBgSprite_->SetSize({ 220.0f, 106.0f });
 			handCountBgSprite_->Update();
 		}
+		if (floorBgSprite_) {
+			floorBgSprite_->SetPosition({ 260.0f, 75.0f });
+			floorBgSprite_->SetSize({ 470.0f, 120.0f });
+			floorBgSprite_->Update();
+		}
 	}
 
 	if (tutorial_ && tutorial_->IsActive()) {
@@ -1620,7 +1688,7 @@ void GamePlayScene::Update() {
 	if (!(tutorial_ && tutorial_->IsActive())) {
 		TextManager* text = TextManager::GetInstance();
 
-		text->SetPosition("TutorialGuide", 1450.0f, 750.0f);
+		text->SetPosition("TutorialGuide", 40.0f, 100.0f);
 		text->SetCentered("TutorialGuide", false);
 		text->SetScale("TutorialGuide", 0.8f);
 		text->SetColor("TutorialGuide", 1.0f, 1.0f, 1.0f, 0.9f);
@@ -1946,6 +2014,9 @@ void GamePlayScene::Draw() {
 
 		if (handCountBgSprite_) {
 			handCountBgSprite_->Draw();
+		}
+		if (floorBgSprite_ && !(tutorial_ && tutorial_->IsActive())) {
+			floorBgSprite_->Draw();
 		}
 
 		levelUpBonusManager_.Draw();
@@ -2549,11 +2620,11 @@ void GamePlayScene::UpdatePlayerStatusGaugeUI() {
 		return;
 	}
 
-	const float panelLeft = 250.0f;
-	const float labelWidth = 150.0f;
-	const float gaugeLeft = panelLeft + labelWidth + 18.0f;
+	
 	const float gaugeWidth = 330.0f;
 	const float gaugeHeight = 14.0f;
+	const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+	const float gaugeLeft = (screenW - gaugeWidth) * 0.5f;
 	const float hpY = 42.0f;
 	const float costY = 72.0f;
 

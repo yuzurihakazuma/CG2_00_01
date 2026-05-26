@@ -28,6 +28,66 @@ std::wstring ConvertString(const std::string& utf8){
 	return wstrTo;
 }
 
+namespace {
+void DrawTextData(DirectX::SpriteFont* spriteFont, DirectX::SpriteBatch* spriteBatch, const TextData& data) {
+	std::wstring wText = ConvertString(data.text);
+	if (wText.empty()) {
+		return;
+	}
+
+	DirectX::XMFLOAT2 origin = { 0.0f, 0.0f };
+	if (data.isCentered) {
+		DirectX::XMVECTOR measured = spriteFont->MeasureString(wText.c_str());
+		DirectX::XMFLOAT2 measuredSize {};
+		DirectX::XMStoreFloat2(&measuredSize, measured);
+		origin = { measuredSize.x * 0.5f, measuredSize.y * 0.5f };
+	}
+
+	if (data.hasOutline && data.outlineOffset > 0.0f) {
+		DirectX::XMVECTOR outlineColor = DirectX::XMVectorSet(
+			data.outlineColor[0],
+			data.outlineColor[1],
+			data.outlineColor[2],
+			data.outlineColor[3]
+		);
+		const float offset = data.outlineOffset;
+		const DirectX::XMFLOAT2 offsets[] = {
+			{ -offset, -offset },
+			{  0.0f,  -offset },
+			{  offset, -offset },
+			{ -offset,  0.0f },
+			{  offset,  0.0f },
+			{ -offset,  offset },
+			{  0.0f,   offset },
+			{  offset,  offset },
+		};
+
+		for (const DirectX::XMFLOAT2& outlineOffset : offsets) {
+			spriteFont->DrawString(
+				spriteBatch,
+				wText.c_str(),
+				DirectX::XMFLOAT2(data.x + outlineOffset.x, data.y + outlineOffset.y),
+				outlineColor,
+				0.0f,
+				origin,
+				data.scale
+			);
+		}
+	}
+
+	DirectX::XMVECTOR color = DirectX::XMVectorSet(data.color[0], data.color[1], data.color[2], data.color[3]);
+	spriteFont->DrawString(
+		spriteBatch,
+		wText.c_str(),
+		DirectX::XMFLOAT2(data.x, data.y),
+		color,
+		0.0f,
+		origin,
+		data.scale
+	);
+}
+}
+
 void TextManager::Initialize(){
 	// 2回初期化されるのを防ぐ安全装置
 	if ( spriteBatch_ ){
@@ -101,31 +161,8 @@ void TextManager::Draw(){
 	for ( auto& pair : texts_ ) {
 		const TextData& data = pair.second;
 
-		// 色の変換 (RGBA配列 -> XMVECTOR型)
-		DirectX::XMVECTOR color = DirectX::XMVectorSet(data.color[0], data.color[1], data.color[2], data.color[3]);
-
-		// 文字列の変換 (std::string -> std::wstring)
-		std::wstring wText = ConvertString(data.text);
-
 		try {
-			// 画面に描画！
-			DirectX::XMFLOAT2 origin = { 0.0f, 0.0f };
-			if ( data.isCentered ) {
-				DirectX::XMVECTOR measured = spriteFont_->MeasureString(wText.c_str());
-				DirectX::XMFLOAT2 measuredSize {};
-				DirectX::XMStoreFloat2(&measuredSize, measured);
-				origin = { measuredSize.x * 0.5f, measuredSize.y * 0.5f };
-			}
-
-			spriteFont_->DrawString(
-				spriteBatch_.get(),
-				wText.c_str(),
-				DirectX::XMFLOAT2(data.x, data.y),
-				color,
-				0.0f,
-				origin,
-				data.scale
-			);
+			DrawTextData(spriteFont_.get(), spriteBatch_.get(), data);
 		} catch ( ... ) {
 			// ⚠️未対応の文字（今回なら日本語など）が来たときにクラッシュするのを防ぐ
 		}
@@ -168,27 +205,9 @@ void TextManager::DrawText(const std::string& key) {
 	spriteBatch_->Begin(commandList);
 
 	const TextData& data = it->second;
-	DirectX::XMVECTOR color = DirectX::XMVectorSet(data.color[0], data.color[1], data.color[2], data.color[3]);
-	std::wstring wText = ConvertString(data.text);
 
 	try {
-		DirectX::XMFLOAT2 origin = { 0.0f, 0.0f };
-		if (data.isCentered) {
-			DirectX::XMVECTOR measured = spriteFont_->MeasureString(wText.c_str());
-			DirectX::XMFLOAT2 measuredSize {};
-			DirectX::XMStoreFloat2(&measuredSize, measured);
-			origin = { measuredSize.x * 0.5f, measuredSize.y * 0.5f };
-		}
-
-		spriteFont_->DrawString(
-			spriteBatch_.get(),
-			wText.c_str(),
-			DirectX::XMFLOAT2(data.x, data.y),
-			color,
-			0.0f,
-			origin,
-			data.scale
-		);
+		DrawTextData(spriteFont_.get(), spriteBatch_.get(), data);
 	} catch (...) {
 		// 未対応文字が来たときにクラッシュするのを防ぐ
 	}
@@ -278,6 +297,9 @@ void TextManager::Save(const std::string& filePath){
 		j[key]["scale"] = data.scale;
 		j[key]["isCentered"] = data.isCentered;
 		j[key]["color"] = { data.color[0], data.color[1], data.color[2], data.color[3] };
+		j[key]["hasOutline"] = data.hasOutline;
+		j[key]["outlineColor"] = { data.outlineColor[0], data.outlineColor[1], data.outlineColor[2], data.outlineColor[3] };
+		j[key]["outlineOffset"] = data.outlineOffset;
 	}
 
 	std::ofstream file(filePath);
@@ -321,6 +343,20 @@ void TextManager::Load(const std::string& filePath){
 		data.color[2] = colorArray[2];
 		data.color[3] = colorArray[3];
 
+		if ( it.value().contains("hasOutline") ) {
+			data.hasOutline = it.value()["hasOutline"];
+		}
+		if ( it.value().contains("outlineColor") ) {
+			auto outlineColorArray = it.value()["outlineColor"];
+			data.outlineColor[0] = outlineColorArray[0];
+			data.outlineColor[1] = outlineColorArray[1];
+			data.outlineColor[2] = outlineColorArray[2];
+			data.outlineColor[3] = outlineColorArray[3];
+		}
+		if ( it.value().contains("outlineOffset") ) {
+			data.outlineOffset = it.value()["outlineOffset"];
+		}
+
 		texts_[key] = data;
 	}
 }
@@ -348,6 +384,15 @@ void TextManager::SetColor(const std::string& key, float r, float g, float b, fl
 	texts_[key].color[1] = g;
 	texts_[key].color[2] = b;
 	texts_[key].color[3] = a;
+}
+
+void TextManager::SetOutline(const std::string& key, bool enabled, float r, float g, float b, float a, float offset) {
+	texts_[key].hasOutline = enabled;
+	texts_[key].outlineColor[0] = r;
+	texts_[key].outlineColor[1] = g;
+	texts_[key].outlineColor[2] = b;
+	texts_[key].outlineColor[3] = a;
+	texts_[key].outlineOffset = offset;
 }
 
 void TextManager::Finalize(){

@@ -251,6 +251,7 @@ private: // メンバ変数
 	// プレイヤーステータスの背景
 	std::unique_ptr<Sprite> playerStatusBgSprite_ = nullptr;
 	std::unique_ptr<Sprite> handCountBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> floorBgSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeBackSprite_ = nullptr;
