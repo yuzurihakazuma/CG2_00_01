@@ -642,6 +642,11 @@ void GamePlayScene::Update() {
 		return;
 	}
 
+	// ゲームクリアなどのシーン遷移フェード中は、レベルアップ画面などの新しいUIを開かない。
+	if (isSceneTransitionFading) {
+		return;
+	}
+
 	if (isCardSwapMode_) {
 		if (isCardReady_) {
 			PauseMagicCastForSwap();
@@ -2005,7 +2010,9 @@ void GamePlayScene::Draw() {
 			handCountBgSprite_->Draw();
 		}
 
-		levelUpBonusManager_.Draw();
+		if (!SceneManager::GetInstance()->IsFading()) {
+			levelUpBonusManager_.Draw();
+		}
 
 		
 		DrawPauseUI();

@@ -165,6 +165,7 @@ private:
     std::unique_ptr<CardUseSystem> bossCardSystem_ = nullptr; // カード処理
 
     bool bossDeadHandled_ = false; // 死亡処理フラグ
+    bool splitBossFirstDefeatExpAwarded_ = false; // 分裂ボスの1体目撃破経験値を渡したか
 
     // HPバー
     std::unique_ptr<Sprite> bossHpBackSprite_ = nullptr;
