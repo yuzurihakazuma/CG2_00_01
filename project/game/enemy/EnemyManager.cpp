@@ -230,7 +230,7 @@ namespace {
 		Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 		switch (enemy.GetType()) {
 		case Enemy::Type::Fast:
-			baseColor = { 0.85f, 1.0f, 0.7f, 1.0f };
+			baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 			break;
 		case Enemy::Type::Ranged:
 			baseColor = { 0.75f, 0.9f, 1.0f, 1.0f };

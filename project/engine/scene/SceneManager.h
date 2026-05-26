@@ -45,6 +45,9 @@ public:
 	// エディタのアクティブ状態を管理
 	bool IsEditorActive() const { return isEditorActive_; }
 
+	// Fade input should be blocked while scene transition cards are covering the screen.
+	bool IsFading() const { return fadeState_ != FadeState::None; }
+
 	// 最初のシーンを設定（ゲーム開始時に一度だけ呼び出す）
 	void SetFirstScene(std::unique_ptr<IScene> scene);
 private:
