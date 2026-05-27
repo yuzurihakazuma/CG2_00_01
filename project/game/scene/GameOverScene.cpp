@@ -128,6 +128,14 @@ void GameOverScene::Initialize(){
     gameOverPlayer_->SetRotation(gameOverPlayerRot_);
     gameOverPlayer_->SetInputEnable(false); // ゲームオーバー画面では操作させない
     gameOverPlayerPoseTimer_ = 0;
+
+    // ロゴ落下アニメーション初期化
+    logoDropTimer_ = 0;
+    logoTargetY_   = screenH * 0.50f;
+    logoCurrentY_  = -400.0f; // 画面外の上からスタート
+    // プレイヤーへのスポットライト（MaskedGlow）を有効化
+    PostEffect::GetInstance()->SetPlayerScreenUV(0.5f, 0.6f, 0.40f); // 初期UV（カメラ更新前の仮値）
+    PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedGlow, true);
 }
 
 void GameOverScene::Update(){
@@ -167,13 +175,54 @@ void GameOverScene::Update(){
         gameOverPlayer_->Update();
     }
 
-    // ロゴの位置と大きさを更新する
+    // ---- ロゴ落下アニメーション ----
+    logoDropTimer_++;
+    {
+        const float startY  = -400.0f;
+        const float range   = logoTargetY_ - startY;
+
+        if (logoDropTimer_ <= 40) {
+            // 0〜40フレーム: 加速しながら落下（easeIn）
+            float t = static_cast<float>(logoDropTimer_) / 40.0f;
+            logoCurrentY_ = startY + range * (t * t);
+        } else if (logoDropTimer_ <= 48) {
+            // 40〜48フレーム: バウンス（上に跳ねる）
+            float t = static_cast<float>(logoDropTimer_ - 40) / 8.0f;
+            float bounce = std::sinf(t * 3.14159f) * 28.0f;
+            logoCurrentY_ = logoTargetY_ - bounce;
+        } else {
+            // 48フレーム以降: 着地位置で固定
+            logoCurrentY_ = logoTargetY_;
+        }
+    }
+
+    // ロゴの位置と大きさを更新する（落下アニメーションを適用）
     if (gameOverSprite_) {
         const float logoWidth = screenW * 0.90f;
         const float logoHeight = logoWidth * (1080.0f / 1920.0f);
-        gameOverSprite_->SetPosition({ screenW * 0.5f, screenH * 0.50f });
+        gameOverSprite_->SetPosition({ screenW * 0.5f, logoCurrentY_ });
         gameOverSprite_->SetSize({ logoWidth, logoHeight });
         gameOverSprite_->Update();
+    }
+
+    // ---- プレイヤーへのスポットライト (MaskedGlow) ----
+    if (camera_) {
+        // プレイヤーの胴体中央あたりをワールド座標で指定
+        Vector3 wp = {
+            gameOverPlayerBasePos_.x,
+            gameOverPlayerBasePos_.y + 1.0f,
+            gameOverPlayerBasePos_.z
+        };
+        const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+        float cx = wp.x * vp.m[0][0] + wp.y * vp.m[1][0] + wp.z * vp.m[2][0] + vp.m[3][0];
+        float cy = wp.x * vp.m[0][1] + wp.y * vp.m[1][1] + wp.z * vp.m[2][1] + vp.m[3][1];
+        float cw = wp.x * vp.m[0][3] + wp.y * vp.m[1][3] + wp.z * vp.m[2][3] + vp.m[3][3];
+        if (std::abs(cw) > 0.0001f) {
+            float uvX = cx / cw * 0.5f + 0.5f;
+            float uvY = -cy / cw * 0.5f + 0.5f;
+            PostEffect::GetInstance()->SetPlayerScreenUV(uvX, uvY, 0.40f);
+            PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedGlow, true);
+        }
     }
 
     if (spaceSprite_) {
@@ -258,6 +307,9 @@ void GameOverScene::Draw() {
 }
 
 void GameOverScene::Finalize(){
+    // スポットライトを切る（他シーンに影響させない）
+    PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedGlow, false);
+
     // このシーンで作ったものを解放する
     fallingBurnCards_.clear(); // 落下カード演出を解放する
     gameOverSprite_.reset();
