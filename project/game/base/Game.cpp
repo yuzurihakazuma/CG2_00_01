@@ -9,6 +9,7 @@
 #include "engine/base/DirectXCommon.h"   
 #include "engine/graphics/SrvManager.h"
 #include "engine/utils/EditorManager.h"
+#include "engine/audio/AudioManager.h"
 
 void Game::Initialize(){
 	// 基盤システムの初期化 (Window, DirectX, Input, Common類)
@@ -33,6 +34,7 @@ void Game::Initialize(){
 void Game::Update(){
 	// 基盤更新
 	Framework::Update();
+	AudioManager::GetInstance()->UpdateVoices();
 
 	// エディタ更新
 	EditorManager::GetInstance()->Begin();
