@@ -288,18 +288,23 @@ void GamePlayScene::Initialize() {
 	TextManager::GetInstance()->SetOutline("PlayerCostOverhead", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
 
 	// 左下のステータス背景
-	playerStatusBgSprite_ = Sprite::Create("resources/white1x1.png", { 170.0f, 625.0f });
-	playerStatusBgSprite_->SetSize({ 340.0f, 190.0f });
-	playerStatusBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.65f });
-	handCountBgSprite_ = Sprite::Create("resources/white1x1.png", { 132.0f, screenH - 82.0f });
-	if (handCountBgSprite_) {
-		handCountBgSprite_->SetSize({ 220.0f, 106.0f });
-		handCountBgSprite_->SetColor({ 0.02f, 0.04f, 0.06f, 0.58f });
+	playerStatusBgSprite_ = Sprite::Create("resources/UI/FrameHPBar.png", { 170.0f, 625.0f });
+	if (playerStatusBgSprite_) {
+		playerStatusBgSprite_->SetTextureRect(373.0f, 41.0f, 1049.0f, 122.0f);
+		playerStatusBgSprite_->SetSize({ 800.0f, 94.0f });
+		playerStatusBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
-	floorBgSprite_ = Sprite::Create("resources/white1x1.png", { 190.0f, 75.0f });
+	handCountBgSprite_ = Sprite::Create("resources/UI/FraemHand.png", { 132.0f, screenH - 82.0f });
+	if (handCountBgSprite_) {
+		handCountBgSprite_->SetTextureRect(78.0f, 1108.0f, 229.0f, 115.0f);
+		handCountBgSprite_->SetSize({ 220.0f, 110.0f });
+		handCountBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	floorBgSprite_ = Sprite::Create("resources/UI/Frame.png", { 124.0f, 66.0f });
 	if (floorBgSprite_) {
-		floorBgSprite_->SetSize({ 360.0f, 120.0f });
-		floorBgSprite_->SetColor({ 0.02f, 0.04f, 0.06f, 0.58f });
+		floorBgSprite_->SetTextureRect(17.0f, 26.0f, 320.0f, 107.0f);
+		floorBgSprite_->SetSize({ 300.0f, 140.0f });
+		floorBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
 	playerHpGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
@@ -352,13 +357,14 @@ void GamePlayScene::Initialize() {
 	}
 
 	// スプライト作成（座標 X:100, Y:500）
-	descBgSprite_ = Sprite::Create("resources/white1x1.png", { 100.0f, 500.0f });
+	descBgSprite_ = Sprite::Create("resources/UI/FrameCard.png", { 100.0f, 500.0f });
+	descBgSprite_->SetTextureRect(48.0f, 847.0f, 331.0f, 166.0f);
 
 	// 大きさを幅600, 高さ100の長方形にする
-	descBgSprite_->SetSize({ 600.0f, 100.0f });
+	descBgSprite_->SetSize({ 390.0f, 200.0f });
 
 	// 色を半透明の黒にする（Vector4 で R, G, B, A）
-	descBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.75f });// 画面全体を覆うフェード用スプライトの作成 (座標0,0)
+	descBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	
 	  // GPUパーティクル初期化 (テクスチャを指定する)
 	GPUParticleManager::GetInstance()->Initialize(
@@ -1567,8 +1573,10 @@ void GamePlayScene::Update() {
 		// 1. サイズの決定
 	// 横幅を小さくして、左側の背景と被らないようにする
 		float bgW = 800.0f;
-		float bgH = 76.0f;
+		float bgH = 94.0f;
+		playerStatusBgSprite_->SetTextureRect(373.0f, 41.0f, 1049.0f, 122.0f);
 		playerStatusBgSprite_->SetSize({ bgW, bgH });
+		playerStatusBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 
 		// 2. 位置の決定 (アンカーポイントが中心 0.5 の場合)
 		// HPバーの中央に合わせる
@@ -1726,13 +1734,16 @@ void GamePlayScene::Update() {
 		textMgr->SetPosition("HandCountLabel", 48.0f, screenH - 126.0f);
 		textMgr->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
 		if (handCountBgSprite_) {
-			handCountBgSprite_->SetPosition({ 132.0f, screenH - 82.0f });
-			handCountBgSprite_->SetSize({ 220.0f, 106.0f });
+			handCountBgSprite_->SetPosition({ 90.0f, screenH - 82.0f });
+			handCountBgSprite_->SetTextureRect(78.0f, 1108.0f, 229.0f, 115.0f);
+			handCountBgSprite_->SetSize({ 110.0f, 110.0f });
+			handCountBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 			handCountBgSprite_->Update();
 		}
 		if (floorBgSprite_) {
-			floorBgSprite_->SetPosition({ 260.0f, 75.0f });
-			floorBgSprite_->SetSize({ 470.0f, 120.0f });
+			floorBgSprite_->SetPosition({ 340.0f, 130.0f });
+			floorBgSprite_->SetTextureRect(13.0f, 15.0f, 320.0f, 144.0f);
+			floorBgSprite_->SetSize({ 640.0f, 200.0f });
 			floorBgSprite_->Update();
 		}
 	}
@@ -1757,7 +1768,7 @@ void GamePlayScene::Update() {
 		text->SetColor("TutorialGuide", 1.0f, 1.0f, 1.0f, 0.9f);
 		text->SetText(
 			"TutorialGuide",
-			"クリア条件:10階層まで進みボスを倒す"
+			"クリア条件:10階層まで進みボスを倒す\nESC:ポーズ画面"
 		);
 	}
 
@@ -1887,10 +1898,10 @@ void GamePlayScene::Update() {
 
 		// 枠のサイズ
 		float bgWidth = 390.0f;  // ミニマップの横幅に合わせると綺麗です
-		float bgHeight = 200.0f;
+		float bgHeight = 220.0f;
 
 		// 右端・上端からの余白
-		float marginLeft = 20.0f;
+		float marginLeft = 15.0f;
 		float marginBottom = 260.0f;
 
 		// 背景枠の位置（中心座標）
@@ -1902,14 +1913,16 @@ void GamePlayScene::Update() {
 		float bgPosY = screenH - marginBottom - (bgHeight * 0.5f);
 
 		if (descBgSprite_) {
+			descBgSprite_->SetTextureRect(48.0f, 847.0f, 331.0f, 166.0f);
 			descBgSprite_->SetSize({ bgWidth, bgHeight });
+			descBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 			descBgSprite_->SetPosition({ bgPosX, bgPosY });
 			descBgSprite_->Update();
 		}
 
 		// 3. 文字の位置（枠の左上に合わせる）
 		float textPosY = screenH - marginBottom - bgHeight + 15.0f;
-		TextManager::GetInstance()->SetPosition("CardT", textPosX, textPosY);
+		TextManager::GetInstance()->SetPosition("CardT", textPosX + 25.0f, textPosY);
 	}
 	else {
 		// 手札がない時は文字を消す
@@ -2463,13 +2476,15 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		float bgPosY = screenH - marginBottom - (bgHeight * 0.5f);
 
 		if (descBgSprite_) {
+			descBgSprite_->SetTextureRect(48.0f, 847.0f, 331.0f, 166.0f);
 			descBgSprite_->SetSize({ bgWidth, bgHeight });
+			descBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 			descBgSprite_->SetPosition({ bgPosX, bgPosY });
 			descBgSprite_->Update();
 		}
 
 		float textPosY = screenH - marginBottom - bgHeight + 15.0f;
-		TextManager::GetInstance()->SetPosition("CardT", textPosX, textPosY);
+		TextManager::GetInstance()->SetPosition("CardT", textPosX + 25.0f, textPosY);
 	}
 
 	// SPACE に加えて A ボタンでも決定できるようにする
