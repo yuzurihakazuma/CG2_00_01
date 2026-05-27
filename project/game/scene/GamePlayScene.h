@@ -299,10 +299,10 @@ private: // メンバ変数
 	float fireballPredictionYaw_ = 0.0f;
 	int fireballPredictionTimer_ = 0;
 	static constexpr int kFireballPredictionDuration = 24;
-	static constexpr float kFireballPredictionHalfWidth = 2.3f;
-	static constexpr float kEnemyFireballPredictionHalfWidth = 1.5f;
+	static constexpr float kFireballPredictionHalfWidth = 0.8f;
 	static constexpr float kFireballPredictionLength = 20.0f;
 	static constexpr float kFireballSpawnOffset = 1.5f;
+	static constexpr float kFireballPredictionLineThickness = 2.0f;
 	int fistCooldownTimer_ = 0;
 	const int fistCooldownDuration_ = 60;
 	std::unique_ptr<Obj3d> cardUseFlashObj_ = nullptr;
