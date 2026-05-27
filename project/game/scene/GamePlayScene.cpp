@@ -83,6 +83,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("normalEnemy", "resources/enemy", "normalEnemy.gltf");
 	ModelManager::GetInstance()->LoadModel("wallEnemy", "resources/enemy", "wallEnemy.obj");
 	ModelManager::GetInstance()->LoadModel("cornerEnemy", "resources/enemy", "cornerEnemy.obj");
+	ModelManager::GetInstance()->LoadModel("slimeEnemy", "resources/enemy", "slimeEnemy.obj");
 
 	// ボスモデル読み込み
 	ModelManager::GetInstance()->LoadModel("boss", "resources/boss", "boss.obj");
@@ -264,7 +265,7 @@ void GamePlayScene::Initialize() {
 	TextManager::GetInstance()->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
 	TextManager::GetInstance()->SetScale("HandCountLabel", 0.58f);
 	TextManager::GetInstance()->SetScale("HandCountValue", 0.95f);
-	TextManager::GetInstance()->SetColor("HandCountLabel", 0.70f, 0.86f, 1.0f, 0.92f);
+	TextManager::GetInstance()->SetColor("HandCountLabel", 1.0f, 1.0f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetColor("HandCountValue", 0.96f, 1.0f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetPosition("FloorTransition", screenW * 0.5f, screenH * 0.5f);
 	TextManager::GetInstance()->SetScale("FloorTransition", 2.0f);
@@ -1422,11 +1423,7 @@ void GamePlayScene::Update() {
 		// プレイヤーが拾う処理
 		if (player && !player->IsDead() && playerDist < 2.0f) {
 
-			// 使ったカードが消滅中なら、拾うのを一瞬だけ保留する！
-			if (handManager_.IsSelectedCardDissolving()) {
-				continue;
-			}
-
+			// 消滅中の手札があれば、HandManager::AddCard側で詰めてから末尾に追加する
 			bool success = handManager_.AddCard(pickup.card);
 			if (success) {
 				pickup.isActive = false;
@@ -1959,6 +1956,7 @@ void GamePlayScene::Draw() {
 	Boss* boss = bossManager_ ? bossManager_->GetBoss() : nullptr;
 	const bool isBossIntroPlaying = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
 	const bool isBossCinematicPlaying = isBossIntroPlaying || isBossDeathCinematicPlaying_;
+	const bool isLevelUpBonusSelecting = levelUpBonusManager_.IsSelecting();
 
 	// GPUパーティクルの描画準備（DispatchでComputeシェーダーを実行して、描画に必要なデータをGPU側で更新してもらう）
 	GPUParticleManager::GetInstance()->Dispatch(commandList);
@@ -2030,7 +2028,7 @@ void GamePlayScene::Draw() {
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
 	// 手札カードもBloom対象にしたいので、MRT描画中に3Dとして描く
-	if (!isBossCinematicPlaying) {
+	if (!isBossCinematicPlaying && !isLevelUpBonusSelecting) {
 
 		// ==========================================
 		// ★ 修正1：黒幕を「手札」より先に描画する！
@@ -2087,7 +2085,7 @@ void GamePlayScene::Draw() {
 
 	if (!isBossCinematicPlaying) {
 
-		if (!isCardSwapMode_) {
+		if (!isCardSwapMode_ && !isLevelUpBonusSelecting) {
 			handManager_.DrawCooldownOverlays();
 		}
 

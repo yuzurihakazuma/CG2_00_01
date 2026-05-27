@@ -179,7 +179,7 @@ private:
     int cost_ = 3;
     int maxCost_ = 3;
     int costRecoveryTimer_ = 0;
-    int costRecoveryInterval_ = 120;
+    int costRecoveryInterval_ = 100;
 
     // HP
     int hp_ = 10;

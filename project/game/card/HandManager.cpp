@@ -157,12 +157,16 @@ bool HandManager::AddCard(const Card& newCard) {
 	}
 
 	// =========================================================
-	// ★ 修正ポイント①：消えかかっている（ディゾルブ中の）枠を再利用する！
+	// 消えかかっているカードがあれば先に詰めて、新しいカードは末尾に追加する
 	// =========================================================
 	for (size_t i = 0; i < hand_.size(); ++i) {
 		if (isDissolving_[i]) {
-			// ディゾルブ中のカードを、拾った新しいカードで上書きする
-			hand_[i] = newCard;
+			const int removeIndex = static_cast<int>(i);
+			hand_.erase(hand_.begin() + removeIndex);
+			handModels_.erase(handModels_.begin() + removeIndex);
+			cooldownOverlays_.erase(cooldownOverlays_.begin() + removeIndex);
+			isDissolving_.erase(isDissolving_.begin() + removeIndex);
+			dissolveThresholds_.erase(dissolveThresholds_.begin() + removeIndex);
 
 			auto model = std::make_unique<Obj3d>();
 			model->Initialize(cardModelData);
@@ -171,15 +175,21 @@ bool HandManager::AddCard(const Card& newCard) {
 			model->SetDissolveThreshold(0.0f);
 			ApplyCardDissolveColor(model.get(), newCard);
 
-			handModels_[i] = std::move(model);
-			cooldownOverlays_[i] = CreateCooldownOverlay();
+			hand_.push_back(newCard);
+			handModels_.push_back(std::move(model));
+			cooldownOverlays_.push_back(CreateCooldownOverlay());
+			isDissolving_.push_back(false);
+			dissolveThresholds_.push_back(0.0f);
 
-			// ディゾルブをキャンセルして、新しいカードを実体化させる
-			isDissolving_[i] = false;
-			dissolveThresholds_[i] = 0.0f;
+			if (selectedCardIndex_ > removeIndex) {
+				selectedCardIndex_--;
+			}
+			ClampSelectedCardIndex();
+			pendingReturnToFist_ = false;
+			manualSelectionAfterUse_ = false;
 
 			// ドローきらめきフラグ
-			drawSparkCardIdx_ = static_cast<int>(i);
+			drawSparkCardIdx_ = static_cast<int>(hand_.size()) - 1;
 			drawSparkFrames_  = 4;
 
 			return true; // 取得成功！
