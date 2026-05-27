@@ -2702,13 +2702,7 @@ void GamePlayScene::StartFireballPredictionAttack(const Card& card) {
 	fireballPredictionTimer_ = kFireballPredictionDuration;
 	isFireballPredictionActive_ = true;
 
-	// チュートリアル練習中のファイヤーボールは使用後も消費しない
-	const bool keepTutorialMagicCard =
-		tutorial_ &&
-		tutorial_->IsReusableCombatPracticeStep() &&
-		card.id == 2;
-
-	EndMagicCast(!keepTutorialMagicCard);
+	// ファイヤーボールは時間制限中に連続で使えるので、ここでは待機状態を終了しない
 	player->LockAction(kFireballPredictionDuration);
 	player->PlayCardUsePose(kFireballPredictionDuration);
 }
