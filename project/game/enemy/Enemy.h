@@ -113,6 +113,8 @@ public:
     // 現在デバフ中か
     bool IsAttackDebuffed() const { return isAttackDebuffed_; }
 
+
+    void SetHP(int hp) { hp_ = hp; } // チュートリアル用に敵HPを上書きする
     // 詠唱状態
     bool IsCasting() const { return isCasting_; }
     int GetCastTimer() const { return castTimer_; }

@@ -44,6 +44,15 @@ void Tutorial::Start() {
 	firstRoomDodgeChecked_ = false;
 	firstRoomCardChecked_ = false;
 
+	combatPracticePendingCardId_ = -1;    // 練習用カードIDの記録を初期化する
+	combatPracticeTrackedEnemyHp_ = -1;   // 敵HP監視値を初期化する
+	combatPracticeTaskCompleted_ = false; // 練習タスク達成状態を初期化する
+
+	combatPracticePendingCardTimer_ = 0; // 直前カードIDタイマーを初期化する
+
+	combatPracticeAttackHitChecked_ = false; // 攻撃カード命中チェックを初期化する
+	combatPracticeMagicHitChecked_ = false;  // 魔法カード命中チェックを初期化する
+
 	step_ = Step::MoveChecklist;
 
 	ClearGameplayObjects();
@@ -61,18 +70,38 @@ void Tutorial::Update(Input* input) {
 	if (!isActive_) {
 		return;
 	}
-
+	// 直前に使ったカードIDは、一定時間を過ぎたら無効にする
+	if (combatPracticePendingCardTimer_ > 0) {
+		combatPracticePendingCardTimer_--;
+		if (combatPracticePendingCardTimer_ <= 0) {
+			combatPracticePendingCardId_ = -1;
+			combatPracticePendingCardTimer_ = 0;
+		}
+	}
 	if (step_ == Step::MoveChecklist) {
 		UpdateFirstRoomChecks(input);
 
 		if (IsFirstRoomChecklistComplete()) {
-			OpenCorridor(corridor0_);
-			step_ = Step::PickCard;
+			// 最初のタスク完了後、1秒だけその場で見せる
+			step_ = Step::FirstRoomTaskCompleteWait;
+			isPauseStep_ = false;
+			waitingForSpace_ = false;
+			tutorialAdvanceCooldown_ = 60; // 60フレーム = 約1秒
 			UpdateTexts();
 			return;
 		}
 	}
-
+	if (step_ == Step::FirstRoomTaskCompleteWait) {
+		// 1秒待ったら次の説明へ進む
+		if (tutorialAdvanceCooldown_ <= 0) {
+			step_ = Step::FirstRoomStatusIntro;
+			isPauseStep_ = true;
+			waitingForSpace_ = true;
+			tutorialAdvanceCooldown_ = kAdvanceCooldownFrames_;
+			UpdateTexts();
+			return;
+		}
+	}
 	if (tutorialAdvanceCooldown_ > 0) {
 		tutorialAdvanceCooldown_--;
 	}
@@ -93,7 +122,7 @@ void Tutorial::Update(Input* input) {
 		switch (step_) {
 
 		case Step::StatusIntro:
-			SpawnTutorialEnemy();
+			// 攻撃カード / 魔法カードの説明の次は、敵タスク説明に進む
 			step_ = Step::CombatIntro;
 			isPauseStep_ = true;
 			waitingForSpace_ = true;
@@ -103,6 +132,24 @@ void Tutorial::Update(Input* input) {
 		case Step::CombatIntro:
 			step_ = Step::DefeatEnemy;
 			isPauseStep_ = false;
+			UpdateTexts();
+			return;
+
+		case Step::FirstRoomStatusIntro:
+			// 上部UI説明の次は、カード操作説明へ進む
+			step_ = Step::FirstRoomCardControlIntro;
+			isPauseStep_ = true;
+			waitingForSpace_ = true;
+			tutorialAdvanceCooldown_ = kAdvanceCooldownFrames_;
+			UpdateTexts();
+			return;
+
+		case Step::FirstRoomCardControlIntro:
+			// カード操作説明が終わったら、次の部屋への通路を開ける
+			OpenCorridor(corridor0_);
+			step_ = Step::PickCard;
+			isPauseStep_ = false;
+			waitingForSpace_ = false;
 			UpdateTexts();
 			return;
 
@@ -142,15 +189,81 @@ void Tutorial::Update(Input* input) {
 		return;
 	}
 
-	if (step_ == Step::DefeatEnemy && enemySpawned_ && AreAllEnemiesDefeated()) {
+	if (step_ == Step::DefeatEnemy && context_.playerManager && !enemySpawned_) {
+		const Vector3 currentPos = context_.playerManager->GetPosition();
+		const LevelData& level = context_.mapManager->GetLevelData();
+		const int gridX = static_cast<int>(std::round(currentPos.x / level.tileSize));
+		const int gridZ = static_cast<int>(std::round(currentPos.z / level.tileSize));
+
+		if (IsInsideRect(gridX, gridZ, room2_)) {
+			SpawnTutorialEnemy();
+			combatPracticePendingCardId_ = -1;
+			combatPracticePendingCardTimer_ = 0; // 直前カードタイマーもリセットする
+			combatPracticeTaskCompleted_ = false;
+			combatPracticeAttackHitChecked_ = false;
+			combatPracticeMagicHitChecked_ = false;
+
+			// 練習用の敵は倒れないようにHPを大きくしておく
+			combatPracticeTrackedEnemyHp_ = 100000;
+			if (context_.enemyManager) {
+				const auto& enemies = context_.enemyManager->GetEnemies();
+				if (!enemies.empty() && enemies[0]) {
+					enemies[0]->SetHP(100000); // 練習用なので高HPにする
+				}
+			}
+		}
+	}
+
+	if (step_ == Step::DefeatEnemy && context_.enemyManager) {
+		// 練習用の敵はずっと止めておく
+		for (const auto& enemy : context_.enemyManager->GetEnemies()) {
+			if (enemy && !enemy->IsDead()) {
+				enemy->Freeze(2);
+			}
+		}
+
+		// 敵HPを見て、正しいカードで当てられたかを判定する
+		UpdateCombatPracticeHitCheck();
+	}
+
+	if (step_ == Step::DefeatEnemy && combatPracticeTaskCompleted_) {
+		// 正しいカードで当てられたら、練習用の敵を消す
+		context_.enemyManager->Clear();
+
+		// 練習用の状態をリセットする
+		enemySpawned_ = false;
+		combatPracticePendingCardId_ = -1;
+		combatPracticeTrackedEnemyHp_ = -1;
+		combatPracticeTaskCompleted_ = false;
+		requestCombatPracticeCleanup_ = true; // 手札から練習用2枚を消す依頼を出す
+
+		// 次の部屋への通路を開ける
 		OpenCorridor(corridor2_);
-		SpawnCardSwapTutorialCards();
-		step_ = Step::CardSwapIntro;
-		isPauseStep_ = true;
-		waitingForSpace_ = true;
-		tutorialAdvanceCooldown_ = kAdvanceCooldownFrames_;
+
+		// 次の案内へ進む
+		step_ = Step::GoToSwapRoom;
+		isPauseStep_ = false;
+		waitingForSpace_ = false;
 		UpdateTexts();
 		return;
+	}
+
+	if (step_ == Step::GoToSwapRoom && context_.playerManager) {
+		const Vector3 currentPos = context_.playerManager->GetPosition();
+		const LevelData& level = context_.mapManager->GetLevelData();
+		const int gridX = static_cast<int>(std::round(currentPos.x / level.tileSize));
+		const int gridZ = static_cast<int>(std::round(currentPos.z / level.tileSize));
+
+		// 次の部屋に入った瞬間にカード交換チュートリアルへ進める
+		if (IsInsideRect(gridX, gridZ, room3_)) {
+			SpawnCardSwapTutorialCards();
+			step_ = Step::CardSwapIntro;
+			isPauseStep_ = true;
+			waitingForSpace_ = true;
+			tutorialAdvanceCooldown_ = kAdvanceCooldownFrames_;
+			UpdateTexts();
+			return;
+		}
 	}
 
 	if (step_ == Step::CardSwapPractice && swapPickupSpawned_ && AreAllPickupsCollected()) {
@@ -336,12 +449,19 @@ void Tutorial::PlacePlayerAt(int tileX, int tileZ) {
 void Tutorial::SpawnTutorialCard() {
 	context_.cardPickupManager->Initialize(context_.camera);
 
-	const int cardX = room1_.right - 2;
-	const int cardZ = room1_.CenterZ();
+	const int centerX = room1_.CenterX();
+	const int centerZ = room1_.CenterZ();
 
+	// PickCard の部屋にファイヤーボールを置く
 	context_.cardPickupManager->AddPickup(
-		GetTileWorldPosition(cardX, cardZ, 0.01f),
-		CardDatabase::GetCardData(2)
+		GetTileWorldPosition(centerX - 2, centerZ, 0.01f),
+		CardDatabase::GetCardData(2) // ファイヤーボール
+	);
+
+	// PickCard の部屋にけりを置く
+	context_.cardPickupManager->AddPickup(
+		GetTileWorldPosition(centerX + 2, centerZ, 0.01f),
+		CardDatabase::GetCardData(13) // けり
 	);
 
 	pickupSpawned_ = true;
@@ -403,17 +523,27 @@ void Tutorial::SpawnEnemyCardTutorial() {
 
 	const int cardX = room4_.right - 2;
 	const int cardZ = room4_.CenterZ();
-	const int enemyX0 = cardX - 1;
-	const int enemyZ0 = cardZ - 1;
-	const int enemyX1 = cardX - 1;
-	const int enemyZ1 = cardZ + 1;
 
+	const int enemyX0 = cardX - 1;
+	const int enemyZ0 = cardZ - 2;
+
+	const int enemyX1 = cardX - 1;
+	const int enemyZ1 = cardZ;
+
+	const int enemyX2 = cardX - 1;
+	const int enemyZ2 = cardZ + 2;
+
+	// カードの手前側に3体並べて出す
 	context_.enemyManager->SpawnEnemyAt(
 		GetTileWorldPosition(enemyX0, enemyZ0, 1.0f),
 		context_.camera
 	);
 	context_.enemyManager->SpawnEnemyAt(
 		GetTileWorldPosition(enemyX1, enemyZ1, 1.0f),
+		context_.camera
+	);
+	context_.enemyManager->SpawnEnemyAt(
+		GetTileWorldPosition(enemyX2, enemyZ2, 1.0f),
 		context_.camera
 	);
 
@@ -525,6 +655,8 @@ void Tutorial::UpdateTexts() const {
 	text->SetPosition("TutorialCheckDodge", 20.0f, 465.0f);
 	text->SetPosition("TutorialCheckCard", 20.0f, 500.0f);
 
+
+
 	text->SetCentered("TutorialCheckMove", false);
 	text->SetCentered("TutorialCheckDodge", false);
 	text->SetCentered("TutorialCheckCard", false);
@@ -532,6 +664,19 @@ void Tutorial::UpdateTexts() const {
 	text->SetScale("TutorialCheckMove", 0.8f);
 	text->SetScale("TutorialCheckDodge", 0.8f);
 	text->SetScale("TutorialCheckCard", 0.8f);
+
+	text->SetPosition("TutorialCheckAttack", 20.0f, 430.0f);
+	text->SetPosition("TutorialCheckMagic", 20.0f, 465.0f);
+
+	text->SetCentered("TutorialCheckAttack", false);
+	text->SetCentered("TutorialCheckMagic", false);
+
+	text->SetScale("TutorialCheckAttack", 0.8f);
+	text->SetScale("TutorialCheckMagic", 0.8f);
+
+	// 毎フレーム最初に空文字を入れて、TextManager の初期値 "New Text" を出さない
+	text->SetText("TutorialCheckAttack", "");
+	text->SetText("TutorialCheckMagic", "");
 	switch (step_) {
 	case Step::MoveIntro:
 	text->SetText("TutorialTitle", "TUTORIAL 1 / 8");
@@ -565,10 +710,48 @@ void Tutorial::UpdateTexts() const {
 		text->SetColor("TutorialCheckDodge", firstRoomDodgeChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomDodgeChecked_ ? 0.3f : 1.0f, 1.0f);
 		text->SetColor("TutorialCheckCard", firstRoomCardChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomCardChecked_ ? 0.3f : 1.0f, 1.0f);
 		break;
-	case Step::PickCard:
+	case Step::FirstRoomTaskCompleteWait:
+		text->SetText("TutorialTitle", "TUTORIAL 1 / 8");
+
+		text->SetText(
+			"TutorialCheckMove",
+			firstRoomMoveChecked_ ? "[OK] 移動する" : "[ ] 移動する"
+		);
+		text->SetText(
+			"TutorialCheckDodge",
+			firstRoomDodgeChecked_ ? "[OK] 回避する" : "[ ] 回避する"
+		);
+		text->SetText(
+			"TutorialCheckCard",
+			firstRoomCardChecked_ ? "[OK] 殴りカードを使う" : "[ ] 殴りカードを使う"
+		);
+
+		text->SetColor("TutorialCheckMove", firstRoomMoveChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomMoveChecked_ ? 0.3f : 1.0f, 1.0f);
+		text->SetColor("TutorialCheckDodge", firstRoomDodgeChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomDodgeChecked_ ? 0.3f : 1.0f, 1.0f);
+		text->SetColor("TutorialCheckCard", firstRoomCardChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomCardChecked_ ? 0.3f : 1.0f, 1.0f);
+
+		break;
+	case Step::FirstRoomStatusIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 2 / 8");
-		// 次の部屋でカードを拾わせる説明を表示する
-		text->SetText("TutorialBody", "次の部屋にあるカードを拾ってください。");
+		// 最初の部屋のタスク完了後に、上部UIを説明する
+		text->SetText("TutorialBody", "上にHP、コスト、レベル、経験値が表示されます。\nカード使用でコストを消費します。SPACEで再開します。");
+		text->SetText("TutorialCheckMove", "");
+		text->SetText("TutorialCheckDodge", "");
+		text->SetText("TutorialCheckCard", "");
+		break;
+
+	case Step::FirstRoomCardControlIntro:
+		text->SetText("TutorialTitle", "TUTORIAL 2 / 8");
+		// 次にカード選択と使用方法を説明する
+		text->SetText("TutorialBody", "矢印キーで選びSPACEで選択中のカードを使います。\nSPACEで再開します。");
+		text->SetText("TutorialCheckMove", "");
+		text->SetText("TutorialCheckDodge", "");
+		text->SetText("TutorialCheckCard", "");
+		break;
+	case Step::PickCard:
+		text->SetText("TutorialTitle", "TUTORIAL 3 / 8");
+		// 説明が終わったら、次の部屋で2枚のカードを拾わせる
+		text->SetText("TutorialBody", "次の部屋にある2枚のカードを拾ってください。");
 		text->SetText("TutorialCheckMove", "");
 		text->SetText("TutorialCheckDodge", "");
 		text->SetText("TutorialCheckCard", "");
@@ -576,7 +759,8 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::StatusIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 3 / 8");
-		text->SetText("TutorialBody", "上にHP、コスト、レベル、経験値が表示されます。\nカード使用でコストを消費します。SPACEで次");
+		// 2枚拾ったあとに攻撃カードと魔法カードの違いを説明する
+		text->SetText("TutorialBody", "けりは攻撃カード、ファイヤーボールは魔法カードです。\n攻撃カードは近くの敵に使い、魔法カードは離れた敵にも使えます。\nカードに種類が書いてあります。\n'攻'が攻撃'魔'が魔法です。\nSPACEで次へ進みます。");
 		text->SetText("TutorialCheckMove", "");
 		text->SetText("TutorialCheckDodge", "");
 		text->SetText("TutorialCheckCard", "");
@@ -584,12 +768,35 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::CombatIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
-		text->SetText("TutorialBody", "矢印キーで選びSPACEで選択中のカードを使います。\nSPACEで再開します。");
+		// 練習用なので、けりとファイヤーボールは何回でも使えることを説明する
+		text->SetText("TutorialBody", "次の部屋の敵に攻撃カードと魔法カードで攻撃し当ててみてください。\nこの部屋では練習なので何度もカードが使えます\nSPACEで始めます。");
 		break;
-
 	case Step::DefeatEnemy:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
-		text->SetText("TutorialBody", "2つ目の部屋の敵を倒してください。\n倒すまで次の部屋には進めません。");
+		// 攻撃カードと魔法カードの両方を当てる練習タスクを表示する
+		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\nこの練習では、けりとファイヤーボールは何回でも使えます。");
+
+		text->SetText(
+			"TutorialCheckAttack",
+			combatPracticeAttackHitChecked_ ? "[OK] けりを当てる" : "[ ] けりを当てる"
+		);
+		text->SetText(
+			"TutorialCheckMagic",
+			combatPracticeMagicHitChecked_ ? "[OK] ファイヤーボールを当てる" : "[ ] ファイヤーボールを当てる"
+		);
+
+		text->SetColor("TutorialCheckAttack", combatPracticeAttackHitChecked_ ? 0.3f : 1.0f, 1.0f, combatPracticeAttackHitChecked_ ? 0.3f : 1.0f, 1.0f);
+		text->SetColor("TutorialCheckMagic", combatPracticeMagicHitChecked_ ? 0.3f : 1.0f, 1.0f, combatPracticeMagicHitChecked_ ? 0.3f : 1.0f, 1.0f);
+
+		text->SetText("TutorialCheckMove", "");
+		text->SetText("TutorialCheckDodge", "");
+		text->SetText("TutorialCheckCard", "");
+		break;
+
+	case Step::GoToSwapRoom:
+		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
+		// 練習後は次の部屋へ進ませる
+		text->SetText("TutorialBody", "次の部屋に進んでください。");
 		break;
 
 	case Step::CardSwapIntro:
@@ -603,7 +810,7 @@ void Tutorial::UpdateTexts() const {
 		break;
 
 	case Step::EnemyCardWatch:
-		text->SetText("TutorialTitle", "TUTORIAL 6 / 8");
+		text->SetText("TutorialTitle", "TUTORIAL 5 / 8");
 		text->SetText("TutorialBody", "");
 		break;
 
@@ -614,7 +821,7 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::EnemyCardBattle:
 		text->SetText("TutorialTitle", "TUTORIAL 6 / 8");
-		text->SetText("TutorialBody", "この部屋の敵を2体とも倒してください。");
+		text->SetText("TutorialBody", "この部屋の敵を3体とも倒してください。");
 		break;
 
 	case Step::LevelUpIntro:
@@ -635,6 +842,8 @@ void Tutorial::ClearTexts() const {
 	TextManager::GetInstance()->SetText("TutorialCheckMove", "");
 	TextManager::GetInstance()->SetText("TutorialCheckDodge", "");
 	TextManager::GetInstance()->SetText("TutorialCheckCard", "");
+	TextManager::GetInstance()->SetText("TutorialCheckAttack", "");
+	TextManager::GetInstance()->SetText("TutorialCheckMagic", "");
 }
 
 bool Tutorial::IsFirstRoomChecklistComplete() const {
@@ -683,4 +892,84 @@ void Tutorial::UpdateFirstRoomChecks(Input* input) {
 		firstRoomDodgeChecked_ = true;
 		UpdateTexts();
 	}
+}
+
+bool Tutorial::IsReusableCombatPracticeStep() const {
+	// カード命中練習中だけ、けりとファイヤーボールを使い捨てにしない
+	return isActive_ && step_ == Step::DefeatEnemy;
+}
+
+void Tutorial::NotifyCombatPracticeCardUsed(int cardId) {
+	// 練習用の敵タスク中だけ、直前に使ったカードIDを記録する
+	if (step_ != Step::DefeatEnemy) {
+		return;
+	}
+
+	// 練習対象はファイヤーボール(2)とけり(13)だけにする
+	if (cardId == 2 || cardId == 13) {
+		combatPracticePendingCardId_ = cardId;
+		// 命中判定は短時間だけ有効にする
+		combatPracticePendingCardTimer_ = 180;
+	}
+}
+
+void Tutorial::UpdateCombatPracticeHitCheck() {
+	// 練習用の敵タスク中だけ、敵への命中を監視する
+	if (step_ != Step::DefeatEnemy || !context_.enemyManager || !enemySpawned_) {
+		return;
+	}
+
+	const auto& enemies = context_.enemyManager->GetEnemies();
+	if (enemies.empty() || !enemies[0]) {
+		return;
+	}
+
+	Enemy* enemy = enemies[0].get();
+
+	// 敵に何かが当たっているフレームで、直前に使ったカードIDを見てチェックを付ける
+	if (enemy->IsHit() && combatPracticePendingCardTimer_ > 0) {
+		bool changed = false; // OK表示を更新する必要があるかを覚える
+
+		if (combatPracticePendingCardId_ == 13 && !combatPracticeAttackHitChecked_) {
+			// けりは攻撃カード扱い
+			combatPracticeAttackHitChecked_ = true;
+			changed = true;
+		}
+
+		if (combatPracticePendingCardId_ == 2 && !combatPracticeMagicHitChecked_) {
+			// ファイヤーボールは魔法カード扱い
+			combatPracticeMagicHitChecked_ = true;
+			changed = true;
+		}
+
+		// 練習中は敵を倒させず、命中確認後にHPを元へ戻す
+		if (combatPracticeTrackedEnemyHp_ > 0) {
+			enemy->SetHP(combatPracticeTrackedEnemyHp_);
+		}
+
+		// 命中を確認したので、直前カード記録を消す
+		combatPracticePendingCardId_ = -1;
+		combatPracticePendingCardTimer_ = 0; // 命中したので有効時間も終了する
+
+		// チェック状態が変わった瞬間に表示を更新する
+		if (changed) {
+			UpdateTexts();
+		}
+	}
+
+	// 攻撃カードと魔法カードの両方が当たったら完了
+	if (IsCombatPracticeCompleted()) {
+		combatPracticeTaskCompleted_ = true;
+	}
+}
+bool Tutorial::ConsumeCombatPracticeClearRequest() {
+	// 練習完了後のカード整理依頼を1回だけ渡す
+	const bool requested = requestCombatPracticeCleanup_;
+	requestCombatPracticeCleanup_ = false;
+	return requested;
+}
+
+bool Tutorial::IsCombatPracticeCompleted() const {
+	// 攻撃カードと魔法カードの両方を当てたら完了
+	return combatPracticeAttackHitChecked_ && combatPracticeMagicHitChecked_;
 }

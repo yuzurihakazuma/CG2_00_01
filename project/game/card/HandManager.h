@@ -56,7 +56,7 @@ private:
 	void ClampSelectedCardIndex();
 	bool SelectCardById(int cardId);
 	void ApplyPostUseSelectionAfterRemove();
-
+	
 public:
 	//初期化
 	void Initialize(Camera* camera, uint32_t noiseTextureIndex);
@@ -142,4 +142,6 @@ public:
 
 		selectedCardIndex_ = index;
 	}
+
+	void RemoveCardsById(int cardId); // 指定したIDのカードを手札から全部消す
 };

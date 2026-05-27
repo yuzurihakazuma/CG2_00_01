@@ -38,7 +38,10 @@ public:
 
 	void CheckPlayerGoal(const Vector3& playerWorldPos);
 	void NotifyFirstRoomCardUsed();
-
+	bool IsReusableCombatPracticeStep() const; // 練習用カードを無限使用にするステップかどうか
+	void NotifyCombatPracticeCardUsed(int cardId); // 練習用に、直前に使ったカードIDを記録する
+	void UpdateCombatPracticeHitCheck(); // 練習用の敵が正しいカードで攻撃されたかを判定する
+	bool ConsumeCombatPracticeClearRequest(); // 練習完了後にカード削除を依頼する
 private:
 	struct Rect {
 		int left;
@@ -53,10 +56,14 @@ private:
 	enum class Step {
 		MoveIntro,
 		MoveChecklist,
+		FirstRoomTaskCompleteWait,
+		FirstRoomStatusIntro,
+		FirstRoomCardControlIntro,
 		PickCard,
 		StatusIntro,
 		CombatIntro,
 		DefeatEnemy,
+		GoToSwapRoom,
 		CardSwapIntro,
 		CardSwapPractice,
 		EnemyCardWatch,
@@ -92,7 +99,7 @@ private:
 
 	void UpdateFirstRoomChecks(Input* input);
 	bool IsFirstRoomChecklistComplete() const;
-
+	bool IsCombatPracticeCompleted() const; // 攻撃カードと魔法カードの両方を当てたか
 private:
 	Context context_{};
 	bool isActive_ = false;
@@ -134,4 +141,14 @@ private:
 	bool firstRoomCardChecked_ = false;
 
 	bool shouldPauseOnIntro_ = false;
+
+	int combatPracticePendingCardId_ = -1;   // 直前に使った練習用カードIDを覚える
+	int combatPracticeTrackedEnemyHp_ = -1;  // 練習用の敵HPを監視する
+	bool combatPracticeTaskCompleted_ = false; // 正しいカードで敵に当てたか
+
+	bool requestCombatPracticeCleanup_ = false; // 練習完了後に手札整理を依頼する
+
+	bool combatPracticeAttackHitChecked_ = false; // 攻撃カードを当てたか
+	bool combatPracticeMagicHitChecked_ = false;  // 魔法カードを当てたか
+	int combatPracticePendingCardTimer_ = 0; // 直前カードIDの有効時間
 };

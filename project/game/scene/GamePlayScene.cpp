@@ -782,6 +782,12 @@ void GamePlayScene::Update() {
 		tutorial_->Update(shouldFreezeGameplayForFade ? nullptr : input);
 		tutorial_->CheckPlayerGoal(playerPos_);
 
+		// 練習タスク完了後は、練習用に配っていた2枚のカードを手札から消す
+		if (tutorial_->ConsumeCombatPracticeClearRequest()) {
+			handManager_.RemoveCardsById(2);  // ファイヤーボールを消す
+			handManager_.RemoveCardsById(13); // けりを消す
+		}
+
 		if (tutorial_->ConsumeAdvanceInputRequest()) {
 			return;
 		}
@@ -1833,8 +1839,14 @@ void GamePlayScene::Update() {
 		TextManager::GetInstance()->SetScale("ReadyCardT", 0.92f);
 		TextManager::GetInstance()->SetColor("ReadyCardT", 1.0f, 0.95f, 0.55f, 1.0f);
 
+		// チュートリアル練習中のファイヤーボールは時間切れで消費しない
+		const bool keepTutorialMagicCard =
+			tutorial_ &&
+			tutorial_->IsReusableCombatPracticeStep() &&
+			readiedCard_.id == 2;
+
 		if (cardReadyTimer_ <= 0) {
-			EndMagicCast(true);
+			EndMagicCast(!keepTutorialMagicCard);
 		}
 	} else if (!isCardReady_) {
 		handManager_.SetCastDisplay(-1, 0, 0, -1);
@@ -2685,7 +2697,13 @@ void GamePlayScene::StartFireballPredictionAttack(const Card& card) {
 	fireballPredictionTimer_ = kFireballPredictionDuration;
 	isFireballPredictionActive_ = true;
 
-	EndMagicCast(true);
+	// チュートリアル練習中のファイヤーボールは使用後も消費しない
+	const bool keepTutorialMagicCard =
+		tutorial_ &&
+		tutorial_->IsReusableCombatPracticeStep() &&
+		card.id == 2;
+
+	EndMagicCast(!keepTutorialMagicCard);
 	player->LockAction(kFireballPredictionDuration);
 	player->PlayCardUsePose(kFireballPredictionDuration);
 }
@@ -3075,7 +3093,20 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	}
 
 	// コストを消費
-	playerManager_->UseCost(selectedCard.cost);
+	// チュートリアルの命中練習中は、けりとファイヤーボールのコストを消費しない
+	const bool isReusableTutorialCard =
+		tutorial_ &&
+		tutorial_->IsReusableCombatPracticeStep() &&
+		(selectedCard.id == 2 || selectedCard.id == 13);
+
+	if (!isReusableTutorialCard) {
+		playerManager_->UseCost(selectedCard.cost);
+	}
+
+	// チュートリアルの練習中は、今使ったカードIDを Tutorial 側へ通知する
+	if (tutorial_ && tutorial_->IsActive()) {
+		tutorial_->NotifyCombatPracticeCardUsed(selectedCard.id);
+	}
 
 	if (tutorial_ && tutorial_->IsActive() && selectedCard.id == 1) {
 		tutorial_->NotifyFirstRoomCardUsed();
@@ -3118,8 +3149,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		handManager_.SetCooldownDisplay(1, fistCooldownTimer_, fistCooldownDuration_);
 	}
 
-	// 初期カード以外は使用後にディゾルブ開始
-	if (selectedCard.id != 1) {
+	if (selectedCard.id != 1 && !isReusableTutorialCard) {
 		handManager_.StartDissolveSelectedCard();
 	}
 
