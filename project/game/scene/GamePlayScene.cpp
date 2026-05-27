@@ -287,6 +287,22 @@ void GamePlayScene::Initialize() {
 	TextManager::GetInstance()->SetCentered("PlayerCostOverhead", true);
 	TextManager::GetInstance()->SetColor("PlayerCostOverhead", 0.82f, 0.96f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetOutline("PlayerCostOverhead", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
+	TextManager::GetInstance()->SetText("MoveLabel", "移動");
+	TextManager::GetInstance()->SetScale("MoveLabel", 0.85f);
+	TextManager::GetInstance()->SetColor("MoveLabel", 1.0f, 1.0f, 1.0f, 1.0f);
+	TextManager::GetInstance()->SetOutline("MoveLabel", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
+	TextManager::GetInstance()->SetText("AvoidanceLabel", "回避");
+	TextManager::GetInstance()->SetScale("AvoidanceLabel", 0.85f);
+	TextManager::GetInstance()->SetColor("AvoidanceLabel", 1.0f, 1.0f, 1.0f, 1.0f);
+	TextManager::GetInstance()->SetOutline("AvoidanceLabel", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
+	TextManager::GetInstance()->SetText("CardSelectLabel", "カード選択");
+	TextManager::GetInstance()->SetScale("CardSelectLabel", 0.85f);
+	TextManager::GetInstance()->SetColor("CardSelectLabel", 1.0f, 1.0f, 1.0f, 1.0f);
+	TextManager::GetInstance()->SetOutline("CardSelectLabel", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
+	TextManager::GetInstance()->SetText("SlideMoveLabel", "");
+	TextManager::GetInstance()->SetScale("SlideMoveLabel", 0.85f);
+	TextManager::GetInstance()->SetColor("SlideMoveLabel", 1.0f, 1.0f, 1.0f, 1.0f);
+	TextManager::GetInstance()->SetOutline("SlideMoveLabel", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
 
 	// 左下のステータス背景
 	playerStatusBgSprite_ = Sprite::Create("resources/UI/FrameHPBar.png", { 170.0f, 625.0f });
@@ -307,6 +323,31 @@ void GamePlayScene::Initialize() {
 		floorBgSprite_->SetSize({ 300.0f, 140.0f });
 		floorBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
+	moveUiSprite_ = Sprite::Create("resources/UI/moveUI.png", { 0.0f, 0.0f });
+	if (moveUiSprite_) {
+		moveUiSprite_->SetTextureRect(1612.0f, 1103.0f, 174.0f, 121.0f);
+		moveUiSprite_->SetSize({ 150.0f, 104.0f });
+		moveUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	avoidanceUiSprite_ = Sprite::Create("resources/UI/avoidanceUI.png", { 0.0f, 0.0f });
+	if (avoidanceUiSprite_) {
+		avoidanceUiSprite_->SetTextureRect(1600.0f, 1150.0f, 200.0f, 73.0f);
+		avoidanceUiSprite_->SetSize({ 136.0f, 73.0f });
+		avoidanceUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	cardSelectUiSprite_ = Sprite::Create("resources/UI/avoidance2UI.png", { 0.0f, 0.0f });
+	if (cardSelectUiSprite_) {
+		cardSelectUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
+		cardSelectUiSprite_->SetSize({ 150.0f, 59.0f });
+		cardSelectUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	slideMoveUiSprite_ = Sprite::Create("resources/UI/avoidance2UI.png", { 0.0f, 0.0f });
+	if (slideMoveUiSprite_) {
+		slideMoveUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
+		slideMoveUiSprite_->SetSize({ 150.0f, 59.0f });
+		slideMoveUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	UpdateMoveUiLayout();
 	playerHpGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
 	playerHpGaugeBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
@@ -462,6 +503,55 @@ void GamePlayScene::Initialize() {
 	}
 
 
+}
+
+void GamePlayScene::UpdateMoveUiLayout() {
+	const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+	const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+	const Vector2 moveIconSize = { 150.0f, 104.0f };
+	const Vector2 avoidanceIconSize = { 136.0f, 73.0f };
+	const Vector2 cardSelectIconSize = { 150.0f, 59.0f };
+	const Vector2 slideMoveIconSize = { 150.0f, 59.0f };
+	const float iconColumnWidth = 150.0f;
+	const float textGap = 18.0f;
+	const float rowGap = 0.0f;
+	const float labelWidth = 170.0f;
+	const float marginRight = 48.0f;
+	const float marginBottom = 10.0f;
+
+	const float groupWidth = iconColumnWidth + textGap + labelWidth;
+	const float groupHeight =
+		moveIconSize.y + rowGap +
+		avoidanceIconSize.y + rowGap +
+		cardSelectIconSize.y + rowGap +
+		slideMoveIconSize.y;
+	const float iconLeft = std::max(16.0f, screenW - marginRight - groupWidth);
+	const float groupTop = std::max(16.0f, screenH - marginBottom - groupHeight);
+	const float labelX = iconLeft + iconColumnWidth + textGap;
+
+	auto placeRow = [iconLeft, iconColumnWidth, labelX](Sprite* sprite, const Vector2& iconSize, float rowTop, const std::string& labelKey) {
+		const float iconX = iconLeft + (iconColumnWidth * 0.5f);
+		if (sprite) {
+			sprite->SetPosition({ iconX, rowTop + iconSize.y * 0.5f });
+			sprite->SetSize(iconSize);
+			sprite->Update();
+		}
+
+		TextManager::GetInstance()->SetPosition(
+			labelKey,
+			labelX,
+			rowTop + iconSize.y * 0.5f - 14.0f
+		);
+	};
+
+	float rowTop = groupTop;
+	placeRow(moveUiSprite_.get(), moveIconSize, rowTop, "MoveLabel");
+	rowTop += moveIconSize.y + rowGap;
+	placeRow(avoidanceUiSprite_.get(), avoidanceIconSize, rowTop, "AvoidanceLabel");
+	rowTop += avoidanceIconSize.y + rowGap;
+	placeRow(cardSelectUiSprite_.get(), cardSelectIconSize, rowTop, "CardSelectLabel");
+	rowTop += cardSelectIconSize.y + rowGap;
+	placeRow(slideMoveUiSprite_.get(), slideMoveIconSize, rowTop, "SlideMoveLabel");
 }
 
 void GamePlayScene::Update() {
@@ -1756,9 +1846,9 @@ void GamePlayScene::Update() {
 		textMgr->SetPosition("HandCountLabel", 48.0f, screenH - 126.0f);
 		textMgr->SetPosition("HandCountValue", 48.0f, screenH - 88.0f);
 		if (handCountBgSprite_) {
-			handCountBgSprite_->SetPosition({ 90.0f, screenH - 82.0f });
+			handCountBgSprite_->SetPosition({ 100.0f, screenH - 82.0f });
 			handCountBgSprite_->SetTextureRect(78.0f, 1108.0f, 229.0f, 115.0f);
-			handCountBgSprite_->SetSize({ 110.0f, 110.0f });
+			handCountBgSprite_->SetSize({ 160.0f, 110.0f });
 			handCountBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 			handCountBgSprite_->Update();
 		}
@@ -1890,6 +1980,7 @@ void GamePlayScene::Update() {
 	if (descBgSprite_) {
 		descBgSprite_->Update();
 	}
+	UpdateMoveUiLayout();
 
 	// 手札がある時だけ処理
 	if (handManager_.GetHandSize() > 0) {
@@ -1936,7 +2027,7 @@ void GamePlayScene::Update() {
 
 		// 右端・上端からの余白
 		float marginLeft = 15.0f;
-		float marginBottom = 260.0f;
+		float marginBottom = 400.0f;
 
 		// 背景枠の位置（中心座標）
 		float textPosX = marginLeft;
@@ -2130,6 +2221,18 @@ void GamePlayScene::Draw() {
 		}
 		if (floorBgSprite_ && !(tutorial_ && tutorial_->IsActive())) {
 			floorBgSprite_->Draw();
+		}
+		if (moveUiSprite_) {
+			moveUiSprite_->Draw();
+		}
+		if (avoidanceUiSprite_) {
+			avoidanceUiSprite_->Draw();
+		}
+		if (cardSelectUiSprite_) {
+			cardSelectUiSprite_->Draw();
+		}
+		if (slideMoveUiSprite_) {
+			slideMoveUiSprite_->Draw();
 		}
 
 		if (!SceneManager::GetInstance()->IsFading()) {
