@@ -35,20 +35,35 @@ namespace {
 		static const EnemyTypeWeight floor1To2[] = {
 			{ Enemy::Type::Normal, 100 },
 		};
-		static const EnemyTypeWeight floor3To5[] = {
-			{ Enemy::Type::Normal, 70 },
-			{ Enemy::Type::Fast, 30 },
+		static const EnemyTypeWeight floor3[] = {
+			{ Enemy::Type::Normal, 75 },
+			{ Enemy::Type::Fast, 25 },
 		};
-		static const EnemyTypeWeight floor6To8[] = {
-			{ Enemy::Type::Normal, 45 },
+		static const EnemyTypeWeight floor4[] = {
+			{ Enemy::Type::Normal, 50 },
+			{ Enemy::Type::Fast, 50 },
+		};
+		static const EnemyTypeWeight floor6[] = {
+			{ Enemy::Type::Normal, 37 },
+			{ Enemy::Type::Fast, 37 },
+			{ Enemy::Type::Ranged, 26 },
+		};
+		static const EnemyTypeWeight floor7[] = {
+			{ Enemy::Type::Normal, 34 },
+			{ Enemy::Type::Fast, 33 },
+			{ Enemy::Type::Ranged, 33 },
+		};
+		static const EnemyTypeWeight floor8[] = {
+			{ Enemy::Type::Normal, 25 },
 			{ Enemy::Type::Fast, 30 },
-			{ Enemy::Type::Ranged, 25 },
+			{ Enemy::Type::Ranged, 30 },
+			{ Enemy::Type::Heavy, 15 },
 		};
 		static const EnemyTypeWeight floor9Plus[] = {
-			{ Enemy::Type::Normal, 35 },
+			{ Enemy::Type::Normal, 25 },
 			{ Enemy::Type::Fast, 25 },
 			{ Enemy::Type::Ranged, 25 },
-			{ Enemy::Type::Heavy, 15 },
+			{ Enemy::Type::Heavy, 25 },
 		};
 
 		const EnemyTypeWeight *weights = floor1To2;
@@ -56,12 +71,21 @@ namespace {
 		if (floor >= 9) {
 			weights = floor9Plus;
 			weightCount = static_cast<int>(std::size(floor9Plus));
-		} else if (floor >= 6) {
-			weights = floor6To8;
-			weightCount = static_cast<int>(std::size(floor6To8));
-		} else if (floor >= 3) {
-			weights = floor3To5;
-			weightCount = static_cast<int>(std::size(floor3To5));
+		} else if (floor == 8) {
+			weights = floor8;
+			weightCount = static_cast<int>(std::size(floor8));
+		} else if (floor == 7) {
+			weights = floor7;
+			weightCount = static_cast<int>(std::size(floor7));
+		} else if (floor == 6) {
+			weights = floor6;
+			weightCount = static_cast<int>(std::size(floor6));
+		} else if (floor == 4) {
+			weights = floor4;
+			weightCount = static_cast<int>(std::size(floor4));
+		} else if (floor == 3) {
+			weights = floor3;
+			weightCount = static_cast<int>(std::size(floor3));
 		}
 
 		int totalWeight = 0;
@@ -328,8 +352,9 @@ namespace {
 	const char *GetEnemyModelName(Enemy::Type type) {
 		switch (type) {
 		case Enemy::Type::Heavy:
-		case Enemy::Type::Ranged:
 			return "wallEnemy";
+		case Enemy::Type::Ranged:
+			return "slimeEnemy";
 		case Enemy::Type::Fast:
 			return "cornerEnemy";
 		case Enemy::Type::Normal:

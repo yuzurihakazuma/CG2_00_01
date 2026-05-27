@@ -107,6 +107,9 @@ void Player::Initialize() {
 
     maxCost_ = 5; // 初期最大コスト
     cost_ = maxCost_;
+    maxCost_ = 7;
+    cost_ = maxCost_;
+    costRecoveryInterval_ = 100;
     costRecoveryMultiplier_ = 1.0f; // バフをリセット
 
     hp_ = 10;                  // 現在HP初期化
