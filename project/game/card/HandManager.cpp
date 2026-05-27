@@ -876,3 +876,24 @@ float HandManager::GetCardCastRatio(int index) const {
 		1.0f
 	);
 }
+
+void HandManager::RemoveCardsById(int cardId) {
+	// 指定したIDのカードを手札から後ろ順で全部消す
+	for (int i = static_cast<int>(hand_.size()) - 1; i >= 0; --i) {
+		if (hand_[i].id == cardId) {
+			hand_.erase(hand_.begin() + i);
+			handModels_.erase(handModels_.begin() + i);
+			cooldownOverlays_.erase(cooldownOverlays_.begin() + i);
+			isDissolving_.erase(isDissolving_.begin() + i);
+			dissolveThresholds_.erase(dissolveThresholds_.begin() + i);
+		}
+	}
+
+	// 選択中インデックスが手札数を超えないように補正する
+	if (selectedCardIndex_ >= static_cast<int>(hand_.size())) {
+		selectedCardIndex_ = static_cast<int>(hand_.size()) - 1;
+	}
+	if (selectedCardIndex_ < 0) {
+		selectedCardIndex_ = 0;
+	}
+}
