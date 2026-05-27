@@ -55,15 +55,19 @@ PixelShaderOutput main(VertexShaderOutput input)
     }
 
     float32_t weight = length(difference);
-    weight = saturate(weight);
-   
+
+    // 増幅 → 弱いエッジを除去してシャープな輪郭だけ残す
+    weight = saturate(weight * 6.0f);
+    weight = smoothstep(0.1f, 0.6f, weight);
+
     float32_t4 originalColor = gTexture.Sample(gSampler, input.texcoord);
 
-    float32_t3 outlineColor = float32_t3(0.0f, 0.0f, 0.0f);
+    // 白アウトライン
+    float32_t3 outlineColor = float32_t3(1.0f, 1.0f, 1.0f);
 
     PixelShaderOutput output;
-    
-    output.color.rgb = lerp(originalColor.rgb, outlineColor, weight);
+
+    output.color.rgb = lerp(originalColor.rgb, outlineColor, weight * 0.75f);
     output.color.a = originalColor.a;
 
     return output;

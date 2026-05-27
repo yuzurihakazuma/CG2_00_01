@@ -12,7 +12,8 @@ struct FangData {
 	int activeTimer;   // 出現中の残り時間
 	bool isActive;     // 現在有効か
 	bool hasHit;       // 既にヒットしたか
-	bool hasEmergedParticle; 
+	bool hasEmergedParticle;
+	std::unique_ptr<Obj3d> obj; // 各トゲ専用の描画オブジェクト
 };
 
 class FangEffect : public ICardEffect {
@@ -35,9 +36,8 @@ public:
 	bool IsFinished() const override { return isFinished_; }
 
 private:
-	std::unique_ptr<Obj3d> obj_ = nullptr; // 表示用オブジェクト
-	std::vector<FangData> fangs_;         // トゲの配列
-	Vector3 scale_ = { 0.9f, 2.0f, 1.0f };// トゲの大きさ
+	std::vector<FangData> fangs_;          // トゲの配列（各トゲが個別のobj_を持つ）
+	Vector3 scale_ = { 0.9f, 2.0f, 1.0f }; // トゲの大きさ
 
 	bool isPlayerCaster_ = true;          // 使用者がプレイヤーか
 	bool isFinished_ = false;             // 効果終了フラグ

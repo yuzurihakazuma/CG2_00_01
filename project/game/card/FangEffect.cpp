@@ -47,7 +47,28 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		fang.isActive = false;
 		fang.hasHit = false;
 		fang.hasEmergedParticle = false;
-		fangs_.push_back(fang);
+
+		// 各トゲ専用のObj3dを生成（共有すると1本しか描画されない問題の修正）
+		fang.obj = std::unique_ptr<Obj3d>(Obj3d::Create("Fang"));
+		if ( fang.obj ) {
+			fang.obj->SetCamera(camera);
+			fang.obj->SetScale(scale_);
+			Model* fangModel = fang.obj->GetModel();
+			if ( fangModel ) {
+				fangModel->SetTexture("resources/white1x1.png");
+				Model::Material* mat = fangModel->GetMaterial();
+				if ( mat ) {
+					mat->color = { 0.55f, 0.38f, 0.15f, 1.0f }; // 岩・土の茶色
+					mat->emissive = 0.5f;
+				}
+			}
+			fang.obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+			fang.obj->Update();
+		}
+
+		fangs_.push_back(std::move(fang));
+		// move後は fangs_.back() で参照する
+		const Vector3& fangPos = fangs_.back().pos;
 		// ==========================================
 		// ★ 追加：IceBulletと同じ「赤い予兆円」の作成
 		// ==========================================
@@ -55,7 +76,7 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		if (indicator) {
 			indicator->SetCamera(camera);
 			// 地面にめり込まないよう、少しだけ浮かせる(y + 0.05f)
-			indicator->SetTranslation({ fang.pos.x, fang.pos.y + 0.05f, fang.pos.z });
+			indicator->SetTranslation({ fangPos.x, fangPos.y + 0.05f, fangPos.z });
 
 			// 当たり判定の範囲(半径1.5f)に合わせた大きさで平たくする
 			indicator->SetScale({ 1.0f, 0.05f, 1.5f });
@@ -77,23 +98,6 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 
 	
 
-	// 表示用オブジェクトを生成
-	obj_ = Obj3d::Create("Fang");
-	if ( obj_ ) {
-		obj_->SetCamera(camera);
-		obj_->SetScale(scale_);
-
-		//  色とテクスチャの設定（岩や土をイメージした色）
-		Model* model = obj_->GetModel();
-		if ( model ) {
-			model->SetTexture("resources/white1x1.png"); // 無地にする
-			Model::Material* material = model->GetMaterial();
-			if ( material ) {
-				material->color = { 0.55f, 0.38f, 0.15f, 1.0f }; // 岩・土の茶色（不透明）
-				material->emissive = 0.5f; // 地面っぽく控えめに発光
-			}
-		}
-	}
 }
 
 void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss,
@@ -338,36 +342,29 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	// 全てのトゲが終わったら効果終了
 	if ( allDone ) {
 		isFinished_ = true;
-		if ( obj_ ) {
-			obj_->SetTranslation({ 0.0f, -100.0f, 0.0f });
-			obj_->Update();
-		}
-
 	}
 }
 
 void FangEffect::Draw(){
-	// 終了済みまたは描画オブジェクトが無ければ何もしない
-	if ( isFinished_ || !obj_ ) {
+	if ( isFinished_ ) {
 		return;
 	}
 
 	// 予兆円の描画（トゲが地面に隠れている待機中のみ）
 	for (size_t i = 0; i < fangs_.size(); ++i) {
-		// 待機中(delayTimer > 0)の時だけ描画する
 		if (fangs_[i].delayTimer > 0 && i < indicators_.size() && indicators_[i]) {
 			indicators_[i]->Draw();
 		}
 	}
 
-	// 有効なトゲだけ描画する
-	for ( const auto& fang : fangs_ ) {
-		if ( fang.isActive && fang.currentY > fang.pos.y - 1.0f )   {
-			// アニメーション中の currentY を使って描画！
+	// 有効なトゲを各自の obj で描画（毎フレーム SetColor で色を強制上書きして全本に反映させる）
+	for ( auto& fang : fangs_ ) {
+		if ( fang.isActive && fang.currentY > fang.pos.y - 1.0f && fang.obj ) {
 			Vector3 drawPos = { fang.pos.x, fang.currentY, fang.pos.z };
-			obj_->SetTranslation(drawPos);
-			obj_->Update();
-			obj_->Draw();
+			fang.obj->SetColor({ 0.55f, 0.38f, 0.15f, 1.0f }); // 岩・土の茶色を毎フレーム強制適用
+			fang.obj->SetTranslation(drawPos);
+			fang.obj->Update();
+			fang.obj->Draw();
 		}
 	}
 }
