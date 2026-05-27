@@ -103,21 +103,23 @@ private:
 	bool isTextSuppressed_ = false;
 	bool consumedAdvanceInput_ = false;
 	int tutorialAdvanceCooldown_ = 0;
-
 	Step step_ = Step::MoveIntro;
 	int stairsX_ = -1;
 	int stairsZ_ = -1;
 
-	const Rect room0_{ 6, 6, 15, 15 };
-	const Rect room1_{ 6, 20, 15, 29 };
-	const Rect room2_{ 20, 20, 29, 29 };
-	const Rect room3_{ 34, 20, 43, 29 };
-	const Rect room4_{ 34, 34, 43, 43 };
-	const Rect room5_{ 20, 34, 29, 43 };
-	const Rect corridor0_{ 9, 16, 12, 19 };
-	const Rect corridor1_{ 16, 23, 19, 26 };
-	const Rect corridor2_{ 30, 23, 33, 26 };
-	const Rect corridor3_{ 37, 30, 40, 33 };
-	const Rect corridor4_{ 30, 37, 33, 40 };
+	// 本編の small_square の床 10x10 に合わせて正方形部屋を固定配置する
+	const Rect room0_{ 2, 2, 11, 11 };
+	const Rect room1_{ 2, 14, 11, 23 };
+	const Rect room2_{ 14, 14, 23, 23 };
+	const Rect room3_{ 26, 14, 35, 23 };
+	const Rect room4_{ 26, 26, 35, 35 };
+	const Rect room5_{ 14, 26, 23, 35 };
+
+	// 部屋同士をつなぐ通路も新しい床サイズに合わせて配置する
+	const Rect corridor0_{ 6, 12, 7, 13 };
+	const Rect corridor1_{ 12, 18, 13, 19 };
+	const Rect corridor2_{ 24, 18, 25, 19 };
+	const Rect corridor3_{ 30, 24, 31, 25 };
+	const Rect corridor4_{ 24, 30, 25, 31 };
 	static constexpr int kAdvanceCooldownFrames_ = 60;
 };
