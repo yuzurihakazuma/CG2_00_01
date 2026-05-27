@@ -37,6 +37,7 @@ public:
 	bool ConsumeAdvanceInputRequest();
 
 	void CheckPlayerGoal(const Vector3& playerWorldPos);
+	void NotifyFirstRoomCardUsed();
 
 private:
 	struct Rect {
@@ -51,6 +52,7 @@ private:
 
 	enum class Step {
 		MoveIntro,
+		MoveChecklist,
 		PickCard,
 		StatusIntro,
 		CombatIntro,
@@ -88,6 +90,9 @@ private:
 	void UpdateTexts() const;
 	void ClearTexts() const;
 
+	void UpdateFirstRoomChecks(Input* input);
+	bool IsFirstRoomChecklistComplete() const;
+
 private:
 	Context context_{};
 	bool isActive_ = false;
@@ -122,4 +127,11 @@ private:
 	const Rect corridor3_{ 30, 24, 31, 25 };
 	const Rect corridor4_{ 24, 30, 25, 31 };
 	static constexpr int kAdvanceCooldownFrames_ = 60;
+
+	Vector3 firstRoomStartPos_{};
+	bool firstRoomMoveChecked_ = false;
+	bool firstRoomDodgeChecked_ = false;
+	bool firstRoomCardChecked_ = false;
+
+	bool shouldPauseOnIntro_ = false;
 };

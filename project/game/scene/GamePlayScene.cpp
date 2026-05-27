@@ -3077,6 +3077,10 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	// コストを消費
 	playerManager_->UseCost(selectedCard.cost);
 
+	if (tutorial_ && tutorial_->IsActive() && selectedCard.id == 1) {
+		tutorial_->NotifyFirstRoomCardUsed();
+	}
+
 	if (isMagicCastCard(selectedCard.id)) {
 		isCardReady_ = true;
 		readiedCard_ = selectedCard;

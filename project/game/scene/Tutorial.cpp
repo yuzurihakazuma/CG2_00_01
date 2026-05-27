@@ -38,12 +38,21 @@ void Tutorial::Start() {
 	tutorialAdvanceCooldown_ = 0;
 	stairsX_ = -1;
 	stairsZ_ = -1;
-	step_ = Step::MoveIntro;
+
+	firstRoomStartPos_ = {};
+	firstRoomMoveChecked_ = false;
+	firstRoomDodgeChecked_ = false;
+	firstRoomCardChecked_ = false;
+
+	step_ = Step::MoveChecklist;
 
 	ClearGameplayObjects();
 	BuildTutorialMap();
 
 	PlacePlayerAt(room0_.CenterX(), room0_.CenterZ());
+	if (context_.playerManager) {
+		firstRoomStartPos_ = context_.playerManager->GetPosition();
+	}
 	SpawnTutorialCard();
 	UpdateTexts();
 }
@@ -53,14 +62,14 @@ void Tutorial::Update(Input* input) {
 		return;
 	}
 
-	if (step_ == Step::MoveIntro && context_.playerManager) {
-		const Vector3 currentPos = context_.playerManager->GetPosition();
-		const LevelData& level = context_.mapManager->GetLevelData();
-		const int gridX = static_cast<int>(std::round(currentPos.x / level.tileSize));
-		const int gridZ = static_cast<int>(std::round(currentPos.z / level.tileSize));
-		if (IsInsideRect(gridX, gridZ, room1_)) {
+	if (step_ == Step::MoveChecklist) {
+		UpdateFirstRoomChecks(input);
+
+		if (IsFirstRoomChecklistComplete()) {
+			OpenCorridor(corridor0_);
 			step_ = Step::PickCard;
 			UpdateTexts();
+			return;
 		}
 	}
 
@@ -82,6 +91,7 @@ void Tutorial::Update(Input* input) {
 		waitingForSpace_ = false;
 
 		switch (step_) {
+
 		case Step::StatusIntro:
 			SpawnTutorialEnemy();
 			step_ = Step::CombatIntro;
@@ -122,6 +132,7 @@ void Tutorial::Update(Input* input) {
 	}
 
 	if (step_ == Step::PickCard && pickupSpawned_ && AreAllPickupsCollected()) {
+		// 部屋のカードを拾ったら、次の説明へ進める
 		OpenCorridor(corridor1_);
 		step_ = Step::StatusIntro;
 		isPauseStep_ = true;
@@ -254,7 +265,6 @@ void Tutorial::BuildTutorialMap() {
 	CarveRect(room4_, 0);
 	CarveRect(room5_, 0);
 	CarveRect(room0_, 0);
-	CarveRect(corridor0_, 0);
 
 	context_.mapManager->SetCurrentFloor(1);
 	context_.mapManager->SetStairsTile({ -1, -1 });
@@ -363,17 +373,22 @@ void Tutorial::SpawnCardSwapTutorialCards() {
 	const int centerX = room3_.CenterX();
 	const int centerZ = room3_.CenterZ();
 
+	// 交換チュートリアル用に4枚のカードを横並びで配置する
 	context_.cardPickupManager->AddPickup(
-		GetTileWorldPosition(centerX - 2, centerZ, 0.01f),
-		CardDatabase::GetCardData(3)
+		GetTileWorldPosition(centerX - 3, centerZ, 0.01f),
+		CardDatabase::GetCardData(3) // ポーション
 	);
 	context_.cardPickupManager->AddPickup(
-		GetTileWorldPosition(centerX, centerZ, 0.01f),
-		CardDatabase::GetCardData(4)
+		GetTileWorldPosition(centerX - 1, centerZ, 0.01f),
+		CardDatabase::GetCardData(14) // 剣
 	);
 	context_.cardPickupManager->AddPickup(
-		GetTileWorldPosition(centerX + 2, centerZ, 0.01f),
-		CardDatabase::GetCardData(5)
+		GetTileWorldPosition(centerX + 1, centerZ, 0.01f),
+		CardDatabase::GetCardData(5) // シールド
+	);
+	context_.cardPickupManager->AddPickup(
+		GetTileWorldPosition(centerX + 3, centerZ, 0.01f),
+		CardDatabase::GetCardData(4) // スピードアップ
 	);
 
 	swapPickupSpawned_ = true;
@@ -505,21 +520,66 @@ void Tutorial::UpdateTexts() const {
 		"クリア条件:10階層まで進みボスを倒す"
 	);
 
+	// チェック項目を少し下にずらす
+	text->SetPosition("TutorialCheckMove", 20.0f, 430.0f);
+	text->SetPosition("TutorialCheckDodge", 20.0f, 465.0f);
+	text->SetPosition("TutorialCheckCard", 20.0f, 500.0f);
 
+	text->SetCentered("TutorialCheckMove", false);
+	text->SetCentered("TutorialCheckDodge", false);
+	text->SetCentered("TutorialCheckCard", false);
+
+	text->SetScale("TutorialCheckMove", 0.8f);
+	text->SetScale("TutorialCheckDodge", 0.8f);
+	text->SetScale("TutorialCheckCard", 0.8f);
 	switch (step_) {
 	case Step::MoveIntro:
-		text->SetText("TutorialTitle", "TUTORIAL 1 / 8");
-		text->SetText("TutorialBody", "右下に操作説明とクリア条件が表示されています。");
-		break;
+	text->SetText("TutorialTitle", "TUTORIAL 1 / 8");
 
+	text->SetText("TutorialBody", "右下に操作説明とクリア条件が表示されています。\nSPACE or A を押してください。");
+	text->SetText("TutorialCheckMove", "");
+	text->SetText("TutorialCheckDodge", "");
+	text->SetText("TutorialCheckCard", "");
+	break;
+
+	case Step::MoveChecklist:
+		text->SetText("TutorialTitle", "TUTORIAL 1 / 8");
+		text->SetText("TutorialBody", "右下に操作説明とクリア条件が表示されています。\n右下の操作説明を見ながら、3つの操作を試してください。");
+
+		text->SetText(
+			"TutorialCheckMove",
+			firstRoomMoveChecked_ ? "[OK] 移動する" : "[ ] 移動する"
+		);
+		text->SetText(
+			"TutorialCheckDodge",
+			firstRoomDodgeChecked_ ? "[OK] 回避する" : "[ ] 回避する"
+		);
+		text->SetText(
+			"TutorialCheckCard",
+			firstRoomCardChecked_ ? "[OK] 殴りカードを使う" : "[ ] 殴りカードを使う"
+		);
+
+
+
+		text->SetColor("TutorialCheckMove", firstRoomMoveChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomMoveChecked_ ? 0.3f : 1.0f, 1.0f);
+		text->SetColor("TutorialCheckDodge", firstRoomDodgeChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomDodgeChecked_ ? 0.3f : 1.0f, 1.0f);
+		text->SetColor("TutorialCheckCard", firstRoomCardChecked_ ? 0.3f : 1.0f, 1.0f, firstRoomCardChecked_ ? 0.3f : 1.0f, 1.0f);
+		break;
 	case Step::PickCard:
 		text->SetText("TutorialTitle", "TUTORIAL 2 / 8");
-		text->SetText("TutorialBody", "部屋に置かれたカードを拾ってください。");
+		// 次の部屋でカードを拾わせる説明を表示する
+		text->SetText("TutorialBody", "次の部屋にあるカードを拾ってください。");
+		text->SetText("TutorialCheckMove", "");
+		text->SetText("TutorialCheckDodge", "");
+		text->SetText("TutorialCheckCard", "");
 		break;
 
 	case Step::StatusIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 3 / 8");
-		text->SetText("TutorialBody", "上にHP、コスト、レベル、経験値が表示されます。\nカード使用でコストを消費します。SPACEで再開します。");
+		text->SetText("TutorialBody", "上にHP、コスト、レベル、経験値が表示されます。\nカード使用でコストを消費します。SPACEで次");
+		text->SetText("TutorialCheckMove", "");
+		text->SetText("TutorialCheckDodge", "");
+		text->SetText("TutorialCheckCard", "");
 		break;
 
 	case Step::CombatIntro:
@@ -534,12 +594,12 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::CardSwapIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 5 / 8");
-		text->SetText("TutorialBody", "持てるカードは3枚まで、レベルアップで増やすことができます。SPACEで再開します。");
+		text->SetText("TutorialBody", "持てるカードは4枚まで、レベルアップで増やすことができます。SPACEで再開します。");
 		break;
 
 	case Step::CardSwapPractice:
 		text->SetText("TutorialTitle", "TUTORIAL 5 / 8");
-		text->SetText("TutorialBody", "部屋に3枚のカードがあります。\n手札がいっぱいの状態で拾うと交換になります。");
+		text->SetText("TutorialBody", "部屋に4枚のカードがあります。\n手札がいっぱいの状態で拾うと交換になります。");
 		break;
 
 	case Step::EnemyCardWatch:
@@ -572,4 +632,55 @@ void Tutorial::UpdateTexts() const {
 void Tutorial::ClearTexts() const {
 	TextManager::GetInstance()->SetText("TutorialTitle", "");
 	TextManager::GetInstance()->SetText("TutorialBody", "");
+	TextManager::GetInstance()->SetText("TutorialCheckMove", "");
+	TextManager::GetInstance()->SetText("TutorialCheckDodge", "");
+	TextManager::GetInstance()->SetText("TutorialCheckCard", "");
+}
+
+bool Tutorial::IsFirstRoomChecklistComplete() const {
+	return firstRoomMoveChecked_ &&
+		firstRoomDodgeChecked_ &&
+		firstRoomCardChecked_;
+}
+
+void Tutorial::NotifyFirstRoomCardUsed() {
+	if (step_ != Step::MoveChecklist) {
+		return;
+	}
+
+	if (!firstRoomCardChecked_) {
+		firstRoomCardChecked_ = true;
+		UpdateTexts();
+	}
+}
+
+void Tutorial::UpdateFirstRoomChecks(Input* input) {
+	if (step_ != Step::MoveChecklist || !context_.playerManager || !context_.mapManager) {
+		return;
+	}
+
+	const Vector3 currentPos = context_.playerManager->GetPosition();
+	const float dx = currentPos.x - firstRoomStartPos_.x;
+	const float dz = currentPos.z - firstRoomStartPos_.z;
+	const float movedSq = (dx * dx) + (dz * dz);
+
+	const float moveThreshold = context_.mapManager->GetLevelData().tileSize * 1.5f;
+	const float moveThresholdSq = moveThreshold * moveThreshold;
+
+	if (!firstRoomMoveChecked_ && movedSq >= moveThresholdSq) {
+		firstRoomMoveChecked_ = true;
+		UpdateTexts();
+	}
+
+	if (
+		!firstRoomDodgeChecked_ &&
+		input &&
+		(
+			input->Triggerkey(DIK_LSHIFT) ||
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_B)
+			)
+		) {
+		firstRoomDodgeChecked_ = true;
+		UpdateTexts();
+	}
 }
