@@ -253,7 +253,7 @@ void Tutorial::Update(Input* input) {
 		const LevelData& level = context_.mapManager->GetLevelData();
 		const int gridX = static_cast<int>(std::round(currentPos.x / level.tileSize));
 		const int gridZ = static_cast<int>(std::round(currentPos.z / level.tileSize));
-
+		
 		// 次の部屋に入った瞬間にカード交換チュートリアルへ進める
 		if (IsInsideRect(gridX, gridZ, room3_)) {
 			SpawnCardSwapTutorialCards();
