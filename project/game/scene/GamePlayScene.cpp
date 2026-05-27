@@ -299,7 +299,7 @@ void GamePlayScene::Initialize() {
 	TextManager::GetInstance()->SetScale("CardSelectLabel", 0.85f);
 	TextManager::GetInstance()->SetColor("CardSelectLabel", 1.0f, 1.0f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetOutline("CardSelectLabel", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
-	TextManager::GetInstance()->SetText("SlideMoveLabel", "");
+	TextManager::GetInstance()->SetText("SlideMoveLabel", "向き固定");
 	TextManager::GetInstance()->SetScale("SlideMoveLabel", 0.85f);
 	TextManager::GetInstance()->SetColor("SlideMoveLabel", 1.0f, 1.0f, 1.0f, 1.0f);
 	TextManager::GetInstance()->SetOutline("SlideMoveLabel", true, 0.0f, 0.0f, 0.0f, 0.86f, 3.0f);
