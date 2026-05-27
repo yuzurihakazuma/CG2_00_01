@@ -51,6 +51,7 @@ public:
 	// ボタン押下 (XINPUT_GAMEPAD_A などを指定)
 	bool PushJoystickButton(WORD button);
 	bool TriggerJoystickButton(WORD button);
+	bool PushLeftTrigger(float threshold = 0.5f);
 	// スティックの入力 
 	float GetLeftStickX();
 	float GetLeftStickY();

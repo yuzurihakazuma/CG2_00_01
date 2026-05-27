@@ -141,6 +141,13 @@ bool Input::TriggerJoystickButton(WORD button) {
 }
 
 // ※スティックは触っていなくても微妙に数値が入るため「デッドゾーン(遊び)」を設けています
+bool Input::PushLeftTrigger(float threshold) {
+	if (!isJoyConnected) {
+		return false;
+	}
+	return (static_cast<float>(joyState.Gamepad.bLeftTrigger) / 255.0f) >= threshold;
+}
+
 float Input::GetLeftStickX() {
 	if (!isJoyConnected) {
 		return 0.0f;

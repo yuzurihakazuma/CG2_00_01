@@ -388,12 +388,12 @@ void Player::Update(bool isMagicCasting) {
     // 詠唱中にShift/Bを押している間だけ、回避ではなく向き固定のスライド移動にする
     const bool isCastingDirectionLocked =
         isMagicCasting &&
-        (input->Pushkey(DIK_LSHIFT) || input->PushJoystickButton(XINPUT_GAMEPAD_B));
+        (input->Pushkey(DIK_LCONTROL) || input->Pushkey(DIK_RCONTROL) || input->PushLeftTrigger());
 
     // 回避開始
    // Shift に加えて B ボタンでも回避できるようにする
     if (!isDodging_ && dodgeCooldownTimer_ <= 0 &&
-        (!isMagicCasting && (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B)))) {
+        (input->Triggerkey(DIK_LSHIFT) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
         isDodging_ = true;
         dodgeTimer_ = dodgeDuration_;
         dodgeInvincibleTimer_ = dodgeInvincibleDuration_;
