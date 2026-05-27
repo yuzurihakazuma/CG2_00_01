@@ -431,8 +431,19 @@ void GamePlayScene::Initialize() {
 
 	if (ConsumeTutorialStartRequest()) {
 		tutorial_->Start();
-		isFloorTransitionTextVisible_ = false;
-		TextManager::GetInstance()->SetText("FloorTransition", "");
+		if (playerManager_) {
+			playerPos_ = playerManager_->GetPosition();
+			playerScale_ = playerManager_->GetScale();
+		}
+		if (mapManager_) {
+			mapManager_->ConsumeMapChanged();
+		}
+		transitionState_ = TransitionState::BlackHold;
+		fadeAlpha_ = 1.0f;
+		floorTransitionHoldTimer_ = 45;
+		shouldAdvanceFloorOnBlack_ = false;
+		isFloorTransitionTextVisible_ = true;
+		TextManager::GetInstance()->SetText("FloorTransition", "TUTORIAL");
 	}
 	else {
 		transitionState_ = TransitionState::BlackHold;
@@ -633,6 +644,7 @@ void GamePlayScene::Update() {
 	if (transitionState_ == TransitionState::FadeOut || transitionState_ == TransitionState::BlackHold) {
 		return;
 	}
+	const bool shouldFreezeGameplayForFade = isLocalTransitionFading;
 
 	// マップ切り替えがあったら戦闘ごとリセット
 	if (mapManager_ && mapManager_->ConsumeMapChanged()) {
@@ -712,7 +724,9 @@ void GamePlayScene::Update() {
 	// ① Updateを呼ぶ「前」に、選択画面が開いているかを記憶しておく！
 	bool wasSelecting = levelUpBonusManager_.IsSelecting();
 
-	LevelUpResult levelUpResult = levelUpBonusManager_.Update(playerManager_.get(), &handManager_, input);
+	LevelUpResult levelUpResult = shouldFreezeGameplayForFade
+		? LevelUpResult{ false, { -1, "", 0 } }
+		: levelUpBonusManager_.Update(playerManager_.get(), &handManager_, input);
 	if (levelUpResult.needCardSwap) {
 		isCardSwapMode_ = true;
 		pendingCard_ = levelUpResult.droppedCard;
@@ -734,17 +748,17 @@ void GamePlayScene::Update() {
 
 
 	// デバッグ用リセット
-	if (!isEditingDebugText && input->Triggerkey(DIK_R)) {
+	if (!shouldFreezeGameplayForFade && !isEditingDebugText && input->Triggerkey(DIK_R)) {
 		ResetBattleDebug();
 	}
 
 	// BGM再生
-	if (!isEditingDebugText && input->Triggerkey(DIK_SPACE)) {
+	if (!shouldFreezeGameplayForFade && !isEditingDebugText && input->Triggerkey(DIK_SPACE)) {
 		//AudioManager::GetInstance()->PlayWave(bgmFile_);
 	}
 
 	// タイトルシーンへ移動
-	if (!isEditingDebugText && input->Triggerkey(DIK_T)) {
+	if (!shouldFreezeGameplayForFade && !isEditingDebugText && input->Triggerkey(DIK_T)) {
 		SceneManager::GetInstance()->ChangeScene(std::make_unique<TitleScene>());
 	}
 
@@ -765,7 +779,7 @@ void GamePlayScene::Update() {
 			player->SetTutorialNoDeath(tutorialActive);
 		}
 
-		tutorial_->Update(input);
+		tutorial_->Update(shouldFreezeGameplayForFade ? nullptr : input);
 		tutorial_->CheckPlayerGoal(playerPos_);
 
 		if (tutorial_->ConsumeAdvanceInputRequest()) {
@@ -795,7 +809,7 @@ void GamePlayScene::Update() {
 		playerManager_->ApplyInfiniteMode(isInfiniteMode_);
 
 		// 登場演出中は入力だけ止めて、見た目の同期は続ける
-		if (isBossCinematicPlayingNow && playerManager_->GetPlayer()) {
+		if ((shouldFreezeGameplayForFade || isBossCinematicPlayingNow) && playerManager_->GetPlayer()) {
 			playerManager_->GetPlayer()->LockAction(1);
 		}
 
@@ -829,6 +843,7 @@ void GamePlayScene::Update() {
 			if (level.tiles[gridZ][gridX] == 3) {
 				const bool tutorialActive = tutorial_ && tutorial_->IsActive();
 				if (!tutorialActive && transitionState_ == TransitionState::None) {
+					ResetFloorTransitionActionState();
 					transitionState_ = TransitionState::FadeOut;
 					fadeAlpha_ = 0.0f;
 					isFloorTransitionTextVisible_ = false;
@@ -859,7 +874,7 @@ void GamePlayScene::Update() {
 	}
 
 	// EnemyManager に更新をお願いする
-	if (enemyManager_ && !isBossIntroPlaying && !isBossDeathAnimationPlaying) {
+	if (!shouldFreezeGameplayForFade && enemyManager_ && !isBossIntroPlaying && !isBossDeathAnimationPlaying) {
 		enemyManager_->Update(player, &cardPickupManager_, mapManager_.get(), boss, targetPos);
 	}
 
@@ -868,7 +883,7 @@ void GamePlayScene::Update() {
 	// ==========================================
 
 	// ボス関連の更新をまとめてBossManagerに任せる
-	if (bossManager_) {
+	if (!shouldFreezeGameplayForFade && bossManager_) {
 
 
 		bossManager_->Update(
@@ -882,7 +897,7 @@ void GamePlayScene::Update() {
 		);
 	}
 
-	if (bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
+	if (!shouldFreezeGameplayForFade && bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
 		if (!isBossDeathCinematicPlaying_) {
 			isBossDeathCinematicPlaying_ = true;
 			bossDeathCinematicTimer_ = bossDeathCinematicDuration_;
@@ -899,15 +914,17 @@ void GamePlayScene::Update() {
 
 
 	// ボスを倒していたらゲームクリアへ遷移
-	UpdateTimedSpawns();
-	if (bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
+	if (!shouldFreezeGameplayForFade) {
+		UpdateTimedSpawns();
+	}
+	if (!shouldFreezeGameplayForFade && bossManager_ && bossManager_->ShouldTriggerGameClear(mapManager_.get())) {
 		// 10階ボス撃破後にゲームクリアへ遷移する
 		SceneManager::GetInstance()->ChangeScene("GAMECLEAR");
 		return;
 	}
 
 	// 敵とプレイヤーの当たり判定
-	if (enemyManager_ && !isBossIntroPlaying && !isBossDeathAnimationPlaying) {
+	if (!shouldFreezeGameplayForFade && enemyManager_ && !isBossIntroPlaying && !isBossDeathAnimationPlaying) {
 		enemyManager_->CheckCollisions(player, mapManager_.get());
 	}
 
@@ -1793,12 +1810,12 @@ void GamePlayScene::Update() {
 		bossPos = boss->GetPosition();
 	}
 
-	if (!isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
+	if (!shouldFreezeGameplayForFade && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
 		UpdateCardUse(input);
 	}
 	UpdateCardUseFlash();
 
-	if (isCardReady_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
+	if (!shouldFreezeGameplayForFade && isCardReady_ && !isBossIntroPlaying && !isBossDeathCinematicPlaying_) {
 		cardReadyTimer_--;
 		SyncReadiedCardIndex();
 		if (!isCardReady_) {
@@ -1835,6 +1852,7 @@ void GamePlayScene::Update() {
 
 	const bool shouldUpdatePlayerCardSystem =
 		playerCardSystem_ &&
+		!shouldFreezeGameplayForFade &&
 		!isBossDeathCinematicPlaying_ &&
 		(!isBossIntroPlaying || (player && player->GetShieldHits() > 0));
 	if (shouldUpdatePlayerCardSystem) {
@@ -2127,8 +2145,7 @@ void GamePlayScene::Draw() {
 		}
 	}
 	if (isFloorTransitionTextVisible_ &&
-		transitionState_ == TransitionState::BlackHold &&
-		!(tutorial_ && tutorial_->IsActive())) {
+		transitionState_ == TransitionState::BlackHold) {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
@@ -2380,6 +2397,7 @@ void GamePlayScene::ResetBattleDebug() {
 	// プレイヤー状態をリセット
 	if (playerManager_) {
 		playerManager_->Reset();
+		playerManager_->ResetTransientActionState();
 		playerPos_ = playerManager_->GetPosition();
 		playerScale_ = playerManager_->GetScale();
 
@@ -2414,6 +2432,9 @@ void GamePlayScene::ResetBattleDebug() {
 
 	// ダンジョン生成 + プレイヤー再配置 + 敵/カード再生成 + ボス再配置
 	RegenerateDungeonAndRespawnPlayer(5);
+	if (playerManager_) {
+		playerManager_->ResetTransientActionState();
+	}
 
 	// 再配置後のプレイヤー位置とスケールを取り直す
 	if (playerManager_) {
@@ -2436,6 +2457,35 @@ void GamePlayScene::ResetBattleDebug() {
 	isBossDeathCinematicPlaying_ = false;
 	bossDeathCinematicPlayed_ = false;
 	bossDeathCinematicTimer_ = 0;
+}
+
+void GamePlayScene::ResetFloorTransitionActionState() {
+	if (isCardReady_) {
+		EndMagicCast(false);
+	}
+	isCardReady_ = false;
+	isMagicCastPausedForSwap_ = false;
+	cardReadyTimer_ = 0;
+	readiedCard_ = Card{};
+	readiedCardIndex_ = -1;
+	handManager_.SetCastDisplay(-1, 0, 0, -1);
+	TextManager::GetInstance()->SetText("ReadyCardT", "");
+
+	ResetFireballPredictionAttack();
+	cardUseFlashObj_.reset();
+	cardUseFlashTimer_ = 0;
+	cardUseFlashPersistent_ = false;
+	cardUseFlashDissolving_ = false;
+	cardUseFlashDissolveEnabled_ = true;
+
+	if (playerCardSystem_) {
+		playerCardSystem_->CancelCasting();
+	}
+	if (playerManager_) {
+		playerManager_->ResetTransientActionState();
+		playerPos_ = playerManager_->GetPosition();
+		playerScale_ = playerManager_->GetScale();
+	}
 }
 
 

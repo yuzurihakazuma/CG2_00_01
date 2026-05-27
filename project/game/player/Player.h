@@ -50,6 +50,7 @@ public:
     void SetPosition(const Vector3& pos) { pos_ = pos; }
     void SetScale(const Vector3& scale) { scale_ = scale; }
     void SetRotation(const Vector3& rot) { rot_ = rot; }
+    void ResetTransientActionState(); // 階層移動で持ち越したくない一時行動だけを解除
 
     void LockAction(int frame); // 指定フレームの間プレイヤー操作をロック
 

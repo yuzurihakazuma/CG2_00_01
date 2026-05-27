@@ -55,6 +55,14 @@ void LevelUpBonusManager::Initialize() {
     if (rightTextSprite_) {
         rightTextSprite_->SetAnchorPoint({ 0.5f, 0.5f });
     }
+
+    choiceArrowSprite_ = Sprite::Create("resources/pose/poseChoice.png", { 0.0f, 0.0f });
+    if (choiceArrowSprite_) {
+        choiceArrowSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+        choiceArrowSprite_->SetTextureRect(914.0f, 1052.0f, 40.0f, 76.0f);
+        choiceArrowSprite_->SetSize({ 36.0f, 68.0f });
+        choiceArrowSprite_->SetRotation(1.570796f);
+    }
    
 }
 
@@ -177,6 +185,18 @@ void LevelUpBonusManager::Draw() {
         UISprite_->SetPosition({ centerX, screenH * 0.5f });
         UISprite_->Update();
         UISprite_->Draw();
+    }
+
+    if (choiceArrowSprite_) {
+        const float offsetX = screenW * 0.15f;
+        Vector2 selectedBasePos = { centerX - offsetX, centerY };
+        if (currentSelectedChoice_ == Choice::GetRandomCard) {
+            selectedBasePos = { centerX + offsetX, centerY };
+        }
+
+        choiceArrowSprite_->SetPosition({ selectedBasePos.x, selectedBasePos.y - 250.0f });
+        choiceArrowSprite_->Update();
+        choiceArrowSprite_->Draw();
     }
 
     

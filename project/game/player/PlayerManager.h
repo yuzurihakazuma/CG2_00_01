@@ -62,6 +62,7 @@ public:
 
     // 状態リセット
     void Reset();
+    void ResetTransientActionState();
 
     // 無限モード適用
     void ApplyInfiniteMode(bool isInfiniteMode);
