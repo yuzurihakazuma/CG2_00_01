@@ -185,6 +185,7 @@ private: // メンバ変数
 	// ポーズ画面の更新
 	void UpdatePause(Input* input);
 	void UpdatePauseSpriteLayout();
+	void UpdateMoveUiLayout();
 
 	// ポーズ画面の描画
 	void DrawPauseUI();
@@ -259,6 +260,10 @@ private: // メンバ変数
 	std::unique_ptr<Sprite> playerStatusBgSprite_ = nullptr;
 	std::unique_ptr<Sprite> handCountBgSprite_ = nullptr;
 	std::unique_ptr<Sprite> floorBgSprite_ = nullptr;
+	std::unique_ptr<Sprite> moveUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> avoidanceUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> cardSelectUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> slideMoveUiSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeBackSprite_ = nullptr;

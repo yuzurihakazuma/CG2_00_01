@@ -357,7 +357,7 @@ void HandManager::Update() {
 	wasStickRight = isStickRight;
 
 	// カードとカードの間隔
-	float spacing = 0.3f;
+	float spacing = 0.2f;
 
 	// 手札が画面の「中央」に揃うように、最初のカードのX座標を計算する
 	float totalWidth = (static_cast<float>(hand_.size()) - 1.0f) * spacing;
