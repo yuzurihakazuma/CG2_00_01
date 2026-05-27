@@ -366,6 +366,8 @@ void GamePlayScene::Initialize() {
 
 	// 色を半透明の黒にする（Vector4 で R, G, B, A）
 	descBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+
+	// 詠唱中のフレーム
 	
 	  // GPUパーティクル初期化 (テクスチャを指定する)
 	GPUParticleManager::GetInstance()->Initialize(
@@ -1829,12 +1831,7 @@ void GamePlayScene::Update() {
 		}
 
 		handManager_.SetCastDisplay(readiedCard_.id, cardReadyTimer_, kMagicCastDuration, readiedCardIndex_);
-		TextManager::GetInstance()->SetText("ReadyCardT", "詠唱中\nSPACEで発動\n" + readiedCard_.name);
-
-		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
-		TextManager::GetInstance()->SetPosition("ReadyCardT", screenW - 440.0f, 230.0f);
-		TextManager::GetInstance()->SetScale("ReadyCardT", 0.92f);
-		TextManager::GetInstance()->SetColor("ReadyCardT", 1.0f, 0.95f, 0.55f, 1.0f);
+		TextManager::GetInstance()->SetText("ReadyCardT", "");
 
 		// チュートリアル練習中のファイヤーボールは時間切れで消費しない
 		const bool keepTutorialMagicCard =
@@ -1911,7 +1908,17 @@ void GamePlayScene::Update() {
 		}
 
 		// カード名とコストを合体させた文字列を作る！
-		std::string displayText = "【" + selectedCard.name + "】\n  Cost : " + std::to_string(selectedCard.cost) + "\n" + descText;
+		std::string displayText;
+		if (isCardReady_) {
+			const int remainingSeconds = (cardReadyTimer_ + 59) / 60;
+			displayText =
+				"詠唱中\n"
+				"SPACEで発動\n"
+				"残り : " + std::to_string(remainingSeconds) + "秒\n"
+				+ descText;
+		} else {
+			displayText = "【" + selectedCard.name + "】\n  Cost : " + std::to_string(selectedCard.cost) + "\n" + descText;
+		}
 
 		// 4. テキストオブジェクトに文字を流し込む！
 		// ※ textObj_ の部分は、チームメンバーさんが作ったテキスト管理の変数名に直してください
@@ -1924,7 +1931,7 @@ void GamePlayScene::Update() {
 		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 
 		// 枠のサイズ
-		float bgWidth = 390.0f;  // ミニマップの横幅に合わせると綺麗です
+		float bgWidth = 440.0f;  // ミニマップの横幅に合わせると綺麗です
 		float bgHeight = 220.0f;
 
 		// 右端・上端からの余白
