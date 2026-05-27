@@ -81,4 +81,9 @@ private:
     int fallingBurnCardSpawnInterval_ = 20;
 
     uint32_t burnCardNoiseTextureIndex_ = 0;
+
+    // ロゴ落下アニメーション
+    int   logoDropTimer_  = 0;
+    float logoCurrentY_   = -400.0f; // 現在のY座標（画面外上からスタート）
+    float logoTargetY_    = 0.0f;    // 着地Y座標
 };

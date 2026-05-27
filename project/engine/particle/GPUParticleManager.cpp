@@ -19,6 +19,9 @@ using namespace MatrixMath;
 void GPUParticleManager::Initialize(
     DirectXCommon* dxCommon, SrvManager* srvManager,
     const std::string& textureFilePath){
+    // 二重初期化を防ぐ（Framework と GamePlayScene の両方から呼ばれても安全）
+    if (isInitialized_) { return; }
+
     assert(dxCommon);
     dxCommon_ = dxCommon;
     srvManager_ = srvManager;
@@ -32,6 +35,8 @@ void GPUParticleManager::Initialize(
     TextureData texData = TextureManager::GetInstance()->LoadTextureAndCreateSRV(
         textureFilePath, cmd);
     textureSrvIndex_ = texData.srvIndex;
+
+    isInitialized_ = true;
 }
 
 // -------------------------------------------------------
@@ -317,4 +322,7 @@ void GPUParticleManager::Finalize(){
     cameraCBResource_.Reset();
     materialCBResource_.Reset();
     vertexResource_.Reset();
+
+    // フラグをリセットして次回 Initialize() が正しく再実行されるようにする
+    isInitialized_ = false;
 }

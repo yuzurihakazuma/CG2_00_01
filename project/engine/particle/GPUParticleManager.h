@@ -75,6 +75,8 @@ public:
 
     void SetGravity(float gravityY){ gravityY_ = gravityY; }
 
+    // 初期化済みかどうかを外部から確認できるようにする
+    bool IsInitialized() const { return isInitialized_; }
 
     uint32_t GetLastFrameEmitCount() const{ return lastFrameEmitCount_; }
     uint32_t GetMaxParticles() const{ return kMaxParticles; }
@@ -137,7 +139,8 @@ private:
 
     float gravityY_ = -0.098f;
 
-   
+    bool isInitialized_ = false; // Initialize()が完了したかのフラグ
+
     uint32_t lastFrameEmitCount_ = 0;  // 直前フレームのEmit数
     uint32_t totalEmitted_ = 0;  // 累計Emit数
 };

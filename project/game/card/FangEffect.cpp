@@ -239,8 +239,8 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			}
 
 
-			// --- 2. 当たり判定（トゲがちゃんと地上に出ている時だけ判定！） ---
-			if ( fang.currentY >= fang.pos.y - 0.5f ) {
+			// --- 2. 当たり判定（出現中・停滞中のみ。沈降フェーズに入ったら判定終了） ---
+			if ( fang.activeTimer > 0 && fang.currentY >= fang.pos.y - 0.5f ) {
 
 				// プレイヤーが使った場合
 				if ( isPlayerCaster_ ) {
