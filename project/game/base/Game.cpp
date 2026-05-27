@@ -34,7 +34,7 @@ void Game::Initialize(){
 void Game::Update(){
 	// 基盤更新
 	Framework::Update();
-	AudioManager::GetInstance()->UpdateVoices();
+	AudioManager::GetInstance()->Update(); // フェード処理 + SE クリーンアップ
 
 	// エディタ更新
 	EditorManager::GetInstance()->Begin();

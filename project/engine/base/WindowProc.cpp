@@ -2,6 +2,9 @@
 // --- 標準ライブラリ・外部ライブラリ ---
 #include <Windows.h>
 
+// --- エンジン ---
+#include "engine/audio/AudioManager.h"
+
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
@@ -135,8 +138,16 @@ LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 		}
 		break;
 	case WM_ENTERSIZEMOVE:
-
 		isResized_ = true; // ウィンドウサイズ変更フラグを立てる
+		break;
+
+	case WM_ACTIVATE:
+		// ウィンドウがフォーカスを失ったら音声をミュート、戻ったら復帰
+		if ( LOWORD(wparam) == WA_INACTIVE ) {
+			AudioManager::GetInstance()->OnFocusLost();
+		} else {
+			AudioManager::GetInstance()->OnFocusGained();
+		}
 		break;
 
 	}
