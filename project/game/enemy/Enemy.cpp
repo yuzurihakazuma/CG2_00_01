@@ -518,6 +518,44 @@ void Enemy::UpdateUseCard(){
 	// 詠唱中
 	if ( castTimer_ > 0 ) {
 		castTimer_--;
+
+		// ======== 魔法陣リングパーティクル（詠唱中） ========
+		if ( castTime_ > 0 ) {
+			float t = 1.0f - static_cast<float>(castTimer_) / static_cast<float>(castTime_);
+
+			// カード距離タイプに応じた魔法陣の色 (近=土茶 / 中=黄 / 遠=青)
+			Vector4 circleColor;
+			switch ( currentUseCard_.attackRangeType ) {
+			case CardAttackRangeType::Melee: circleColor = { 0.6f, 0.35f, 0.1f, 0.9f }; break; // 近距離: 土・茶
+			case CardAttackRangeType::Mid:   circleColor = { 1.0f, 0.85f, 0.1f, 0.9f }; break; // 中距離: 黄
+			case CardAttackRangeType::Long:  circleColor = { 0.2f, 0.55f, 1.0f, 0.9f }; break; // 遠距離: 青
+			default:                         circleColor = { 0.5f, 0.20f, 0.9f, 0.9f }; break;
+			}
+
+			// 詠唱の進捗に合わせてリングが広がる (半径 0.4 → 2.2)
+			float ringRadius = 0.4f + t * 1.8f;
+			float baseY = pos_.y + 0.1f;
+			int elapsedFrames = castTime_ - castTimer_;
+
+			// 2粒子を等間隔に、時間で回転させながら配置
+			for ( int i = 0; i < 2; i++ ) {
+				float angle = 3.14159f * static_cast<float>(i)
+					+ static_cast<float>(elapsedFrames) * 0.2f;
+				Vector3 ringPos = {
+					pos_.x + std::cosf(angle) * ringRadius,
+					baseY,
+					pos_.z + std::sinf(angle) * ringRadius
+				};
+				Vector3 ringVel = {
+					( rand() % 5 - 2 ) * 0.01f,
+					0.015f + ( rand() % 3 ) * 0.01f,
+					( rand() % 5 - 2 ) * 0.01f
+				};
+				float circleScale = 0.25f + t * 0.35f;
+				GPUParticleManager::GetInstance()->Emit(ringPos, ringVel, 0.2f, circleScale, circleColor);
+			}
+		}
+
 		return;
 	}
 
