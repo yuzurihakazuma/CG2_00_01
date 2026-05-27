@@ -257,10 +257,10 @@ namespace {
 			baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 			break;
 		case Enemy::Type::Ranged:
-			baseColor = { 0.75f, 0.9f, 1.0f, 1.0f };
+			baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 			break;
 		case Enemy::Type::Heavy:
-			baseColor = { 1.0f, 0.78f, 0.58f, 1.0f };
+			baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 			break;
 		case Enemy::Type::Normal:
 		default:
@@ -288,6 +288,14 @@ namespace {
 		}
 
 		return baseColor;
+	}
+
+	float GetEnemyWallHalfSize(const Enemy &enemy) {
+		float halfSize = 0.7f * (std::max)(enemy.GetScale().x, enemy.GetScale().z);
+		if (enemy.GetType() == Enemy::Type::Ranged) {
+			halfSize = (std::max)(halfSize, 0.9f);
+		}
+		return (std::min)(halfSize, 0.95f);
 	}
 
 	bool ShouldShowEnemyCardRing(const Enemy &enemy) {
@@ -482,7 +490,11 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, co
 	}
 
 	if (visual.obj) {
-		visual.obj->SetTranslation(enemy.GetPosition());
+		Vector3 displayPosition = enemy.GetPosition();
+		if (enemy.GetType() == Enemy::Type::Ranged) {
+			displayPosition.y -= 0.32f;
+		}
+		visual.obj->SetTranslation(displayPosition);
 		visual.obj->SetRotation(enemy.GetRotation());
 		visual.obj->SetScale(enemy.GetScale());
 		visual.obj->SetColor(GetEnemyDisplayColor(enemy));
@@ -517,10 +529,10 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 	const LevelData &level = mapManager->GetLevelData();
 
 	// 敵が壁に触れているかを簡易的に判定する
-	auto IsEnemyHitWall = [&](const Vector3 &pos) -> bool {
+	auto IsEnemyHitWall = [&](const Vector3 &pos, float enemyWallHalfSize) -> bool {
 		AABB enemyAABB;
-		enemyAABB.min = { pos.x - 0.5f, pos.y - 0.5f, pos.z - 0.5f };
-		enemyAABB.max = { pos.x + 0.5f, pos.y + 0.5f, pos.z + 0.5f };
+		enemyAABB.min = { pos.x - enemyWallHalfSize, pos.y - 0.5f, pos.z - enemyWallHalfSize };
+		enemyAABB.max = { pos.x + enemyWallHalfSize, pos.y + 0.5f, pos.z + enemyWallHalfSize };
 
 		int gridX = static_cast<int>(std::round(pos.x / level.tileSize));
 		int gridZ = static_cast<int>(std::round(pos.z / level.tileSize));
@@ -621,9 +633,10 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 
 		// --- ⑤ 壁との衝突判定（引数のlevelを使う） ---
 		Vector3 enemyPos = enemy->GetPosition();
+		const float enemyWallHalfSize = GetEnemyWallHalfSize(*enemy);
 		AABB enemyAABB;
-		enemyAABB.min = { enemyPos.x - 0.5f, enemyPos.y - 0.5f, enemyPos.z - 0.5f };
-		enemyAABB.max = { enemyPos.x + 0.5f, enemyPos.y + 0.5f, enemyPos.z + 0.5f };
+		enemyAABB.min = { enemyPos.x - enemyWallHalfSize, enemyPos.y - 0.5f, enemyPos.z - enemyWallHalfSize };
+		enemyAABB.max = { enemyPos.x + enemyWallHalfSize, enemyPos.y + 0.5f, enemyPos.z + enemyWallHalfSize };
 
 		int enemyGridX = static_cast<int>(std::round(enemyPos.x / level.tileSize));
 		int enemyGridZ = static_cast<int>(std::round(enemyPos.z / level.tileSize));
@@ -666,10 +679,10 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				slideZ.z += moveDelta.z;
 
 				bool moved = false;
-				if (std::abs(moveDelta.x) > 0.0001f && !IsEnemyHitWall(slideX)) {
+				if (std::abs(moveDelta.x) > 0.0001f && !IsEnemyHitWall(slideX, enemyWallHalfSize)) {
 					enemy->SetPositionOnly(slideX);
 					moved = true;
-				} else if (std::abs(moveDelta.z) > 0.0001f && !IsEnemyHitWall(slideZ)) {
+				} else if (std::abs(moveDelta.z) > 0.0001f && !IsEnemyHitWall(slideZ, enemyWallHalfSize)) {
 					enemy->SetPositionOnly(slideZ);
 					moved = true;
 				} else if (Length(moveDelta) > 0.0001f) {
@@ -680,10 +693,10 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 					Vector3 sidePosA = oldEnemyPos + sideDirA * sideStep;
 					Vector3 sidePosB = oldEnemyPos + sideDirB * sideStep;
 
-					if (!IsEnemyHitWall(sidePosA)) {
+					if (!IsEnemyHitWall(sidePosA, enemyWallHalfSize)) {
 						enemy->SetPositionOnly(sidePosA);
 						moved = true;
-					} else if (!IsEnemyHitWall(sidePosB)) {
+					} else if (!IsEnemyHitWall(sidePosB, enemyWallHalfSize)) {
 						enemy->SetPositionOnly(sidePosB);
 						moved = true;
 					}
@@ -1229,11 +1242,9 @@ void EnemyManager::CheckCollisions(Player *player, MapManager *mapManager) {
 
 	const float playerRadius = 0.6f;
 	const float enemyBaseRadius = 0.9f;
-	const float enemyWallBaseHalfSize = 0.7f;
 
 	// 指定位置の敵が壁に当たるか
-	auto IsEnemyHitWall = [&](const Vector3 &pos, float radiusScale) -> bool {
-		const float enemyWallHalfSize = enemyWallBaseHalfSize * radiusScale;
+	auto IsEnemyHitWall = [&](const Vector3 &pos, float enemyWallHalfSize) -> bool {
 		AABB enemyAABB;
 		enemyAABB.min = { pos.x - enemyWallHalfSize, pos.y - 0.5f, pos.z - enemyWallHalfSize };
 		enemyAABB.max = { pos.x + enemyWallHalfSize, pos.y + 0.5f, pos.z + enemyWallHalfSize };
@@ -1336,7 +1347,7 @@ void EnemyManager::CheckCollisions(Player *player, MapManager *mapManager) {
 			newEnemyPos.z += pushDir.z * (pushAmount * 0.5f);
 
 			bool playerHitWall = IsPlayerHitWall(newPlayerPos);
-			bool enemyHitWall = IsEnemyHitWall(newEnemyPos, (std::max)(enemy->GetScale().x, enemy->GetScale().z));
+			bool enemyHitWall = IsEnemyHitWall(newEnemyPos, GetEnemyWallHalfSize(*enemy));
 
 			// 両方とも壁に当たらない時だけ反映
 			if (!playerHitWall && !enemyHitWall) {
@@ -1394,8 +1405,8 @@ void EnemyManager::CheckCollisions(Player *player, MapManager *mapManager) {
 				newPosB.x += pushDir.x * (pushAmount * 0.5f);
 				newPosB.z += pushDir.z * (pushAmount * 0.5f);
 
-				bool aHitWall = IsEnemyHitWall(newPosA, (std::max)(enemies_[i]->GetScale().x, enemies_[i]->GetScale().z));
-				bool bHitWall = IsEnemyHitWall(newPosB, (std::max)(enemies_[j]->GetScale().x, enemies_[j]->GetScale().z));
+				bool aHitWall = IsEnemyHitWall(newPosA, GetEnemyWallHalfSize(*enemies_[i]));
+				bool bHitWall = IsEnemyHitWall(newPosB, GetEnemyWallHalfSize(*enemies_[j]));
 
 				// 両方とも安全な時だけ両方反映
 				if (!aHitWall && !bHitWall) {
