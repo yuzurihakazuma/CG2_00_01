@@ -830,6 +830,10 @@ void GamePlayScene::Update() {
 	// ② 今選択画面を開いている、または「このフレームで選択し終わったばかり」ならリターン！
 	// （これでボタンの入力がここで完全に吸収されて、下へ貫通しません）
 	if (wasSelecting) {
+		TextManager::GetInstance()->SetText(
+			"HandCountValue",
+			std::to_string(handManager_.GetHandSize()) + " / " + std::to_string(handManager_.GetMaxHandSize())
+		);
 		return;
 	}
 
@@ -2201,6 +2205,11 @@ void GamePlayScene::Draw() {
 
 		if (!isCardSwapMode_ && !isLevelUpBonusSelecting) {
 			handManager_.DrawCooldownOverlays();
+			commandList->ClearDepthStencilView(dxCommon->GetDsvHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+			Obj3dCommon::GetInstance()->PreDraw(commandList);
+			PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
+			handManager_.DrawSelectedCard();
+			SpriteCommon::GetInstance()->PreDraw(commandList);
 		}
 
 		if (handManager_.GetHandSize() > 0 && descBgSprite_) {

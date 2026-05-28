@@ -386,9 +386,8 @@ void Player::Update(bool isMagicCasting) {
     }
 
     // 詠唱中にShift/Bを押している間だけ、回避ではなく向き固定のスライド移動にする
-    const bool isCastingDirectionLocked =
-        isMagicCasting &&
-        (input->Pushkey(DIK_LCONTROL) || input->Pushkey(DIK_RCONTROL) || input->PushLeftTrigger());
+    const bool isDirectionLocked =
+        input->Pushkey(DIK_LCONTROL) || input->Pushkey(DIK_RCONTROL) || input->PushLeftTrigger();
 
     // 回避開始
    // Shift に加えて B ボタンでも回避できるようにする
@@ -506,7 +505,7 @@ void Player::Update(bool isMagicCasting) {
 
         if ( Length(move) > 0.0f ) {
             pos_ += move * ( moveSpeed_ * speedMultiplier_ );
-            if (!isCastingDirectionLocked) {
+            if (!isDirectionLocked) {
                 rot_.y = std::atan2f(move.x, move.z);
             }
 
