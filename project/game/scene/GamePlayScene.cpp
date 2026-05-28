@@ -2938,7 +2938,6 @@ void GamePlayScene::StartFireballPredictionAttack(const Card& card) {
 	isFireballPredictionActive_ = true;
 
 	// ファイヤーボールは時間制限中に連続で使えるので、ここでは待機状態を終了しない
-	player->LockAction(kFireballPredictionDuration);
 	player->PlayCardUsePose(kFireballPredictionDuration);
 }
 
@@ -2967,7 +2966,6 @@ void GamePlayScene::UpdateFireballPredictionAttack(Player* player) {
 		false
 	);
 
-	magicRepeatCooldownTimer_ = kMagicRepeatCooldownDuration;
 	ResetFireballPredictionAttack();
 }
 
@@ -3261,11 +3259,14 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	}
 
 	if (isCardReady_) {
-		if (magicRepeatCooldownTimer_ > 0 || isFireballPredictionActive_) {
+		if (readiedCard_.id == 2) {
+			if (isFireballPredictionActive_) {
+				return;
+			}
+			StartFireballPredictionAttack(readiedCard_);
 			return;
 		}
-		if (readiedCard_.id == 2) {
-			StartFireballPredictionAttack(readiedCard_);
+		if (magicRepeatCooldownTimer_ > 0) {
 			return;
 		}
 		if (playerCardSystem_) {

@@ -14,7 +14,9 @@
       "PowerShell(cd \"C:\\\\Game\\\\CG2\\\\CG2_00_01\"; $msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild CG2_00_01.sln /p:Configuration=Debug /p:Platform=x64 /t:Build /m /nologo /v:minimal 2>&1 | Select-Object -Last 30)",
       "Bash(Get-ChildItem -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\replace_minion_particles.ps1\")"
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\replace_minion_particles.ps1\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\yuzuk\\\\Desktop\\\\GE3\\\\project\\\\game\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object Name | Sort-Object Name)",
+      "PowerShell(Select-String -Path \"C:\\\\Users\\\\yuzuk\\\\Desktop\\\\GE3\\\\project\\\\game\\\\GamePlayScene.cpp\" -Pattern \"toge|Toge|spike|Spike|Spear|spear|fang|Fang|trap|Trap\" -CaseSensitive:$false)"
     ]
   }
 }

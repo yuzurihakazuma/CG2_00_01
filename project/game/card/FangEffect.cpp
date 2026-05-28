@@ -36,15 +36,16 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 
 
 	// 前方に順番に5本並べる
+	const float kFloorY = -1.0f;
 	for ( int i = 0; i < 5; i++ ) {
 		FangData fang;
 		fang.pos = {
-			casterPos.x + forward.x * ( 0.5f + i * 2.0f ),
-			casterPos.y,
-			casterPos.z + forward.z * ( 0.5f + i * 2.0f )
+			casterPos.x + forward.x * ( 1.5f + i * 2.0f ),
+			kFloorY,
+			casterPos.z + forward.z * ( 1.5f + i * 2.0f )
 		};
 		// 地面の下深くからスタートさせる
-		fang.currentY = casterPos.y - 3.5f;
+		fang.currentY = kFloorY - 3.5f;
 
 		// 順番に出る間隔と、地上に留まる時間
 		fang.delayTimer = 15 + (i * 8);
