@@ -32,9 +32,32 @@
 #include "game/card/BossChargeEffect.h"
 #include "game/card/BossKickEffect.h"
 #include "game/card/BossSpearEffect.h" // ボス専用の槍攻撃
+#include "game/audio/GameSE.h"
 #include "engine/particle/GPUParticleManager.h"
 
 using namespace VectorMath;
+
+namespace {
+bool IsMagicUseCard(int cardId) {
+	switch (cardId) {
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 8:
+	case 9:
+	case 11:
+	case 12:
+	case 102:
+	case 103:
+	case 104:
+		return true;
+	default:
+		return false;
+	}
+}
+}
 
 // 初期化
 void CardUseSystem::Initialize(Camera* camera) {
@@ -236,6 +259,55 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 
 	// 1. 辞書の中に、使われたカードのIDが登録されているかチェック
 	if (effectFactory_.count(card.id)) {
+		// プレイヤー・敵・ボス問わず、使用するカードに応じたSEを再生
+		switch (card.id) {
+		case 1:  // SE: 殴りの音を再生
+			GameSE::Fist(); break;
+		case 2:  // SE: ファイヤーボールの音を再生
+			GameSE::Fireball(); break;
+		case 3:  // SE: ポーションの音を再生
+			GameSE::Potion(); break;
+		case 4:  // SE: スピードアップの音を再生
+			GameSE::SpeedUp(); break;
+		case 5:  // SE: シールドの音を再生
+			GameSE::Shield(); break;
+		case 6:  // SE: アイスの音を再生
+			GameSE::Ice(); break;
+		case 7:  // SE: トゲの音を再生
+			GameSE::Fang(); break;
+		case 8:  // SE: 身代わりの音を再生
+			GameSE::Decoy(); break;
+		case 9:  // SE: 攻撃力低下の音を再生
+			GameSE::AtkDown(); break;
+		case 10: // SE: クローの音を再生
+			GameSE::Claw(); break;
+		case 11: // SE: マップ表示の音を再生
+			GameSE::Scanner(); break;
+		case 12: // SE: コストブーストの音を再生
+			GameSE::CostBoost(); break;
+		case 13: // SE: 蹴りの音を再生
+			GameSE::Kick(); break;
+		case 14: // SE: 剣の音を再生
+			GameSE::Sword(); break;
+		case 15: // SE: ハンマーの音を再生
+			GameSE::Hammer(); break;
+		case 16: // SE: 槍の音を再生
+			GameSE::Spear(); break;
+		// ボス用SE
+		case 103: // SE: ボス召喚の音を再生
+			GameSE::BossSummon(); break;
+		case 104: // SE: ボスビームの音を再生
+			GameSE::BossBeam(); break;
+		case 105: // SE: ボス突進の音を再生
+			GameSE::BossCharge(); break;
+		default:
+			if (IsMagicUseCard(card.id)) {
+				GameSE::CardUseMagic();
+			} else {
+				GameSE::CardUseAttack();
+			}
+			break;
+		}
 
 		// ID:102（ボス炎弾）はボス使用時のみ全方位6発に展開する（全体攻撃）
 		if (card.id == 102 && !isPlayerCaster) {

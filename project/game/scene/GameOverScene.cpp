@@ -8,6 +8,7 @@
 #include "Engine/3D/Obj/Obj3dCommon.h"
 #include "Engine/Camera/Camera.h"
 #include "Engine/2D/Sprite.h"
+#include "game/audio/GameSE.h"
 #include "game/player/Player.h"
 #include "externals/imgui/imgui.h"
 
@@ -290,6 +291,7 @@ void GameOverScene::Update(){
         input->Triggerkey(DIK_SPACE) ||
         input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
         ) {
+        GameSE::Confirm();
         SceneManager::GetInstance()->ChangeScene("TITLE");
         return;
     }

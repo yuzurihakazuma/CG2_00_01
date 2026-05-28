@@ -1,4 +1,4 @@
-#include "GamePlayScene.h"
+﻿#include "GamePlayScene.h"
 // --- ゲーム固有のファイル ---
 #include "TitleScene.h"
 
@@ -8,6 +8,7 @@
 #include "Engine/Utils/Color.h"
 #include "externals/imgui/imgui.h"
 #include "Engine/Audio/AudioManager.h"
+#include "game/audio/GameSE.h"
 #include "Engine/3D/Model/ModelManager.h"
 #include "Engine/Particle/ParticleManager.h"
 #include "Engine/Graphics/TextureManager.h"
@@ -694,7 +695,15 @@ void GamePlayScene::Update() {
 		!isEditingDebugText &&
 		(input->Triggerkey(DIK_ESCAPE) ||
 		 input->TriggerJoystickButton(XINPUT_GAMEPAD_START))) {
+		const bool wasPaused = isPaused_;
 		isPaused_ = !isPaused_;
+		if (wasPaused) {
+			// SE: ポーズ解除音（キャンセル音）を再生
+			GameSE::Cancel();
+		} else {
+			// SE: ポーズ開始音（決定音）を再生
+			GameSE::Confirm();
+		}
 		pauseSelection_ = 0; // 開くたびに先頭へ戻す
 	}
 
@@ -1025,6 +1034,8 @@ void GamePlayScene::Update() {
 			if (level.tiles[gridZ][gridX] == 3) {
 				const bool tutorialActive = tutorial_ && tutorial_->IsActive();
 				if (!tutorialActive && transitionState_ == TransitionState::None) {
+					// SE: 階段を下りる音を再生
+					GameSE::Stairs();
 					ResetFloorTransitionActionState();
 					transitionState_ = TransitionState::FadeOut;
 					fadeAlpha_ = 0.0f;
@@ -1623,6 +1634,8 @@ void GamePlayScene::Update() {
 			// 消滅中の手札があれば、HandManager::AddCard側で詰めてから末尾に追加する
 			bool success = handManager_.AddCard(pickup.card);
 			if (success) {
+				// SE: カード取得音を再生
+				GameSE::CardPickup();
 				pickup.isActive = false;
 				continue;
 			}
@@ -2784,10 +2797,15 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		if (handManager_.GetCard(selectedIdx).id == 1) {
 			return;
 		}
+		// SE: カード交換時の決定音を再生
+		GameSE::Confirm();
 
 		handManager_.RemoveCardImmediate(selectedIdx);
 
-		handManager_.AddCard(pendingCard_);
+		if (handManager_.AddCard(pendingCard_)) {
+			// SE: 交換したカードの取得音を再生
+			GameSE::CardPickup();
+		}
 
 		// 交換パスではAddCardが上限でスキップされるので直接きらめきをトリガー
 		handManager_.TriggerDrawSparkle();
@@ -3290,6 +3308,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	if (!playerManager_->CanUseCost(selectedCard.cost)) {
 		costLackMessageTimer_ = 60;
 		costFlashTimer_ = costFlashDuration_;
+		GameSE::CostShortage();
 
 		// オレンジの弾かれスパーク
 		Vector3 cp = playerPos_;
@@ -3385,6 +3404,7 @@ void GamePlayScene::UpdatePause(Input* input) {
 	static bool wasStickRight = false;
 	bool isStickLeft = input->GetLeftStickX() < -0.5f;
 	bool isStickRight = input->GetLeftStickX() > 0.5f;
+	const int previousSelection = pauseSelection_;
 
 	// 左入力で左の項目へ移動する
 	if (
@@ -3409,6 +3429,10 @@ void GamePlayScene::UpdatePause(Input* input) {
 			pauseSelection_ = 0;
 		}
 	}
+	if (pauseSelection_ != previousSelection) {
+		// SE: ポーズ画面のカーソル移動音を再生
+		GameSE::CursorMove();
+	}
 
 	// 次フレーム比較用に、今フレームの横スティック状態を保存する
 	wasStickLeft = isStickLeft;
@@ -3420,6 +3444,8 @@ void GamePlayScene::UpdatePause(Input* input) {
 		input->Triggerkey(DIK_RETURN) ||
 		input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
 		) {
+		// SE: ポーズ画面の項目決定音を再生
+		GameSE::Confirm();
 		if (pauseSelection_ == 0) {
 			isPaused_ = false; // ゲームに戻る
 		}
@@ -4290,3 +4316,5 @@ bool GamePlayScene::ConsumeTutorialStartRequest() {
 
 
 void GamePlayScene::UpdatePostEffects(){}
+
+

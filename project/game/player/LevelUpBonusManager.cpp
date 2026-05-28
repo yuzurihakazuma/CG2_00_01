@@ -2,6 +2,7 @@
 #include "game/player/PlayerManager.h"
 #include "game/card/HandManager.h"
 #include "engine/base/Input.h"
+#include "game/audio/GameSE.h"
 #include "engine/base/WindowProc.h"
 #include "engine/2d/Sprite.h"
 #include "engine/utils/TextManager.h"
@@ -110,6 +111,7 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
 
         const bool isRightStickLeft = input->GetRightStickX() < -0.5f;
         const bool isRightStickRight = input->GetRightStickX() > 0.5f;
+        const Choice previousChoice = currentSelectedChoice_;
 
         // 選択画面表示中：入力処理（A/Dキー または 左右矢印キー）
        // Aキーと左キーに加えて 左D-Pad でも左選択できるようにする
@@ -130,6 +132,9 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
             ) {
             currentSelectedChoice_ = Choice::GetRandomCard;
         }
+        if (currentSelectedChoice_ != previousChoice) {
+            GameSE::CursorMove();
+        }
 
         // 決定（スペースキー）
         // SPACE に加えて A ボタンでも決定できるようにする
@@ -137,6 +142,7 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
         wasRightStickRight_ = isRightStickRight;
 
         if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
+            GameSE::Confirm();
             // 選択されたボーナスを適用
             finalResult = ApplyBonus(handManager, currentSelectedChoice_);
 
@@ -259,6 +265,8 @@ LevelUpResult LevelUpBonusManager::ApplyBonus(HandManager *handManager, Choice c
         if (!handManager->AddCard(randomCard)) {
             result.needCardSwap = true;
             result.droppedCard = randomCard;
+        } else {
+            GameSE::CardPickup();
         }
     }
 

@@ -5,6 +5,7 @@
 #include "engine/math/VectorMath.h"
 #include "externals/imgui/imgui.h"
 #include "externals/nlohmann/json.hpp"
+#include "game/audio/GameSE.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <algorithm>
 #include <cctype>
@@ -397,6 +398,7 @@ void Player::Update(bool isMagicCasting) {
         dodgeTimer_ = dodgeDuration_;
         dodgeInvincibleTimer_ = dodgeInvincibleDuration_;
         dodgeCooldownTimer_ = dodgeCooldownDuration_;
+        GameSE::Dodge();
 
         if (Length(move) > 0.0f) {
             dodgeDirection_ = move;
@@ -833,6 +835,7 @@ void Player::LevelUp() {
     hp_ = maxHp_;
     maxCost_ += 2;
     cost_ = maxCost_;
+    GameSE::LevelUp();
 
     if (costRecoveryInterval_ > 60) {
         costRecoveryInterval_ -= 15;
@@ -944,6 +947,8 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
 
         return;
     }
+
+    GameSE::PlayerDamage();
 
     if ( isEnemyAtkDebuffed_ ) {
         damage /= 2;
@@ -1153,6 +1158,8 @@ void Player::TakeContinuousDamage(int damage) {
         shieldHitCount_--;
         return;
     }
+
+    GameSE::PlayerDamage();
 
     if (isEnemyAtkDebuffed_) {
         damage /= 2;
