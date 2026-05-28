@@ -14,6 +14,12 @@
 
 using namespace VectorMath;
 
+namespace {
+Vector4 GetFireballMainColor(bool isPlayerCaster) {
+	return isPlayerCaster ? Vector4{ 1.0f, 0.35f, 0.0f, 1.0f } : Vector4{ 1.0f, 0.04f, 0.0f, 1.0f };
+}
+}
+
 void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
 	// この効果は発動元ボスを使わない
 	(void)casterBoss;
@@ -56,6 +62,7 @@ void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
 			// ベースを無地にする
 			model->SetTexture("resources/white1x1.png");
 			if (Model::Material* material = model->GetMaterial()) {
+				material->color = GetFireballMainColor(isPlayerCaster_);
 				material->emissive = 2.2f; // Bloomに乗るように自己発光を強める
 			}
 		}
@@ -104,12 +111,14 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 			};
 
 			// 炎の色（オレンジ〜赤）
-			Vector4 color = {
-					1.0f,
-					0.2f + static_cast< float >( rand() % 5 ) * 0.1f,
-					0.0f,
-					1.0f
-			};
+			Vector4 color = isPlayerCaster_
+				? Vector4{
+						1.0f,
+						0.2f + static_cast< float >( rand() % 5 ) * 0.1f,
+						0.0f,
+						1.0f
+				}
+				: Vector4{ 1.0f, 0.04f + static_cast< float >(rand() % 3) * 0.04f, 0.0f, 1.0f };
 
 			float lifeTime = 0.5f + static_cast< float >( rand() % 3 ) * 0.1f; // 0.2〜0.4秒
 			float scale = 0.5f + static_cast< float >( rand() % 3 ) * 0.05f;  // 0.15〜0.25
@@ -138,7 +147,9 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 						( rand() % 3 - 1 ) * 0.3f
 					};
 
-					Vector4 coreColor = { 1.0f,1.0f,0.3f,1.0f }; // 白から黄色
+					Vector4 coreColor = isPlayerCaster_
+						? Vector4{ 1.0f,1.0f,0.3f,1.0f }
+						: Vector4{ 1.0f,0.25f,0.15f,1.0f };
 					
 					GPUParticleManager::GetInstance()->Emit(corePos, coreVel, 0.2f, 0.3f, coreColor);
 
@@ -167,7 +178,9 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 						( rand() % 3 - 1 ) * 0.2f
 					};
 					float g = 0.1f + static_cast< float >( rand() % 3 ) * 0.1f;
-					Vector4 trailColor = { 0.8f, g, 0.0f, 0.9f }; // 暗い赤〜オレンジ
+					Vector4 trailColor = isPlayerCaster_
+						? Vector4{ 0.8f, g, 0.0f, 0.9f }
+						: Vector4{ 0.9f, 0.02f, 0.0f, 0.9f };
 					float trailScale = 0.6f + static_cast< float >( rand() % 4 ) * 0.1f;
 					GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, 0.6f, trailScale, trailColor);
 				}

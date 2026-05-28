@@ -9,6 +9,12 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kPlayerSwordColor = { 0.2f, 0.9f, 1.0f, 1.0f };
+const Vector4 kEnemySwordColor = { 1.0f, 0.18f, 0.32f, 1.0f };
+const Vector4 kEnemySwordTrailColor = { 1.0f, 0.18f, 0.28f, 1.0f };
+}
+
 // 🌟 修正：引数に Boss* casterBoss を追加
 void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
     isPlayerCaster_ = isPlayerCaster;
@@ -29,7 +35,7 @@ void SwordEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
         if ( model && model->GetMaterial() ) {
             model->SetTexture("resources/white1x1.png");
             Model::Material* material = model->GetMaterial();
-            material->color = { 0.2f, 0.9f, 1.0f, 1.0f }; // 残像に合わせたシアン
+            material->color = isPlayerCaster_ ? kPlayerSwordColor : kEnemySwordColor; // 敵版は赤寄せで区別する
             material->emissive = 2.0f;
         }
     }
@@ -180,7 +186,7 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 for ( int i = 0; i < 12; i++ ) {
                     float angle = (3.14159f * 2.0f / 12.0f) * static_cast< float >(i);
                     Vector3 vel = { std::sinf(angle) * 0.6f, 0.05f, std::cosf(angle) * 0.6f };
-                    GPUParticleManager::GetInstance()->Emit(pos_, vel, 0.2f, 0.25f, { 0.5f, 0.9f, 1.0f, 0.8f });
+                    GPUParticleManager::GetInstance()->Emit(pos_, vel, 0.2f, 0.25f, { 1.0f, 0.18f, 0.28f, 0.8f });
                 }
             }
 
@@ -203,7 +209,7 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
             if ( afterimage.isActive ) {
                 afterimage.lifeTimer--;
                 float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
-                Vector4 afterimageColor = { 0.2f, 0.9f, 1.0f, alphaRatio * 0.4f };
+                Vector4 afterimageColor = { 1.0f, 0.18f, 0.32f, alphaRatio * 0.4f };
                 afterimage.object->SetColor(afterimageColor);
                 afterimage.object->Update();
 
@@ -221,7 +227,7 @@ void SwordEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                     pos_.y + static_cast< float >(rand() % 11 - 5) * 0.08f,
                     pos_.z + static_cast< float >(rand() % 11 - 5) * 0.08f
                 };
-                GPUParticleManager::GetInstance()->Emit(particlePosition, { 0.0f, 0.0f, 0.0f }, 0.25f, 0.4f, { 0.4f, 0.9f, 1.0f, 1.0f });
+                GPUParticleManager::GetInstance()->Emit(particlePosition, { 0.0f, 0.0f, 0.0f }, 0.25f, 0.4f, kEnemySwordTrailColor);
             }
         }
     }

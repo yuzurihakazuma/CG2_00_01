@@ -11,6 +11,10 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kEnemySpearColor = { 1.0f, 0.22f, 0.25f, 1.0f };
+}
+
 void SpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
@@ -30,6 +34,10 @@ void SpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayer
         Model* model = obj_->GetModel();
         if ( model && model->GetMaterial() ) {
             Model::Material* mat = model->GetMaterial();
+            if ( !isPlayerCaster_ ) {
+                model->SetTexture("resources/white1x1.png");
+                mat->color = kEnemySpearColor;
+            }
             mat->emissive = 2.0f;
         }
     }
@@ -111,7 +119,9 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 float dx = pos_.x - from.x, dy = pos_.y - from.y, dz = pos_.z - from.z;
                 float d = std::sqrtf(dx*dx + dy*dy + dz*dz) + 0.001f;
                 float sp = 4.0f;
-                GPUParticleManager::GetInstance()->Emit(from, {dx/d*sp, dy/d*sp, dz/d*sp}, d/sp + 0.03f, 0.12f, {0.6f, 1.0f, 1.0f, 0.8f});
+                GPUParticleManager::GetInstance()->Emit(
+                    from, {dx/d*sp, dy/d*sp, dz/d*sp}, d/sp + 0.03f, 0.12f,
+                    isPlayerCaster_ ? Vector4{0.6f, 1.0f, 1.0f, 0.8f} : Vector4{1.0f, 0.2f, 0.25f, 0.8f});
             }
         }
 
@@ -140,7 +150,9 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
 
                 float speed = 3.0f + ( rand() % 10 ) * 0.2f;
                 Vector3 windVel = forwardVec * speed;
-                Vector4 windColor = { 0.8f, 1.0f, 1.0f, 0.5f };
+                Vector4 windColor = isPlayerCaster_
+                    ? Vector4{ 0.8f, 1.0f, 1.0f, 0.5f }
+                    : Vector4{ 1.0f, 0.18f, 0.22f, 0.5f };
 
                 GPUParticleManager::GetInstance()->Emit(startPos, windVel, 0.1f, 0.5f, windColor);
             }
@@ -160,7 +172,9 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
                 };
 
                 float speed = 1.5f + ( rand() % 10 ) * 0.2f;
-                Vector4 windColor = { 0.9f, 1.0f, 1.0f, 0.7f };
+                Vector4 windColor = isPlayerCaster_
+                    ? Vector4{ 0.9f, 1.0f, 1.0f, 0.7f }
+                    : Vector4{ 1.0f, 0.22f, 0.25f, 0.7f };
                 GPUParticleManager::GetInstance()->Emit(pos_, dir * speed, 0.2f, 0.8f, windColor);
             }
             GPUParticleManager::GetInstance()->Emit(pos_, forwardVec * 1.0f, 0.1f, 2.0f, { 1.0f, 1.0f, 1.0f, 0.8f });
@@ -171,7 +185,9 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
         if ( afterimage.isActive ) {
             afterimage.lifeTimer--;
             float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
-            Vector4 afterimageColor = { 0.3f, 0.8f, 1.0f, alphaRatio * 0.4f };
+            Vector4 afterimageColor = isPlayerCaster_
+                ? Vector4{ 0.3f, 0.8f, 1.0f, alphaRatio * 0.4f }
+                : Vector4{ 1.0f, 0.2f, 0.25f, alphaRatio * 0.4f };
             afterimage.object->SetColor(afterimageColor);
             afterimage.object->Update();
 

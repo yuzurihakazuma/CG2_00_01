@@ -12,6 +12,11 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kPlayerFistColor = { 1.0f, 0.85f, 0.2f, 1.0f };
+const Vector4 kEnemyFistColor = { 1.0f, 0.18f, 0.08f, 1.0f };
+}
+
 void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
 	// この効果は発動元ボスを使わない
 	(void)casterBoss;
@@ -46,7 +51,7 @@ void FistEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 			model->SetTexture("resources/white1x1.png");
 			Model::Material* material = model->GetMaterial();
 			if ( material ) {
-				material->color = { 1.0f, 0.85f, 0.2f, 1.0f };
+				material->color = isPlayerCaster_ ? kPlayerFistColor : kEnemyFistColor;
 				material->emissive = 1.2f;
 			}
 		}
@@ -141,11 +146,13 @@ void FistEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				-forward.z * (0.08f + static_cast<float>(rand() % 3) * 0.04f) + (rand() % 5 - 2) * 0.03f
 			};
 			GPUParticleManager::GetInstance()->Emit(
-				trailPos, vel, 0.18f, 0.2f, { 1.0f, 0.7f, 0.15f, 0.9f });
+				trailPos, vel, 0.18f, 0.2f,
+				isPlayerCaster_ ? Vector4{ 1.0f, 0.7f, 0.15f, 0.9f } : Vector4{ 1.0f, 0.12f, 0.05f, 0.9f });
 		}
 		// 拳のコアに鋭い光点（小さめ）
 		GPUParticleManager::GetInstance()->Emit(
-			pos_, { 0.0f, 0.0f, 0.0f }, 0.12f, 0.6f, { 1.0f, 0.6f, 0.1f, 0.65f });
+			pos_, { 0.0f, 0.0f, 0.0f }, 0.12f, 0.6f,
+			isPlayerCaster_ ? Vector4{ 1.0f, 0.6f, 0.1f, 0.65f } : Vector4{ 1.0f, 0.1f, 0.05f, 0.65f });
 	}
 
 	// ==================================================

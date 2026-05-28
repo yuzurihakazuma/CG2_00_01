@@ -12,6 +12,12 @@
 
 using namespace VectorMath;
 
+namespace {
+Vector4 GetIceBulletColor(bool isPlayerCaster, float alpha) {
+	return isPlayerCaster ? Vector4{ 1.0f, 0.0f, 0.0f, alpha } : Vector4{ 1.0f, 0.12f, 0.25f, alpha };
+}
+}
+
 void IceBulletEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
     // この効果は発動元ボスを使わない
     ( void ) casterBoss;
@@ -43,7 +49,7 @@ void IceBulletEffect::Start(const Vector3& casterPos, float casterYaw, bool isPl
             model->SetTexture("resources/white1x1.png");
             Model::Material* material = model->GetMaterial();
             if ( material ) {
-                material->color = { 1.0f, 0.0f, 0.0f, 0.1f };
+                material->color = GetIceBulletColor(isPlayerCaster_, 0.1f);
                 material->emissive = 1.0f;
             }
         }

@@ -10,6 +10,11 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kPlayerHammerColor = { 1.0f, 0.3f, 0.0f, 1.0f };
+const Vector4 kEnemyHammerColor = { 1.0f, 0.08f, 0.02f, 1.0f };
+}
+
 void HammerEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
     isPlayerCaster_ = isPlayerCaster;
     isFinished_ = false;
@@ -30,7 +35,7 @@ void HammerEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlaye
         if ( model && model->GetMaterial() ) {
             Model::Material* mat = model->GetMaterial();
             // 🌟 復活：ハンマー自体を超高熱のマグマ色に発光させる
-            mat->color = { 1.0f, 0.3f, 0.0f, 1.0f };
+            mat->color = isPlayerCaster_ ? kPlayerHammerColor : kEnemyHammerColor;
             mat->emissive = 3.0f;
         }
     }
@@ -95,7 +100,9 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
             if ( afterimage.isActive ) {
                 afterimage.lifeTimer--;
                 float alphaRatio = static_cast< float >( afterimage.lifeTimer ) / static_cast< float >( defaultAfterimageLife_ );
-                Vector4 afterimageColor = { 1.0f, 0.2f, 0.0f, alphaRatio * 0.5f }; // マグマ色
+                Vector4 afterimageColor = isPlayerCaster_
+                    ? Vector4{ 1.0f, 0.2f, 0.0f, alphaRatio * 0.5f }
+                    : Vector4{ 1.0f, 0.05f, 0.02f, alphaRatio * 0.5f }; // 敵版は濃い赤
                 afterimage.object->SetColor(afterimageColor);
                 afterimage.object->Update();
 
@@ -108,7 +115,9 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
         // 🌟 復活：振り下ろしている最中に高熱の火の粉を散らす
         if ( timer_ < 14 ) {
             Vector3 sparkVel = { ( rand() % 11 - 5 ) * 0.02f, 0.05f, ( rand() % 11 - 5 ) * 0.02f };
-            Vector4 sparkColor = { 1.0f, 0.4f, 0.0f, 0.8f }; // 鮮やかなオレンジ
+            Vector4 sparkColor = isPlayerCaster_
+                ? Vector4{ 1.0f, 0.4f, 0.0f, 0.8f }
+                : Vector4{ 1.0f, 0.08f, 0.02f, 0.8f };
             GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.15f, 0.4f, sparkColor);
 
             // 振り上げタメ（0〜6フレーム）：ハンマーに向かって上からエネルギーが集まる
