@@ -645,6 +645,7 @@ void Tutorial::UpdateTexts() const {
 	text->SetCentered("TutorialGuide", false);
 	text->SetScale("TutorialGuide", 0.8f);
 	text->SetColor("TutorialGuide", 1.0f, 1.0f, 1.0f, 0.9f);
+	text->SetText("TutorialGuide", "");
 
 	// 通常チェック項目を上に移動
 	text->SetPosition("TutorialCheckMove", 20.0f, 300.0f);
@@ -676,7 +677,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::MoveIntro:
 	text->SetText("TutorialTitle", "TUTORIAL 1 / 8");
 
-	text->SetText("TutorialBody", "右下に操作説明とクリア条件が表示されています。\nSPACE or A を押してください。");
+	text->SetText("TutorialBody", "右下に操作説明とクリア条件が表示されています。\nSPACEを押してください。");
 	text->SetText("TutorialCheckMove", "");
 	text->SetText("TutorialCheckDodge", "");
 	text->SetText("TutorialCheckCard", "");
@@ -729,7 +730,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::FirstRoomStatusIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 2 / 8");
 		// 最初の部屋のタスク完了後に、上部UIを説明する
-		text->SetText("TutorialBody", "上にHP、コスト、レベル、経験値が表示されます。\nカード使用でコストを消費します。SPACEで再開します。");
+		text->SetText("TutorialBody", "上にHP、コスト、レベル、経験値が表示されます。\nカード使用でコストを消費します。\nSPACEで再開します。");
 		text->SetText("TutorialCheckMove", "");
 		text->SetText("TutorialCheckDodge", "");
 		text->SetText("TutorialCheckCard", "");
@@ -738,7 +739,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::FirstRoomCardControlIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 2 / 8");
 		// 実際にカードを切り替えてポーションを使わせる説明にする
-		text->SetText("TutorialBody", "矢印キーで選びSPACEで選択中のカードを使います。\nポーションを付与したので使ってみてください");
+		text->SetText("TutorialBody", "矢印キーで選びSPACEで選択中のカードを使います。\nポーションを付与したので使ってみてください。");
 		text->SetText("TutorialCheckMove", "");
 		text->SetText("TutorialCheckDodge", "");
 		text->SetText("TutorialCheckCard", "");
@@ -755,7 +756,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::StatusIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 3 / 8");
 		// 2枚拾ったあとに攻撃カードと魔法カードの違いを説明する
-		text->SetText("TutorialBody", "けりは攻撃カード、ファイヤーボールは魔法カードです。\n攻撃カードは近くの敵に使い、魔法カードは離れた敵にも使えます。\nカードに種類が書いてあります。\n'攻'が攻撃'魔'が魔法です。\nSPACEで次へ進みます。");
+		text->SetText("TutorialBody", "けりは攻撃カード、ファイヤーボールは魔法カードです。\n攻撃カードは近くの敵に使い、魔法カードは離れた敵にも使えます。\nカードに種類が書いてあります。\n'攻'が攻撃'魔'が魔法です。\nSPACEで再開します。");
 		text->SetText("TutorialCheckMove", "");
 		text->SetText("TutorialCheckDodge", "");
 		text->SetText("TutorialCheckCard", "");
@@ -764,12 +765,12 @@ void Tutorial::UpdateTexts() const {
 	case Step::CombatIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
 		// 練習用なので、けりとファイヤーボールは何回でも使えることを説明する
-		text->SetText("TutorialBody", "次の部屋の敵に攻撃カードと魔法カードで攻撃し当ててみてください。\nこの部屋では練習なので何度もカードが使えます\nSPACEで始めます。");
+		text->SetText("TutorialBody", "次の部屋の敵に攻撃カードと魔法カードで攻撃し当ててみてください。\nこの部屋では練習なので何度もカードが使えます。\nSPACEで再開します。");
 		break;
 	case Step::DefeatEnemy:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
 		// 攻撃カードと魔法カードの両方を当てる練習タスクを表示する
-		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\nLCTRLで向き固定することで狙いやすくなります\nこの練習では、けりとファイヤーボールは何回でも使えます。");
+		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\nLCTRLで向き固定することで狙いやすくなります。\nこの練習では、けりとファイヤーボールは何回でも使えます。");
 
 		text->SetText(
 			"TutorialCheckAttack",
@@ -796,7 +797,7 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::CardSwapIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 5 / 8");
-		text->SetText("TutorialBody", "持てるカードは4枚まで、レベルアップで増やすことができます。SPACEで再開します。");
+		text->SetText("TutorialBody", "持てるカードは4枚までレベルアップで増やすことができます。\nSPACEで再開します。");
 		break;
 
 	case Step::CardSwapPractice:
@@ -806,7 +807,7 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::EnemyCardWatch:
 		text->SetText("TutorialTitle", "TUTORIAL 5 / 8");
-		text->SetText("TutorialBody", "");
+		text->SetText("TutorialBody", "次の部屋に進んでください。");
 		break;
 
 	case Step::EnemyCardIntro:
@@ -826,7 +827,7 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::ReachStairs:
 		text->SetText("TutorialTitle", "TUTORIAL 8 / 8");
-		text->SetText("TutorialBody", "階段をのぼると\nチュートリアルを終えて\n本編を開始します。");
+		text->SetText("TutorialBody", "階段をのぼるとチュートリアルを終えて本編を開始します。");
 		break;
 	}
 }
@@ -834,6 +835,7 @@ void Tutorial::UpdateTexts() const {
 void Tutorial::ClearTexts() const {
 	TextManager::GetInstance()->SetText("TutorialTitle", "");
 	TextManager::GetInstance()->SetText("TutorialBody", "");
+	TextManager::GetInstance()->SetText("TutorialGuide", "");
 	TextManager::GetInstance()->SetText("TutorialCheckMove", "");
 	TextManager::GetInstance()->SetText("TutorialCheckDodge", "");
 	TextManager::GetInstance()->SetText("TutorialCheckCard", "");
