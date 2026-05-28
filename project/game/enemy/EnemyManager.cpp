@@ -403,6 +403,14 @@ EnemyManager::EnemyVisual EnemyManager::CreateEnemyVisual(Enemy::Type type, Came
 				visual.skinned->SetIsWalking(false);
 			}
 		}
+	} else if (type == Enemy::Type::Heavy) {
+		visual.skinned = SkinnedObj3d::Create("wallEnemy", "resources/enemy", "wallEnemy.gltf");
+		if (visual.skinned) {
+			visual.skinned->SetCamera(camera);
+			visual.skinned->SetLoopAnimation(true);
+			visual.skinned->SetIsWalking(false);
+			visual.useWallWalkAnimation = true;
+		}
 	}
 
 	if (!visual.skinned) {
@@ -473,17 +481,53 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, co
 	}
 
 	if (visual.skinned) {
-		visual.skinned->SetTranslation(enemy.GetPosition());
-		visual.skinned->SetRotation(enemy.GetRotation());
+		Vector3 displayPosition = enemy.GetPosition();
+		const bool isMoving = Length(enemy.GetPosition() - previousPosition) > 0.001f;
+		const float wallWalkPhase = visual.wallWalkTimer * 4.6f;
+		if (visual.useWallWalkAnimation) {
+			displayPosition.y += 0.33f;
+			if (isMoving) {
+				displayPosition.y += std::abs(std::sinf(wallWalkPhase)) * 0.07f;
+			}
+		}
+		visual.skinned->SetTranslation(displayPosition);
+		Vector3 displayRotation = enemy.GetRotation();
+		if (visual.useWallWalkAnimation && isMoving) {
+			displayRotation.z += std::sinf(wallWalkPhase) * 0.055f;
+		}
+		visual.skinned->SetRotation(displayRotation);
 		visual.skinned->SetScale(enemy.GetScale());
 		visual.skinned->SetColor(GetEnemyDisplayColor(enemy));
 
-		if (visual.useHeadIdleAnimation && visual.skinned->HasJoint("head")) {
+		if (visual.useWallWalkAnimation) {
+			visual.skinned->SetIsWalking(false);
+			if (isMoving) {
+				visual.wallWalkTimer += 1.0f / 60.0f;
+			}
+
+			const float leftStep = isMoving ? (std::max)(std::sinf(wallWalkPhase), 0.0f) * 0.17f : 0.0f;
+			const float rightStep = isMoving ? (std::max)(std::sinf(wallWalkPhase + 3.14159265f), 0.0f) * 0.17f : 0.0f;
+
+			if (visual.skinned->HasJoint("leg.L")) {
+				visual.skinned->SetJointRotationOffset("leg.L", { 0.0f, 0.0f, 0.0f });
+			}
+			if (visual.skinned->HasJoint("leg.R")) {
+				visual.skinned->SetJointRotationOffset("leg.R", { 0.0f, 0.0f, 0.0f });
+			}
+			if (visual.skinned->HasJoint("foot.L")) {
+				visual.skinned->SetJointRotationOffset("foot.L", { 0.0f, 0.0f, 0.0f });
+				visual.skinned->SetJointTranslationOffset("foot.L", { 0.0f, leftStep, 0.0f });
+			}
+			if (visual.skinned->HasJoint("foot.R")) {
+				visual.skinned->SetJointRotationOffset("foot.R", { 0.0f, 0.0f, 0.0f });
+				visual.skinned->SetJointTranslationOffset("foot.R", { 0.0f, rightStep, 0.0f });
+			}
+		} else if (visual.useHeadIdleAnimation && visual.skinned->HasJoint("head")) {
 			visual.headIdleTimer += 1.0f / 60.0f;
 			const float pitch = std::sinf(visual.headIdleTimer * 4.0f) * 0.10f;
 			visual.skinned->SetJointRotationOffset("head", { pitch, 0.0f, 0.0f });
 		} else {
-			visual.skinned->SetIsWalking(Length(enemy.GetPosition() - previousPosition) > 0.001f);
+			visual.skinned->SetIsWalking(isMoving);
 		}
 		visual.skinned->Update();
 		return;
