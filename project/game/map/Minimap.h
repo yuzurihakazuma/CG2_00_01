@@ -46,6 +46,7 @@ private:
 	void RebuildMapSprites();
 	void BuildChunks();
 	void BuildChunkSprites();
+	void UpdateLayoutIfNeeded();
 	void UpdateStaticSprites();
 	void DiscoverCurrentChunk();
 	int GetChunkIndexFromTile(int tileX, int tileZ) const;
@@ -58,6 +59,8 @@ private:
 
 	Vector2 mapLeftTop_ = { 1300.0f, 200.0f };   // 画面中央寄りに表示する位置
 	Vector2 mapSize_ = { 550.0f, 550.0f };      // 正方形にしてずれをなくす
+
+	Vector2 currentScreenSize_ = { 0.0f, 0.0f };
 
 	float drawTileSize_ = 8.0f;
 

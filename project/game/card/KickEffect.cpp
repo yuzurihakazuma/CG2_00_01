@@ -210,6 +210,23 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
                     }
                 }
             }
+        } else {
+            if (player && !player->IsDead()) {
+                Vector3 playerPos = player->GetPosition();
+                Vector3 diff = { playerPos.x - hitCenter.x, 0.0f, playerPos.z - hitCenter.z };
+
+                if (Length(diff) < hitRadius) {
+                    player->TakeDamage(randomDamage, hitCenter);
+                    hasHit_ = true;
+
+                    for (int i = 0; i < 20; i++) {
+                        Vector3 sparkVel = {
+                            (rand() % 11 - 5) * 0.2f, (rand() % 11 - 5) * 0.2f, (rand() % 11 - 5) * 0.2f
+                        };
+                        GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.2f, 0.2f, { 1.0f, 0.18f, 0.25f, 1.0f });
+                    }
+                }
+            }
         }
     }
 
