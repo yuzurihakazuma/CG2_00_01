@@ -997,6 +997,22 @@ void GamePlayScene::Update() {
 		);
 	}
 
+	// ボス撃破後に出した階段をミニマップにも反映する
+	if (bossManager_ && !bossManager_->IsBossDeadHandled()) {
+		hasRefreshedMinimapAfterBossDeath_ = false; // ボス未撃破中は再更新可能状態に戻す
+	}
+
+	if (
+		bossManager_ &&
+		bossManager_->IsBossDeadHandled() &&
+		!hasRefreshedMinimapAfterBossDeath_ &&
+		mapManager_ &&
+		minimap_
+		) {
+		minimap_->SetLevelData(&mapManager_->GetLevelData(), true); // 探索済み状態を維持したまま階段だけ反映する
+		hasRefreshedMinimapAfterBossDeath_ = true; // 以後は毎フレーム再構築しない
+	}
+
 	if (!shouldFreezeGameplayForFade && bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
 		if (!isBossDeathCinematicPlaying_) {
 			isBossDeathCinematicPlaying_ = true;
