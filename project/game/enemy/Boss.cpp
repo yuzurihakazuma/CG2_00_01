@@ -428,8 +428,8 @@ void Boss::Update() {
 			float uvY = -cy / cw * 0.5f + 0.5f;
 			PostEffect::GetInstance()->SetBossScreenUV(uvX, uvY, 0.18f, 0.35f);
 		}
-		// 歪み：カード命中時にイベント駆動でON（常時ではない）/ セピア：激怒時のみON
-		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, hasEnrageTriggered_);
+		// 歪み：カード命中時にイベント駆動でON（常時ではない）/ セピア：無効化
+		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, false);
 	} else if ( state_ == State::Appear ) {
 		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedDistortion, false);
 		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, false);
@@ -839,36 +839,92 @@ void Boss::UpdateUseCard() {
 		ApplyCastingPose(t);
 
 		if (selectedCard_.id == 104) {
-			// ボスの胸〜口元あたりをエネルギーの「中心（コア）」とする
+			// コア位置（ボスの胸元）
 			Vector3 corePos = { pos_.x, pos_.y + 2.0f, pos_.z };
+			int elapsedFrames = castDurationCurrent_ - castTimer_;
 
-			// 毎フレーム周囲から光の粒子を発生させて吸い込む
-			for (int i = 0; i < 4; i++) {
-				// コアから 6.0f 〜 12.0f 離れたランダムな空間（球体状）の座標を計算
-				float angleY = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
-				float angleX = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
-				float radius = 6.0f + (rand() % 60) * 0.1f;
+			// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+			// ① コアに溜まる光球（その場でほぼ静止・詠唱が進むほど大きく輝く）
+			// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+			{
+				int coreCount = 2 + static_cast<int>(t * 7.0f); // 2〜9個に増える
+				for (int i = 0; i < coreCount; i++) {
+					Vector3 clusterPos = {
+						corePos.x + (rand() % 9 - 4) * 0.1f,
+						corePos.y + (rand() % 9 - 4) * 0.1f,
+						corePos.z + (rand() % 9 - 4) * 0.1f
+					};
+					Vector3 clusterVel = {
+						(rand() % 5 - 2) * 0.008f,
+						(rand() % 5 - 2) * 0.008f,
+						(rand() % 5 - 2) * 0.008f
+					};
+					float clusterScale = 0.6f + t * 1.6f; // 0.6 → 2.2 に成長
+					float alpha = 0.55f + t * 0.45f;
+					Vector4 color = (rand() % 2 == 0)
+						? Vector4{ 1.0f, 1.0f, 0.65f, alpha }
+						: Vector4{ 1.0f, 1.0f, 1.0f,  alpha };
+					GPUParticleManager::GetInstance()->Emit(clusterPos, clusterVel, 0.14f, clusterScale, color);
+				}
+			}
 
-				Vector3 spawnPos = {
-					corePos.x + std::sinf(angleY) * std::cosf(angleX) * radius,
-					corePos.y + std::sinf(angleX) * radius,
-					corePos.z + std::cosf(angleY) * std::cosf(angleX) * radius
-				};
+			// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+			// ② 螺旋状にコアへ引き込まれるパーティクル（渦巻き回収）
+			// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+			{
+				const int spiralCount = 4;
+				float orbitRadius = 4.5f * (1.0f - t * 0.75f); // 4.5 → 1.1 に縮む
+				for (int i = 0; i < spiralCount; i++) {
+					float angle = static_cast<float>(elapsedFrames) * 0.18f
+						+ (3.14159f * 2.0f / spiralCount) * i;
+					Vector3 orbitPos = {
+						corePos.x + std::cosf(angle) * orbitRadius,
+						corePos.y + (rand() % 5 - 2) * 0.18f,
+						corePos.z + std::sinf(angle) * orbitRadius
+					};
+					// 接線方向（旋回）＋コア方向（収束）の合成速度
+					float tanSpeed = 0.10f;
+					float inSpeed  = 0.06f + t * 0.10f;
+					Vector3 orbitVel = {
+						-std::sinf(angle) * tanSpeed + (corePos.x - orbitPos.x) * inSpeed,
+						0.01f,
+						 std::cosf(angle) * tanSpeed + (corePos.z - orbitPos.z) * inSpeed
+					};
+					float orbitScale = 0.3f + t * 0.5f;
+					GPUParticleManager::GetInstance()->Emit(orbitPos, orbitVel, 0.16f, orbitScale, { 1.0f, 1.0f, 0.4f, 0.9f });
+				}
+			}
 
-				// 発生地点から「コアに向かって飛んでいくベクトル（速度）」を計算
-				Vector3 toCore = { corePos.x - spawnPos.x, corePos.y - spawnPos.y, corePos.z - spawnPos.z };
+			// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+			// ③ 遠方から吸い込まれるパーティクル（詠唱が進むほど数が増える）
+			// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+			{
+				int suckCount = 3 + static_cast<int>(t * 5.0f); // 3〜8個
+				for (int i = 0; i < suckCount; i++) {
+					float angleY = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
+					float angleX = static_cast<float>(rand()) / RAND_MAX * 3.141592f * 2.0f;
+					float radius = 6.0f + (rand() % 60) * 0.1f;
 
-				// 速度を距離に比例させる（約20フレームでコアに到達する速度）
-				Vector3 particleVel = { toCore.x * 0.05f, toCore.y * 0.05f, toCore.z * 0.05f };
+					Vector3 spawnPos = {
+						corePos.x + std::sinf(angleY) * std::cosf(angleX) * radius,
+						corePos.y + std::sinf(angleX) * radius,
+						corePos.z + std::cosf(angleY) * std::cosf(angleX) * radius
+					};
 
-				// ビームっぽく、眩しい黄色と白の光にする
-				Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 1.0f, 0.5f, 1.0f } : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
+					Vector3 toCore = {
+						corePos.x - spawnPos.x,
+						corePos.y - spawnPos.y,
+						corePos.z - spawnPos.z
+					};
+					// 速度を少し速くして確実にコアに到達させる
+					Vector3 particleVel = { toCore.x * 0.055f, toCore.y * 0.055f, toCore.z * 0.055f };
 
-				// アニメーション終盤（t が 1.0 に近づく）ほど、粒子が大きくなって迫力が増す！
-				float scale = 0.2f + (t * 0.6f) + (rand() % 5) * 0.1f;
-
-				// 寿命を0.35秒(約21フレーム)に設定。コアに到達した瞬間にフッと消える！
-				GPUParticleManager::GetInstance()->Emit(spawnPos, particleVel, 0.35f, scale, color);
+					Vector4 color = (rand() % 2 == 0)
+						? Vector4{ 1.0f, 1.0f, 0.5f, 1.0f }
+						: Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
+					float scale = 0.2f + (t * 0.6f) + (rand() % 5) * 0.1f;
+					GPUParticleManager::GetInstance()->Emit(spawnPos, particleVel, 0.32f, scale, color);
+				}
 			}
 		} else {
 			// ======== 魔法陣リングパーティクル（ビーム以外のカード詠唱中） ========

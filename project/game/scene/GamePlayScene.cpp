@@ -1963,6 +1963,10 @@ void GamePlayScene::Update() {
 			mapManager_->GetLevelData()
 		);
 	}
+	// プレイヤー死亡中はカードエフェクト（残像含む）を強制クリア
+	if (player && player->IsDead() && playerCardSystem_) {
+		playerCardSystem_->Reset();
+	}
 	for (auto& block : blocks_) {
 		block->Update();
 	}

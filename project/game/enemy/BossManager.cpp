@@ -922,7 +922,15 @@ void BossManager::Update(
 	// =========================================================
 	// ボスのカード演出更新
 	// =========================================================
-	if (bossCardSystem_ &&
+
+	// ボス死亡中はカードエフェクト（残像含む）を強制クリア
+	bool allBossesDead = (bossType_ == BossType::Split)
+		? ((!splitBosses_[0] || splitBosses_[0]->IsDead()) && (!splitBosses_[1] || splitBosses_[1]->IsDead()))
+		: (boss_ && boss_->IsDead());
+
+	if (bossCardSystem_ && allBossesDead) {
+		bossCardSystem_->Reset();
+	} else if (bossCardSystem_ &&
 		mapManager->IsBossMap() &&
 		!isBossIntroPlaying_) {
 

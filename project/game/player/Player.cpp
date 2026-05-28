@@ -1053,6 +1053,12 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
         isKnockback_ = false;
         knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
 
+        // 死亡時に残像を強制クリア
+        for ( auto& ai : afterimages_ ) {
+            ai.isActive = false;
+        }
+        afterimageSpawnTimer_ = 0;
+
         // 死亡フラッシュ（白→赤 ColorTint）を起動
         deathFlashTimer_ = deathFlashDuration_;
 
@@ -1193,6 +1199,12 @@ void Player::TakeContinuousDamage(int damage) {
         isDodging_ = false;
         isKnockback_ = false;
         knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+
+        // 死亡時に残像を強制クリア
+        for ( auto& ai : afterimages_ ) {
+            ai.isActive = false;
+        }
+        afterimageSpawnTimer_ = 0;
 
         // 継続ダメージ死亡でも同じ派手な演出を出す
         deathFlashTimer_ = deathFlashDuration_;
