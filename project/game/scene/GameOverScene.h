@@ -55,6 +55,8 @@ private:
 
 	// スペースキーでタイトルに戻ることを促すUIのスプライト
 	std::unique_ptr<Sprite> spaceSprite_ = nullptr;
+	std::unique_ptr<Sprite> controllerSpaceSprite_ = nullptr;
+    bool isControllerUiMode_ = false;
 
     // タイトル画面と同じ向きで背景を見るためのカメラ設定
     Vector3 gameOverBgCameraPos_ = { 49.0f, 16.0f, 49.1f };

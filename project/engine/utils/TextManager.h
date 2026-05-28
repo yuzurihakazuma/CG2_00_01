@@ -44,6 +44,7 @@ public:
 	// 描画処理
 	void Draw();
 	void DrawText(const std::string& key);
+	void SetUseControllerPrompts(bool enabled) { useControllerPrompts_ = enabled; }
 
 	// デバッグUI描画
 	void DrawDebugUI();
@@ -82,4 +83,5 @@ private:
 	std::unique_ptr<DirectX::DescriptorHeap> resourceDescriptors_;
 	std::unique_ptr<DirectX::SpriteBatch> spriteBatch_;
 	std::unique_ptr<DirectX::SpriteFont> spriteFont_;
+	bool useControllerPrompts_ = false;
 };

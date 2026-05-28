@@ -3,6 +3,7 @@
 // --- 標準ライブラリ ---
 #include <fstream>
 #include <iostream>
+#include <vector>
 #include <Windows.h> // 文字列変換用
 
 // --- 外部ライブラリ ---
@@ -29,7 +30,171 @@ std::wstring ConvertString(const std::string& utf8){
 }
 
 namespace {
-void DrawTextData(DirectX::SpriteFont* spriteFont, DirectX::SpriteBatch* spriteBatch, const TextData& data) {
+DirectX::XMVECTOR MakeColor(const float color[4]) {
+	return DirectX::XMVectorSet(color[0], color[1], color[2], color[3]);
+}
+
+DirectX::XMFLOAT2 MeasureText(DirectX::SpriteFont* spriteFont, const std::wstring& text) {
+	if (text.empty()) {
+		return { 0.0f, 0.0f };
+	}
+
+	DirectX::XMVECTOR measured = spriteFont->MeasureString(text.c_str());
+	DirectX::XMFLOAT2 measuredSize {};
+	DirectX::XMStoreFloat2(&measuredSize, measured);
+	return measuredSize;
+}
+
+void DrawStringWithOutline(
+	DirectX::SpriteFont* spriteFont,
+	DirectX::SpriteBatch* spriteBatch,
+	const std::wstring& text,
+	const DirectX::XMFLOAT2& position,
+	DirectX::FXMVECTOR color,
+	const TextData& data
+) {
+	if (text.empty()) {
+		return;
+	}
+
+	if (data.hasOutline && data.outlineOffset > 0.0f) {
+		DirectX::XMVECTOR outlineColor = MakeColor(data.outlineColor);
+		const float offset = data.outlineOffset;
+		const DirectX::XMFLOAT2 offsets[] = {
+			{ -offset, -offset },
+			{  0.0f,  -offset },
+			{  offset, -offset },
+			{ -offset,  0.0f },
+			{  offset,  0.0f },
+			{ -offset,  offset },
+			{  0.0f,   offset },
+			{  offset,  offset },
+		};
+
+		for (const DirectX::XMFLOAT2& outlineOffset : offsets) {
+			spriteFont->DrawString(
+				spriteBatch,
+				text.c_str(),
+				DirectX::XMFLOAT2(position.x + outlineOffset.x, position.y + outlineOffset.y),
+				outlineColor,
+				0.0f,
+				{ 0.0f, 0.0f },
+				data.scale
+			);
+		}
+	}
+
+	spriteFont->DrawString(
+		spriteBatch,
+		text.c_str(),
+		position,
+		color,
+		0.0f,
+		{ 0.0f, 0.0f },
+		data.scale
+	);
+}
+
+struct PromptReplacement {
+	std::wstring token;
+	std::wstring replacement;
+	bool isAccent = false;
+};
+
+const PromptReplacement* FindNextPromptReplacement(const std::wstring& text, size_t start, size_t& foundPosition) {
+	static const PromptReplacement replacements[] = {
+		{ L"SPACE", L"A", true },
+		{ L"ESC", L"\u2261", false },
+		{ L"LCTRL", L"ZL", false },
+		{ L"\u77e2\u5370\u30ad\u30fc", L"\u53f3\u30b9\u30c6\u30a3\u30c3\u30af", false },
+	};
+
+	const PromptReplacement* nextReplacement = nullptr;
+	foundPosition = std::wstring::npos;
+
+	for (const PromptReplacement& replacement : replacements) {
+		const size_t position = text.find(replacement.token, start);
+		if (position != std::wstring::npos && position < foundPosition) {
+			foundPosition = position;
+			nextReplacement = &replacement;
+		}
+	}
+
+	return nextReplacement;
+}
+
+bool HasControllerPrompt(const std::wstring& text) {
+	size_t foundPosition = std::wstring::npos;
+	return FindNextPromptReplacement(text, 0, foundPosition) != nullptr;
+}
+
+std::wstring ReplaceControllerPrompts(const std::wstring& text) {
+	std::wstring result;
+	result.reserve(text.size());
+
+	size_t current = 0;
+	while (current < text.size()) {
+		size_t found = std::wstring::npos;
+		const PromptReplacement* replacement = FindNextPromptReplacement(text, current, found);
+		if (!replacement) {
+			result += text.substr(current);
+			break;
+		}
+
+		result += text.substr(current, found - current);
+		result += replacement->replacement;
+		current = found + replacement->token.size();
+	}
+
+	return result;
+}
+
+std::vector<std::wstring> SplitLines(const std::wstring& text) {
+	std::vector<std::wstring> lines;
+	size_t start = 0;
+
+	while (start <= text.size()) {
+		const size_t newline = text.find(L'\n', start);
+		if (newline == std::wstring::npos) {
+			lines.push_back(text.substr(start));
+			break;
+		}
+
+		lines.push_back(text.substr(start, newline - start));
+		start = newline + 1;
+	}
+
+	return lines;
+}
+
+struct PromptSegment {
+	std::wstring text;
+	bool isAccent = false;
+};
+
+std::vector<PromptSegment> BuildPromptSegments(const std::wstring& line) {
+	std::vector<PromptSegment> segments;
+	size_t current = 0;
+
+	while (current < line.size()) {
+		size_t found = std::wstring::npos;
+		const PromptReplacement* replacement = FindNextPromptReplacement(line, current, found);
+		if (!replacement) {
+			segments.push_back({ line.substr(current), false });
+			break;
+		}
+
+		if (found > current) {
+			segments.push_back({ line.substr(current, found - current), false });
+		}
+		segments.push_back({ replacement->replacement, replacement->isAccent });
+		current = found + replacement->token.size();
+	}
+
+	return segments;
+}
+
+void DrawPlainTextData(DirectX::SpriteFont* spriteFont, DirectX::SpriteBatch* spriteBatch, const TextData& data) {
 	std::wstring wText = ConvertString(data.text);
 	if (wText.empty()) {
 		return;
@@ -85,6 +250,59 @@ void DrawTextData(DirectX::SpriteFont* spriteFont, DirectX::SpriteBatch* spriteB
 		origin,
 		data.scale
 	);
+}
+
+void DrawControllerPromptTextData(DirectX::SpriteFont* spriteFont, DirectX::SpriteBatch* spriteBatch, const TextData& data) {
+	std::wstring wText = ConvertString(data.text);
+	if (wText.empty()) {
+		return;
+	}
+
+	if (!HasControllerPrompt(wText)) {
+		DrawPlainTextData(spriteFont, spriteBatch, data);
+		return;
+	}
+
+	const std::vector<std::wstring> lines = SplitLines(wText);
+	const DirectX::XMFLOAT2 baseLineSize = MeasureText(spriteFont, L"A");
+	const float lineHeight = baseLineSize.y > 0.0f ? baseLineSize.y : 32.0f;
+	const float totalHeight = lineHeight * static_cast<float>(lines.size()) * data.scale;
+	const float startY = data.isCentered ? data.y - totalHeight * 0.5f : data.y;
+
+	const DirectX::XMVECTOR normalColor = MakeColor(data.color);
+	const DirectX::XMVECTOR promptColor = DirectX::XMVectorSet(0.20f, 1.0f, 0.25f, data.color[3]);
+
+	for (size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+		const std::wstring displayLine = ReplaceControllerPrompts(lines[lineIndex]);
+		const DirectX::XMFLOAT2 lineSize = MeasureText(spriteFont, displayLine);
+		float drawX = data.isCentered ? data.x - lineSize.x * data.scale * 0.5f : data.x;
+		const float drawY = startY + lineHeight * static_cast<float>(lineIndex) * data.scale;
+
+		const std::vector<PromptSegment> segments = BuildPromptSegments(lines[lineIndex]);
+		for (const PromptSegment& segment : segments) {
+			const DirectX::XMVECTOR segmentColor = segment.isAccent ? promptColor : normalColor;
+			DrawStringWithOutline(
+				spriteFont,
+				spriteBatch,
+				segment.text,
+				DirectX::XMFLOAT2(drawX, drawY),
+				segmentColor,
+				data
+			);
+
+			const DirectX::XMFLOAT2 segmentSize = MeasureText(spriteFont, segment.text);
+			drawX += segmentSize.x * data.scale;
+		}
+	}
+}
+
+void DrawTextData(DirectX::SpriteFont* spriteFont, DirectX::SpriteBatch* spriteBatch, const TextData& data, bool useControllerPrompts) {
+	if (useControllerPrompts) {
+		DrawControllerPromptTextData(spriteFont, spriteBatch, data);
+		return;
+	}
+
+	DrawPlainTextData(spriteFont, spriteBatch, data);
 }
 }
 
@@ -162,7 +380,7 @@ void TextManager::Draw(){
 		const TextData& data = pair.second;
 
 		try {
-			DrawTextData(spriteFont_.get(), spriteBatch_.get(), data);
+			DrawTextData(spriteFont_.get(), spriteBatch_.get(), data, useControllerPrompts_);
 		} catch ( ... ) {
 			// ⚠️未対応の文字（今回なら日本語など）が来たときにクラッシュするのを防ぐ
 		}
@@ -207,7 +425,7 @@ void TextManager::DrawText(const std::string& key) {
 	const TextData& data = it->second;
 
 	try {
-		DrawTextData(spriteFont_.get(), spriteBatch_.get(), data);
+		DrawTextData(spriteFont_.get(), spriteBatch_.get(), data, useControllerPrompts_);
 	} catch (...) {
 		// 未対応文字が来たときにクラッシュするのを防ぐ
 	}

@@ -12,6 +12,8 @@ void LevelUpBonusManager::Initialize() {
     isSelecting_ = false;
 	previousPlayerLevel_ = 1;
     currentSelectedChoice_ = Choice::IncreaseMaxHandSize;
+    wasRightStickLeft_ = false;
+    wasRightStickRight_ = false;
     const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
     const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 
@@ -69,6 +71,8 @@ void LevelUpBonusManager::Initialize() {
 void LevelUpBonusManager::Reset(int currentLevel) {
     isSelecting_ = false;
 	previousPlayerLevel_ = currentLevel;
+    wasRightStickLeft_ = false;
+    wasRightStickRight_ = false;
 }
 
 LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandManager *handManager, Input *input) {
@@ -84,6 +88,8 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
         // 通常時：レベルアップを検知
         if (currentLevel > previousPlayerLevel_) {
             isSelecting_ = true;
+            wasRightStickLeft_ = false;
+            wasRightStickRight_ = false;
             currentSelectedChoice_ = Choice::IncreaseMaxHandSize; // デフォルトは枠増加
 
             // 画面が出た直後、30フレーム(0.5秒)は入力を受け付けない！
@@ -96,16 +102,22 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
 
         // タイマーが残っている間は入力を無視してリターンする
         if (inputDelayTimer_ > 0) {
+            wasRightStickLeft_ = input && input->GetRightStickX() < -0.5f;
+            wasRightStickRight_ = input && input->GetRightStickX() > 0.5f;
             inputDelayTimer_--;
             return finalResult;
         }
+
+        const bool isRightStickLeft = input->GetRightStickX() < -0.5f;
+        const bool isRightStickRight = input->GetRightStickX() > 0.5f;
 
         // 選択画面表示中：入力処理（A/Dキー または 左右矢印キー）
        // Aキーと左キーに加えて 左D-Pad でも左選択できるようにする
         if (
             input->Triggerkey(DIK_A) ||
             input->Triggerkey(DIK_LEFT) ||
-            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT)
+            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT) ||
+            (isRightStickLeft && !wasRightStickLeft_)
             ) {
             currentSelectedChoice_ = Choice::IncreaseMaxHandSize;
         }
@@ -113,13 +125,17 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
         if (
             input->Triggerkey(DIK_D) ||
             input->Triggerkey(DIK_RIGHT) ||
-            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_RIGHT)
+            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_RIGHT) ||
+            (isRightStickRight && !wasRightStickRight_)
             ) {
             currentSelectedChoice_ = Choice::GetRandomCard;
         }
 
         // 決定（スペースキー）
         // SPACE に加えて A ボタンでも決定できるようにする
+        wasRightStickLeft_ = isRightStickLeft;
+        wasRightStickRight_ = isRightStickRight;
+
         if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
             // 選択されたボーナスを適用
             finalResult = ApplyBonus(handManager, currentSelectedChoice_);

@@ -51,6 +51,36 @@ namespace {
         return distribution(GetClearCardRandomEngine());
     }
 
+    bool HasControllerPromptInput(Input* input) {
+        return input &&
+            input->GetJoystickState() &&
+            (input->PushJoystickButton(0xFFFF) ||
+             input->PushLeftTrigger(0.25f) ||
+             std::fabs(input->GetLeftStickX()) > 0.25f ||
+             std::fabs(input->GetLeftStickY()) > 0.25f ||
+             std::fabs(input->GetRightStickX()) > 0.25f ||
+             std::fabs(input->GetRightStickY()) > 0.25f);
+    }
+
+    bool HasKeyboardPromptInput(Input* input) {
+        if (!input) {
+            return false;
+        }
+
+        const BYTE keys[] = {
+            DIK_SPACE, DIK_RETURN, DIK_ESCAPE,
+            DIK_W, DIK_A, DIK_S, DIK_D,
+            DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT
+        };
+        for (BYTE key : keys) {
+            if (input->Pushkey(key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Scatter origins spread across the screen so cards do not all come from one point.
     Vector2 GetRandomScatterOrigin(float screenW, float screenH) {
         constexpr std::array<Vector2, 5> kNormalizedOrigins = {
@@ -112,6 +142,8 @@ void GameClearScene::Initialize() {
     // Create the main logo and the return prompt.
     gameClearSprite_ = Sprite::Create("resources/UI/GAME_CLEAR.png", { screenW * 0.5f, screenH * 0.40f });
     spaceSprite_ = Sprite::Create("resources/UI/CrearUI.png", { screenW * 0.5f, screenH * 0.60f });
+    controllerSpaceSprite_ = Sprite::Create("resources/UI/CrearUIC.png", { screenW * 0.5f, screenH * 0.60f });
+    isControllerUiMode_ = Input::GetInstance()->GetJoystickState();
 
     if (gameClearSprite_) {
         const float logoWidth = screenW * 0.90f;
@@ -125,6 +157,12 @@ void GameClearScene::Initialize() {
         const float logoHeight = logoWidth * (1080.0f / 1920.0f);
         spaceSprite_->SetSize({ logoWidth, logoHeight });
         spaceSprite_->Update();
+    }
+    if (controllerSpaceSprite_) {
+        const float logoWidth = screenW * 0.90f;
+        const float logoHeight = logoWidth * (1080.0f / 1920.0f);
+        controllerSpaceSprite_->SetSize({ logoWidth, logoHeight });
+        controllerSpaceSprite_->Update();
     }
 
     // Reset animation state and prepare initial card particles.
@@ -268,6 +306,13 @@ void GameClearScene::UpdateClearCardParticles(float screenW, float screenH) {
 void GameClearScene::Update() {
     const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
     const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+    Input* input = Input::GetInstance();
+
+    if (HasControllerPromptInput(input)) {
+        isControllerUiMode_ = true;
+    } else if (HasKeyboardPromptInput(input)) {
+        isControllerUiMode_ = false;
+    }
 
     // Advance the shared clear-scene timer.
     clearAnimationTimer_++;
@@ -337,11 +382,21 @@ void GameClearScene::Update() {
         spaceSprite_->SetColor({ 1.0f, 1.0f, 1.0f, blink });
         spaceSprite_->Update();
     }
+    if (controllerSpaceSprite_) {
+        const float logoWidth = screenW * 0.90f;
+        const float logoHeight = logoWidth * (1080.0f / 1920.0f);
+        const float blink = 0.55f + 0.45f * ((std::sinf(static_cast<float>(clearAnimationTimer_) * 0.08f) + 1.0f) * 0.5f);
+
+        controllerSpaceSprite_->SetPosition({ screenW * 0.5f, screenH * 0.60f });
+        controllerSpaceSprite_->SetSize({ logoWidth, logoHeight });
+        controllerSpaceSprite_->SetColor({ 1.0f, 1.0f, 1.0f, blink });
+        controllerSpaceSprite_->Update();
+    }
 
     // Return to the title scene on confirm.
     if (
-        Input::GetInstance()->Triggerkey(DIK_SPACE) ||
-        Input::GetInstance()->TriggerJoystickButton(XINPUT_GAMEPAD_A)
+        input->Triggerkey(DIK_SPACE) ||
+        input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
         ) {
         SceneManager::GetInstance()->ChangeScene("TITLE");
         return;
@@ -396,8 +451,9 @@ void GameClearScene::Draw() {
     }
 
     // 8. Draw the return prompt.
-    if (spaceSprite_) {
-        spaceSprite_->Draw();
+    Sprite* promptSprite = isControllerUiMode_ ? controllerSpaceSprite_.get() : spaceSprite_.get();
+    if (promptSprite) {
+        promptSprite->Draw();
     }
 
     // 背景の上にプレイヤーを描画
@@ -413,6 +469,7 @@ void GameClearScene::Finalize() {
     // Release scene resources.
     gameClearSprite_.reset();
     spaceSprite_.reset();
+    controllerSpaceSprite_.reset();
     mapManager_.reset();
     camera_.reset();
 

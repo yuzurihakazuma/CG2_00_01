@@ -54,6 +54,8 @@ private:
     // Foreground UI sprites.
     std::unique_ptr<Sprite> gameClearSprite_ = nullptr;
     std::unique_ptr<Sprite> spaceSprite_ = nullptr;
+    std::unique_ptr<Sprite> controllerSpaceSprite_ = nullptr;
+    bool isControllerUiMode_ = false;
 
     // Animated card particles for the clear effect.
     std::vector<ClearCardParticle> clearCardParticles_;

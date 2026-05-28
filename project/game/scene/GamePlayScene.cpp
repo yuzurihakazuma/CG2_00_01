@@ -331,11 +331,23 @@ void GamePlayScene::Initialize() {
 		moveUiSprite_->SetSize({ 150.0f, 104.0f });
 		moveUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
+	moveControllerUiSprite_ = Sprite::Create("resources/UI/moveUIC.png", { 0.0f, 0.0f });
+	if (moveControllerUiSprite_) {
+		moveControllerUiSprite_->SetTextureRect(1612.0f, 1103.0f, 174.0f, 121.0f);
+		moveControllerUiSprite_->SetSize({ 150.0f, 104.0f });
+		moveControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
 	avoidanceUiSprite_ = Sprite::Create("resources/UI/avoidanceUI.png", { 0.0f, 0.0f });
 	if (avoidanceUiSprite_) {
 		avoidanceUiSprite_->SetTextureRect(1600.0f, 1150.0f, 200.0f, 73.0f);
 		avoidanceUiSprite_->SetSize({ 136.0f, 73.0f });
 		avoidanceUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	avoidanceControllerUiSprite_ = Sprite::Create("resources/UI/avoidanceUIC.png", { 0.0f, 0.0f });
+	if (avoidanceControllerUiSprite_) {
+		avoidanceControllerUiSprite_->SetTextureRect(1600.0f, 1150.0f, 200.0f, 73.0f);
+		avoidanceControllerUiSprite_->SetSize({ 136.0f, 73.0f });
+		avoidanceControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
 	cardSelectUiSprite_ = Sprite::Create("resources/UI/avoidance2UI.png", { 0.0f, 0.0f });
 	if (cardSelectUiSprite_) {
@@ -343,11 +355,23 @@ void GamePlayScene::Initialize() {
 		cardSelectUiSprite_->SetSize({ 150.0f, 59.0f });
 		cardSelectUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
+	cardSelectControllerUiSprite_ = Sprite::Create("resources/UI/avoidance2UIC.png", { 0.0f, 0.0f });
+	if (cardSelectControllerUiSprite_) {
+		cardSelectControllerUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
+		cardSelectControllerUiSprite_->SetSize({ 150.0f, 59.0f });
+		cardSelectControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
 	slideMoveUiSprite_ = Sprite::Create("resources/UI/avoidance3UI.png", { 0.0f, 0.0f });
 	if (slideMoveUiSprite_) {
 		slideMoveUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
 		slideMoveUiSprite_->SetSize({ 150.0f, 59.0f });
 		slideMoveUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+	}
+	slideMoveControllerUiSprite_ = Sprite::Create("resources/UI/avoidance3UIC.png", { 0.0f, 0.0f });
+	if (slideMoveControllerUiSprite_) {
+		slideMoveControllerUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
+		slideMoveControllerUiSprite_->SetSize({ 150.0f, 59.0f });
+		slideMoveControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
 	UpdateMoveUiLayout();
 	playerHpGaugeShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
@@ -440,10 +464,15 @@ void GamePlayScene::Initialize() {
 	pausePanelSprite_->SetSize({ screenW, screenH });
 	pausePanelSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.75f });
 	pausePanelSprite_->Update();
+	tutorialDimSprite_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH * 0.5f });
+	tutorialDimSprite_->SetSize({ screenW, screenH });
+	tutorialDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.55f });
+	tutorialDimSprite_->Update();
 
 	//　ポーズ画面のUIスプライト
 	const Vector2 pauseScreenCenter = { screenW * 0.5f, screenH * 0.5f };
 	pauseHelpSprite_ = Sprite::Create("resources/pose/pose.png", pauseScreenCenter);
+	pauseControllerHelpSprite_ = Sprite::Create("resources/pose/poseController.png", pauseScreenCenter);
 	pauseChoiceSprite_ = Sprite::Create("resources/pose/poseChoice.png", pauseScreenCenter);
 	pauseGameSprite_ = Sprite::Create("resources/pose/poseUIG.png", pauseScreenCenter);
 	pauseTitleSprite_ = Sprite::Create("resources/pose/poseUIT.png", pauseScreenCenter);
@@ -536,12 +565,15 @@ void GamePlayScene::UpdateMoveUiLayout() {
 	const float groupTop = std::max(16.0f, screenH - marginBottom - groupHeight);
 	const float labelX = iconLeft + iconColumnWidth + textGap;
 
-	auto placeRow = [iconLeft, iconColumnWidth, labelX](Sprite* sprite, const Vector2& iconSize, float rowTop, const std::string& labelKey) {
+	auto placeRow = [iconLeft, iconColumnWidth, labelX](Sprite* keyboardSprite, Sprite* controllerSprite, const Vector2& iconSize, float rowTop, const std::string& labelKey) {
 		const float iconX = iconLeft + (iconColumnWidth * 0.5f);
-		if (sprite) {
-			sprite->SetPosition({ iconX, rowTop + iconSize.y * 0.5f });
-			sprite->SetSize(iconSize);
-			sprite->Update();
+		Sprite* sprites[] = { keyboardSprite, controllerSprite };
+		for (Sprite* sprite : sprites) {
+			if (sprite) {
+				sprite->SetPosition({ iconX, rowTop + iconSize.y * 0.5f });
+				sprite->SetSize(iconSize);
+				sprite->Update();
+			}
 		}
 
 		TextManager::GetInstance()->SetPosition(
@@ -552,13 +584,52 @@ void GamePlayScene::UpdateMoveUiLayout() {
 	};
 
 	float rowTop = groupTop;
-	placeRow(moveUiSprite_.get(), moveIconSize, rowTop, "MoveLabel");
+	placeRow(moveUiSprite_.get(), moveControllerUiSprite_.get(), moveIconSize, rowTop, "MoveLabel");
 	rowTop += moveIconSize.y + rowGap;
-	placeRow(avoidanceUiSprite_.get(), avoidanceIconSize, rowTop, "AvoidanceLabel");
+	placeRow(avoidanceUiSprite_.get(), avoidanceControllerUiSprite_.get(), avoidanceIconSize, rowTop, "AvoidanceLabel");
 	rowTop += avoidanceIconSize.y + rowGap;
-	placeRow(cardSelectUiSprite_.get(), cardSelectIconSize, rowTop, "CardSelectLabel");
+	placeRow(cardSelectUiSprite_.get(), cardSelectControllerUiSprite_.get(), cardSelectIconSize, rowTop, "CardSelectLabel");
 	rowTop += cardSelectIconSize.y + rowGap;
-	placeRow(slideMoveUiSprite_.get(), slideMoveIconSize, rowTop, "SlideMoveLabel");
+	placeRow(slideMoveUiSprite_.get(), slideMoveControllerUiSprite_.get(), slideMoveIconSize, rowTop, "SlideMoveLabel");
+}
+
+void GamePlayScene::UpdateControlUiMode(Input* input) {
+	if (!input) {
+		return;
+	}
+
+	auto setControllerUiMode = [this](bool enabled) {
+		isControllerUiMode_ = enabled;
+		TextManager::GetInstance()->SetUseControllerPrompts(enabled);
+	};
+
+	const bool controllerInput =
+		input->GetJoystickState() &&
+		(input->PushJoystickButton(0xFFFF) ||
+		 input->PushLeftTrigger(0.25f) ||
+		 std::fabs(input->GetLeftStickX()) > 0.25f ||
+		 std::fabs(input->GetLeftStickY()) > 0.25f ||
+		 std::fabs(input->GetRightStickX()) > 0.25f ||
+		 std::fabs(input->GetRightStickY()) > 0.25f);
+	if (controllerInput) {
+		setControllerUiMode(true);
+		return;
+	}
+
+	const BYTE keyboardKeys[] = {
+		DIK_W, DIK_A, DIK_S, DIK_D,
+		DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT,
+		DIK_LSHIFT, DIK_RSHIFT, DIK_LCONTROL, DIK_RCONTROL,
+		DIK_SPACE, DIK_RETURN, DIK_ESCAPE
+	};
+	for (BYTE key : keyboardKeys) {
+		if (input->Pushkey(key)) {
+			setControllerUiMode(false);
+			return;
+		}
+	}
+
+	TextManager::GetInstance()->SetUseControllerPrompts(isControllerUiMode_);
 }
 
 void GamePlayScene::Update() {
@@ -574,6 +645,7 @@ void GamePlayScene::Update() {
 #ifdef USE_IMGUI
 	isEditingDebugText = ImGui::GetIO().WantTextInput;
 #endif
+	UpdateControlUiMode(input);
 
 	// ==========================================
 	// ★ ここに追加：さっき下で消した「F1の判定」をここに引っ越し！
@@ -2258,17 +2330,21 @@ void GamePlayScene::Draw() {
 		if (floorBgSprite_ && !(tutorial_ && tutorial_->IsActive())) {
 			floorBgSprite_->Draw();
 		}
-		if (moveUiSprite_) {
-			moveUiSprite_->Draw();
+		Sprite* moveUi = isControllerUiMode_ ? moveControllerUiSprite_.get() : moveUiSprite_.get();
+		Sprite* avoidanceUi = isControllerUiMode_ ? avoidanceControllerUiSprite_.get() : avoidanceUiSprite_.get();
+		Sprite* cardSelectUi = isControllerUiMode_ ? cardSelectControllerUiSprite_.get() : cardSelectUiSprite_.get();
+		Sprite* slideMoveUi = isControllerUiMode_ ? slideMoveControllerUiSprite_.get() : slideMoveUiSprite_.get();
+		if (moveUi) {
+			moveUi->Draw();
 		}
-		if (avoidanceUiSprite_) {
-			avoidanceUiSprite_->Draw();
+		if (avoidanceUi) {
+			avoidanceUi->Draw();
 		}
-		if (cardSelectUiSprite_) {
-			cardSelectUiSprite_->Draw();
+		if (cardSelectUi) {
+			cardSelectUi->Draw();
 		}
-		if (slideMoveUiSprite_) {
-			slideMoveUiSprite_->Draw();
+		if (slideMoveUi) {
+			slideMoveUi->Draw();
 		}
 
 		if (!SceneManager::GetInstance()->IsFading()) {
@@ -2284,9 +2360,14 @@ void GamePlayScene::Draw() {
 		}
 	}
 
-	// チュートリアルのポーズ背景だけは必要なら個別で残す
-	if (tutorial_ && tutorial_->IsActive() && tutorial_->IsGameplayPausedByTutorial() && pauseBgSprite_) {
-		pauseBgSprite_->Draw();
+	// チュートリアルの停止中は、ポーズ画面とは別の暗幕だけを描く
+	if (tutorial_ && tutorial_->IsActive() && tutorial_->IsGameplayPausedByTutorial() && tutorialDimSprite_) {
+		const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+		tutorialDimSprite_->SetPosition({ screenW * 0.5f, screenH * 0.5f });
+		tutorialDimSprite_->SetSize({ screenW, screenH });
+		tutorialDimSprite_->Update();
+		tutorialDimSprite_->Draw();
 	}
 
 	// =========================================
@@ -3365,6 +3446,7 @@ void GamePlayScene::UpdatePause(Input* input) {
 	}
 
 	if (pauseHelpSprite_) pauseHelpSprite_->Update();
+	if (pauseControllerHelpSprite_) pauseControllerHelpSprite_->Update();
 	if (pauseGameSprite_) pauseGameSprite_->Update();
 	if (pauseTitleSprite_) pauseTitleSprite_->Update();
 
@@ -3404,6 +3486,7 @@ void GamePlayScene::UpdatePauseSpriteLayout() {
 	applyFullscreenLayout(pauseBgSprite_);
 	applyFullscreenLayout(pausePanelSprite_);
 	applyFullscreenLayout(pauseHelpSprite_);
+	applyFullscreenLayout(pauseControllerHelpSprite_);
 	applyFullscreenLayout(pauseGameSprite_);
 	applyFullscreenLayout(pauseTitleSprite_);
 
@@ -3435,8 +3518,9 @@ void GamePlayScene::DrawPauseUI() {
 		pauseBgSprite_->Draw();
 	}
 
-	if (pauseHelpSprite_) {
-		pauseHelpSprite_->Draw();
+	Sprite* pauseHelpSprite = isControllerUiMode_ ? pauseControllerHelpSprite_.get() : pauseHelpSprite_.get();
+	if (pauseHelpSprite) {
+		pauseHelpSprite->Draw();
 	}
 
 	if (pauseGameSprite_) {
@@ -3522,6 +3606,12 @@ void GamePlayScene::Finalize() {
 	}
 	pauseBgSprite_.reset();
 	pausePanelSprite_.reset();
+	tutorialDimSprite_.reset();
+	pauseControllerHelpSprite_.reset();
+	moveControllerUiSprite_.reset();
+	avoidanceControllerUiSprite_.reset();
+	cardSelectControllerUiSprite_.reset();
+	slideMoveControllerUiSprite_.reset();
 	bossIntroTopBar_.reset();
 	bossIntroBottomBar_.reset();
 

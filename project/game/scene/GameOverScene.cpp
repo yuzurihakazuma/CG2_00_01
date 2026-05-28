@@ -52,6 +52,36 @@ namespace {
         std::uniform_int_distribution<int> distribution(0, maxExclusive - 1);
         return distribution(GetBurnCardRandomEngine());
     }
+
+    bool HasControllerPromptInput(Input* input) {
+        return input &&
+            input->GetJoystickState() &&
+            (input->PushJoystickButton(0xFFFF) ||
+             input->PushLeftTrigger(0.25f) ||
+             std::fabs(input->GetLeftStickX()) > 0.25f ||
+             std::fabs(input->GetLeftStickY()) > 0.25f ||
+             std::fabs(input->GetRightStickX()) > 0.25f ||
+             std::fabs(input->GetRightStickY()) > 0.25f);
+    }
+
+    bool HasKeyboardPromptInput(Input* input) {
+        if (!input) {
+            return false;
+        }
+
+        const BYTE keys[] = {
+            DIK_SPACE, DIK_RETURN, DIK_ESCAPE,
+            DIK_W, DIK_A, DIK_S, DIK_D,
+            DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT
+        };
+        for (BYTE key : keys) {
+            if (input->Pushkey(key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 GameOverScene::GameOverScene() = default;
@@ -108,12 +138,20 @@ void GameOverScene::Initialize(){
     // GAME OVER のロゴと戻り案内を作る
     gameOverSprite_ = Sprite::Create("resources/UI/Game_Over.png", { screenW * 0.5f, screenH * 0.40f });
     spaceSprite_ = Sprite::Create("resources/UI/GAME_overUI.png", { screenW * 0.5f, screenH * 0.60f });
+    controllerSpaceSprite_ = Sprite::Create("resources/UI/GAME_overUIC.png", { screenW * 0.5f, screenH * 0.60f });
+    isControllerUiMode_ = Input::GetInstance()->GetJoystickState();
 
     if (spaceSprite_) {
         const float logoWidth = screenW * 0.90f;
         const float logoHeight = logoWidth * (1080.0f / 1920.0f);
         spaceSprite_->SetSize({ logoWidth, logoHeight });
         spaceSprite_->Update();
+    }
+    if (controllerSpaceSprite_) {
+        const float logoWidth = screenW * 0.90f;
+        const float logoHeight = logoWidth * (1080.0f / 1920.0f);
+        controllerSpaceSprite_->SetSize({ logoWidth, logoHeight });
+        controllerSpaceSprite_->Update();
     }
 
     // 上から落ちて燃え尽きるカード演出を初期化する
@@ -141,6 +179,13 @@ void GameOverScene::Initialize(){
 void GameOverScene::Update(){
     const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
     const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+    Input* input = Input::GetInstance();
+
+    if (HasControllerPromptInput(input)) {
+        isControllerUiMode_ = true;
+    } else if (HasKeyboardPromptInput(input)) {
+        isControllerUiMode_ = false;
+    }
 
     // 背景カメラを固定で更新する
     if (camera_) {
@@ -232,11 +277,18 @@ void GameOverScene::Update(){
         spaceSprite_->SetSize({ logoWidth, logoHeight });
         spaceSprite_->Update();
     }
+    if (controllerSpaceSprite_) {
+        const float logoWidth = screenW * 0.90f;
+        const float logoHeight = logoWidth * (1080.0f / 1920.0f);
+        controllerSpaceSprite_->SetPosition({ screenW * 0.5f, screenH * 0.50f });
+        controllerSpaceSprite_->SetSize({ logoWidth, logoHeight });
+        controllerSpaceSprite_->Update();
+    }
 
     // 決定入力でタイトルへ戻る
     if (
-        Input::GetInstance()->Triggerkey(DIK_SPACE) ||
-        Input::GetInstance()->TriggerJoystickButton(XINPUT_GAMEPAD_A)
+        input->Triggerkey(DIK_SPACE) ||
+        input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
         ) {
         SceneManager::GetInstance()->ChangeScene("TITLE");
         return;
@@ -301,8 +353,9 @@ void GameOverScene::Draw() {
         gameOverSprite_->Draw();
     }
 
-    if (spaceSprite_) {
-        spaceSprite_->Draw();
+    Sprite* promptSprite = isControllerUiMode_ ? controllerSpaceSprite_.get() : spaceSprite_.get();
+    if (promptSprite) {
+        promptSprite->Draw();
     }
 }
 
@@ -314,6 +367,7 @@ void GameOverScene::Finalize(){
     fallingBurnCards_.clear(); // 落下カード演出を解放する
     gameOverSprite_.reset();
     spaceSprite_.reset();
+    controllerSpaceSprite_.reset();
     mapManager_.reset();
     camera_.reset();
     gameOverPlayer_.reset(); // ゲームオーバー画面用プレイヤーを解放する

@@ -58,6 +58,8 @@ private:
 
     // 連打による誤爆防止用タイマー
     int inputDelayTimer_ = 0;
+    bool wasRightStickLeft_ = false;
+    bool wasRightStickRight_ = false;
 
     // パネルを左右にどれくらい離すかの距離
     float panelOffsetX_ = 200.0f;

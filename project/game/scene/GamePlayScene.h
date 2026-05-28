@@ -186,6 +186,7 @@ private: // メンバ変数
 	void UpdatePause(Input* input);
 	void UpdatePauseSpriteLayout();
 	void UpdateMoveUiLayout();
+	void UpdateControlUiMode(Input* input);
 
 	// ポーズ画面の描画
 	void DrawPauseUI();
@@ -264,6 +265,11 @@ private: // メンバ変数
 	std::unique_ptr<Sprite> avoidanceUiSprite_ = nullptr;
 	std::unique_ptr<Sprite> cardSelectUiSprite_ = nullptr;
 	std::unique_ptr<Sprite> slideMoveUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> moveControllerUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> avoidanceControllerUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> cardSelectControllerUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> slideMoveControllerUiSprite_ = nullptr;
+	bool isControllerUiMode_ = false;
 	std::unique_ptr<Sprite> playerHpGaugeShadowSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeFrameSprite_ = nullptr;
 	std::unique_ptr<Sprite> playerHpGaugeBackSprite_ = nullptr;
@@ -323,7 +329,9 @@ private: // メンバ変数
 
 	std::unique_ptr<Sprite> pauseBgSprite_ = nullptr; // ポーズ中の半透明背景
 	std::unique_ptr<Sprite> pausePanelSprite_ = nullptr;
+	std::unique_ptr<Sprite> tutorialDimSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseHelpSprite_ = nullptr;
+	std::unique_ptr<Sprite> pauseControllerHelpSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseChoiceSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseGameSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseTitleSprite_ = nullptr;
