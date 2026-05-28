@@ -193,7 +193,7 @@ void DirectXCommon::PreDraw(){
 	commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
 	// 画面クリア & 深度クリア
-	const float clearColor[4] = { 0.1f, 0.25f, 0.5f, 1.0f };
+	const float clearColor[4] = { 0.04f, 0.03f, 0.05f, 1.0f }; // 洞窟の闇（暗紫黒）
 	commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	commandList_->ClearDepthStencilView(
 		dsvHandle,

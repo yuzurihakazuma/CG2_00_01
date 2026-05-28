@@ -51,8 +51,162 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
     if ( isFinished_ ) return;
 
-    // 弾を前へ進める
+    // =========================================================
+    // 分裂後：小炎3本の更新
+    // =========================================================
+    if ( hasSplit_ ) {
+        bool anyActive = false;
+        for ( auto& mf : miniFlames_ ) {
+            if ( !mf.active ) continue;
+            anyActive = true;
+
+            mf.pos += mf.vel;
+            mf.timer--;
+
+            // メイン弾と同じパーティクル（小炎版・少し小さめ）
+            mf.rotAngle += 0.20f;
+
+            // --- 内側リング（6個・明るい紫）---
+            for ( int ri = 0; ri < 6; ri++ ) {
+                float ang = mf.rotAngle + ( 3.14159f * 2.0f / 6 ) * ri;
+                Vector3 ep = { mf.pos.x + std::cosf( ang ) * 0.28f,
+                               mf.pos.y + std::sinf( ang * 0.8f ) * 0.12f,
+                               mf.pos.z + std::sinf( ang ) * 0.28f };
+                Vector3 rv = { -std::sinf( ang ) * 0.8f + ( rand() % 3 - 1 ) * 0.04f,
+                                0.10f + static_cast<float>( rand() % 4 ) * 0.05f,
+                                std::cosf( ang ) * 0.8f + ( rand() % 3 - 1 ) * 0.04f };
+                float r = 0.6f + static_cast<float>( rand() % 4 ) * 0.1f;
+                GPUParticleManager::GetInstance()->Emit( ep, rv, 0.22f, 0.18f, { r, 0.0f, 1.0f, 1.0f } );
+            }
+            // --- 外側リング（5個・深紫・逆回転）---
+            for ( int ri = 0; ri < 5; ri++ ) {
+                float ang = -mf.rotAngle * 0.55f + ( 3.14159f * 2.0f / 5 ) * ri;
+                Vector3 ep = { mf.pos.x + std::cosf( ang ) * 0.52f,
+                               mf.pos.y + std::sinf( ang * 0.5f ) * 0.10f,
+                               mf.pos.z + std::sinf( ang ) * 0.52f };
+                Vector3 rv = { std::sinf( ang ) * 0.5f + ( rand() % 3 - 1 ) * 0.03f,
+                               0.06f + static_cast<float>( rand() % 3 ) * 0.04f,
+                              -std::cosf( ang ) * 0.5f + ( rand() % 3 - 1 ) * 0.03f };
+                float b = 0.55f + static_cast<float>( rand() % 3 ) * 0.1f;
+                GPUParticleManager::GetInstance()->Emit( ep, rv, 0.30f, 0.26f, { 0.25f, 0.0f, b, 0.9f } );
+            }
+            // --- コア（3個・白熱した核）---
+            for ( int ci = 0; ci < 3; ci++ ) {
+                Vector3 cp = { mf.pos.x + ( rand() % 5 - 2 ) * 0.05f,
+                               mf.pos.y + ( rand() % 5 - 2 ) * 0.05f,
+                               mf.pos.z + ( rand() % 5 - 2 ) * 0.05f };
+                Vector3 cv = { ( rand() % 3 - 1 ) * 0.10f,
+                               0.38f + static_cast<float>( rand() % 5 ) * 0.06f,
+                               ( rand() % 3 - 1 ) * 0.10f };
+                float bright = ( ci < 2 ) ? 1.0f : 0.85f;
+                GPUParticleManager::GetInstance()->Emit( cp, cv, 0.14f, 0.22f, { bright, bright * 0.85f, 1.0f, 1.0f } );
+            }
+
+            // 小炎の壁衝突
+            if ( Collision::CheckBlockCollision( mf.pos, 0.6f, level ) ) {
+                for ( int i = 0; i < 10; i++ ) {
+                    float a = static_cast<float>( rand() % 628 ) * 0.01f;
+                    float sp = 0.5f + static_cast<float>( rand() % 6 ) * 0.08f;
+                    Vector3 v = { std::cosf( a ) * sp, 0.25f + static_cast<float>( rand() % 4 ) * 0.08f, std::sinf( a ) * sp };
+                    GPUParticleManager::GetInstance()->Emit( mf.pos, v, 0.2f, 0.55f, { 0.8f, 0.0f, 1.0f, 1.0f } );
+                }
+                mf.active = false;
+                continue;
+            }
+
+            // 小炎のプレイヤー当たり判定
+            if ( player && !player->IsDead() ) {
+                Vector3 pp = player->GetPosition();
+                Vector3 d = { pp.x - mf.pos.x, 0.0f, pp.z - mf.pos.z };
+                if ( Length( d ) < 1.6f ) {
+                    int finalDmg = miniDamage_;
+                    if ( casterBoss_ && casterBoss_->IsAttackDebuffed() ) finalDmg = finalDmg / 2;
+                    if ( finalDmg < 1 ) finalDmg = 1;
+                    player->TakeDamage( finalDmg, mf.pos );
+                    // 命中パーティクル
+                    for ( int i = 0; i < 18; i++ ) {
+                        float a = static_cast<float>( rand() % 628 ) * 0.01f;
+                        float sp = 1.0f + static_cast<float>( rand() % 8 ) * 0.18f;
+                        Vector3 v = { std::cosf( a ) * sp, 0.35f + static_cast<float>( rand() % 6 ) * 0.12f, std::sinf( a ) * sp };
+                        GPUParticleManager::GetInstance()->Emit( mf.pos, v, 0.28f, 0.45f, { 0.8f, 0.0f, 1.0f, 1.0f } );
+                    }
+                    if ( camera_ ) camera_->TriggerShake( 0.1f, 6 );
+                    mf.active = false;
+                    continue;
+                }
+            }
+
+            if ( mf.timer <= 0 ) mf.active = false;
+        }
+
+        if ( !anyActive ) isFinished_ = true;
+        return; // 分裂後はメイン弾の処理をスキップ
+    }
+
+    // =========================================================
+    // メイン弾：前へ進める
+    // =========================================================
     pos_ += velocity_;
+
+    // =============================================
+    // 壁衝突判定
+    // =============================================
+    if ( Collision::CheckBlockCollision( pos_, 1.0f, level ) ) {
+        // 壁ヒット：炎の爆散
+        for ( int i = 0; i < 20; i++ ) {
+            float a = static_cast<float>( rand() % 628 ) * 0.01f;
+            float sp = 0.7f + static_cast<float>( rand() % 10 ) * 0.12f;
+            Vector3 v = { std::cosf( a ) * sp, 0.3f + static_cast<float>( rand() % 6 ) * 0.1f, std::sinf( a ) * sp };
+            Vector4 c = ( rand() % 2 == 0 )
+                ? Vector4{ 0.8f, 0.0f, 1.0f, 1.0f }
+                : Vector4{ 0.5f, 0.0f, 0.85f, 0.9f };
+            GPUParticleManager::GetInstance()->Emit( pos_, v, 0.3f, 0.7f + static_cast<float>( rand() % 5 ) * 0.1f, c );
+        }
+        // 壁ヒットリング
+        for ( int i = 0; i < 16; i++ ) {
+            float a = ( 3.14159f * 2.0f / 16.0f ) * i;
+            Vector3 v = { std::sinf( a ) * 1.0f, 0.02f, std::cosf( a ) * 1.0f };
+            GPUParticleManager::GetInstance()->Emit( { pos_.x, pos_.y - 0.3f, pos_.z }, v, 0.25f, 0.8f, { 0.7f, 0.0f, 1.0f, 0.9f } );
+        }
+        isFinished_ = true;
+        return;
+    }
+
+    // =============================================
+    // 激怒中（HP半分以下）：飛行距離の半分で3分裂
+    // =============================================
+    const bool isEnraged = casterBoss_ && !casterBoss_->IsDead()
+        && casterBoss_->GetHP() <= casterBoss_->GetMaxHP() / 2;
+    if ( isEnraged && !hasSplit_ && timer_ == 60 ) {
+        // 分裂バースト
+        GPUParticleManager::GetInstance()->Emit( pos_, { 0, 0.05f, 0 }, 0.12f, 3.5f, { 0.9f, 0.3f, 1.0f, 1.0f } );
+        for ( int i = 0; i < 12; i++ ) {
+            float a = static_cast<float>( rand() % 628 ) * 0.01f;
+            float sp = 0.8f + static_cast<float>( rand() % 6 ) * 0.1f;
+            Vector3 v = { std::cosf( a ) * sp, 0.2f + static_cast<float>( rand() % 4 ) * 0.08f, std::sinf( a ) * sp };
+            GPUParticleManager::GetInstance()->Emit( pos_, v, 0.22f, 0.4f, { 0.7f, 0.0f, 1.0f, 1.0f } );
+        }
+
+        // 小炎3本：後ろ方向へ 左斜め↓ / 右斜め↓ / 上 の3方向に分裂
+        miniDamage_ = damage_ > 1 ? damage_ - 1 : 1;
+        miniFlames_.clear();
+
+        // 前方向ベースでファン状に3分裂（真前 | ・前左 / ・前右 \）
+        float baseAngle = std::atan2f( velocity_.x, velocity_.z );
+        const float kSplitAngles[3] = { -0.7854f, 0.7854f, 3.14159f }; // 前左-45°・前右+45°・真後ろ180°
+        float miniSpeed = 0.38f;
+        for ( int i = 0; i < 3; i++ ) {
+            MiniFire mf;
+            mf.pos = pos_;
+            float ang = baseAngle + kSplitAngles[i];
+            mf.vel = { std::sinf( ang ) * miniSpeed, 0.0f, std::cosf( ang ) * miniSpeed };
+            mf.timer = 45;
+            mf.active = true;
+            miniFlames_.push_back( mf );
+        }
+        hasSplit_ = true;
+        return; // メイン弾はここで停止、以降は miniFlames_ が担当
+    }
 
     // =============================================
     // 飛行中のトレイルパーティクル

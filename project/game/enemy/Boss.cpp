@@ -1,4 +1,4 @@
-#include "game/enemy/Boss.h"
+﻿#include "game/enemy/Boss.h"
 #include "engine/camera/Camera.h"
 #include "engine/math/VectorMath.h"
 #include "engine/postEffect/PostEffect.h"
@@ -570,6 +570,52 @@ void Boss::SetStun(int durationFrames) {
 
 	isStunned_  = true;
 	stunTimer_  = durationFrames;
+
+	// ===== スタン突入の大型視覚バースト =====
+	{
+		Vector3 stunCenter = { pos_.x, pos_.y + 1.5f, pos_.z };
+
+		// ① 大型白フラッシュ（2段）
+		GPUParticleManager::GetInstance()->Emit( stunCenter, { 0, 0, 0 }, 0.10f, 7.5f, { 1.0f, 1.0f, 1.0f, 1.0f } );
+		GPUParticleManager::GetInstance()->Emit( stunCenter, { 0, 0, 0 }, 0.22f, 5.0f,
+			isSplitBehaviorEnabled_
+				? Vector4{ 0.4f, 0.8f, 1.0f, 0.85f }    // 分裂ボス：青白フラッシュ
+				: Vector4{ 1.0f, 0.95f, 0.25f, 0.85f }  // 通常ボス：黄白フラッシュ
+		);
+
+		// ② 電撃パーティクルを全方向に放射（20本）
+		for ( int i = 0; i < 20; i++ ) {
+			float angle = ( 3.14159f * 2.0f / 20.0f ) * i;
+			float speed = 0.22f + ( rand() % 10 ) * 0.04f;
+			Vector3 boltVel = {
+				std::sinf( angle ) * speed + ( rand() % 5 - 2 ) * 0.04f,
+				( rand() % 6 - 1 ) * 0.05f,
+				std::cosf( angle ) * speed + ( rand() % 5 - 2 ) * 0.04f
+			};
+			Vector4 boltColor = isSplitBehaviorEnabled_
+				? Vector4{ 0.3f, 0.75f, 1.0f, 1.0f }    // 分裂ボス：青電撃
+				: Vector4{ 1.0f, 0.95f, 0.2f, 1.0f };   // 通常ボス：黄電撃
+			GPUParticleManager::GetInstance()->Emit( stunCenter, boltVel, 0.22f, 0.4f + ( rand() % 5 ) * 0.07f, boltColor );
+		}
+
+		// ③ 上方向に立ち昇る電光（10本）
+		for ( int i = 0; i < 10; i++ ) {
+			Vector3 risePos = {
+				pos_.x + ( rand() % 7 - 3 ) * 0.2f,
+				pos_.y,
+				pos_.z + ( rand() % 7 - 3 ) * 0.2f
+			};
+			Vector3 riseVel = {
+				( rand() % 9 - 4 ) * 0.04f,
+				0.18f + ( rand() % 10 ) * 0.06f,
+				( rand() % 9 - 4 ) * 0.04f
+			};
+			Vector4 riseColor = isSplitBehaviorEnabled_
+				? Vector4{ 0.55f, 0.9f, 1.0f, 0.9f }
+				: Vector4{ 1.0f, 1.0f, 0.45f, 0.9f };
+			GPUParticleManager::GetInstance()->Emit( risePos, riseVel, 0.32f, 0.5f + ( rand() % 4 ) * 0.1f, riseColor );
+		}
+	}
 }
 void Boss::DecideNextState() {
 	if (state_ == State::Appear) {
@@ -687,6 +733,50 @@ void Boss::UpdateChase() {
 
 	// 相方との重なり防止を最後に足す
 	pos_ += separation;
+
+	// ===== 移動中の足元エフェクト（12フレームに1回、実際に動いている時だけ）=====
+	if ( animationTimer_ % 6 == 0 && dist > stopRange ) {
+		// pos_.y はボス中心。床面 = pos_.y - 1.5f（着地パーティクルと同じ基準）
+		Vector3 footBase = { pos_.x, pos_.y - 2.0f, pos_.z };
+
+		// ① 足元の土煙リング（6方向）
+		for ( int i = 0; i < 12; i++ ) {
+			float angle = ( 3.14159f * 2.0f / 12.0f ) * i + static_cast<float>( rand() % 4 ) * 0.1f;
+			float speed = 0.22f + ( rand() % 6 ) * 0.05f;
+			Vector3 dustVel = {
+				std::sinf( angle ) * speed,
+				0.05f + ( rand() % 4 ) * 0.02f,
+				std::cosf( angle ) * speed
+			};
+			Vector3 dustPos = {
+				footBase.x + ( rand() % 5 - 2 ) * 0.12f,
+				footBase.y,
+				footBase.z + ( rand() % 5 - 2 ) * 0.12f
+			};
+			// 分裂ボスは青白塵、通常ボスは茶灰色塵
+			Vector4 dustColor = isSplitBehaviorEnabled_
+				? Vector4{ 0.55f, 0.7f, 0.8f, 0.9f }
+				: Vector4{ 0.55f, 0.45f, 0.33f, 0.9f };
+			GPUParticleManager::GetInstance()->Emit( dustPos, dustVel, 0.6f, 2.5f + ( rand() % 6 ) * 0.4f, dustColor );
+		}
+
+		// ② 激怒中は足元に火花も追加
+		if ( isEnraged ) {
+			for ( int i = 0; i < 3; i++ ) {
+				float angle = static_cast<float>( rand() % 628 ) * 0.01f;
+				float speed = 0.14f + ( rand() % 5 ) * 0.03f;
+				Vector3 sparkVel = {
+					std::sinf( angle ) * speed,
+					0.07f + ( rand() % 5 ) * 0.03f,
+					std::cosf( angle ) * speed
+				};
+				Vector4 sparkColor = isSplitBehaviorEnabled_
+					? Vector4{ 0.3f, 0.7f, 1.0f, 1.0f }   // 分裂ボス：青白電光
+					: Vector4{ 1.0f, 0.2f, 0.0f, 1.0f };  // 通常ボス：赤い火花
+				GPUParticleManager::GetInstance()->Emit( footBase, sparkVel, 0.4f, 1.2f + ( rand() % 5 ) * 0.3f, sparkColor );
+			}
+		}
+	}
 
 }
 
@@ -1273,6 +1363,58 @@ void Boss::TakeDamage(int damage) {
 		float scale = 0.4f + (rand() % 5) * 0.09f;
 		float orange = 0.35f + (rand() % 8) * 0.06f;
 		GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, scale, { 1.0f, orange, 0.05f, 1.0f });
+	}
+
+	// ===== 激怒中：被弾方向への引き波エフェクト =====
+	if ( hp_ <= ( maxHP_ / 2 ) ) {
+		// ノックバック方向（プレイヤー→ボス方向）を先に計算
+		Vector3 hitDir = { pos_.x - playerPos_.x, 0.0f, pos_.z - playerPos_.z };
+		if ( Length( hitDir ) > 0.01f ) {
+			hitDir = Normalize( hitDir );
+		}
+
+		// ① ノックバック方向に流れる赤黒い煙（引き波）
+		for ( int i = 0; i < 15; i++ ) {
+			float spread = ( rand() % 7 - 3 ) * 0.07f;
+			float speed = 0.10f + ( rand() % 8 ) * 0.05f;
+			Vector3 trailVel = {
+				hitDir.x * speed + spread,
+				( rand() % 5 ) * 0.05f,
+				hitDir.z * speed + spread
+			};
+			Vector3 trailPos = {
+				pos_.x + ( rand() % 7 - 3 ) * 0.1f,
+				pos_.y + 0.4f + ( rand() % 12 ) * 0.1f,
+				pos_.z + ( rand() % 7 - 3 ) * 0.1f
+			};
+			Vector4 smokeColor = isSplitBehaviorEnabled_
+				? Vector4{ 0.05f, 0.08f, 0.25f, 0.88f }   // 分裂ボス：暗青煙
+				: Vector4{ 0.55f, 0.0f, 0.0f, 0.88f };    // 通常ボス：暗赤煙
+			GPUParticleManager::GetInstance()->Emit( trailPos, trailVel, 0.32f, 0.7f + ( rand() % 4 ) * 0.1f, smokeColor );
+		}
+
+		// ② 追加スパーク（激怒中は派手に）
+		for ( int i = 0; i < 15; i++ ) {
+			Vector3 spVel = {
+				( rand() % 11 - 5 ) * 0.22f,
+				( rand() % 8 ) * 0.09f + 0.08f,
+				( rand() % 11 - 5 ) * 0.22f
+			};
+			Vector3 spPos = {
+				pos_.x + ( rand() % 9 - 4 ) * 0.14f,
+				pos_.y + 0.5f + ( rand() % 12 ) * 0.12f,
+				pos_.z + ( rand() % 9 - 4 ) * 0.14f
+			};
+			Vector4 spColor = isSplitBehaviorEnabled_
+				? Vector4{ 0.4f, 0.8f, 1.0f, 1.0f }
+				: Vector4{ 1.0f, 0.05f, 0.0f, 1.0f };
+			GPUParticleManager::GetInstance()->Emit( spPos, spVel, 0.28f, 0.45f + ( rand() % 5 ) * 0.08f, spColor );
+		}
+
+		// ③ カメラシェイクを少し強化
+		if ( camera_ ) {
+			camera_->TriggerShake( 0.04f, 5 );
+		}
 	}
 
 	isHit_ = true;
