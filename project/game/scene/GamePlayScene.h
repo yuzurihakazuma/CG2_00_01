@@ -204,7 +204,7 @@ private: // メンバ変数
 	int cardSpawnMargin_ = 1;
 	int timedEnemySpawnTimer_ = 600;
 	int timedCardSpawnTimer_ = 600;
-	const int timedSpawnIntervalFrames_ = 600;
+	const int timedSpawnIntervalFrames_ = 480;
 	const int normalTimedEnemyMax_ = 6;
 	const int normalTimedCardMax_ = 6;
 	const int bossTimedCardMax_ = 8;

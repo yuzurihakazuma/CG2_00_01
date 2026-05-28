@@ -56,6 +56,8 @@ private:
 		std::vector<std::unique_ptr<Obj3d>> fangPreviews;  // トゲ予測線
 		bool useHeadIdleAnimation = false;
 		float headIdleTimer = 0.0f;
+		bool useWallWalkAnimation = false;
+		float wallWalkTimer = 0.0f;
 	};
 
 	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera, bool useBossMinionModel = false) const;
