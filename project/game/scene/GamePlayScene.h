@@ -146,6 +146,7 @@ private: // メンバ変数
 	void DrawCharacterHitboxesDebug() const;
 	void DrawBossBeamHitboxesDebug() const;
 	void DrawFireballPredictionLines() const;
+	void DrawBossPredictionLines() const;
 	void StartFireballPredictionAttack(const Card& card);
 	void UpdateFireballPredictionAttack(Player* player);
 	void ResetFireballPredictionAttack();

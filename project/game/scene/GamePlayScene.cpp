@@ -2384,6 +2384,7 @@ void GamePlayScene::Draw() {
 	}
 
 	DrawFireballPredictionLines();
+	DrawBossPredictionLines();
 	DrawCharacterHitboxesDebug();
 	DrawBossIntroLetterbox();
 }
@@ -3942,6 +3943,7 @@ void GamePlayScene::DrawFireballPredictionLines() const {
 		}
 	}
 
+
 	if (!enemyManager_) {
 		return;
 	}
@@ -4010,6 +4012,87 @@ void GamePlayScene::DrawFireballPredictionLines() const {
 				kFireballPredictionLineThickness
 			);
 		}
+	}
+}
+
+void GamePlayScene::DrawBossPredictionLines() const {
+	if (!bossManager_) return;
+
+	ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+	if (!drawList) return;
+
+	auto drawPredictionForBoss = [&](Boss* boss) {
+		if (!boss || boss->IsDead() || boss->GetState() != Boss::State::UseCard || !boss->IsCasting()) return;
+		int cardId = boss->GetSelectedCard().id;
+		if (cardId != 102 && cardId != 105) return;
+
+		float progress = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(boss->GetCastDurationCurrent());
+		progress = std::clamp(progress, 0.0f, 1.0f);
+
+		float yaw = boss->GetRotation().y;
+		Vector3 start = boss->GetPosition();
+		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
+		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
+		// ボス用は赤っぽくする
+		const unsigned int fillColor = IM_COL32(255, 30, 30, fillAlpha);
+		const unsigned int lineColor = IM_COL32(255, 50, 50, lineAlpha);
+
+		auto drawRect = [&](float angle, float halfWidth, float length) {
+			Vector3 forward = { std::sinf(angle), 0.0f, std::cosf(angle) };
+			Vector3 right = { std::cosf(angle), 0.0f, -std::sinf(angle) };
+			std::array<Vector3, 4> corners = {
+				start - right * halfWidth,
+				start + right * halfWidth,
+				start + right * halfWidth + forward * length,
+				start - right * halfWidth + forward * length
+			};
+			std::array<Vector2, 4> screenCorners{};
+			std::array<bool, 4> visible{};
+			for (size_t i = 0; i < corners.size(); ++i) {
+				visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+			}
+			const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
+			if (allVisible) {
+				const ImVec2 fillPoints[4] = {
+					ImVec2(screenCorners[0].x, screenCorners[0].y),
+					ImVec2(screenCorners[1].x, screenCorners[1].y),
+					ImVec2(screenCorners[2].x, screenCorners[2].y),
+					ImVec2(screenCorners[3].x, screenCorners[3].y),
+				};
+				drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
+			}
+
+			for (int i = 0; i < 4; ++i) {
+				const int next = (i + 1) % 4;
+				if (!visible[i] || !visible[next]) continue;
+				drawList->AddLine(
+					ImVec2(screenCorners[i].x, screenCorners[i].y),
+					ImVec2(screenCorners[next].x, screenCorners[next].y),
+					lineColor,
+					2.0f
+				);
+			}
+		};
+
+		if (cardId == 102) {
+			// ファイアボール (6方向)
+			for (int i = 0; i < 6; ++i) {
+				float angle = yaw + (3.14159f * 2.0f / 6.0f) * i;
+				drawRect(angle, 0.8f, 20.0f);
+			}
+		} else if (cardId == 105) {
+			// 突進 (1方向、幅広め・少し長め)
+			drawRect(yaw, 1.5f, 25.0f);
+		}
+	};
+
+	if (bossManager_->IsSplitBossBattle()) {
+		drawPredictionForBoss(bossManager_->GetBossAt(0));
+		drawPredictionForBoss(bossManager_->GetBossAt(1));
+	} else {
+		drawPredictionForBoss(bossManager_->GetBoss());
 	}
 }
 
