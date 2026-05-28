@@ -2,7 +2,9 @@
 #include "game/card/ICardEffect.h"
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/camera/Camera.h"
+#include "engine/collision/Collision.h"
 #include <memory>
+#include <vector>
 
 class BossFierEffect : public ICardEffect {
 public:
@@ -10,7 +12,7 @@ public:
     BossFierEffect(int damage) : damage_(damage) {}
 
     // 初期化
-// 分裂ボス時に、どの個体が発動した攻撃かを受け取れるようにする
+    // 分裂ボス時に、どの個体が発動した攻撃かを受け取れるようにする
     void Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) override;
 
     // 更新
@@ -21,9 +23,17 @@ public:
 
     // 終了判定
     bool IsFinished() const override { return isFinished_; }
-private:
 
-   
+private:
+    // 3分裂後の小炎
+    struct MiniFire {
+        Vector3 pos{ 0.0f, 0.0f, 0.0f };
+        Vector3 vel{ 0.0f, 0.0f, 0.0f };
+        int timer = 0;
+        bool active = false;
+        float rotAngle = 0.0f;  // リング回転角（メイン弾と同じパーティクル用）
+    };
+
     Vector3 pos_ = { 0.0f, 0.0f, 0.0f };
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f };
     Vector3 scale_ = { 1.0f, 1.0f, 1.0f };
@@ -37,8 +47,12 @@ private:
     Camera* camera_ = nullptr;     // スクリーンUV変換 / シェイク用
 
     // この攻撃を発動したボス本人
-// 分裂ボス時に左右どちらの弾かを失わないように保持する
+    // 分裂ボス時に左右どちらの弾かを失わないように保持する
     Boss* casterBoss_ = nullptr;
 
+    // ===== 3分裂 =====
+    std::vector<MiniFire> miniFlames_;  // 小炎3本
+    bool hasSplit_ = false;             // 分裂済みフラグ
+    int miniDamage_ = 1;                // 小炎のダメージ（damage_ - 1）
 };
 
