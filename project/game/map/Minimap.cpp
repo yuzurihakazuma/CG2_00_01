@@ -342,11 +342,15 @@ void Minimap::UpdateLayoutIfNeeded() {
 	constexpr float kBaseRightMargin = 70.0f;
 	constexpr float kBaseTop = 200.0f;
 	constexpr float kBaseMapSize = 550.0f;
+	constexpr float kControlGuideBottomMargin = 10.0f;
+	constexpr float kControlGuideHeight = 104.0f + 73.0f + 59.0f + 59.0f;
+	constexpr float kControlGuideGap = 24.0f;
 
 	mapSize_ = { kBaseMapSize, kBaseMapSize };
+	const float maxMapTop = screenSize.y - kControlGuideBottomMargin - kControlGuideHeight - kControlGuideGap - mapSize_.y;
 	mapLeftTop_ = {
 		screenSize.x - kBaseRightMargin - mapSize_.x,
-		kBaseTop
+		std::max(16.0f, std::min(kBaseTop, maxMapTop))
 	};
 
 	if (backgroundSprite_) {
