@@ -3,6 +3,7 @@
 #include "engine/math/VectorMath.h"
 #include "engine/postEffect/PostEffect.h"
 #include <cmath>
+#include "game/audio/GameSE.h"
 #include "game/card/CardDatabase.h"
 #include "engine/particle/GPUParticleManager.h" 
 #include "game/particle/StunEffectManager.h"
@@ -1312,6 +1313,7 @@ void Boss::TakeDamage(int damage) {
 	if (isDead_) {
 		return;
 	}
+	GameSE::AttackHit();
 
 	// 詠唱中に殴られたらキャンセルする
 	if (state_ == State::UseCard) {
@@ -1434,6 +1436,7 @@ void Boss::TakeDamage(int damage) {
 	if (hp_ <= 0) {
 		hp_ = 0;
 		isDead_ = true;
+		GameSE::BossDeath();
 		state_ = State::Dead;
 		isHit_ = false;
 		hitTimer_ = 0;

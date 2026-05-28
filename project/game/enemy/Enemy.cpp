@@ -3,6 +3,7 @@
 #include "game/card/CardDatabase.h"
 #include <cmath>
 #include <random>
+#include "game/audio/GameSE.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "game/particle/StunEffectManager.h"
 
@@ -665,6 +666,8 @@ void Enemy::UpdateStatusEffects(){
 	}
 }
 void Enemy::TakeDamage(int damage){
+	if ( isDead_ ) return;
+	GameSE::AttackHit();
 	if ( isDead_ ) return; // 既に死亡していたら無視
 
 	if ( state_ == State::UseCard ) {
@@ -732,6 +735,7 @@ void Enemy::TakeDamage(int damage){
 	if ( hp_ <= 0 ) {
 		hp_ = 0;
 		isDead_ = true;
+		GameSE::EnemyDeath();
 
 		Vector3 deathCenter = { pos_.x, pos_.y + 0.6f, pos_.z };
 

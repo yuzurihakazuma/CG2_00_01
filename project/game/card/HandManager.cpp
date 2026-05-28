@@ -10,6 +10,7 @@
 #include "Engine/2D/Sprite.h"
 #include "Engine/Base/WindowProc.h"
 #include "Engine/Camera/Camera.h"
+#include "game/audio/GameSE.h"
 #include "engine/math/Matrix4x4.h"
 
 using namespace MatrixMath;
@@ -239,6 +240,7 @@ void HandManager::MoveSelection(int direction) {
 	}
 
 	const int handSize = static_cast<int>(hand_.size());
+	const int oldIndex = selectedCardIndex_;
 	int nextIndex = selectedCardIndex_;
 
 	for (int i = 0; i < handSize; ++i) {
@@ -252,6 +254,9 @@ void HandManager::MoveSelection(int direction) {
 
 		if (IsCardSelectableInCurrentMode(nextIndex)) {
 			selectedCardIndex_ = nextIndex;
+			if (selectedCardIndex_ != oldIndex) {
+				GameSE::CardMove();
+			}
 			return;
 		}
 	}
@@ -782,6 +787,7 @@ void HandManager::StartDissolveSelectedCard() {
 	dissolveThresholds_[selectedCardIndex_] = 0.0f;
 	pendingReturnToFist_ = hand_[selectedCardIndex_].id != 1;
 	manualSelectionAfterUse_ = false;
+	GameSE::CardVanish();
 
 	if (handModels_[selectedCardIndex_]) {
 		ApplyCardDissolveColor(handModels_[selectedCardIndex_].get(), hand_[selectedCardIndex_]);

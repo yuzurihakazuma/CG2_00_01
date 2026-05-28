@@ -8,6 +8,7 @@
 #include "Engine/Utils/Color.h"
 #include "Engine/Utils/TextManager.h"
 #include "Engine/Audio/AudioManager.h"
+#include "game/audio/GameSE.h"
 #include "Engine/3D/Model/ModelManager.h"
 #include "Engine/Particle/ParticleManager.h"
 #include "Engine/Graphics/TextureManager.h"
@@ -226,6 +227,7 @@ void TitleScene::Update() {
 	// 今フレームで上/下に倒れているかを判定する
 	bool isStickUp = input->GetLeftStickY() > 0.5f;
 	bool isStickDown = input->GetLeftStickY() < -0.5f;
+	const TitleChoice previousSelection = currentSelection_;
 
 	// 上入力は W / ↑ / 上D-Pad / 左スティック上
 	if (
@@ -245,6 +247,9 @@ void TitleScene::Update() {
 		(isStickDown && !wasStickDown)
 		) {
 		currentSelection_ = TitleChoice::Tutorial;
+	}
+	if (currentSelection_ != previousSelection) {
+		GameSE::CursorMove();
 	}
 
 	// 次フレーム用に保存する
@@ -308,6 +313,7 @@ void TitleScene::Update() {
 	// SPACEでゲーム開始
 	// SPACE に加えて A ボタンでも決定できるようにする
 	if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
+		GameSE::Confirm();
 		if (currentSelection_ == TitleChoice::StartGame) {
 			// 通常プレイ
 			GamePlayScene::RequestTutorialStart(false);

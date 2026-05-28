@@ -16,6 +16,7 @@
 #include "engine/base/WindowProc.h"
 #include "engine/2d/Sprite.h"
 #include "engine/2d/SpriteCommon.h"
+#include "game/audio/GameSE.h"
 #include "engine/graphics/TextureManager.h"
 
 
@@ -318,6 +319,7 @@ void SceneManager::ChangeScene(const std::string& sceneName) {
 
 	// 次のシーンを予約してフェードアウト開始
 	nextScene_ = sceneFactory_->CreateScene(sceneName);
+	GameSE::SceneTransition();
 	RandomizeFadeCardTextures();
 	fadeState_ = FadeState::Out;
 	fadeAlpha_ = 0.0f;
@@ -333,6 +335,7 @@ void SceneManager::ChangeScene(std::unique_ptr<IScene> nextScene) {
 	}
 
 	nextScene_ = std::move(nextScene);
+	GameSE::SceneTransition();
 	RandomizeFadeCardTextures();
 	fadeState_ = FadeState::Out;
 	fadeAlpha_ = 0.0f;
