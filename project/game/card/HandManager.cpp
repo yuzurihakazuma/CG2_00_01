@@ -572,6 +572,20 @@ void HandManager::Draw() {
 	}
 }
 
+void HandManager::DrawSelectedCard() {
+	if (selectedCardIndex_ < 0 || selectedCardIndex_ >= static_cast<int>(handModels_.size())) {
+		return;
+	}
+	if (!handModels_[selectedCardIndex_]) {
+		return;
+	}
+	if (IsCardCoolingDown(selectedCardIndex_) || IsCardCasting(selectedCardIndex_)) {
+		return;
+	}
+
+	handModels_[selectedCardIndex_]->Draw();
+}
+
 void HandManager::DrawCooldownOverlays() {
 	if ((cooldownTimer_ <= 0 || cooldownDuration_ <= 0) &&
 		(castTimer_ <= 0 || castDuration_ <= 0)) {
@@ -583,10 +597,11 @@ void HandManager::DrawCooldownOverlays() {
 	}
 
 	for (int i = 0; i < static_cast<int>(hand_.size()); ++i) {
-		if (!IsCardCoolingDown(i) && !IsCardCasting(i)) {
+		const bool isCoolingDown = IsCardCoolingDown(i);
+		const bool isCasting = IsCardCasting(i);
+		if (!isCoolingDown && !isCasting) {
 			continue;
 		}
-
 		if (!cooldownOverlays_[i]) {
 			cooldownOverlays_[i] = CreateCooldownOverlay();
 		}

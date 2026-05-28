@@ -184,7 +184,9 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
     // 🌟 当たり判定も突きの発生（7フレーム目以降）に合わせる
     if ( localTimer >= 7 && localTimer <= 11 ) {
 
-        int currentDamage = damage_ + ( rand() % 2 ) + ( cycle == 2 ? 1 : 0 );
+        int currentDamage = (cycle == 2)
+            ? damage_ + (rand() % 2) + 1
+            : 1 + (rand() % 2);
 
         // 3段目命中時の歪みエフェクト用ヘルパー
         auto TriggerSpearDistortion = [&](const Vector3& hitPos) {
