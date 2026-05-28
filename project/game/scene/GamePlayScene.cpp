@@ -2222,11 +2222,6 @@ void GamePlayScene::Draw() {
 
 		if (!isCardSwapMode_ && !isLevelUpBonusSelecting) {
 			handManager_.DrawCooldownOverlays();
-			commandList->ClearDepthStencilView(dxCommon->GetDsvHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-			Obj3dCommon::GetInstance()->PreDraw(commandList);
-			PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
-			handManager_.DrawSelectedCard();
-			SpriteCommon::GetInstance()->PreDraw(commandList);
 		}
 
 		if (handManager_.GetHandSize() > 0 && descBgSprite_) {
@@ -2892,13 +2887,16 @@ void GamePlayScene::StartCardUseFlash(const Card& card, bool persistent, bool di
 		flashObj->SetNoiseTexture(it->second.srvIndex);
 	}
 
-	Vector3 dissolveColor = { 1.0f, 0.65f, 0.12f };
-	if (card.effectType == CardEffectType::Heal) {
-		dissolveColor = { 0.1f, 1.0f, 0.25f };
-	} else if (card.effectType == CardEffectType::Defense) {
-		dissolveColor = { 0.15f, 0.55f, 1.0f };
-	} else if (card.effectType == CardEffectType::Special) {
-		dissolveColor = { 0.75f, 0.25f, 1.0f };
+	Vector3 dissolveColor = { 1.0f, 0.0f, 0.0f };
+	if (card.effectType == CardEffectType::Attack) {
+		if (card.id == 2 || card.id == 6 || card.id == 7) {
+			dissolveColor = { 0.0f, 0.12f, 1.0f };
+		}
+	} else if (card.effectType == CardEffectType::Heal) {
+		dissolveColor = { 0.1f, 1.0f, 0.2f };
+	} else if (card.effectType == CardEffectType::Defense ||
+		card.effectType == CardEffectType::Special) {
+		dissolveColor = { 0.7f, 0.2f, 1.0f };
 	}
 	flashObj->SetDissolveColor(dissolveColor);
 	flashObj->SetDissolveThreshold(0.0f);

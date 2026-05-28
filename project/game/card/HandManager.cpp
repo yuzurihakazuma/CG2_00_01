@@ -566,24 +566,21 @@ void HandManager::Update() {
 }
 
 void HandManager::Draw() {
-	// 3Dモデルを描画する
-	for (auto& model : handModels_) {
-		model->Draw();
-	}
-}
-
-void HandManager::DrawSelectedCard() {
-	if (selectedCardIndex_ < 0 || selectedCardIndex_ >= static_cast<int>(handModels_.size())) {
-		return;
-	}
-	if (!handModels_[selectedCardIndex_]) {
-		return;
-	}
-	if (IsCardCoolingDown(selectedCardIndex_) || IsCardCasting(selectedCardIndex_)) {
-		return;
+	// 選択中カードは同じ3D描画内で最後に描く。
+	// UI描画後に描き直すと、ディゾルブの色が上書きされて見えるためここで完結させる。
+	for (int i = 0; i < static_cast<int>(handModels_.size()); ++i) {
+		if (i == selectedCardIndex_) {
+			continue;
+		}
+		if (handModels_[i]) {
+			handModels_[i]->Draw();
+		}
 	}
 
-	handModels_[selectedCardIndex_]->Draw();
+	if (selectedCardIndex_ >= 0 && selectedCardIndex_ < static_cast<int>(handModels_.size()) &&
+		handModels_[selectedCardIndex_]) {
+		handModels_[selectedCardIndex_]->Draw();
+	}
 }
 
 void HandManager::DrawCooldownOverlays() {
@@ -610,7 +607,43 @@ void HandManager::DrawCooldownOverlays() {
 		}
 
 		const float ratio = (std::max)(GetCardCooldownRatio(i), GetCardCastRatio(i));
-		const ScreenRect rect = GetCardScreenRect(camera_, handModels_[i].get());
+		ScreenRect rect = GetCardScreenRect(camera_, handModels_[i].get());
+
+		// クールタイム帯は2D描画なので深度を持たない。
+		// 非選択カードの帯が、手前に出ている選択カードへ貫通して見えないよう重なった横幅だけ切る。
+		if (i != selectedCardIndex_ &&
+			selectedCardIndex_ >= 0 &&
+			selectedCardIndex_ < static_cast<int>(handModels_.size()) &&
+			handModels_[selectedCardIndex_]) {
+			const ScreenRect selectedRect = GetCardScreenRect(camera_, handModels_[selectedCardIndex_].get());
+			const float rectLeft = rect.center.x - rect.size.x * 0.5f;
+			const float rectRight = rect.center.x + rect.size.x * 0.5f;
+			const float rectTop = rect.center.y - rect.size.y * 0.5f;
+			const float rectBottom = rect.center.y + rect.size.y * 0.5f;
+			const float selectedLeft = selectedRect.center.x - selectedRect.size.x * 0.5f;
+			const float selectedRight = selectedRect.center.x + selectedRect.size.x * 0.5f;
+			const float selectedTop = selectedRect.center.y - selectedRect.size.y * 0.5f;
+			const float selectedBottom = selectedRect.center.y + selectedRect.size.y * 0.5f;
+
+			const bool overlapsX = rectLeft < selectedRight && rectRight > selectedLeft;
+			const bool overlapsY = rectTop < selectedBottom && rectBottom > selectedTop;
+			if (overlapsX && overlapsY) {
+				float clippedLeft = rectLeft;
+				float clippedRight = rectRight;
+				if (rect.center.x < selectedRect.center.x) {
+					clippedRight = (std::min)(clippedRight, selectedLeft);
+				} else {
+					clippedLeft = (std::max)(clippedLeft, selectedRight);
+				}
+
+				const float clippedWidth = clippedRight - clippedLeft;
+				if (clippedWidth <= 4.0f) {
+					continue;
+				}
+				rect.center.x = (clippedLeft + clippedRight) * 0.5f;
+				rect.size.x = clippedWidth;
+			}
+		}
 
 		cooldownOverlays_[i]->SetPosition({ rect.center.x, rect.center.y + rect.size.y * 0.5f });
 		cooldownOverlays_[i]->SetSize({ rect.size.x, rect.size.y * ratio });
