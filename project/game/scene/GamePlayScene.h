@@ -369,4 +369,6 @@ public:
 	bool wasBossDead_ = false;
 	bool wasEnraged_ = false;
 
+	bool hasRefreshedMinimapAfterBossDeath_ = false; // ボス撃破後のミニマップ再構築を1回だけにする
+
 };

@@ -353,7 +353,7 @@ void Minimap::Update() {
 	if (!visible_) {
 		return;
 	}
-	UpdateStaticSprites();
+	
 
 	// 今いる区画を探索済みにする
 	DiscoverCurrentChunk();
