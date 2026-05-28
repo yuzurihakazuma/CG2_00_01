@@ -27,6 +27,7 @@
 #include "game/map/MapManager.h"
 #include"engine/utils/Level/LevelEditor.h"
 #include "engine/utils/EditorManager.h"
+#include <cmath>
 #include <cstdlib>
 
 #include "engine/graphics/SrvManager.h"
@@ -34,6 +35,38 @@
 
 using namespace VectorMath;
 using namespace MatrixMath;
+
+namespace {
+bool HasControllerPromptInput(Input* input) {
+	return input &&
+		input->GetJoystickState() &&
+		(input->PushJoystickButton(0xFFFF) ||
+		 input->PushLeftTrigger(0.25f) ||
+		 std::fabs(input->GetLeftStickX()) > 0.25f ||
+		 std::fabs(input->GetLeftStickY()) > 0.25f ||
+		 std::fabs(input->GetRightStickX()) > 0.25f ||
+		 std::fabs(input->GetRightStickY()) > 0.25f);
+}
+
+bool HasKeyboardPromptInput(Input* input) {
+	if (!input) {
+		return false;
+	}
+
+	const BYTE keys[] = {
+		DIK_SPACE, DIK_RETURN, DIK_ESCAPE,
+		DIK_W, DIK_A, DIK_S, DIK_D,
+		DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT
+	};
+	for (BYTE key : keys) {
+		if (input->Pushkey(key)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+}
 
 TitleScene::TitleScene() {}
 
@@ -145,6 +178,8 @@ void TitleScene::Initialize() {
 
 	// 操作説明の読み込み
 	operateSprite_ = Sprite::Create("resources/UI/TitleOperate.png", { screenW * 0.5f, screenH * 0.5f });
+	controllerOperateSprite_ = Sprite::Create("resources/UI/TitleOperateC.png", { screenW * 0.5f, screenH * 0.5f });
+	isControllerUiMode_ = Input::GetInstance()->GetJoystickState();
 
 	// モデル読み込み（カード）
 	ModelManager::GetInstance()->LoadModel("cardR", "resources/card", "CardR.obj");
@@ -209,6 +244,11 @@ void TitleScene::Update() {
 	}
 
 	Input* input = Input::GetInstance();
+	if (HasControllerPromptInput(input)) {
+		isControllerUiMode_ = true;
+	} else if (HasKeyboardPromptInput(input)) {
+		isControllerUiMode_ = false;
+	}
 
 
 
@@ -308,6 +348,11 @@ void TitleScene::Update() {
 		operateSprite_->SetSize(normalSize);
 		operateSprite_->SetPosition({ centerX+170, centerY });
 		operateSprite_->Update();
+	}
+	if (controllerOperateSprite_) {
+		controllerOperateSprite_->SetSize(normalSize);
+		controllerOperateSprite_->SetPosition({ centerX + 170, centerY });
+		controllerOperateSprite_->Update();
 	}
 
 	// SPACEでゲーム開始
@@ -441,8 +486,9 @@ void TitleScene::Draw(){
 	}
 
 	// 操作説明の描画
-	if (operateSprite_) {
-		operateSprite_->Draw();
+	Sprite* activeOperateSprite = isControllerUiMode_ ? controllerOperateSprite_.get() : operateSprite_.get();
+	if (activeOperateSprite) {
+		activeOperateSprite->Draw();
 	}
 
 	// エディタ用の出力設定

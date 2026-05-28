@@ -18,6 +18,7 @@ class Sprite;
 class RenderTexture;
 class PostEffect;
 class MapManager;
+class Input;
 
 // タイトルシーン
 class TitleScene : public IScene {
@@ -123,5 +124,7 @@ private:
 	std::unique_ptr<Sprite> tutorialBlueSprite_ = nullptr;
 	std::unique_ptr<Sprite> tutorialWhiteSprite_ = nullptr;
 	std::unique_ptr<Sprite> operateSprite_ = nullptr;
+	std::unique_ptr<Sprite> controllerOperateSprite_ = nullptr;
+	bool isControllerUiMode_ = false;
 
 };
