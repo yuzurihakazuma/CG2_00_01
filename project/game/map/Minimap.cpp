@@ -1,10 +1,13 @@
 #include "Minimap.h"
 #include "Engine/2D/Sprite.h"
+#include "Engine/Base/WindowProc.h"
 
 #include <algorithm>
 #include <cmath>
 
 void Minimap::Initialize() {
+	UpdateLayoutIfNeeded();
+
 	backgroundSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
 	backgroundSprite_->SetAnchorPoint({ 0.0f, 0.0f });
 	backgroundSprite_->SetSize(mapSize_);
@@ -37,6 +40,7 @@ void Minimap::SetLevelData(const LevelData* levelData, bool keepDiscovery) {
 
 	// 新しいマップ情報でミニマップを作り直す
 	levelData_ = levelData;
+	UpdateLayoutIfNeeded();
 	RebuildMapSprites();
 
 	// 保持指定のときだけ開示状態を戻す
@@ -261,6 +265,60 @@ void Minimap::BuildChunkSprites() {
 	}
 }
 
+void Minimap::UpdateLayoutIfNeeded() {
+	WindowProc* windowProc = WindowProc::GetInstance();
+	const Vector2 screenSize = {
+		static_cast<float>(windowProc->GetClientWidth()),
+		static_cast<float>(windowProc->GetClientHeight())
+	};
+
+	if (screenSize.x <= 0.0f || screenSize.y <= 0.0f) {
+		return;
+	}
+	if (std::fabs(screenSize.x - currentScreenSize_.x) < 0.5f &&
+		std::fabs(screenSize.y - currentScreenSize_.y) < 0.5f) {
+		return;
+	}
+
+	std::vector<bool> discoveredStates;
+	discoveredStates.reserve(chunks_.size());
+	for (const Chunk& chunk : chunks_) {
+		discoveredStates.push_back(chunk.discovered);
+	}
+
+	currentScreenSize_ = screenSize;
+
+	constexpr float kBaseRightMargin = 70.0f;
+	constexpr float kBaseTop = 200.0f;
+	constexpr float kBaseMapSize = 550.0f;
+
+	mapSize_ = { kBaseMapSize, kBaseMapSize };
+	mapLeftTop_ = {
+		screenSize.x - kBaseRightMargin - mapSize_.x,
+		kBaseTop
+	};
+
+	if (backgroundSprite_) {
+		backgroundSprite_->SetPosition(mapLeftTop_);
+		backgroundSprite_->SetSize(mapSize_);
+	}
+	if (frameSprite_) {
+		frameSprite_->SetPosition({ mapLeftTop_.x - 2.0f, mapLeftTop_.y - 2.0f });
+		frameSprite_->SetSize({ mapSize_.x + 4.0f, mapSize_.y + 4.0f });
+	}
+
+	if (levelData_) {
+		RebuildMapSprites();
+
+		const size_t restoreCount = (std::min)(discoveredStates.size(), chunks_.size());
+		for (size_t i = 0; i < restoreCount; ++i) {
+			chunks_[i].discovered = discoveredStates[i];
+		}
+	}
+
+	UpdateStaticSprites();
+}
+
 void Minimap::UpdateStaticSprites() {
 	if (backgroundSprite_) {
 		backgroundSprite_->Update();
@@ -350,6 +408,8 @@ Vector2 Minimap::WorldToMinimapPosition(const Vector3& worldPos) const {
 }
 
 void Minimap::Update() {
+	UpdateLayoutIfNeeded();
+
 	if (!visible_) {
 		return;
 	}
