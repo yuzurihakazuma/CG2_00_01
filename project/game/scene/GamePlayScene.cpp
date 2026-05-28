@@ -8,6 +8,7 @@
 #include "Engine/Utils/Color.h"
 #include "externals/imgui/imgui.h"
 #include "Engine/Audio/AudioManager.h"
+#include "game/audio/GameBGM.h"
 #include "game/audio/GameSE.h"
 #include "Engine/3D/Model/ModelManager.h"
 #include "Engine/Particle/ParticleManager.h"
@@ -65,7 +66,8 @@ void GamePlayScene::Initialize() {
 	auto commandList = dxCommon->GetCommandList();
 
 	// BGMロード (シングルトン)
-	AudioManager::GetInstance()->LoadWave(bgmFile_);
+	// 通常ゲーム用BGMを再生
+	GameBGM::GameScene();
 	// モデル読み込み (シングルトン)
 	ModelManager::GetInstance()->LoadModel("fence", "resources", "fence.obj");
 
@@ -849,6 +851,8 @@ void GamePlayScene::Update() {
 			if (mapManager_->IsBossMap()) {
 				bossManager_->StartBossIntro();
 			} else {
+				// ボス部屋以外では通常ゲーム用BGMに戻す
+				GameBGM::GameScene(0.5f);
 				bossManager_->EndBossIntro();
 			}
 		}
@@ -935,11 +939,6 @@ void GamePlayScene::Update() {
 	// デバッグ用リセット
 	if (!shouldFreezeGameplayForFade && !isEditingDebugText && input->Triggerkey(DIK_R)) {
 		ResetBattleDebug();
-	}
-
-	// BGM再生
-	if (!shouldFreezeGameplayForFade && !isEditingDebugText && input->Triggerkey(DIK_SPACE)) {
-		//AudioManager::GetInstance()->PlayWave(bgmFile_);
 	}
 
 	// タイトルシーンへ移動

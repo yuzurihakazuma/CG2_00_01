@@ -382,6 +382,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="game\base\Game.h" />
     <ClInclude Include="game\card\SpeedBuffEffect.h" />
     <ClInclude Include="game\scene\AnimationEditorScene.h" />
+    <ClInclude Include="game\audio\GameBGM.h" />
     <ClInclude Include="game\scene\GamePlayScene.h" />
     <ClInclude Include="game\scene\SceneFactory.h" />
     <ClInclude Include="game\scene\TitleScene.h" />

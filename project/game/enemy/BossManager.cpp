@@ -14,6 +14,7 @@
 #include "game/card/CardPickupManager.h"
 #include "game/card/CardDatabase.h"
 #include "engine/collision/Collision.h"
+#include "game/audio/GameBGM.h"
 #include "game/audio/GameSE.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
@@ -288,6 +289,8 @@ void BossManager::StartBossIntro() {
 	bossIntroCameraState_ = IntroCameraState::SkyLook;
 	bossIntroTimer_ = 50;
 	bossCardRainTimer_ = bossCardRainInterval_;
+	// ボス演出の開始時にボス用BGMへ切り替える
+	GameBGM::Boss(0.8f);
 	GameSE::BossAppear();
 }
 

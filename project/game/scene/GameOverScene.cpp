@@ -8,6 +8,7 @@
 #include "Engine/3D/Obj/Obj3dCommon.h"
 #include "Engine/Camera/Camera.h"
 #include "Engine/2D/Sprite.h"
+#include "game/audio/GameBGM.h"
 #include "game/audio/GameSE.h"
 #include "game/player/Player.h"
 #include "externals/imgui/imgui.h"
@@ -90,6 +91,9 @@ GameOverScene::GameOverScene() = default;
 GameOverScene::~GameOverScene() = default;
 
 void GameOverScene::Initialize(){
+    // ゲームオーバーシーンに入ったら専用BGMへ切り替える
+    GameBGM::GameOver(0.8f);
+
     // 強いポストエフェクトは切って見やすくする
     auto* pe = PostEffect::GetInstance();
     pe->SetEffectActive(PostEffectType::Vignetting, false);

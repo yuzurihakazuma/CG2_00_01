@@ -8,6 +8,7 @@
 #include "Engine/3D/Obj/Obj3dCommon.h"
 #include "Engine/Camera/Camera.h"
 #include "Engine/2D/Sprite.h"
+#include "game/audio/GameBGM.h"
 #include "game/audio/GameSE.h"
 #include "game/player/Player.h"
 
@@ -105,6 +106,9 @@ GameClearScene::GameClearScene() = default;
 GameClearScene::~GameClearScene() = default;
 
 void GameClearScene::Initialize() {
+    // クリアシーンに入ったらクリア用BGMへ切り替える
+    GameBGM::GameClear(0.8f);
+
     // Reset strong post effects so the clear scene stays readable.
     auto* pe = PostEffect::GetInstance();
     pe->SetEffectActive(PostEffectType::Vignetting, false);

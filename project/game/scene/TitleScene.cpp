@@ -8,6 +8,7 @@
 #include "Engine/Utils/Color.h"
 #include "Engine/Utils/TextManager.h"
 #include "Engine/Audio/AudioManager.h"
+#include "game/audio/GameBGM.h"
 #include "game/audio/GameSE.h"
 #include "Engine/3D/Model/ModelManager.h"
 #include "Engine/Particle/ParticleManager.h"
@@ -86,7 +87,8 @@ void TitleScene::Initialize() {
 	auto commandList = dxCommon->GetCommandList();
 
 	// BGMロード
-	AudioManager::GetInstance()->LoadWave(bgmFile_);
+	// タイトル用BGMを再生
+	GameBGM::Title();
 
 	// モデル読み込み
 	ModelManager::GetInstance()->LoadModel("fence", "resources", "fence.obj");
@@ -253,10 +255,6 @@ void TitleScene::Update() {
 
 
 	// BGM再生はBキーに分ける
-	if (input->Triggerkey(DIK_B)) {
-		AudioManager::GetInstance()->PlayWave(bgmFile_);
-	}
-
 	// ==========================================
 	// W/Sキー または 上下矢印キーで選択
 	// ==========================================
@@ -405,7 +403,6 @@ void TitleScene::DrawDebugUI() {
 	ImGui::SetNextWindowSize(ImVec2(500, 100), ImGuiCond_FirstUseEver);
 	ImGui::Begin("TitleScene Debug");
 	ImGui::Text("Enter : Start Game");
-	ImGui::Text("B : Play BGM");
 	ImGui::End();
 #endif
 }

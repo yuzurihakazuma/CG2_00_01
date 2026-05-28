@@ -79,7 +79,6 @@ private:
 	// デプスステンシル
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource_;
 
-	std::string bgmFile_ = "resources/BGMDon.mp3";
 
 	// マップエディタ
 	std::unique_ptr<MapManager> mapManager_ = nullptr;
