@@ -13,6 +13,7 @@
 #include "game/map/MapManager.h"
 #include "game/map/Minimap.h"
 #include "game/player/PlayerManager.h"
+#include "game/card/HandManager.h"
 
 void Tutorial::Initialize(const Context& context) {
 	context_ = context;
@@ -43,6 +44,7 @@ void Tutorial::Start() {
 	firstRoomMoveChecked_ = false;
 	firstRoomDodgeChecked_ = false;
 	firstRoomCardChecked_ = false;
+	firstRoomPotionGranted_ = false; // チュートリアル開始時にポーション配布状態をリセットする
 
 	combatPracticePendingCardId_ = -1;    // 練習用カードIDの記録を初期化する
 	combatPracticeTrackedEnemyHp_ = -1;   // 敵HP監視値を初期化する
@@ -136,21 +138,23 @@ void Tutorial::Update(Input* input) {
 			return;
 
 		case Step::FirstRoomStatusIntro:
-			// 上部UI説明の次は、カード操作説明へ進む
+			// 上部UI説明の次は、実際にカードを選んで使う練習へ進む
 			step_ = Step::FirstRoomCardControlIntro;
-			isPauseStep_ = true;
-			waitingForSpace_ = true;
-			tutorialAdvanceCooldown_ = kAdvanceCooldownFrames_;
+			isPauseStep_ = false;      // このステップではゲームを止めない
+			waitingForSpace_ = false;  // SPACEで説明を閉じず、カード使用に使わせる
+			tutorialAdvanceCooldown_ = 0;
+
+			// 練習用にポーションを1枚だけ手札へ追加する
+			if (!firstRoomPotionGranted_ && context_.handManager) {
+				context_.handManager->AddCard(CardDatabase::GetCardData(3));
+				firstRoomPotionGranted_ = true;
+			}
+
 			UpdateTexts();
 			return;
 
 		case Step::FirstRoomCardControlIntro:
-			// カード操作説明が終わったら、次の部屋への通路を開ける
-			OpenCorridor(corridor0_);
-			step_ = Step::PickCard;
-			isPauseStep_ = false;
-			waitingForSpace_ = false;
-			UpdateTexts();
+			// このステップはポーション使用で進めるので、ここでは何もしない
 			return;
 
 		case Step::CardSwapIntro:
@@ -524,13 +528,14 @@ void Tutorial::SpawnEnemyCardTutorial() {
 	const int cardX = room4_.right - 2;
 	const int cardZ = room4_.CenterZ();
 
-	const int enemyX0 = cardX - 1;
+	// カードまで少し歩かせて、拾う流れを見えやすくする
+	const int enemyX0 = cardX - 3;
 	const int enemyZ0 = cardZ - 2;
 
-	const int enemyX1 = cardX - 1;
+	const int enemyX1 = cardX - 3;
 	const int enemyZ1 = cardZ;
 
-	const int enemyX2 = cardX - 1;
+	const int enemyX2 = cardX - 3;
 	const int enemyZ2 = cardZ + 2;
 
 	// カードの手前側に3体並べて出す
@@ -630,32 +635,21 @@ void Tutorial::UpdateTexts() const {
 	}
 
 	TextManager* text = TextManager::GetInstance();
-	text->SetPosition("TutorialTitle", 20.0f, 260.0f);
-	text->SetPosition("TutorialBody", 20.0f, 305.0f);
+	text->SetPosition("TutorialTitle", 20.0f, 140.0f);      // タイトルをさらに上に移動
+	text->SetPosition("TutorialBody", 20.0f, 185.0f);       // 本文をさらに上に移動
 	text->SetCentered("TutorialTitle", false);
 	text->SetCentered("TutorialBody", false);
 
-	// チュートリアル中だけ、操作説明と本編のクリア条件を右下に常時表示する
-	text->SetPosition("TutorialGuide", 1450.0f, 750.0f);
+	// 右下ガイドを少し上に移動
+	text->SetPosition("TutorialGuide", 1450.0f, 620.0f);
 	text->SetCentered("TutorialGuide", false);
 	text->SetScale("TutorialGuide", 0.8f);
 	text->SetColor("TutorialGuide", 1.0f, 1.0f, 1.0f, 0.9f);
-	text->SetText(
-		"TutorialGuide",
-		"操作説明\n"
-		"WASD:移動\n"
-		"LShift:回避\n"
-		"Space:カード使用\n"
-		"矢印キー:カード選択\n\n"
-		"クリア条件:10階層まで進みボスを倒す"
-	);
 
-	// チェック項目を少し下にずらす
-	text->SetPosition("TutorialCheckMove", 20.0f, 430.0f);
-	text->SetPosition("TutorialCheckDodge", 20.0f, 465.0f);
-	text->SetPosition("TutorialCheckCard", 20.0f, 500.0f);
-
-
+	// 通常チェック項目を上に移動
+	text->SetPosition("TutorialCheckMove", 20.0f, 300.0f);
+	text->SetPosition("TutorialCheckDodge", 20.0f, 335.0f);
+	text->SetPosition("TutorialCheckCard", 20.0f, 370.0f);
 
 	text->SetCentered("TutorialCheckMove", false);
 	text->SetCentered("TutorialCheckDodge", false);
@@ -665,8 +659,9 @@ void Tutorial::UpdateTexts() const {
 	text->SetScale("TutorialCheckDodge", 0.8f);
 	text->SetScale("TutorialCheckCard", 0.8f);
 
-	text->SetPosition("TutorialCheckAttack", 20.0f, 430.0f);
-	text->SetPosition("TutorialCheckMagic", 20.0f, 465.0f);
+	// けり / ファイヤーボール確認用は少し下にして本文とかぶらないようにする
+	text->SetPosition("TutorialCheckAttack", 20.0f, 355.0f);
+	text->SetPosition("TutorialCheckMagic", 20.0f, 390.0f);
 
 	text->SetCentered("TutorialCheckAttack", false);
 	text->SetCentered("TutorialCheckMagic", false);
@@ -742,8 +737,8 @@ void Tutorial::UpdateTexts() const {
 
 	case Step::FirstRoomCardControlIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 2 / 8");
-		// 次にカード選択と使用方法を説明する
-		text->SetText("TutorialBody", "矢印キーで選びSPACEで選択中のカードを使います。\nSPACEで再開します。");
+		// 実際にカードを切り替えてポーションを使わせる説明にする
+		text->SetText("TutorialBody", "矢印キーで選びSPACEで選択中のカードを使います。\nポーションを付与したので使ってみてください");
 		text->SetText("TutorialCheckMove", "");
 		text->SetText("TutorialCheckDodge", "");
 		text->SetText("TutorialCheckCard", "");
@@ -774,7 +769,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::DefeatEnemy:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
 		// 攻撃カードと魔法カードの両方を当てる練習タスクを表示する
-		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\nこの練習では、けりとファイヤーボールは何回でも使えます。");
+		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\nLCTRLで向き固定することで狙いやすくなります\nこの練習では、けりとファイヤーボールは何回でも使えます。");
 
 		text->SetText(
 			"TutorialCheckAttack",
@@ -852,13 +847,26 @@ bool Tutorial::IsFirstRoomChecklistComplete() const {
 		firstRoomCardChecked_;
 }
 
-void Tutorial::NotifyFirstRoomCardUsed() {
-	if (step_ != Step::MoveChecklist) {
+void Tutorial::NotifyFirstRoomCardUsed(int cardId) {
+	if (step_ == Step::MoveChecklist) {
+		// 最初のチェックリストでは殴りカードを使えたかだけを見る
+		if (cardId == 1 && !firstRoomCardChecked_) {
+			firstRoomCardChecked_ = true;
+			UpdateTexts();
+		}
 		return;
 	}
 
-	if (!firstRoomCardChecked_) {
-		firstRoomCardChecked_ = true;
+	if (step_ == Step::FirstRoomCardControlIntro) {
+		// このステップはポーションを使った時だけ次へ進める
+		if (cardId != 3) {
+			return; // 殴りカードを使っても進ませない
+		}
+
+		OpenCorridor(corridor0_);
+		step_ = Step::PickCard;
+		isPauseStep_ = false;
+		waitingForSpace_ = false;
 		UpdateTexts();
 	}
 }

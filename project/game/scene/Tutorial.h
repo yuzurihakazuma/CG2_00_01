@@ -12,6 +12,7 @@ class CardPickupManager;
 class Camera;
 class Minimap;
 class Input;
+class HandManager;
 
 class Tutorial {
 public:
@@ -22,6 +23,7 @@ public:
 		CardPickupManager* cardPickupManager = nullptr;
 		Camera* camera = nullptr;
 		Minimap* minimap = nullptr;
+		HandManager* handManager = nullptr; // FirstRoomCardControlIntro で手札を直接操作する
 	};
 
 	void Initialize(const Context& context);
@@ -37,7 +39,7 @@ public:
 	bool ConsumeAdvanceInputRequest();
 
 	void CheckPlayerGoal(const Vector3& playerWorldPos);
-	void NotifyFirstRoomCardUsed();
+	void NotifyFirstRoomCardUsed(int cardId); // 最初の部屋のカード使用を監視する
 	bool IsReusableCombatPracticeStep() const; // 練習用カードを無限使用にするステップかどうか
 	void NotifyCombatPracticeCardUsed(int cardId); // 練習用に、直前に使ったカードIDを記録する
 	void UpdateCombatPracticeHitCheck(); // 練習用の敵が正しいカードで攻撃されたかを判定する
@@ -151,4 +153,7 @@ private:
 	bool combatPracticeAttackHitChecked_ = false; // 攻撃カードを当てたか
 	bool combatPracticeMagicHitChecked_ = false;  // 魔法カードを当てたか
 	int combatPracticePendingCardTimer_ = 0; // 直前カードIDの有効時間
+
+	bool firstRoomPotionGranted_ = false; // ポーションを二重追加しないためのフラグ
+
 };

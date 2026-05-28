@@ -465,12 +465,13 @@ void GamePlayScene::Initialize() {
 	// チュートリアルの初期化
 	tutorial_ = std::make_unique<Tutorial>();
 	tutorial_->Initialize({
-		.mapManager = mapManager_.get(),
-		.playerManager = playerManager_.get(),
-		.enemyManager = enemyManager_.get(),
-		.cardPickupManager = &cardPickupManager_,
-		.camera = camera_.get(),
-		.minimap = minimap_.get()
+	.mapManager = mapManager_.get(),
+	.playerManager = playerManager_.get(),
+	.enemyManager = enemyManager_.get(),
+	.cardPickupManager = &cardPickupManager_,
+	.camera = camera_.get(),
+	.minimap = minimap_.get(),
+	.handManager = &handManager_ // チュートリアルから手札へポーションを追加できるようにする
 		});
 
 	if (ConsumeTutorialStartRequest()) {
@@ -3214,8 +3215,8 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		tutorial_->NotifyCombatPracticeCardUsed(selectedCard.id);
 	}
 
-	if (tutorial_ && tutorial_->IsActive() && selectedCard.id == 1) {
-		tutorial_->NotifyFirstRoomCardUsed();
+	if (tutorial_ && tutorial_->IsActive()) {
+		tutorial_->NotifyFirstRoomCardUsed(selectedCard.id); // 使用したカードIDをTutorial側へ渡す
 	}
 
 	if (isMagicCastCard(selectedCard.id)) {
