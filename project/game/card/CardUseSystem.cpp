@@ -237,14 +237,26 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 	// 1. 辞書の中に、使われたカードのIDが登録されているかチェック
 	if (effectFactory_.count(card.id)) {
 
-		// 2. 辞書から魔法を生み出す！（switch文の代わり）
-		auto newEffect = effectFactory_[card.id](card);
+		// ID:102（ボス炎弾）はボス使用時のみ全方位6発に展開する（全体攻撃）
+		if (card.id == 102 && !isPlayerCaster) {
+			const int kFireCount = 6; // 360°を6等分
+			int reducedDamage = card.effectValue > 1 ? card.effectValue - 1 : 1; // ダメージを1減らす
+			for (int fi = 0; fi < kFireCount; fi++) {
+				float spreadYaw = casterYaw + (3.14159f * 2.0f / kFireCount) * fi;
+				auto fireEffect = std::make_unique<BossFierEffect>(reducedDamage);
+				fireEffect->Start(casterPos, spreadYaw, isPlayerCaster, camera_, casterBoss);
+				activeEffects_.push_back(std::move(fireEffect));
+			}
+		} else {
+			// 2. 通常：辞書から魔法を生み出す！（switch文の代わり）
+			auto newEffect = effectFactory_[card.id](card);
 
-		if (newEffect) {
-			// エフェクト開始時に発射元ボスも渡す
-			// 分裂ボス時に、どのボス本人が撃った攻撃かを各 effect が保持できるようにする
-			newEffect->Start(casterPos, casterYaw, isPlayerCaster, camera_, casterBoss);
-			activeEffects_.push_back(std::move(newEffect));
+			if (newEffect) {
+				// エフェクト開始時に発射元ボスも渡す
+				// 分裂ボス時に、どのボス本人が撃った攻撃かを各 effect が保持できるようにする
+				newEffect->Start(casterPos, casterYaw, isPlayerCaster, camera_, casterBoss);
+				activeEffects_.push_back(std::move(newEffect));
+			}
 		}
 
 	}
