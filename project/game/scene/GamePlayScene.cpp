@@ -2139,7 +2139,7 @@ void GamePlayScene::Update() {
 
 		// 枠のサイズ
 		float bgWidth = 440.0f;  // ミニマップの横幅に合わせると綺麗です
-		float bgHeight = 220.0f;
+		float bgHeight = 250.0f;
 
 		// 右端・上端からの余白
 		float marginLeft = 15.0f;
