@@ -19,6 +19,18 @@
 
 using namespace VectorMath;
 
+namespace {
+	constexpr float kNormalBossVisualYOffset = 2.05f;
+	constexpr float kSplitBossVisualYOffset = 0.05f;
+	constexpr const char* kSplitBossModelNames[2] = { "Boss10L", "Boss10R" };
+
+	Vector3 GetBossVisualPosition(const Boss& boss, float visualYOffset) {
+		Vector3 position = boss.GetPosition();
+		position.y += visualYOffset;
+		return position;
+	}
+}
+
 void BossManager::Initialize(Camera* camera) {
     camera_ = camera;
     bossCastCardObjs_.clear();
@@ -42,7 +54,7 @@ void BossManager::Initialize(Camera* camera) {
 		splitBosses_[i]->SetScale(splitBossScale_);
 
 		// 分裂ボスの見た目オブジェクトも2つ用意する
-		splitBossObjs_[i] = std::unique_ptr<Obj3d>(Obj3d::Create("boss"));
+		splitBossObjs_[i] = std::unique_ptr<Obj3d>(Obj3d::Create(kSplitBossModelNames[i]));
 		if (splitBossObjs_[i]) {
 			splitBossObjs_[i]->SetCamera(camera);
 			splitBossObjs_[i]->SetScale(splitBossScale_);
@@ -238,7 +250,7 @@ splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 
 
 			if (splitBossObjs_[i]) {
-				splitBossObjs_[i]->SetTranslation(splitBosses_[i]->GetPosition());
+				splitBossObjs_[i]->SetTranslation(GetBossVisualPosition(*splitBosses_[i], kSplitBossVisualYOffset));
 				splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
 				splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
 				splitBossObjs_[i]->Update();
@@ -254,7 +266,7 @@ splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 	boss_->SetScale({ 2.0f, 2.0f, 2.0f });
 
 	if (bossObj_) {
-		bossObj_->SetTranslation(boss_->GetPosition());
+		bossObj_->SetTranslation(GetBossVisualPosition(*boss_, kNormalBossVisualYOffset));
 		bossObj_->SetRotation(boss_->GetRotation());
 		bossObj_->SetScale(boss_->GetScale());
 		bossObj_->Update();
@@ -496,7 +508,7 @@ void BossManager::Update(
 
 		// 見た目に反映
 		if (bossObj_) {
-			bossObj_->SetTranslation(boss_->GetPosition());
+			bossObj_->SetTranslation(GetBossVisualPosition(*boss_, kNormalBossVisualYOffset));
 			bossObj_->SetRotation(boss_->GetRotation());
 			bossObj_->SetScale(boss_->GetScale());
 			bossObj_->Update();
@@ -533,7 +545,7 @@ void BossManager::Update(
 					if (splitBosses_[i]->IsDeathAnimationPlaying()) {
 						splitBosses_[i]->Update();
 						if (splitBossObjs_[i]) {
-							splitBossObjs_[i]->SetTranslation(splitBosses_[i]->GetPosition());
+							splitBossObjs_[i]->SetTranslation(GetBossVisualPosition(*splitBosses_[i], kSplitBossVisualYOffset));
 							splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
 							splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
 							splitBossObjs_[i]->Update();
@@ -592,7 +604,7 @@ void BossManager::Update(
 				}
 
 				if (splitBossObjs_[i]) {
-					splitBossObjs_[i]->SetTranslation(splitBosses_[i]->GetPosition());
+					splitBossObjs_[i]->SetTranslation(GetBossVisualPosition(*splitBosses_[i], kSplitBossVisualYOffset));
 					splitBossObjs_[i]->SetRotation(splitBosses_[i]->GetRotation());
 					splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
 					splitBossObjs_[i]->Update();

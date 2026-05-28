@@ -322,6 +322,7 @@ private: // メンバ変数
 	int pauseSelection_ = 0;                 // 0: Resume  1: Title
 
 	std::unique_ptr<Sprite> pauseBgSprite_ = nullptr; // ポーズ中の半透明背景
+	std::unique_ptr<Sprite> pausePanelSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseHelpSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseChoiceSprite_ = nullptr;
 	std::unique_ptr<Sprite> pauseGameSprite_ = nullptr;
