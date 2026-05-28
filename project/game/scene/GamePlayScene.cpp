@@ -432,7 +432,7 @@ void GamePlayScene::Initialize() {
 
 	
 	// ポーズ中の半透明背景
-	pauseBgSprite_ = Sprite::Create("resources/pose/poseBKddd.png", { screenW * 0.5f, screenH * 0.5f });
+	pauseBgSprite_ = Sprite::Create("resources/pose/poseBK.png", { screenW * 0.5f, screenH * 0.5f });
 	pauseBgSprite_->SetSize({ screenW, screenH });
 	pauseBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	pauseBgSprite_->Update();
