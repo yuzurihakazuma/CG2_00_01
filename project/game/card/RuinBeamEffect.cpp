@@ -75,6 +75,43 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
         }
         obj_->Update();
     }
+
+    // ===== 溜めパーティクル解放バースト =====
+    // 詠唱中に吸い込んだ光をビーム方向へ一斉放出する
+
+    // コア位置（Boss.cpp の詠唱中と合わせる）
+    Vector3 corePos = { casterPos.x, casterPos.y + 2.0f, casterPos.z };
+
+    // ① コア爆発フラッシュ（2段階で白→黄に膨らむ）
+    GPUParticleManager::GetInstance()->Emit(corePos, { 0.0f, 0.0f, 0.0f }, 0.08f, 9.0f, { 1.0f, 1.0f, 0.9f, 1.0f });
+    GPUParticleManager::GetInstance()->Emit(corePos, { 0.0f, 0.0f, 0.0f }, 0.18f, 6.0f, { 1.0f, 0.95f, 0.3f, 0.85f });
+
+    // ② 溜めた光弾をビーム前方へ高速放出（白・黄色、詠唱時の色と統一）
+    for (int i = 0; i < 80; i++) {
+        float spread = (rand() % 11 - 5) * 0.04f;
+        float speed  = 1.2f + (rand() % 20) * 0.12f;
+        Vector3 vel = {
+            forward.x * speed + spread,
+            (rand() % 9 - 4) * 0.04f,
+            forward.z * speed + spread
+        };
+        float scale = 0.25f + (rand() % 8) * 0.1f;
+        Vector4 color = (rand() % 2 == 0)
+            ? Vector4{ 1.0f, 1.0f, 0.5f, 1.0f }
+            : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
+        GPUParticleManager::GetInstance()->Emit(corePos, vel, 0.35f, scale, color);
+    }
+
+    // ③ 全方向に弾ける余韻の破片（コアが爆ぜた感）
+    for (int i = 0; i < 30; i++) {
+        Vector3 vel = {
+            (rand() % 21 - 10) * 0.14f,
+            (rand() % 11 - 5) * 0.12f,
+            (rand() % 21 - 10) * 0.14f
+        };
+        float scale = 0.2f + (rand() % 5) * 0.08f;
+        GPUParticleManager::GetInstance()->Emit(corePos, vel, 0.28f, scale, { 1.0f, 0.9f, 0.4f, 1.0f });
+    }
 }
 
 void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {

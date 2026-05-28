@@ -29,7 +29,7 @@ void BossKickEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
         startPos_.z + forward.z * 0.5f
     };
 
-    obj_ = Obj3d::Create("Fist_model");
+    obj_ = Obj3d::Create("kick_model");
     if (obj_) {
         obj_->SetCamera(camera);
         obj_->SetScale(scale_);

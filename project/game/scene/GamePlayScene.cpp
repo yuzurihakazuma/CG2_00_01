@@ -465,12 +465,13 @@ void GamePlayScene::Initialize() {
 	// チュートリアルの初期化
 	tutorial_ = std::make_unique<Tutorial>();
 	tutorial_->Initialize({
-		.mapManager = mapManager_.get(),
-		.playerManager = playerManager_.get(),
-		.enemyManager = enemyManager_.get(),
-		.cardPickupManager = &cardPickupManager_,
-		.camera = camera_.get(),
-		.minimap = minimap_.get()
+	.mapManager = mapManager_.get(),
+	.playerManager = playerManager_.get(),
+	.enemyManager = enemyManager_.get(),
+	.cardPickupManager = &cardPickupManager_,
+	.camera = camera_.get(),
+	.minimap = minimap_.get(),
+	.handManager = &handManager_ // チュートリアルから手札へポーションを追加できるようにする
 		});
 
 	if (ConsumeTutorialStartRequest()) {
@@ -830,6 +831,10 @@ void GamePlayScene::Update() {
 	// ② 今選択画面を開いている、または「このフレームで選択し終わったばかり」ならリターン！
 	// （これでボタンの入力がここで完全に吸収されて、下へ貫通しません）
 	if (wasSelecting) {
+		TextManager::GetInstance()->SetText(
+			"HandCountValue",
+			std::to_string(handManager_.GetHandSize()) + " / " + std::to_string(handManager_.GetMaxHandSize())
+		);
 		return;
 	}
 
@@ -994,6 +999,22 @@ void GamePlayScene::Update() {
 			playerPos_,
 			targetPos
 		);
+	}
+
+	// ボス撃破後に出した階段をミニマップにも反映する
+	if (bossManager_ && !bossManager_->IsBossDeadHandled()) {
+		hasRefreshedMinimapAfterBossDeath_ = false; // ボス未撃破中は再更新可能状態に戻す
+	}
+
+	if (
+		bossManager_ &&
+		bossManager_->IsBossDeadHandled() &&
+		!hasRefreshedMinimapAfterBossDeath_ &&
+		mapManager_ &&
+		minimap_
+		) {
+		minimap_->SetLevelData(&mapManager_->GetLevelData(), true); // 探索済み状態を維持したまま階段だけ反映する
+		hasRefreshedMinimapAfterBossDeath_ = true; // 以後は毎フレーム再構築しない
 	}
 
 	if (!shouldFreezeGameplayForFade && bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
@@ -1963,6 +1984,10 @@ void GamePlayScene::Update() {
 			mapManager_->GetLevelData()
 		);
 	}
+	// プレイヤー死亡中はカードエフェクト（残像含む）を強制クリア
+	if (player && player->IsDead() && playerCardSystem_) {
+		playerCardSystem_->Reset();
+	}
 	for (auto& block : blocks_) {
 		block->Update();
 	}
@@ -2197,6 +2222,11 @@ void GamePlayScene::Draw() {
 
 		if (!isCardSwapMode_ && !isLevelUpBonusSelecting) {
 			handManager_.DrawCooldownOverlays();
+			commandList->ClearDepthStencilView(dxCommon->GetDsvHandle(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+			Obj3dCommon::GetInstance()->PreDraw(commandList);
+			PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
+			handManager_.DrawSelectedCard();
+			SpriteCommon::GetInstance()->PreDraw(commandList);
 		}
 
 		if (handManager_.GetHandSize() > 0 && descBgSprite_) {
@@ -3210,8 +3240,8 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 		tutorial_->NotifyCombatPracticeCardUsed(selectedCard.id);
 	}
 
-	if (tutorial_ && tutorial_->IsActive() && selectedCard.id == 1) {
-		tutorial_->NotifyFirstRoomCardUsed();
+	if (tutorial_ && tutorial_->IsActive()) {
+		tutorial_->NotifyFirstRoomCardUsed(selectedCard.id); // 使用したカードIDをTutorial側へ渡す
 	}
 
 	if (isMagicCastCard(selectedCard.id)) {

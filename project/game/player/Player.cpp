@@ -107,7 +107,7 @@ void Player::Initialize() {
 
     maxCost_ = 5; // 初期最大コスト
     cost_ = maxCost_;
-    maxCost_ = 7;
+    maxCost_ = 8;
     cost_ = maxCost_;
     costRecoveryInterval_ = 100;
     costRecoveryMultiplier_ = 1.0f; // バフをリセット
@@ -386,9 +386,8 @@ void Player::Update(bool isMagicCasting) {
     }
 
     // 詠唱中にShift/Bを押している間だけ、回避ではなく向き固定のスライド移動にする
-    const bool isCastingDirectionLocked =
-        isMagicCasting &&
-        (input->Pushkey(DIK_LCONTROL) || input->Pushkey(DIK_RCONTROL) || input->PushLeftTrigger());
+    const bool isDirectionLocked =
+        input->Pushkey(DIK_LCONTROL) || input->Pushkey(DIK_RCONTROL) || input->PushLeftTrigger();
 
     // 回避開始
    // Shift に加えて B ボタンでも回避できるようにする
@@ -506,7 +505,7 @@ void Player::Update(bool isMagicCasting) {
 
         if ( Length(move) > 0.0f ) {
             pos_ += move * ( moveSpeed_ * speedMultiplier_ );
-            if (!isCastingDirectionLocked) {
+            if (!isDirectionLocked) {
                 rot_.y = std::atan2f(move.x, move.z);
             }
 
@@ -832,7 +831,7 @@ void Player::LevelUp() {
     nextLevelExp_ += 2;
     maxHp_ += 3;
     hp_ = maxHp_;
-    maxCost_ += 1;
+    maxCost_ += 2;
     cost_ = maxCost_;
 
     if (costRecoveryInterval_ > 60) {
@@ -1053,6 +1052,12 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
         isKnockback_ = false;
         knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
 
+        // 死亡時に残像を強制クリア
+        for ( auto& ai : afterimages_ ) {
+            ai.isActive = false;
+        }
+        afterimageSpawnTimer_ = 0;
+
         // 死亡フラッシュ（白→赤 ColorTint）を起動
         deathFlashTimer_ = deathFlashDuration_;
 
@@ -1193,6 +1198,12 @@ void Player::TakeContinuousDamage(int damage) {
         isDodging_ = false;
         isKnockback_ = false;
         knockbackVelocity_ = { 0.0f, 0.0f, 0.0f };
+
+        // 死亡時に残像を強制クリア
+        for ( auto& ai : afterimages_ ) {
+            ai.isActive = false;
+        }
+        afterimageSpawnTimer_ = 0;
 
         // 継続ダメージ死亡でも同じ派手な演出を出す
         deathFlashTimer_ = deathFlashDuration_;

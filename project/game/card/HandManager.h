@@ -69,6 +69,7 @@ public:
 
 	//描画
 	void Draw();
+	void DrawSelectedCard();
 	void DrawCooldownOverlays();
 
 	//指定した番号のカード情報を取得
