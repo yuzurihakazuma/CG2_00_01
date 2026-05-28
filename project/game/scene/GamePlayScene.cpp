@@ -87,6 +87,8 @@ void GamePlayScene::Initialize() {
 
 	// ボスモデル読み込み
 	ModelManager::GetInstance()->LoadModel("boss", "resources/boss", "boss.obj");
+	ModelManager::GetInstance()->LoadModel("Boss10L", "resources/boss", "Boss10L.obj");
+	ModelManager::GetInstance()->LoadModel("Boss10R", "resources/boss", "Boss10R.obj");
 
 	// 球モデル作成 (シングルトン) カード用テクスチャモデル
 	ModelManager::GetInstance()->CreateSphereModel("sphere", 16);
@@ -341,7 +343,7 @@ void GamePlayScene::Initialize() {
 		cardSelectUiSprite_->SetSize({ 150.0f, 59.0f });
 		cardSelectUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
-	slideMoveUiSprite_ = Sprite::Create("resources/UI/avoidance2UI.png", { 0.0f, 0.0f });
+	slideMoveUiSprite_ = Sprite::Create("resources/UI/avoidance3UI.png", { 0.0f, 0.0f });
 	if (slideMoveUiSprite_) {
 		slideMoveUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
 		slideMoveUiSprite_->SetSize({ 150.0f, 59.0f });
@@ -430,10 +432,14 @@ void GamePlayScene::Initialize() {
 
 	
 	// ポーズ中の半透明背景
-	pauseBgSprite_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH * 0.5f });
+	pauseBgSprite_ = Sprite::Create("resources/pose/poseBKddd.png", { screenW * 0.5f, screenH * 0.5f });
 	pauseBgSprite_->SetSize({ screenW, screenH });
-	pauseBgSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.5f });
+	pauseBgSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	pauseBgSprite_->Update();
+	pausePanelSprite_ = Sprite::Create("resources/pose/poseBK4.png", { screenW * 0.5f, screenH * 0.5f });
+	pausePanelSprite_->SetSize({ screenW, screenH });
+	pausePanelSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.75f });
+	pausePanelSprite_->Update();
 
 	//　ポーズ画面のUIスプライト
 	const Vector2 pauseScreenCenter = { screenW * 0.5f, screenH * 0.5f };
@@ -2272,8 +2278,10 @@ void GamePlayScene::Draw() {
 		
 		DrawPauseUI();
 
-		SpriteCommon::GetInstance()->PreDraw(commandList);
-		TextManager::GetInstance()->Draw();
+		if (!isPaused_) {
+			SpriteCommon::GetInstance()->PreDraw(commandList);
+			TextManager::GetInstance()->Draw();
+		}
 	}
 
 	// チュートリアルのポーズ背景だけは必要なら個別で残す
@@ -3394,6 +3402,7 @@ void GamePlayScene::UpdatePauseSpriteLayout() {
 	};
 
 	applyFullscreenLayout(pauseBgSprite_);
+	applyFullscreenLayout(pausePanelSprite_);
 	applyFullscreenLayout(pauseHelpSprite_);
 	applyFullscreenLayout(pauseGameSprite_);
 	applyFullscreenLayout(pauseTitleSprite_);
@@ -3417,6 +3426,10 @@ void GamePlayScene::DrawPauseUI() {
 	}
 
 	UpdatePauseSpriteLayout();
+
+	if (pausePanelSprite_) {
+		pausePanelSprite_->Draw();
+	}
 
 	if (pauseBgSprite_) {
 		pauseBgSprite_->Draw();
@@ -3508,6 +3521,7 @@ void GamePlayScene::Finalize() {
 		bossManager_.reset();
 	}
 	pauseBgSprite_.reset();
+	pausePanelSprite_.reset();
 	bossIntroTopBar_.reset();
 	bossIntroBottomBar_.reset();
 
