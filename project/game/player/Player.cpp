@@ -107,7 +107,7 @@ void Player::Initialize() {
 
     maxCost_ = 5; // 初期最大コスト
     cost_ = maxCost_;
-    maxCost_ = 7;
+    maxCost_ = 8;
     cost_ = maxCost_;
     costRecoveryInterval_ = 100;
     costRecoveryMultiplier_ = 1.0f; // バフをリセット
@@ -832,7 +832,7 @@ void Player::LevelUp() {
     nextLevelExp_ += 2;
     maxHp_ += 3;
     hp_ = maxHp_;
-    maxCost_ += 1;
+    maxCost_ += 2;
     cost_ = maxCost_;
 
     if (costRecoveryInterval_ > 60) {

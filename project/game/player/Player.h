@@ -176,8 +176,8 @@ private:
     int nextLevelExp_ = 3;
 
     // コスト
-    int cost_ = 3;
-    int maxCost_ = 3;
+    int cost_ = 8;
+    int maxCost_ = 8;
     int costRecoveryTimer_ = 0;
     int costRecoveryInterval_ = 100;
 
