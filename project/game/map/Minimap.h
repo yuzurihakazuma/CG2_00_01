@@ -34,6 +34,7 @@ private:
 		bool discovered = false;
 
 		std::vector<std::unique_ptr<Sprite>> wallSprites;
+		std::vector<std::unique_ptr<Sprite>> outlineSprites;
 		std::vector<std::unique_ptr<Sprite>> stairsSprites;
 	};
 

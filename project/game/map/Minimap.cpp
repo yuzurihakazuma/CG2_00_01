@@ -190,6 +190,57 @@ void Minimap::BuildChunkSprites() {
 			}
 		}
 
+		const float outlineThickness = std::max(1.0f, drawTileSize_ * 0.10f);
+		const Vector4 outlineColor = { 0.85f, 0.98f, 1.0f, 0.35f };
+
+		auto isFloorTile = [this](int x, int z) {
+			if (!levelData_ || x < 0 || x >= levelData_->width ||
+				z < 0 || z >= levelData_->height) {
+				return false;
+			}
+			return levelData_->tiles[z][x] == 0 || levelData_->tiles[z][x] == 3;
+			};
+
+		auto addOutline = [&chunk, outlineColor](Vector2 pos, Vector2 size) {
+			auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", pos));
+			sprite->SetAnchorPoint({ 0.0f, 0.0f });
+			sprite->SetSize(size);
+			sprite->SetColor(outlineColor);
+			sprite->Update();
+			chunk.outlineSprites.push_back(std::move(sprite));
+			};
+
+		for (int z = chunk.startZ; z <= chunk.endZ; ++z) {
+			for (int x = chunk.startX; x <= chunk.endX; ++x) {
+				if (!isFloorTile(x, z)) {
+					continue;
+				}
+
+				Vector2 drawPos;
+				drawPos.x = mapLeftTop_.x + x * drawTileSize_;
+				drawPos.y = mapLeftTop_.y + (levelData_->height - 1 - z) * drawTileSize_;
+
+				if (!isFloorTile(x, z + 1)) {
+					addOutline(drawPos, { drawTileSize_, outlineThickness });
+				}
+				if (!isFloorTile(x, z - 1)) {
+					addOutline(
+						{ drawPos.x, drawPos.y + drawTileSize_ - outlineThickness },
+						{ drawTileSize_, outlineThickness }
+					);
+				}
+				if (!isFloorTile(x - 1, z)) {
+					addOutline(drawPos, { outlineThickness, drawTileSize_ });
+				}
+				if (!isFloorTile(x + 1, z)) {
+					addOutline(
+						{ drawPos.x + drawTileSize_ - outlineThickness, drawPos.y },
+						{ outlineThickness, drawTileSize_ }
+					);
+				}
+			}
+		}
+
 		// 階段
 		for (int z = chunk.startZ; z <= chunk.endZ; ++z) {
 			for (int x = chunk.startX; x <= chunk.endX; ++x) {
@@ -333,6 +384,11 @@ void Minimap::UpdateStaticSprites() {
 				sprite->Update();
 			}
 		}
+		for (const auto& sprite : chunk.outlineSprites) {
+			if (sprite) {
+				sprite->Update();
+			}
+		}
 		for (const auto& sprite : chunk.stairsSprites) {
 			if (sprite) {
 				sprite->Update();
@@ -463,6 +519,9 @@ void Minimap::Draw() {
 		}
 
 		for (const auto& sprite : chunk.wallSprites) {
+			sprite->Draw();
+		}
+		for (const auto& sprite : chunk.outlineSprites) {
 			sprite->Draw();
 		}
 		for (const auto& sprite : chunk.stairsSprites) {
