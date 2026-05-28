@@ -10,6 +10,9 @@ std::unordered_map<int, Card> CardDatabase::database_;
 namespace {
 constexpr int kBossRoomExcludedCardId = 11;
 constexpr int kBossRoomAttackCardWeight = 3;
+constexpr int kBossRoomHealCardWeight = 2;
+constexpr int kBossRoomSpecialCardWeight = 2;
+constexpr int kBossRoomDefaultCardWeight = 1;
 }
 
 void CardDatabase::Initialize(const std::string& filePath) {
@@ -186,7 +189,14 @@ Card CardDatabase::GetRandomBossRoomPlayerCard() {
             continue;
         }
 
-        int weight = card.effectType == CardEffectType::Attack ? kBossRoomAttackCardWeight : 1;
+        int weight = kBossRoomDefaultCardWeight;
+        if (card.effectType == CardEffectType::Attack) {
+            weight = kBossRoomAttackCardWeight;
+        } else if (card.effectType == CardEffectType::Heal) {
+            weight = kBossRoomHealCardWeight;
+        } else if (card.effectType == CardEffectType::Special) {
+            weight = kBossRoomSpecialCardWeight;
+        }
         for (int i = 0; i < weight; ++i) {
             weightedDropCards.push_back(card);
         }
