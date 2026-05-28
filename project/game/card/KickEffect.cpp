@@ -9,6 +9,11 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kPlayerKickColor = { 0.2f, 0.8f, 1.0f, 1.0f };
+const Vector4 kEnemyKickColor = { 1.0f, 0.2f, 0.28f, 1.0f };
+}
+
 void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
     // この効果は発動元ボスを使わない
     (void)casterBoss;
@@ -44,7 +49,7 @@ void KickEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerC
             Model::Material *material = model->GetMaterial();
             if (material) {
                 // 拳(黄)と区別するため、蹴りは青系の色にする
-                material->color = { 0.2f, 0.8f, 1.0f, 1.0f };
+                material->color = isPlayerCaster_ ? kPlayerKickColor : kEnemyKickColor;
                 material->emissive = 1.2f;
             }
         }
@@ -136,11 +141,13 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
             GPUParticleManager::GetInstance()->Emit(
                 trailPos,
                 { (rand() % 7 - 3) * 0.03f, 0.04f, (rand() % 7 - 3) * 0.03f },
-                0.18f, 0.2f, { 0.2f, 0.85f, 1.0f, 0.9f });
+                0.18f, 0.2f,
+                isPlayerCaster_ ? Vector4{ 0.2f, 0.85f, 1.0f, 0.9f } : Vector4{ 1.0f, 0.18f, 0.25f, 0.9f });
         }
         // 蹴りのコアに鋭い電撃光点
         GPUParticleManager::GetInstance()->Emit(
-            pos_, { 0.0f, 0.0f, 0.0f }, 0.12f, 0.6f, { 0.4f, 0.9f, 1.0f, 0.65f });
+            pos_, { 0.0f, 0.0f, 0.0f }, 0.12f, 0.6f,
+            isPlayerCaster_ ? Vector4{ 0.4f, 0.9f, 1.0f, 0.65f } : Vector4{ 1.0f, 0.15f, 0.22f, 0.65f });
     }
 
 

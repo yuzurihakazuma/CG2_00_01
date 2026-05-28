@@ -12,6 +12,11 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kPlayerFangColor = { 0.55f, 0.38f, 0.15f, 1.0f };
+const Vector4 kEnemyFangColor = { 0.75f, 0.16f, 0.08f, 1.0f };
+}
+
 void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
 	// この効果は発動元ボスを使わない
 	(void)casterBoss;
@@ -58,7 +63,7 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 				fangModel->SetTexture("resources/white1x1.png");
 				Model::Material* mat = fangModel->GetMaterial();
 				if ( mat ) {
-					mat->color = { 0.55f, 0.38f, 0.15f, 1.0f }; // 岩・土の茶色
+					mat->color = isPlayerCaster_ ? kPlayerFangColor : kEnemyFangColor; // 敵版は赤茶で区別する
 					mat->emissive = 0.5f;
 				}
 			}
@@ -361,7 +366,7 @@ void FangEffect::Draw(){
 	for ( auto& fang : fangs_ ) {
 		if ( fang.isActive && fang.currentY > fang.pos.y - 1.0f && fang.obj ) {
 			Vector3 drawPos = { fang.pos.x, fang.currentY, fang.pos.z };
-			fang.obj->SetColor({ 0.55f, 0.38f, 0.15f, 1.0f }); // 岩・土の茶色を毎フレーム強制適用
+			fang.obj->SetColor(isPlayerCaster_ ? kPlayerFangColor : kEnemyFangColor); // 毎フレーム強制適用
 			fang.obj->SetTranslation(drawPos);
 			fang.obj->Update();
 			fang.obj->Draw();

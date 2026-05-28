@@ -11,6 +11,11 @@
 
 using namespace VectorMath;
 
+namespace {
+const Vector4 kPlayerClawColor = { 0.1f, 0.9f, 1.0f, 1.0f };
+const Vector4 kEnemyClawColor = { 1.0f, 0.15f, 0.35f, 1.0f };
+}
+
 // デバッグ用変数の実体と初期値（例として1ダメージ）
 int ClawEffect::debugBaseDamage = 1;
 
@@ -42,7 +47,7 @@ void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		Model* model = obj_->GetModel();
 		if ( model && model->GetMaterial() ) {
 			Model::Material* mat = model->GetMaterial();
-			mat->color = { 0.1f, 0.9f, 1.0f, 1.0f }; // より鮮やかなシアン
+			mat->color = isPlayerCaster_ ? kPlayerClawColor : kEnemyClawColor; // 敵版は赤寄せで区別する
 			mat->emissive = 3.0f;                   // 限界まで発光
 		}
 	}
@@ -98,7 +103,9 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 
 		//  【残像】勢いを出すため「毎フレーム」出す！
 		Vector3 tracePos = obj_->GetTranslation();
-		Vector4 traceColor = { 0.0f, 0.6f, 1.0f, 0.6f };
+		Vector4 traceColor = isPlayerCaster_
+			? Vector4{ 0.0f, 0.6f, 1.0f, 0.6f }
+			: Vector4{ 1.0f, 0.08f, 0.25f, 0.6f };
 		GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.25f, 1.8f, traceColor);
 
 		// ⚡ 【激しい火花】速度と量を倍増
@@ -109,7 +116,9 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				( rand() % 11 - 5 ) * 0.8f
 			};
 			// 閃光のような白に近い青
-			GPUParticleManager::GetInstance()->Emit(tracePos, sparkVel, 0.1f, 0.08f, { 0.8f, 1.0f, 1.0f, 1.0f });
+			GPUParticleManager::GetInstance()->Emit(
+				tracePos, sparkVel, 0.1f, 0.08f,
+				isPlayerCaster_ ? Vector4{ 0.8f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.35f, 0.35f, 1.0f });
 		}
 	}
 

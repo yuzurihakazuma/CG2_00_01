@@ -418,10 +418,10 @@ void HandManager::Update() {
 			cardScale = 0.325f + 0.012f * pulse;
 			pos.y += 0.04f + 0.02f * pulse;
 			pos.z -= 0.035f;
-			cardColor = { 1.0f, 1.0f, 0.78f + 0.12f * pulse, 1.0f };
+			cardColor = { 0.55f + 0.15f * pulse, 0.82f + 0.18f * pulse, 1.0f, 1.0f };
 		}
 		else if ( i == selectedCardIndex_ ) {
-			// 選択中カードのゴールド点滅パルス
+			// 選択中カードのゴールド点滅パルス。
 			const float pulse = 0.5f + 0.5f * std::sinf(selectionPulseTime_);
 			cardScale = 0.305f + 0.012f * pulse;           // 少し大きくなる
 			cardColor = { 1.0f, 0.88f + 0.12f * pulse, 0.4f + 0.3f * pulse, 1.0f }; // 白→金色
