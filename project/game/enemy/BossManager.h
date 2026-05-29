@@ -156,9 +156,11 @@ private:
     void UpdateBeamWarning(MapManager* mapManager);
     void DrawBossCastCards(MapManager* mapManager);
     void DrawCastCardForBoss(const Boss& boss);
+	bool ShouldDrawSplitBossUnion() const;
 
     std::unique_ptr<Boss> boss_ = nullptr;              // ボス本体
     std::unique_ptr<Obj3d> bossObj_ = nullptr;          // 描画用
+	std::unique_ptr<Obj3d> splitBossUnionObj_ = nullptr;
     std::unique_ptr<Obj3d> beamWarningObj_ = nullptr;
     std::unordered_map<int, std::unique_ptr<Obj3d>> bossCastCardObjs_;
     Camera* camera_ = nullptr;

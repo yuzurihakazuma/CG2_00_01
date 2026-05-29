@@ -90,6 +90,7 @@ void GamePlayScene::Initialize() {
 
 	// ボスモデル読み込み
 	ModelManager::GetInstance()->LoadModel("boss", "resources/boss", "boss.obj");
+	ModelManager::GetInstance()->LoadModel("Boss10Union", "resources/boss", "Boss10Union.obj");
 	ModelManager::GetInstance()->LoadModel("Boss10L", "resources/boss", "Boss10L.obj");
 	ModelManager::GetInstance()->LoadModel("Boss10R", "resources/boss", "Boss10R.obj");
 
