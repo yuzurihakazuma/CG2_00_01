@@ -4076,7 +4076,7 @@ void GamePlayScene::DrawBossPredictionLines() const {
 	auto drawPredictionForBoss = [&](Boss* boss) {
 		if (!boss || boss->IsDead() || boss->GetState() != Boss::State::UseCard || !boss->IsCasting()) return;
 		int cardId = boss->GetSelectedCard().id;
-		if (cardId != 101 && cardId != 102 && cardId != 105) return;
+		if (cardId != 101 && cardId != 102 && cardId != 105 && cardId != 106) return;
 
 		float progress = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(boss->GetCastDurationCurrent());
 		progress = std::clamp(progress, 0.0f, 1.0f);
@@ -4130,7 +4130,50 @@ void GamePlayScene::DrawBossPredictionLines() const {
 			}
 		};
 
-		if (cardId == 101) {
+		if (cardId == 106) {
+			// 回し蹴り: ボスを中心とした円形の危険エリア
+			constexpr float kKickRadius  = 3.5f;
+			constexpr int   kSegments    = 32;
+			constexpr float kCirclePi    = 3.14159f;
+			const float floorY = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y;
+
+			// 円を kSegments 分割して頂点を計算
+			std::vector<Vector2> screenPts;
+			screenPts.reserve(kSegments);
+			bool allVisible = true;
+
+			for (int s = 0; s < kSegments; ++s) {
+				float a = (kCirclePi * 2.0f / kSegments) * s;
+				Vector3 wp = {
+					start.x + std::cosf(a) * kKickRadius,
+					floorY,
+					start.z + std::sinf(a) * kKickRadius
+				};
+				Vector2 sp{};
+				if (!ProjectWorldToScreen(wp, sp)) {
+					allVisible = false;
+					break;
+				}
+				screenPts.push_back(sp);
+			}
+
+			if (allVisible && static_cast<int>(screenPts.size()) == kSegments) {
+				// 塗りつぶし
+				std::vector<ImVec2> imPts;
+				imPts.reserve(kSegments);
+				for (auto& p : screenPts) imPts.push_back({ p.x, p.y });
+				drawList->AddConvexPolyFilled(imPts.data(), kSegments, fillColor);
+
+				// 輪郭線
+				for (int s = 0; s < kSegments; ++s) {
+					const int next = (s + 1) % kSegments;
+					drawList->AddLine(
+						{ screenPts[s].x,    screenPts[s].y },
+						{ screenPts[next].x, screenPts[next].y },
+						lineColor, 2.0f);
+				}
+			}
+		} else if (cardId == 101) {
 			// クロー: 飛び込み先(8ユニット前方)にX字2本
 			constexpr float kLeapDist = 8.0f;
 			Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
