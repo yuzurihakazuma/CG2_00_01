@@ -2396,9 +2396,11 @@ void GamePlayScene::Draw() {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
+#ifdef USE_IMGUI
 	DrawFireballPredictionLines();
 	DrawBossPredictionLines();
 	DrawCharacterHitboxesDebug();
+#endif
 	DrawBossIntroLetterbox();
 }
 
@@ -3686,6 +3688,9 @@ bool GamePlayScene::ProjectWorldToScreen(const Vector3& worldPos, Vector2& scree
 }
 
 void GamePlayScene::DrawCharacterHitboxesDebug() const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	if (!showCharacterHitboxes_) {
 		return;
 	}
@@ -3717,6 +3722,9 @@ void GamePlayScene::DrawCharacterHitboxesDebug() const {
 }
 
 void GamePlayScene::DrawBossBeamHitboxesDebug() const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	if (!bossManager_ || !mapManager_ || !mapManager_->IsBossMap()) {
 		return;
 	}
@@ -3783,6 +3791,9 @@ void GamePlayScene::DrawBossBeamHitboxesDebug() const {
 }
 
 void GamePlayScene::DrawDebugAABB(const Vector3& center, const Vector3& halfSize, unsigned int color, float thickness) const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	ImDrawList* drawList = ImGui::GetForegroundDrawList();
 	if (!drawList) {
 		return;
@@ -3828,6 +3839,9 @@ void GamePlayScene::DrawDebugAABB(const Vector3& center, const Vector3& halfSize
 }
 
 void GamePlayScene::DrawDebugCircleXZ(const Vector3& center, float radius, unsigned int color, float thickness) const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	ImDrawList* drawList = ImGui::GetForegroundDrawList();
 	if (!drawList) {
 		return;
@@ -3862,6 +3876,9 @@ void GamePlayScene::DrawDebugCircleXZ(const Vector3& center, float radius, unsig
 }
 
 void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, float halfWidth, float halfLength, unsigned int color, float thickness) const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	ImDrawList* drawList = ImGui::GetForegroundDrawList();
 	if (!drawList) {
 		return;
@@ -3906,6 +3923,9 @@ void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, fl
 }
 
 void GamePlayScene::DrawFireballPredictionLines() const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	ImDrawList* drawList = ImGui::GetBackgroundDrawList();
 	if (!drawList) {
 		return;
@@ -4043,6 +4063,9 @@ void GamePlayScene::DrawFireballPredictionLines() const {
 }
 
 void GamePlayScene::DrawBossPredictionLines() const {
+#ifndef USE_IMGUI
+	return;
+#endif
 	if (!bossManager_) return;
 
 	ImDrawList* drawList = ImGui::GetBackgroundDrawList();

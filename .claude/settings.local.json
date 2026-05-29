@@ -16,7 +16,8 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\replace_minion_particles.ps1\")",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\yuzuk\\\\Desktop\\\\GE3\\\\project\\\\game\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object Name | Sort-Object Name)",
-      "PowerShell(Select-String -Path \"C:\\\\Users\\\\yuzuk\\\\Desktop\\\\GE3\\\\project\\\\game\\\\GamePlayScene.cpp\" -Pattern \"toge|Toge|spike|Spike|Spear|spear|fang|Fang|trap|Trap\" -CaseSensitive:$false)"
+      "PowerShell(Select-String -Path \"C:\\\\Users\\\\yuzuk\\\\Desktop\\\\GE3\\\\project\\\\game\\\\GamePlayScene.cpp\" -Pattern \"toge|Toge|spike|Spike|Spear|spear|fang|Fang|trap|Trap\" -CaseSensitive:$false)",
+      "Bash(findstr /r /s \"ImGuiManager.*Begin\\\\|ImGuiManager.*End\\\\|ImGuiManager.*Render\" project\\\\game\\\\*.cpp project\\\\game\\\\**\\\\*.cpp)"
     ]
   }
 }
