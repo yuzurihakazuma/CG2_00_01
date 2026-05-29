@@ -34,8 +34,10 @@ public:
 	void SetPostEffectPipeline(ID3D12GraphicsCommandList* commandList, PostEffectType effectType);
 
 
-	// Computeパイプラインをセット
+	// Update Computeパイプラインをセット
 	void SetGPUParticleComputePipeline(ID3D12GraphicsCommandList* commandList);
+	// Emit Computeパイプラインをセット
+	void SetGPUParticleEmitPipeline(ID3D12GraphicsCommandList* commandList);
 	// Draw用パイプラインをセット
 	void SetGPUParticleDrawPipeline(ID3D12GraphicsCommandList* commandList);
 
@@ -67,8 +69,9 @@ private:
 
 	// GPUパーティクル用の初期化関数
 	void CreateGPUParticleComputeRootSignature();
-	
 	void CreateGPUParticleComputePipeline();
+	void CreateGPUParticleEmitRootSignature();
+	void CreateGPUParticleEmitPipeline();
 	void CreateGPUParticleDrawRootSignature();
 	void CreateGPUParticleDrawGraphicsPipeline();
 
@@ -122,6 +125,9 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleComputeRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleComputePipelineState_;
+
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleEmitRootSignature_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleEmitPipelineState_;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleDrawRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleDrawPipelineState_;
