@@ -24,6 +24,7 @@ using namespace VectorMath;
 namespace {
 	constexpr float kNormalBossVisualYOffset = 2.05f;
 	constexpr float kSplitBossVisualYOffset = 0.05f;
+	constexpr const char* kSplitBossUnionModelName = "Boss10Union";
 	constexpr const char* kSplitBossModelNames[2] = { "Boss10L", "Boss10R" };
 
 	Vector3 GetBossVisualPosition(const Boss& boss, float visualYOffset) {
@@ -47,6 +48,14 @@ void BossManager::Initialize(Camera* camera) {
         bossObj_->SetCamera(camera);
         bossObj_->SetScale(boss_->GetScale());
     }
+
+	splitBossUnionObj_ = std::unique_ptr<Obj3d>(Obj3d::Create(kSplitBossUnionModelName));
+	if (splitBossUnionObj_) {
+		splitBossUnionObj_->SetCamera(camera);
+		splitBossUnionObj_->SetScale({ 2.0f, 2.0f, 2.0f });
+		splitBossUnionObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+		splitBossUnionObj_->Update();
+	}
 
 	for (int i = 0; i < 2; ++i) {
 		// 分裂ボス本体を用意しておく
@@ -138,6 +147,7 @@ void BossManager::Finalize() {
         splitBossHpFillSprites_[i].reset();
     }
     bossObj_.reset();
+	splitBossUnionObj_.reset();
     boss_.reset();
 	for (int i = 0; i < 2; ++i) {
 		splitBossObjs_[i].reset();
@@ -212,6 +222,11 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 			bossObj_->Update();
 		}
 
+		if (splitBossUnionObj_) {
+			splitBossUnionObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+			splitBossUnionObj_->Update();
+		}
+
 		for (int i = 0; i < 2; ++i) {
 			if (!splitBosses_[i]) {
 				continue;
@@ -225,20 +240,14 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 			); // 10階の各ボスに個別の攻撃間隔範囲を設定
 
 			// 最初は中央に重ねて出して、着地後に左右へ分裂させる
-splitBosses_[i]->SetSpawnPosition(spawnPos);
-
-// 分裂前は元ボスと同じ大きさで見せる
-splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
-
-
+			splitBosses_[i]->SetSpawnPosition(spawnPos);
+			splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 
 			// 今のボス60HPを半分にして30HPずつにする
 			splitBosses_[i]->SetMaxHP(18);
 			splitBosses_[i]->SetHP(18);
 			// 10階の分裂ボスだけ専用AIを使う
 			splitBosses_[i]->SetSplitBehaviorEnabled(true);
-		hasSplitParticleTriggered_ = false;
-		hasSplitSeenAppearing_     = false;
 
 			if (i == 0) {
 				// 左側は遠距離型
@@ -259,6 +268,16 @@ splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 			}
 		}
 
+		hasSplitParticleTriggered_ = false;
+		hasSplitSeenAppearing_ = false;
+
+		if (splitBossUnionObj_ && splitBosses_[0]) {
+			splitBossUnionObj_->SetTranslation(GetBossVisualPosition(*splitBosses_[0], kSplitBossVisualYOffset));
+			splitBossUnionObj_->SetRotation(splitBosses_[0]->GetRotation());
+			splitBossUnionObj_->SetScale(splitBosses_[0]->GetScale());
+			splitBossUnionObj_->Update();
+		}
+
 		return;
 	}
 
@@ -272,6 +291,11 @@ splitBosses_[i]->SetScale({ 2.0f, 2.0f, 2.0f });
 		bossObj_->SetRotation(boss_->GetRotation());
 		bossObj_->SetScale(boss_->GetScale());
 		bossObj_->Update();
+	}
+
+	if (splitBossUnionObj_) {
+		splitBossUnionObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+		splitBossUnionObj_->Update();
 	}
 
 	// 分裂ボス側は画面外へ逃がしておく
@@ -614,6 +638,17 @@ void BossManager::Update(
 					splitBossObjs_[i]->SetScale(splitBosses_[i]->GetScale());
 					splitBossObjs_[i]->Update();
 				}
+			}
+
+			if (splitBossUnionObj_) {
+				if (ShouldDrawSplitBossUnion() && splitBosses_[0] && !splitBosses_[0]->IsDead()) {
+					splitBossUnionObj_->SetTranslation(GetBossVisualPosition(*splitBosses_[0], kSplitBossVisualYOffset));
+					splitBossUnionObj_->SetRotation(splitBosses_[0]->GetRotation());
+					splitBossUnionObj_->SetScale(splitBosses_[0]->GetScale());
+				} else {
+					splitBossUnionObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+				}
+				splitBossUnionObj_->Update();
 			}
 
 			// 両ボスの登場アニメが終わった瞬間に1回だけ分裂爆発を出す
@@ -1031,6 +1066,13 @@ void BossManager::DrawBossCastCards(MapManager* mapManager) {
 	}
 }
 
+bool BossManager::ShouldDrawSplitBossUnion() const {
+	return bossType_ == BossType::Split &&
+		isBossIntroPlaying_ &&
+		bossIntroCameraState_ != IntroCameraState::BossSplit &&
+		bossIntroCameraState_ != IntroCameraState::ToBattle;
+}
+
 void BossManager::Draw(MapManager* mapManager) {
 	// 必要な物が無ければ描画しない
 	if (!boss_ || !mapManager) {
@@ -1044,10 +1086,16 @@ void BossManager::Draw(MapManager* mapManager) {
 		}
 
 		if (bossType_ == BossType::Split) {
-			// 分裂ボスは2体描画する
-			for (int i = 0; i < 2; ++i) {
-				if (splitBosses_[i] && (!splitBosses_[i]->IsDead() || splitBosses_[i]->IsDeathAnimationPlaying()) && splitBosses_[i]->IsVisible() && splitBossObjs_[i]) {
-					splitBossObjs_[i]->Draw();
+			if (ShouldDrawSplitBossUnion()) {
+				if (splitBossUnionObj_ && splitBosses_[0] && !splitBosses_[0]->IsDead() && splitBosses_[0]->IsVisible()) {
+					splitBossUnionObj_->Draw();
+				}
+			} else {
+				// 分裂後は左右のボスを2体描画する
+				for (int i = 0; i < 2; ++i) {
+					if (splitBosses_[i] && (!splitBosses_[i]->IsDead() || splitBosses_[i]->IsDeathAnimationPlaying()) && splitBosses_[i]->IsVisible() && splitBossObjs_[i]) {
+						splitBossObjs_[i]->Draw();
+					}
 				}
 			}
 		} else {
