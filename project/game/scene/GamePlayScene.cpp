@@ -66,6 +66,7 @@ void GamePlayScene::Initialize() {
 	auto commandList = dxCommon->GetCommandList();
 
 	// BGMロード (シングルトン)
+	AudioManager::GetInstance()->SetBGMVolume(0.22f);
 	// 通常ゲーム用BGMを再生
 	GameBGM::GameScene();
 	// モデル読み込み (シングルトン)

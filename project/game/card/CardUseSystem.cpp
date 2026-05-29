@@ -259,6 +259,7 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 
 	// 1. 辞書の中に、使われたカードのIDが登録されているかチェック
 	if (effectFactory_.count(card.id)) {
+	
 		// プレイヤー・敵・ボス問わず、使用するカードに応じたSEを再生
 		switch (card.id) {
 		case 1:  // SE: 殴りの音を再生
@@ -301,11 +302,7 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 		case 105: // SE: ボス突進の音を再生
 			GameSE::BossCharge(); break;
 		default:
-			if (IsMagicUseCard(card.id)) {
-				GameSE::CardUseMagic();
-			} else {
-				GameSE::CardUseAttack();
-			}
+			
 			break;
 		}
 
