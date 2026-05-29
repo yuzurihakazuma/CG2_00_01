@@ -3,7 +3,8 @@
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
 #include "game/enemy/EnemyManager.h"
-#include "engine/particle/GPUParticleManager.h" 
+#include "engine/particle/GPUParticleManager.h"
+#include "engine/collision/Collision.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -66,12 +67,16 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 			float t = static_cast<float>(timer_) / 12.0f;
 			float backOffset = t * kBackDist;
 
-			// ボス本体を後退させる
-			Vector3 bossMovedPos = {
+			// 後退先の壁チェック
+			Vector3 backTarget = {
 				casterPos_.x - std::sinf(casterYaw_) * backOffset,
 				casterPos_.y,
 				casterPos_.z - std::cosf(casterYaw_) * backOffset
 			};
+			Vector3 bossMovedPos = Collision::CheckBlockCollision(backTarget, 1.45f, level)
+				? casterBoss_->GetPosition() // 壁ならその場で止まる
+				: backTarget;
+
 			if (casterBoss_) casterBoss_->SetPosition(bossMovedPos);
 
 			// クローはボスの少し前に構える
@@ -89,22 +94,37 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 			float leapOffset = t * t * kLeapDist;
 			float heightArc  = std::sinf(t * kPi) * 3.5f;
 
-			// ボス本体を飛び込ませる
-			Vector3 bossLeapPos = {
+			// 地面レベルで壁チェック（めり込み防止）
+			Vector3 groundTarget = {
 				casterPos_.x + std::sinf(casterYaw_) * leapOffset,
-				casterPos_.y + heightArc,
+				casterPos_.y,
 				casterPos_.z + std::cosf(casterYaw_) * leapOffset
 			};
-			if (casterBoss_) casterBoss_->SetPosition(bossLeapPos);
+			if (Collision::CheckBlockCollision(groundTarget, 1.45f, level)) {
+				// 壁に当たったら landPos_ を固定してフェーズを即スキップ
+				// (前フレームで確定した landPos_ をそのまま使う)
+				if (casterBoss_) casterBoss_->SetPosition(landPos_);
+				pos_ = { landPos_.x, landPos_.y + 1.5f, landPos_.z };
+				obj_->SetRotation({ 0.0f, casterYaw_ + kPi, 0.0f });
+				obj_->SetTranslation(pos_);
+			} else {
+				// 壁なし: 通常の飛び込み
+				Vector3 bossLeapPos = {
+					groundTarget.x,
+					casterPos_.y + heightArc,
+					groundTarget.z
+				};
+				if (casterBoss_) casterBoss_->SetPosition(bossLeapPos);
 
-			// クローはボスに追従
-			pos_ = { bossLeapPos.x, bossLeapPos.y + 1.5f, bossLeapPos.z };
-			float divePitch = -1.0f * t;
-			obj_->SetRotation({ divePitch, casterYaw_ + kPi, 0.0f });
-			obj_->SetTranslation(pos_);
+				// クローはボスに追従
+				pos_ = { bossLeapPos.x, bossLeapPos.y + 1.5f, bossLeapPos.z };
+				float divePitch = -1.0f * t;
+				obj_->SetRotation({ divePitch, casterYaw_ + kPi, 0.0f });
+				obj_->SetTranslation(pos_);
 
-			// 着地点を毎フレーム更新 (Phase3/4 の基準位置)
-			landPos_ = { bossLeapPos.x, casterPos_.y, bossLeapPos.z };
+				// 着地点を毎フレーム更新 (Phase3/4 の基準位置)
+				landPos_ = { bossLeapPos.x, casterPos_.y, bossLeapPos.z };
+			}
 		}
 		// --------------------------------------------------
 		// Phase 3: X斬り1撃目 右上→左下 (22〜30フレーム)
