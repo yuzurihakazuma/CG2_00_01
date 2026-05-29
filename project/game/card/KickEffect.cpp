@@ -151,37 +151,34 @@ void KickEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss, 
     }
 
 
-    // 6フレーム経過後から判定発生（スタートアップ）、14フレームまで持続
-    if (timer_ >= 6 && timer_ <= 14 && !hasHit_) {
+    // 1フレーム目から判定発生、14フレームまで持続
+    if (timer_ >= 1 && timer_ <= 14 && !hasHit_) {
 
-        // 当たり判定の中心座標（一歩前に延ばした位置）
-        Vector3 hitCenter = {
-            startPos_.x + forward.x * 3.0f,
-            startPos_.y,
-            startPos_.z + forward.z * 3.0f
-        };
+        // 判定中心: 蹴り出し元（startPos_）から距離 distance の扇形でカバー
+        // → 近距離・遠距離どちらでも当たる
+        Vector3 hitCenter = startPos_;
 
-        float hitRadius = 2.5f; // 蹴りの判定サイズ（プレイヤー用：広め）
+        // 蹴り距離に合わせて半径が伸びる（近〜遠どちらもカバー）
+        float hitRadius = distance + 1.2f;
         int randomDamage = damage_ + (rand() % 2); // ★ ランダムダメージ（1〜2）
 
         if (isPlayerCaster_) {
             // --------------------------------------------------
-            // ① ボスへの判定
+            // ① ボスへの判定 (boss/extraBoss 両方チェック)
             // --------------------------------------------------
-            if (boss && !boss->IsDead()) {
-                Vector3 bossDiff = { bossPos.x - hitCenter.x, 0.0f, bossPos.z - hitCenter.z };
-                if (Length(bossDiff) < hitRadius + 2.0f) { // ボスは当たりやすいように判定を広く
-                    boss->TakeDamage(randomDamage);
-                    hasHit_ = true;
-                    boss->ApplyKnockback(forward * 0.8f);
+            Boss* hitBoss = BossTargetUtils::FindClosestAliveBossInRange(
+                hitCenter, hitRadius + 2.0f, boss, extraBoss);
+            if (hitBoss) {
+                hitBoss->TakeDamage(randomDamage);
+                hasHit_ = true;
+                hitBoss->ApplyKnockback(forward * 0.8f);
 
-                    // ★ ヒット時パーティクル
-                    for (int i = 0; i < 20; i++) {
-                        Vector3 sparkVel = {
-                            (rand() % 11 - 5) * 0.2f, (rand() % 11 - 5) * 0.2f, (rand() % 11 - 5) * 0.2f
-                        };
-                        GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.2f, 0.2f, { 0.2f, 0.8f, 1.0f, 1.0f });
-                    }
+                // ★ ヒット時パーティクル
+                for (int i = 0; i < 20; i++) {
+                    Vector3 sparkVel = {
+                        (rand() % 11 - 5) * 0.2f, (rand() % 11 - 5) * 0.2f, (rand() % 11 - 5) * 0.2f
+                    };
+                    GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.2f, 0.2f, { 0.2f, 0.8f, 1.0f, 1.0f });
                 }
             }
 
