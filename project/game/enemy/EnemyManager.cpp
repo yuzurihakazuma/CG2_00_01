@@ -894,10 +894,12 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 				if (dist > 0.01f && dist < pushRange) {
 					Vector3 pushDir = Normalize(diff);
 					float pushAmount = pushRange - dist;
-					enemyPos.x += pushDir.x * pushAmount;
-					enemyPos.z += pushDir.z * pushAmount;
-					// ボスとの押し分けでも巡回アンカーは維持する
-					enemy->SetPositionOnly(enemyPos);
+					Vector3 pushedPos = enemyPos;
+					pushedPos.x += pushDir.x * pushAmount;
+					pushedPos.z += pushDir.z * pushAmount;
+					if (!IsEnemyHitWall(pushedPos, GetEnemyWallHalfSize(*enemy))) {
+						enemy->SetPositionOnly(pushedPos);
+					}
 				}
 			}
 		}
@@ -1051,7 +1053,7 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManag
 	}
 }
 
-void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera) {
+void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera, MapManager *mapManager) {
 	// 現在「生きている雑魚敵」の数を数える
 	int aliveCount = 0;
 	for (const auto &enemy : enemies_) {
@@ -1084,6 +1086,33 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 			summonCenter.y,
 			summonCenter.z + std::cos(angle) * radius
 		};
+		if (mapManager) {
+			const LevelData &level = mapManager->GetLevelData();
+			constexpr float summonEnemyRadius = 0.95f;
+			bool foundSafePosition = !Collision::CheckBlockCollision(spawnPos, summonEnemyRadius, level);
+
+			// ボスが壁際にいる時は円周上の召喚位置が壁へ入るので、近い角度から安全な床を探す。
+			for (int attempt = 1; attempt <= 16 && !foundSafePosition; ++attempt) {
+				float side = (attempt % 2 == 0) ? 1.0f : -1.0f;
+				float angleOffset = side * (3.14159f / 8.0f) * static_cast<float>((attempt + 1) / 2);
+				float candidateAngle = angle + angleOffset;
+				float candidateRadius = radius + static_cast<float>((attempt - 1) / 8) * 1.0f;
+				Vector3 candidatePos = {
+					summonCenter.x + std::sin(candidateAngle) * candidateRadius,
+					summonCenter.y,
+					summonCenter.z + std::cos(candidateAngle) * candidateRadius
+				};
+
+				if (!Collision::CheckBlockCollision(candidatePos, summonEnemyRadius, level)) {
+					spawnPos = candidatePos;
+					foundSafePosition = true;
+				}
+			}
+
+			if (!foundSafePosition) {
+				continue;
+			}
+		}
 
 		// ① 足元から這い上がるオーラ（強化版: 60個・大型スケール）
 		for (int j = 0; j < 60; j++) {
