@@ -2772,10 +2772,10 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
-		float bgWidth = 390.0f;
-		float bgHeight = 200.0f;
-		float marginLeft = 20.0f;
-		float marginBottom = 260.0f;
+		float bgWidth = 440.0f;
+		float bgHeight = 250.0f;
+		float marginLeft = 15.0f;
+		float marginBottom = 400.0f;
 
 		float textPosX = marginLeft;
 		if (textPosX + bgWidth > screenW - 20.0f) {
