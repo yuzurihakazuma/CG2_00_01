@@ -187,6 +187,7 @@ void GameOverScene::Update(){
     const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
     const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
     Input* input = Input::GetInstance();
+    const bool canAcceptReturnInput = !SceneManager::GetInstance()->IsFading();
 
     if (HasControllerPromptInput(input)) {
         isControllerUiMode_ = true;
@@ -293,7 +294,8 @@ void GameOverScene::Update(){
     }
 
     // 決定入力でタイトルへ戻る
-    if (!hasConfirmedReturn_ &&
+    if (canAcceptReturnInput &&
+        !hasConfirmedReturn_ &&
         (input->Triggerkey(DIK_SPACE) ||
          input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
         hasConfirmedReturn_ = true;

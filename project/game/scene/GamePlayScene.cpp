@@ -2124,7 +2124,7 @@ void GamePlayScene::Update() {
 				"残り : " + std::to_string(remainingSeconds) + "秒\n"
 				+ descText;
 		} else {
-			displayText = "【" + selectedCard.name + "】\n  Cost : " + std::to_string(selectedCard.cost) + "\n" + descText;
+			displayText = "【" + selectedCard.name + "】\n  COST : " + std::to_string(selectedCard.cost) + "\n" + descText;
 		}
 
 		// 4. テキストオブジェクトに文字を流し込む！
@@ -2756,7 +2756,7 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 			pos = descText.find("\\n", pos + 1);
 		}
 
-		std::string displayText = "【" + selectedCard.name + "】\n  Cost : " + std::to_string(selectedCard.cost) + "\n" + descText;
+		std::string displayText = "【" + selectedCard.name + "】\n  COST : " + std::to_string(selectedCard.cost) + "\n" + descText;
 		TextManager::GetInstance()->SetText("CardT", displayText);
 
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
@@ -3411,6 +3411,7 @@ void GamePlayScene::UpdatePause(Input* input) {
 	if (
 		input->Triggerkey(DIK_A) ||
 		input->Triggerkey(DIK_LEFT) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT) ||
 		(isStickLeft && !wasStickLeft)
 		) {
 		pauseSelection_--;
@@ -3423,6 +3424,7 @@ void GamePlayScene::UpdatePause(Input* input) {
 	if (
 		input->Triggerkey(DIK_D) ||
 		input->Triggerkey(DIK_RIGHT) ||
+		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_RIGHT) ||
 		(isStickRight && !wasStickRight)
 		) {
 		pauseSelection_++;
