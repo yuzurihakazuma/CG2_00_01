@@ -47,95 +47,263 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 
 	timer_++;
 
-	// 10フレーム目に判定リセット
-	if (timer_ == 10) {
+	// X斬り2撃目に入る直前に当たり判定をリセット
+	if (timer_ == 30) {
 		hasHit_ = false;
 	}
 
 	if (obj_) {
-		float slashYaw = 0.0f;
-		float slashPitch = 0.0f;
-		float slashRoll = 0.0f;
+		static constexpr float kPi = 3.14159265f;
+		static constexpr float kBackDist   = 4.0f; // 後退距離
+		static constexpr float kLeapDist   = 8.0f; // 着地点（ボス正面）
+		static constexpr float kSlashDist  = 5.0f; // X斬り時の爪オフセット
+		static constexpr float kSlashRoll  = 0.785f; // 45度 = π/4
 
-		// ★ ボス用に振りかぶる距離と高さを大きくする
-		float offsetDist = 5.0f;
-		float heightOffset = 2.0f;
+		// --------------------------------------------------
+		// Phase 1: 後退・ため (0〜12フレーム)
+		// --------------------------------------------------
+		if (timer_ < 12) {
+			float t = static_cast<float>(timer_) / 12.0f;
+			float backOffset = t * kBackDist;
 
-		//  1撃目 (1〜10フレーム)：超高速・横薙ぎ（右→左）
-		if (timer_ < 10) {
-			float progress = static_cast<float>(timer_) / 10.0f;
-			slashYaw = -1.5f + progress * 3.0f;
-			float currentYaw = casterYaw_ + slashYaw;
-
-			pos_ = {
-				casterPos_.x + std::sinf(currentYaw) * offsetDist,
-				casterPos_.y + heightOffset,
-				casterPos_.z + std::cosf(currentYaw) * offsetDist
+			// ボス本体を後退させる
+			Vector3 bossMovedPos = {
+				casterPos_.x - std::sinf(casterYaw_) * backOffset,
+				casterPos_.y,
+				casterPos_.z - std::cosf(casterYaw_) * backOffset
 			};
-			obj_->SetRotation({ 0.0f, currentYaw, 0.0f });
+			if (casterBoss_) casterBoss_->SetPosition(bossMovedPos);
+
+			// クローはボスの少し前に構える
+			pos_ = { bossMovedPos.x, bossMovedPos.y + 1.5f, bossMovedPos.z };
+			float chargePitch = -0.6f * t;
+			obj_->SetRotation({ chargePitch, casterYaw_ + kPi, 0.0f });
 			obj_->SetTranslation(pos_);
 		}
-		//  2撃目 (10〜20フレーム)：超高速・斬り上げ（下→上）
-		else if (timer_ < 20) {
-			float progress = static_cast<float>(timer_ - 10) / 10.0f;
-			slashPitch = 1.2f - progress * 2.4f;
-			slashRoll = 0.6f;
+		// --------------------------------------------------
+		// Phase 2: 前方へ飛び込み (12〜22フレーム)
+		// --------------------------------------------------
+		else if (timer_ < 22) {
+			float t = static_cast<float>(timer_ - 12) / 10.0f;
+			// t² で加速感
+			float leapOffset = t * t * kLeapDist;
+			float heightArc  = std::sinf(t * kPi) * 3.5f;
 
-			pos_ = {
-				casterPos_.x + std::sinf(casterYaw_) * offsetDist,
-				casterPos_.y + heightOffset + (slashPitch * 2.0f), // 縦の動きもダイナミックに
-				casterPos_.z + std::cosf(casterYaw_) * offsetDist
+			// ボス本体を飛び込ませる
+			Vector3 bossLeapPos = {
+				casterPos_.x + std::sinf(casterYaw_) * leapOffset,
+				casterPos_.y + heightArc,
+				casterPos_.z + std::cosf(casterYaw_) * leapOffset
 			};
-			obj_->SetRotation({ slashPitch, casterYaw_, slashRoll });
+			if (casterBoss_) casterBoss_->SetPosition(bossLeapPos);
+
+			// クローはボスに追従
+			pos_ = { bossLeapPos.x, bossLeapPos.y + 1.5f, bossLeapPos.z };
+			float divePitch = -1.0f * t;
+			obj_->SetRotation({ divePitch, casterYaw_ + kPi, 0.0f });
 			obj_->SetTranslation(pos_);
+
+			// 着地点を毎フレーム更新 (Phase3/4 の基準位置)
+			landPos_ = { bossLeapPos.x, casterPos_.y, bossLeapPos.z };
+		}
+		// --------------------------------------------------
+		// Phase 3: X斬り1撃目 右上→左下 (22〜30フレーム)
+		// --------------------------------------------------
+		else if (timer_ < 30) {
+			// ボスは着地点で静止
+			if (casterBoss_) casterBoss_->SetPosition(landPos_);
+
+			float t = static_cast<float>(timer_ - 22) / 8.0f;
+			float pitch    = -1.2f + t * 2.4f;
+			float yawSweep =  1.2f - t * 2.4f;
+			float currentYaw = casterYaw_ + yawSweep;
+			pos_ = {
+				landPos_.x + std::sinf(currentYaw) * kSlashDist,
+				landPos_.y + 2.0f + pitch * 1.5f,
+				landPos_.z + std::cosf(currentYaw) * kSlashDist
+			};
+			obj_->SetRotation({ pitch, currentYaw + kPi, kSlashRoll });
+			obj_->SetTranslation(pos_);
+		}
+		// --------------------------------------------------
+		// Phase 4: X斬り2撃目 左上→右下 (30〜38フレーム)
+		// --------------------------------------------------
+		else if (timer_ < 38) {
+			if (casterBoss_) casterBoss_->SetPosition(landPos_);
+
+			float t = static_cast<float>(timer_ - 30) / 8.0f;
+			float pitch    = -1.2f + t * 2.4f;
+			float yawSweep = -1.2f + t * 2.4f;
+			float currentYaw = casterYaw_ + yawSweep;
+			pos_ = {
+				landPos_.x + std::sinf(currentYaw) * kSlashDist,
+				landPos_.y + 2.0f + pitch * 1.5f,
+				landPos_.z + std::cosf(currentYaw) * kSlashDist
+			};
+			obj_->SetRotation({ pitch, currentYaw + kPi, -kSlashRoll });
+			obj_->SetTranslation(pos_);
+		}
+		// --------------------------------------------------
+		// Phase 終了後: ボスを着地点に固定
+		// --------------------------------------------------
+		else {
+			if (casterBoss_) casterBoss_->SetPosition(landPos_);
 		}
 
 		obj_->Update();
 
 		// =========================================================
-		// ★ ボス専用の巨大な赤いパーティクル！
+		// パーティクル: フェーズごとに色を変える
 		// =========================================================
 		Vector3 tracePos = obj_->GetTranslation();
-		Vector4 traceColor = { 1.0f, 0.1f, 0.1f, 0.6f }; // 禍々しい赤
-		GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.25f, 3.0f, traceColor); // スケールを大きく(3.0f)
 
-		// ⚡ 激しい火花（速度と大きさをボス用に強化）
-		for (int i = 0; i < 5; i++) {
-			Vector3 sparkVel = {
-				(rand() % 11 - 5) * 1.5f,
-				(rand() % 11 - 5) * 1.5f,
-				(rand() % 11 - 5) * 1.5f
-			};
-			// 赤〜オレンジの火花
-			GPUParticleManager::GetInstance()->Emit(tracePos, sparkVel, 0.15f, 0.15f, { 1.0f, 0.4f, 0.0f, 1.0f });
+		if (timer_ < 12) {
+			// ため中: 紫の蓄積エフェクト
+			GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.3f, 2.0f, { 0.6f, 0.0f, 1.0f, 0.5f });
+		} else if (timer_ < 22) {
+			// -----------------------------------------------
+			// 踏み切り爆発 (timer_==12 の1フレームだけ)
+			// -----------------------------------------------
+			if (timer_ == 12) {
+				// 地面から外側に広がる土煙・砂埃
+				for (int i = 0; i < 16; i++) {
+					float angle = (3.14159265f * 2.0f / 16.0f) * i;
+					float speed = 2.5f + (rand() % 10) * 0.3f;
+					Vector3 dustVel = {
+						std::cosf(angle) * speed,
+						(rand() % 5) * 0.3f,       // 少し上にも飛ぶ
+						std::sinf(angle) * speed
+					};
+					// 土色〜砂色
+					float brown = 0.55f + (rand() % 10) * 0.03f;
+					GPUParticleManager::GetInstance()->Emit(
+						casterPos_, dustVel, 0.35f, 1.8f,
+						{ brown, brown * 0.7f, 0.1f, 0.8f });
+				}
+				// 中心の爆発フラッシュ (白〜黄)
+				for (int i = 0; i < 8; i++) {
+					Vector3 flashVel = {
+						(rand() % 7 - 3) * 0.5f,
+						(rand() % 5) * 0.8f,
+						(rand() % 7 - 3) * 0.5f
+					};
+					GPUParticleManager::GetInstance()->Emit(
+						casterPos_, flashVel, 0.2f, 2.5f,
+						{ 1.0f, 0.95f, 0.6f, 0.9f });
+				}
+			}
+
+			// -----------------------------------------------
+			// 飛翔中トレイル: 進行方向の逆に流れる青白い残像
+			// -----------------------------------------------
+			{
+				// 進行方向の逆ベクトル (後方へ流す)
+				Vector3 backDir = {
+					-std::sinf(casterYaw_) * 3.0f,
+					-1.0f,
+					-std::cosf(casterYaw_) * 3.0f
+				};
+				// メインの白トレイル
+				GPUParticleManager::GetInstance()->Emit(
+					tracePos, backDir, 0.18f, 2.0f,
+					{ 0.85f, 0.9f, 1.0f, 0.75f });
+
+				// 周囲にランダムな残像粒子 (青みがかった白)
+				for (int i = 0; i < 4; i++) {
+					Vector3 trailVel = {
+						backDir.x + (rand() % 7 - 3) * 0.4f,
+						backDir.y + (rand() % 5 - 2) * 0.3f,
+						backDir.z + (rand() % 7 - 3) * 0.4f
+					};
+					Vector3 trailPos = {
+						tracePos.x + (rand() % 5 - 2) * 0.2f,
+						tracePos.y + (rand() % 5 - 2) * 0.2f,
+						tracePos.z + (rand() % 5 - 2) * 0.2f
+					};
+					GPUParticleManager::GetInstance()->Emit(
+						trailPos, trailVel, 0.12f, 1.2f,
+						{ 0.6f, 0.75f, 1.0f, 0.55f });
+				}
+			}
+
+			// -----------------------------------------------
+			// 着地衝撃波 (timer_==21 の1フレームだけ)
+			// -----------------------------------------------
+			if (timer_ == 21) {
+				// 地面から外側に破片が放射状に飛ぶ
+				for (int i = 0; i < 24; i++) {
+					float angle = (3.14159265f * 2.0f / 24.0f) * i;
+					float speed = 3.5f + (rand() % 12) * 0.4f;
+					Vector3 debrisVel = {
+						std::cosf(angle) * speed,
+						(rand() % 8) * 0.5f,        // 高く飛び散る
+						std::sinf(angle) * speed
+					};
+					// 暗い灰色〜白の破片
+					float gray = 0.5f + (rand() % 10) * 0.05f;
+					GPUParticleManager::GetInstance()->Emit(
+						landPos_, debrisVel, 0.4f, 1.5f,
+						{ gray, gray, gray, 0.9f });
+				}
+				// 着地点の爆発フラッシュ (紫〜白)
+				for (int i = 0; i < 12; i++) {
+					Vector3 flashVel = {
+						(rand() % 9 - 4) * 0.8f,
+						(rand() % 8) * 0.6f,
+						(rand() % 9 - 4) * 0.8f
+					};
+					GPUParticleManager::GetInstance()->Emit(
+						landPos_, flashVel, 0.25f, 3.0f,
+						{ 0.8f, 0.4f, 1.0f, 0.95f });
+				}
+				// 地面に沿って広がるリング状の衝撃波
+				for (int i = 0; i < 20; i++) {
+					float angle = (3.14159265f * 2.0f / 20.0f) * i;
+					float speed = 5.0f;
+					Vector3 ringVel = {
+						std::cosf(angle) * speed,
+						0.1f,
+						std::sinf(angle) * speed
+					};
+					GPUParticleManager::GetInstance()->Emit(
+						landPos_, ringVel, 0.2f, 0.8f,
+						{ 1.0f, 1.0f, 1.0f, 0.7f });
+				}
+			}
+		} else {
+			// X斬り中: 禍々しい赤い火花
+			GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.25f, 3.0f, { 1.0f, 0.1f, 0.1f, 0.6f });
+			for (int i = 0; i < 5; i++) {
+				Vector3 sparkVel = {
+					(rand() % 11 - 5) * 1.5f,
+					(rand() % 11 - 5) * 1.5f,
+					(rand() % 11 - 5) * 1.5f
+				};
+				GPUParticleManager::GetInstance()->Emit(tracePos, sparkVel, 0.15f, 0.15f, { 1.0f, 0.4f, 0.0f, 1.0f });
+			}
 		}
 	}
 
-	// 当たり判定 (判定時間を短くして「一瞬で切り裂く」感を出す)
-	bool isAttacking = (timer_ >= 2 && timer_ <= 6) || (timer_ >= 12 && timer_ <= 16);
+	// 当たり判定: X斬り1撃目(22〜28f) と 2撃目(30〜36f)
+	bool isAttacking = (timer_ >= 22 && timer_ <= 28) || (timer_ >= 30 && timer_ <= 36);
 
 	if (isAttacking && !hasHit_) {
-		// ボス専用の魔法なので、プレイヤーへの当たり判定のみ行う
 		if (player && !player->IsDead()) {
 			Vector3 playerPos = player->GetPosition();
 			Vector3 diff = { playerPos.x - pos_.x, 0.0f, playerPos.z - pos_.z };
 
-			// ★ ボスの巨大な爪に合わせて、当たり判定も広くする (4.0f)
-			if (Length(diff) < 4.0f) {
+			if (Length(diff) < 2.5f) {
 				int finalDamage = damage_;
-
-				// 発動元のボスが攻撃デバフ中ならダメージを半減する
 				if (casterBoss_ && casterBoss_->IsAttackDebuffed()) {
 					finalDamage = finalDamage / 2;
 				}
-
 				player->TakeDamage(finalDamage, pos_);
 				hasHit_ = true;
 			}
 		}
 	}
 
-	if (timer_ >= 25) {
+	if (timer_ >= 45) {
 		isFinished_ = true;
 	}
 }

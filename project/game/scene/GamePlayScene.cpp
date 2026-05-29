@@ -4074,7 +4074,7 @@ void GamePlayScene::DrawBossPredictionLines() const {
 	auto drawPredictionForBoss = [&](Boss* boss) {
 		if (!boss || boss->IsDead() || boss->GetState() != Boss::State::UseCard || !boss->IsCasting()) return;
 		int cardId = boss->GetSelectedCard().id;
-		if (cardId != 102 && cardId != 105) return;
+		if (cardId != 101 && cardId != 102 && cardId != 105) return;
 
 		float progress = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(boss->GetCastDurationCurrent());
 		progress = std::clamp(progress, 0.0f, 1.0f);
@@ -4128,7 +4128,54 @@ void GamePlayScene::DrawBossPredictionLines() const {
 			}
 		};
 
-		if (cardId == 102) {
+		if (cardId == 101) {
+			// クロー: 飛び込み先(8ユニット前方)にX字2本
+			constexpr float kLeapDist = 8.0f;
+			Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+			// 着地予測点
+			Vector3 landPos = {
+				start.x + forward.x * kLeapDist,
+				start.y,
+				start.z + forward.z * kLeapDist
+			};
+
+			// drawRect は start+forward*2 を基点にするので
+			// landPos を基点にする小さな描画ラムダを別に用意
+			auto drawXRect = [&](float angle, float halfWidth, float length) {
+				Vector3 fw  = { std::sinf(angle), 0.0f, std::cosf(angle) };
+				Vector3 ri  = { std::cosf(angle), 0.0f, -std::sinf(angle) };
+				Vector3 s   = landPos - fw * (length * 0.5f); // 中心を着地点に合わせる
+				std::array<Vector3, 4> corners = {
+					s - ri * halfWidth,
+					s + ri * halfWidth,
+					s + ri * halfWidth + fw * length,
+					s - ri * halfWidth + fw * length
+				};
+				std::array<Vector2, 4> sc{};
+				std::array<bool, 4> vis{};
+				for (size_t i = 0; i < corners.size(); ++i) {
+					vis[i] = ProjectWorldToScreen(corners[i], sc[i]);
+				}
+				if (vis[0] && vis[1] && vis[2] && vis[3]) {
+					const ImVec2 pts[4] = {
+						{sc[0].x, sc[0].y}, {sc[1].x, sc[1].y},
+						{sc[2].x, sc[2].y}, {sc[3].x, sc[3].y}
+					};
+					drawList->AddConvexPolyFilled(pts, 4, fillColor);
+				}
+				for (int i = 0; i < 4; ++i) {
+					const int next = (i + 1) % 4;
+					if (!vis[i] || !vis[next]) continue;
+					drawList->AddLine(
+						{sc[i].x, sc[i].y}, {sc[next].x, sc[next].y},
+						lineColor, 2.0f);
+				}
+			};
+
+			constexpr float kPi4 = 3.14159f * 0.25f; // 45度
+			drawXRect(yaw + kPi4, 1.0f, 9.0f);  // 右上→左下
+			drawXRect(yaw - kPi4, 1.0f, 9.0f);  // 左上→右下
+		} else if (cardId == 102) {
 			// ファイアボール (6方向)
 			for (int i = 0; i < 6; ++i) {
 				float angle = yaw + (3.14159f * 2.0f / 6.0f) * i;
