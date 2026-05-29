@@ -135,7 +135,6 @@ public:
 
     void SetRotation(const Vector3& rot) { rot_ = rot; }
 
-
 private:
     void DecideNextState();
     void UpdateAppear();
@@ -227,6 +226,5 @@ private:
     int attackIntervalTimer_ = 0;       // 次に攻撃開始できるまでの残り時間
 
     bool hasEnrageTriggered_ = false;
-
 };
 

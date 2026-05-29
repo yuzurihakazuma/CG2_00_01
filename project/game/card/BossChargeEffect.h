@@ -26,7 +26,6 @@ public:
 
 private:
 	// 発動元のボス本人
-	// 分裂ボス時に左右どちらを前進させるかを失わないようにする
 	Boss* casterBoss_ = nullptr;
 
 	// 見た目用オブジェクト
@@ -61,14 +60,6 @@ private:
 
 	// 命中半径
 	float hitRadius_ = 2.6f;
-
-	// 予測線フェーズ
-	int windupTimer_          = 0;
-	static const int windupDuration_ = 22; // 予測線を出すフレーム数
-	bool isDashing_           = false;     // 実際のダッシュ開始フラグ
-
-	// 衝撃波リングの発射タイマー（C案トレイル用）
-	int shockwaveTimer_       = 0;
 
 	Camera* camera_ = nullptr;
 };
