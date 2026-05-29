@@ -26,8 +26,10 @@ private:
 
 	// エフェクトの状態（フェーズ）
 	enum class Phase {
-		Horizontal, // 横
-		Vertical    // 縦
+		StepBack,  // 後退・ため
+		Leap,      // 前方飛び込み
+		CrossSlash1, // X斬り1撃目 右上→左下
+		CrossSlash2  // X斬り2撃目 左上→右下
 	};
 
 	std::unique_ptr<Obj3d> obj_ = nullptr;
@@ -41,6 +43,7 @@ private:
 
 	float casterYaw_ = 0.0f;
 	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
+	Vector3 landPos_ = { 0.0f, 0.0f, 0.0f }; // 飛び込み着地点
 
 	// この攻撃を発動したボス本人
 // 今回の爪攻撃では未使用だが、全ボス攻撃クラスで受け口を統一するため保持する
