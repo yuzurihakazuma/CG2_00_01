@@ -823,6 +823,11 @@ void Player::SetStun(int durationFrames) {
     }
     isStunned_ = true;
     stunTimer_ = durationFrames;
+    isHit_ = false;
+    hitTimer_ = 0;
+    if (model_) {
+        model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+    }
 }
 
 void Player::LevelUp() {
@@ -909,9 +914,9 @@ void Player::UpdateCost() {
 }
 
 // ダメージ処理
-void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale){
+bool Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale){
     if ( isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_ ) {
-        return;
+        return false;
     }
 
     if ( shieldHitCount_ > 0 ) {
@@ -946,7 +951,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
             GPUParticleManager::GetInstance()->Emit(sc, sv, 0.5f, scale, { 0.5f, 0.9f, 1.0f, 0.9f });
         }
 
-        return;
+        return false;
     }
 
     GameSE::PlayerDamage();
@@ -1147,6 +1152,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
             model_->Update();
         }
     }
+    return true;
 }
 
 // 継続ダメージ処理

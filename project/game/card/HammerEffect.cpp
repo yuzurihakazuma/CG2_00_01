@@ -238,8 +238,9 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
                 Vector3 pPos = player->GetPosition();
                 Vector3 diff = { pPos.x - pos_.x, 0.0f, pPos.z - pos_.z };
                 if ( Length(diff) < 2.8f ) {
-                    player->TakeDamage(randomDamage, pos_);
-                    player->SetStun(90);
+                    if ( player->TakeDamage(randomDamage, pos_) ) {
+                        player->SetStun(90);
+                    }
                 }
             }
         }

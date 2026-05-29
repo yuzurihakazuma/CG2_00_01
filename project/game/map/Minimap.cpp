@@ -263,7 +263,7 @@ void Minimap::BuildChunkSprites() {
 				const float outlineExpand = drawTileSize_ * 0.25f;
 
 				// 階段マークの色
-				const Vector4 stairsColor = { 0.0f, 1.0f, 0.8f, 0.3f };
+				const Vector4 stairsColor = { 1.0f, 0.9f, 0.15f, 0.45f };
 
 				// 上
 				{
