@@ -112,6 +112,7 @@ private:
 	enum class TitleChoice {
 		StartGame = 0,
 		Tutorial,
+		Credit,
 		Count
 	};
 
@@ -122,9 +123,15 @@ private:
 	std::unique_ptr<Sprite> playWhiteSprite_ = nullptr;
 	std::unique_ptr<Sprite> tutorialBlueSprite_ = nullptr;
 	std::unique_ptr<Sprite> tutorialWhiteSprite_ = nullptr;
+	std::unique_ptr<Sprite> creditBlueSprite_ = nullptr;
+	std::unique_ptr<Sprite> creditWhiteSprite_ = nullptr;
 	std::unique_ptr<Sprite> operateSprite_ = nullptr;
 	std::unique_ptr<Sprite> controllerOperateSprite_ = nullptr;
+	std::unique_ptr<Sprite> creditDimSprite_ = nullptr;
+	std::unique_ptr<Sprite> creditSprite_ = nullptr;
+	std::unique_ptr<Sprite> creditUiSprite_ = nullptr;
 	bool isControllerUiMode_ = false;
 	bool hasConfirmedSelection_ = false;
+	bool isCreditOpen_ = false;
 
 };
