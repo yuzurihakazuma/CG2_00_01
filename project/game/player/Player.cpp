@@ -386,9 +386,10 @@ void Player::Update(bool isMagicCasting) {
         move = Normalize(move);
     }
 
-    // 詠唱中にShift/Bを押している間だけ、回避ではなく向き固定のスライド移動にする
+    // 上入力を押している間は、移動しても向きを変えない
     const bool isDirectionLocked =
-        input->Pushkey(DIK_LCONTROL) || input->Pushkey(DIK_RCONTROL) || input->PushLeftTrigger();
+        input->Pushkey(DIK_UP) ||
+        input->PushLeftTrigger();
 
     // 回避開始
    // Shift に加えて B ボタンでも回避できるようにする

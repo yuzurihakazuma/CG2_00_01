@@ -248,6 +248,7 @@ void TitleScene::Update() {
 	}
 
 	Input* input = Input::GetInstance();
+	const bool canAcceptMenuInput = !SceneManager::GetInstance()->IsFading();
 	if (HasControllerPromptInput(input)) {
 		isControllerUiMode_ = true;
 	} else if (HasKeyboardPromptInput(input)) {
@@ -270,22 +271,22 @@ void TitleScene::Update() {
 	const TitleChoice previousSelection = currentSelection_;
 
 	// 上入力は W / ↑ / 上D-Pad / 左スティック上
-	if (
+	if (canAcceptMenuInput && (
 		input->Triggerkey(DIK_W) ||
 		input->Triggerkey(DIK_UP) ||
 		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP) ||
 		(isStickUp && !wasStickUp)
-		) {
+		)) {
 		currentSelection_ = TitleChoice::StartGame;
 	}
 
 	// 下入力は S / ↓ / 下D-Pad / 左スティック下
-	if (
+	if (canAcceptMenuInput && (
 		input->Triggerkey(DIK_S) ||
 		input->Triggerkey(DIK_DOWN) ||
 		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN) ||
 		(isStickDown && !wasStickDown)
-		) {
+		)) {
 		currentSelection_ = TitleChoice::Tutorial;
 	}
 	if (currentSelection_ != previousSelection) {
@@ -357,7 +358,8 @@ void TitleScene::Update() {
 
 	// SPACEでゲーム開始
 	// SPACE に加えて A ボタンでも決定できるようにする
-	if (!hasConfirmedSelection_ &&
+	if (canAcceptMenuInput &&
+		!hasConfirmedSelection_ &&
 		(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
 		hasConfirmedSelection_ = true;
 		GameSE::Confirm();

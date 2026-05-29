@@ -770,7 +770,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::DefeatEnemy:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
 		// 攻撃カードと魔法カードの両方を当てる練習タスクを表示する
-		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\nLCTRLで向き固定することで狙いやすくなります。\nこの練習では、けりとファイヤーボールは何回でも使えます。");
+		text->SetText("TutorialBody", "動かない敵に、けりとファイヤーボールをそれぞれ当ててください。\n↑キーで向き固定することで狙いやすくなります。\nこの練習では、けりとファイヤーボールは何回でも使えます。");
 
 		text->SetText(
 			"TutorialCheckAttack",
