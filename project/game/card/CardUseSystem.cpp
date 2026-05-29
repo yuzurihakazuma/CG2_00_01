@@ -295,6 +295,8 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 		case 16: // SE: 槍の音を再生
 			GameSE::Spear(); break;
 		// ボス用SE
+		case 102: // SE: ボスファイアーボールの使用音
+			GameSE::Fireball(); break; // 既存の火球音を流用する
 		case 103: // SE: ボス召喚の音を再生
 			GameSE::BossSummon(); break;
 		case 104: // SE: ボスビームの音を再生
