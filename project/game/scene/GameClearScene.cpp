@@ -106,6 +106,8 @@ GameClearScene::GameClearScene() = default;
 GameClearScene::~GameClearScene() = default;
 
 void GameClearScene::Initialize() {
+    hasConfirmedReturn_ = false;
+
     // クリアシーンに入ったらクリア用BGMへ切り替える
     GameBGM::GameClear(0.8f);
 
@@ -399,10 +401,10 @@ void GameClearScene::Update() {
     }
 
     // Return to the title scene on confirm.
-    if (
-        input->Triggerkey(DIK_SPACE) ||
-        input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
-        ) {
+    if (!hasConfirmedReturn_ &&
+        (input->Triggerkey(DIK_SPACE) ||
+         input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
+        hasConfirmedReturn_ = true;
         GameSE::Confirm();
         SceneManager::GetInstance()->ChangeScene("TITLE");
         return;
