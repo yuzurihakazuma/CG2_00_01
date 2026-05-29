@@ -1,4 +1,4 @@
-﻿#include "GamePlayScene.h"
+#include "GamePlayScene.h"
 // --- ゲーム固有のファイル ---
 #include "TitleScene.h"
 
@@ -3640,8 +3640,6 @@ void GamePlayScene::Finalize() {
 	slideMoveControllerUiSprite_.reset();
 	bossIntroTopBar_.reset();
 	bossIntroBottomBar_.reset();
-
-	TextManager::GetInstance()->Finalize();
 
 	if (tutorial_) {
 		tutorial_->Finalize();
