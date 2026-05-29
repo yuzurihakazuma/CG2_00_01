@@ -50,6 +50,8 @@ private:
     // 分裂ボス時に左右どちらの弾かを失わないように保持する
     Boss* casterBoss_ = nullptr;
 
+    bool isSplitBoss_ = false; // 分身ボスが発動したかどうか（青色切替用）
+
     // ===== 3分裂 =====
     std::vector<MiniFire> miniFlames_;  // 小炎3本
     bool hasSplit_ = false;             // 分裂済みフラグ

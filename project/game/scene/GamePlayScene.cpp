@@ -3990,7 +3990,7 @@ void GamePlayScene::DrawFireballPredictionLines() const {
 
 		float yaw = enemy->GetRotation().y;
 		Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
-		Vector3 start = enemy->GetPosition() + forward * kFireballSpawnOffset;
+		Vector3 start = enemy->GetPosition() + forward * (kFireballSpawnOffset + 1.5f);
 		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
 
 		Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
@@ -4061,18 +4061,20 @@ void GamePlayScene::DrawBossPredictionLines() const {
 
 		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
 		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
-		// ボス用は赤っぽくする
-		const unsigned int fillColor = IM_COL32(255, 30, 30, fillAlpha);
-		const unsigned int lineColor = IM_COL32(255, 50, 50, lineAlpha);
+		// 分身ボス:青、通常ボス:赤
+		const bool isSplit = boss->IsSplitBehaviorEnabled();
+		const unsigned int fillColor = isSplit ? IM_COL32(30, 100, 255, fillAlpha) : IM_COL32(255, 30, 30, fillAlpha);
+		const unsigned int lineColor = isSplit ? IM_COL32(50, 130, 255, lineAlpha) : IM_COL32(255, 50, 50, lineAlpha);
 
 		auto drawRect = [&](float angle, float halfWidth, float length) {
 			Vector3 forward = { std::sinf(angle), 0.0f, std::cosf(angle) };
 			Vector3 right = { std::cosf(angle), 0.0f, -std::sinf(angle) };
+			Vector3 rectStart = start + forward * 2.0f;
 			std::array<Vector3, 4> corners = {
-				start - right * halfWidth,
-				start + right * halfWidth,
-				start + right * halfWidth + forward * length,
-				start - right * halfWidth + forward * length
+				rectStart - right * halfWidth,
+				rectStart + right * halfWidth,
+				rectStart + right * halfWidth + forward * length,
+				rectStart - right * halfWidth + forward * length
 			};
 			std::array<Vector2, 4> screenCorners{};
 			std::array<bool, 4> visible{};

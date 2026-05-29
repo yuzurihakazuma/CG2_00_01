@@ -10,229 +10,173 @@
 using namespace VectorMath;
 
 void BossSpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
-    // ボス専用なので isPlayerCaster は使わない
     (void)isPlayerCaster;
 
     isFinished_ = false;
     timer_ = 0;
-    hitTargets_.clear();
     casterYaw_ = casterYaw;
     casterPos_ = casterPos;
-    casterBoss_ = casterBoss; // 攻撃デバフ判定用に発動元を保持
+    casterBoss_ = casterBoss;
 
-    obj_ = Obj3d::Create("spear_model");
-    if (obj_) {
-        obj_->SetCamera(camera);
-        obj_->SetScale(scale_);
-        obj_->SetTranslation({ 0.0f, -1000.0f, 0.0f });
-        obj_->Update();
+    // 左・中央・右の角度オフセット
+    const float angles[3] = { -kSpreadAngle, 0.0f, kSpreadAngle };
 
-        Model* model = obj_->GetModel();
-        if (model && model->GetMaterial()) {
-            Model::Material* mat = model->GetMaterial();
-            mat->color = { 0.7f, 0.2f, 1.0f, 1.0f }; // ボス用の紫
-            mat->emissive = 2.8f; // 少し強めに発光
-        }
-    }
+    for (int i = 0; i < 3; i++) {
+        spears_[i].yaw = casterYaw_ + angles[i];
+        spears_[i].hitDone = false;
+        spears_[i].pos = casterPos_;
 
-    afterimages_.clear();
-    for (int index = 0; index < maxAfterimageCount_; index++) {
-        AfterimageData afterimage;
-        afterimage.object = Obj3d::Create("spear_model");
-        if (afterimage.object) {
-            afterimage.object->SetCamera(camera);
-            afterimage.object->SetScale(scale_);
+        spears_[i].obj = std::unique_ptr<Obj3d>(Obj3d::Create("spear_model"));
+        if (spears_[i].obj) {
+            spears_[i].obj->SetCamera(camera);
+            spears_[i].obj->SetScale(scale_);
+            spears_[i].obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+            spears_[i].obj->Update();
 
-            Model* model = afterimage.object->GetModel();
+            Model* model = spears_[i].obj->GetModel();
             if (model && model->GetMaterial()) {
                 Model::Material* mat = model->GetMaterial();
-                mat->color = { 0.7f, 0.2f, 1.0f, 1.0f }; // 残像も同じ紫にする
-                mat->emissive = 2.0f;
+                mat->color = { 0.7f, 0.2f, 1.0f, 1.0f };
+                mat->emissive = 2.8f;
             }
         }
-        afterimage.isActive = false;
-        afterimages_.push_back(std::move(afterimage));
     }
 }
 
 void BossSpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, Boss* extraBoss, const Vector3& bossPos, const LevelData& level) {
-    // このボス槍では未使用
     (void)enemyManager;
     (void)boss;
     (void)extraBoss;
     (void)bossPos;
     (void)level;
 
-    if (isFinished_) {
-        return;
-    }
+    if (isFinished_) return;
 
     timer_++;
 
-    // 15フレームを1セットとして3連突きする
-    int cycle = (timer_ - 1) / 15;
-    int localTimer = (timer_ - 1) % 15;
+    // フェーズ境界
+    const int t0 = kPhaseDeploy;
+    const int t1 = t0 + kPhaseThrust;
+    const int t2 = t1 + kPhaseRetract;
+    const int t3 = t2 + kPhaseFinish;
+    const int t4 = t3 + kPhaseFinishR;
 
-    if (cycle >= 3) {
+    if (timer_ > t4) {
         isFinished_ = true;
         return;
     }
 
-    Vector3 forwardVec = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
-    Vector3 rightVec = { std::cosf(casterYaw_), 0.0f, -std::sinf(casterYaw_) };
+    for (int i = 0; i < 3; i++) {
+        if (!spears_[i].obj) continue;
 
-    if (obj_) {
-        if (localTimer == 0) {
-            hitTargets_.clear(); // 突きごとにヒット対象をリセット
-        }
+        Vector3 forward = { std::sinf(spears_[i].yaw), 0.0f, std::cosf(spears_[i].yaw) };
 
-        float offsetX = 0.0f;
-        float offsetY = 0.0f;
-        if (cycle == 0) {
-            offsetX = -0.4f;
-            offsetY = 0.2f;
-        } else if (cycle == 1) {
-            offsetX = 0.4f;
-            offsetY = -0.2f;
-        }
+        // 横オフセット：左=-1, 中=0, 右=+1
+        Vector3 right = { std::cosf(casterYaw_), 0.0f, -std::sinf(casterYaw_) };
+        float sideOffset = (i - 1) * 0.8f; // -0.8, 0, +0.8
 
-        // 槍を一度引いてから前へ大きく突き出す
         float zOffset = 0.0f;
-        if (localTimer <= 6) {
-            zOffset = -0.8f * (static_cast<float>(localTimer) / 6.0f); // ため
-        } else if (localTimer <= 9) {
-            float t = static_cast<float>(localTimer - 6) / 3.0f;
-            zOffset = -0.8f + (6.8f * t); // 一気に前へ突き出す
-            if (cycle == 2) {
-                zOffset += 2.0f; // 3段目だけ少し深く突く
+
+        if (timer_ <= t0) {
+            // フェーズ0：扇形に展開して浮かぶ（引きながら浮く）
+            float t = static_cast<float>(timer_) / static_cast<float>(kPhaseDeploy);
+            zOffset = -0.5f - t * 0.5f; // じわっと後ろに引く
+        } else if (timer_ <= t1) {
+            // フェーズ1：一斉突き
+            float t = static_cast<float>(timer_ - t0) / static_cast<float>(kPhaseThrust);
+            zOffset = -1.0f + t * 7.0f; // -1 → +6
+        } else if (timer_ <= t2) {
+            // フェーズ2：引き戻し
+            float t = static_cast<float>(timer_ - t1) / static_cast<float>(kPhaseRetract);
+            zOffset = 6.0f * (1.0f - t);
+        } else if (timer_ <= t3) {
+            // フェーズ3：中央のみフィニッシュ追撃、左右は消える
+            if (i != 1) {
+                spears_[i].obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+                spears_[i].obj->Update();
+                continue;
             }
+            float t = static_cast<float>(timer_ - t2) / static_cast<float>(kPhaseFinish);
+            zOffset = -0.5f + t * 9.0f; // より深く突く
         } else {
-            float t = static_cast<float>(localTimer - 9) / 5.0f;
-            float maxZ = (cycle == 2) ? 8.0f : 6.0f;
-            zOffset = maxZ - (maxZ * t); // 元の位置へ戻す
+            // フェーズ4：フィニッシュ戻し（中央のみ）
+            if (i != 1) {
+                spears_[i].obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
+                spears_[i].obj->Update();
+                continue;
+            }
+            float t = static_cast<float>(timer_ - t3) / static_cast<float>(kPhaseFinishR);
+            zOffset = 8.5f * (1.0f - t);
         }
 
-        pos_ = {
-            casterPos_.x + forwardVec.x * zOffset + rightVec.x * offsetX,
-            casterPos_.y + 1.2f + offsetY,
-            casterPos_.z + forwardVec.z * zOffset + rightVec.z * offsetX
+        spears_[i].pos = {
+            casterPos_.x + forward.x * zOffset + right.x * sideOffset,
+            casterPos_.y + 1.2f,
+            casterPos_.z + forward.z * zOffset + right.z * sideOffset
         };
 
-        obj_->SetRotation({ 1.5f, casterYaw_, 0.0f });
-        obj_->SetTranslation(pos_);
-        obj_->Update();
+        spears_[i].obj->SetRotation({ 1.5f, spears_[i].yaw, 0.0f });
+        spears_[i].obj->SetTranslation(spears_[i].pos);
+        spears_[i].obj->Update();
 
-        if (localTimer >= 7 && localTimer <= 9) {
-            for (auto& afterimage : afterimages_) {
-                if (!afterimage.isActive) {
-                    afterimage.isActive = true;
-                    afterimage.lifeTimer = defaultAfterimageLife_;
-                    CopyTransform(obj_, afterimage.object);
-                    afterimage.object->Update();
-                    break;
-                }
+        // 突き出しフレームにパーティクル
+        if (timer_ > t0 && timer_ <= t1) {
+            for (int p = 0; p < 6; p++) {
+                Vector3 pv = forward * (3.0f + (rand() % 5) * 0.2f);
+                GPUParticleManager::GetInstance()->Emit(spears_[i].pos, pv, 0.1f, 0.4f, { 0.7f, 0.2f, 1.0f, 0.5f });
             }
         }
 
-        if (localTimer >= 7 && localTimer <= 9) {
-            int windCount = 8;
-            for (int i = 0; i < windCount; i++) {
-                Vector3 startPos = {
-                    pos_.x + rightVec.x * ((rand() % 11 - 5) * 0.05f) - forwardVec.x * 0.5f,
-                    pos_.y + ((rand() % 11 - 5) * 0.05f),
-                    pos_.z + rightVec.z * ((rand() % 11 - 5) * 0.05f) - forwardVec.z * 0.5f
-                };
-
-                float speed = 3.0f + (rand() % 10) * 0.2f;
-                Vector3 windVel = forwardVec * speed;
-                Vector4 windColor = { 0.7f, 0.2f, 1.0f, 0.5f }; // ボス用の紫軌跡
-
-                GPUParticleManager::GetInstance()->Emit(startPos, windVel, 0.1f, 0.5f, windColor);
-            }
-        }
-
-        if (cycle == 2 && localTimer == 8) {
-            int burstCount = 40;
-            for (int i = 0; i < burstCount; i++) {
+        // フィニッシュのバースト
+        if (i == 1 && timer_ == t2 + kPhaseFinish / 2) {
+            for (int p = 0; p < 40; p++) {
                 float spreadX = (rand() % 21 - 10) * 0.04f;
                 float spreadY = (rand() % 21 - 10) * 0.04f;
-
-                Vector3 dir = {
-                    forwardVec.x * 1.5f + rightVec.x * spreadX,
-                    spreadY,
-                    forwardVec.z * 1.5f + rightVec.z * spreadX
-                };
-
-                float speed = 1.5f + (rand() % 10) * 0.2f;
-                Vector4 windColor = { 0.8f, 0.3f, 1.0f, 0.7f }; // フィニッシュだけ少し明るい紫
-                GPUParticleManager::GetInstance()->Emit(pos_, dir * speed, 0.2f, 0.8f, windColor);
-            }
-
-            GPUParticleManager::GetInstance()->Emit(
-                pos_,
-                forwardVec * 1.0f,
-                0.1f,
-                2.0f,
-                { 0.9f, 0.5f, 1.0f, 0.8f }
-            );
-        }
-    }
-
-    for (auto& afterimage : afterimages_) {
-        if (afterimage.isActive) {
-            afterimage.lifeTimer--;
-            float alphaRatio = static_cast<float>(afterimage.lifeTimer) / static_cast<float>(defaultAfterimageLife_);
-            Vector4 afterimageColor = { 0.7f, 0.2f, 1.0f, alphaRatio * 0.4f }; // 残像も紫
-            afterimage.object->SetColor(afterimageColor);
-            afterimage.object->Update();
-
-            if (afterimage.lifeTimer <= 0) {
-                afterimage.isActive = false;
+                Vector3 dir = { forward.x + spreadX, spreadY, forward.z + spreadX };
+                float sp = 1.5f + (rand() % 10) * 0.2f;
+                GPUParticleManager::GetInstance()->Emit(spears_[i].pos, dir * sp, 0.2f, 0.8f, { 0.9f, 0.5f, 1.0f, 0.7f });
             }
         }
     }
 
-    // 3連突きの有効フレームだけプレイヤーに当たり判定を出す
-    if (localTimer >= 7 && localTimer <= 11) {
-        int currentDamage = damage_ + (rand() % 2) + (cycle == 2 ? 1 : 0);
+    // 当たり判定：一斉突き（左右含む全3本）
+    if (timer_ > t0 && timer_ <= t1) {
+        for (int i = 0; i < 3; i++) {
+            if (spears_[i].hitDone) continue;
+            if (!player || player->IsDead()) continue;
 
-        if (casterBoss_ && casterBoss_->IsAttackDebuffed()) {
-            currentDamage /= 2; // 発動元ボスが攻撃デバフ中なら半減
+            Vector3 diff = { player->GetPosition().x - spears_[i].pos.x, 0.0f, player->GetPosition().z - spears_[i].pos.z };
+            if (Length(diff) < 1.8f) {
+                int dmg = damage_ + (rand() % 2);
+                if (casterBoss_ && casterBoss_->IsAttackDebuffed()) dmg /= 2;
+                if (dmg < 1) dmg = 1;
+                player->TakeDamage(dmg, spears_[i].pos);
+                spears_[i].hitDone = true;
+            }
         }
+    }
 
-        if (player && !player->IsDead()) {
-            auto it = std::find(hitTargets_.begin(), hitTargets_.end(), player);
-            if (it == hitTargets_.end()) {
-                Vector3 playerPos = player->GetPosition();
-                Vector3 diff = { playerPos.x - pos_.x, 0.0f, playerPos.z - pos_.z };
-
-                if (Length(diff) < 1.8f) { // 槍の先端は細い：プレイヤー体幹に合わせた判定
-                    player->TakeDamage(currentDamage, pos_);
-                    hitTargets_.push_back(player);
-                }
+    // 当たり判定：フィニッシュ（中央のみ、+1ダメージ）
+    if (timer_ > t2 && timer_ <= t3) {
+        if (!spears_[1].hitDone && player && !player->IsDead()) {
+            Vector3 diff = { player->GetPosition().x - spears_[1].pos.x, 0.0f, player->GetPosition().z - spears_[1].pos.z };
+            if (Length(diff) < 1.8f) {
+                int dmg = damage_ + (rand() % 2) + 1;
+                if (casterBoss_ && casterBoss_->IsAttackDebuffed()) dmg /= 2;
+                if (dmg < 1) dmg = 1;
+                player->TakeDamage(dmg, spears_[1].pos);
+                spears_[1].hitDone = true;
             }
         }
     }
 }
 
 void BossSpearEffect::Draw() {
-    if (!isFinished_ && obj_) {
-        obj_->Draw();
-    }
+    if (isFinished_) return;
 
-    for (auto& afterimage : afterimages_) {
-        if (afterimage.isActive && afterimage.object) {
-            afterimage.object->Draw();
+    for (int i = 0; i < 3; i++) {
+        if (spears_[i].obj) {
+            spears_[i].obj->Draw();
         }
     }
-}
-
-void BossSpearEffect::CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj) {
-    if (!sourceObj || !destinationObj) {
-        return;
-    }
-
-    destinationObj->SetTranslation(sourceObj->GetTranslation());
-    destinationObj->SetRotation(sourceObj->GetRotation());
-    destinationObj->SetScale(sourceObj->GetScale());
 }

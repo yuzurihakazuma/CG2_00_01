@@ -3,6 +3,7 @@
 #include "engine/3d/obj/Obj3d.h"
 #include <memory>
 #include <vector>
+#include <array>
 #include <algorithm>
 
 class BossSpearEffect : public ICardEffect {
@@ -15,18 +16,28 @@ public:
     bool IsFinished() const override { return isFinished_; }
 
 private:
-    void CopyTransform(const std::unique_ptr<Obj3d>& sourceObj, const std::unique_ptr<Obj3d>& destinationObj);
+    // フェーズ定義
+    // 0: 展開（3本が扇形に浮かぶ）
+    // 1: 一斉突き
+    // 2: 引き戻し
+    // 3: フィニッシュ（中央1本だけ深く追撃）
+    // 4: 終了戻し
+    static constexpr int kPhaseDeploy   = 20; // 展開フレーム数
+    static constexpr int kPhaseThrust   = 8;  // 突きフレーム数
+    static constexpr int kPhaseRetract  = 12; // 戻しフレーム数
+    static constexpr int kPhaseFinish   = 8;  // フィニッシュフレーム数
+    static constexpr int kPhaseFinishR  = 10; // フィニッシュ戻しフレーム数
 
-    struct AfterimageData {
-        std::unique_ptr<Obj3d> object = nullptr;
-        int lifeTimer = 0;
-        bool isActive = false;
+    static constexpr float kSpreadAngle = 0.5236f; // 扇の広がり角（30°）
+
+    struct SpearData {
+        std::unique_ptr<Obj3d> obj = nullptr;
+        Vector3 pos = { 0.0f, 0.0f, 0.0f };
+        float yaw = 0.0f; // 各槍の向き
+        bool hitDone = false;
     };
 
-private:
-    std::unique_ptr<Obj3d> obj_ = nullptr;
-    Vector3 pos_ = { 0.0f, 0.0f, 0.0f };
-    Vector3 scale_ = { 2.0f, 2.0f, 2.0f }; // ボス用に少し大きめ
+    Vector3 scale_ = { 2.0f, 2.0f, 2.0f };
 
     int damage_ = 1;
     int timer_ = 0;
@@ -35,10 +46,8 @@ private:
     float casterYaw_ = 0.0f;
     Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
 
-    Boss* casterBoss_ = nullptr; // 発動したボス本人を保持
-    std::vector<void*> hitTargets_;
-    std::vector<AfterimageData> afterimages_;
+    Boss* casterBoss_ = nullptr;
 
-    static const int maxAfterimageCount_ = 3;   // 残像数は既存槍と同じ
-    static const int defaultAfterimageLife_ = 5; // 残像寿命も既存槍と同じ
+    // 3本の槍（左・中央・右）
+    std::array<SpearData, 3> spears_;
 };

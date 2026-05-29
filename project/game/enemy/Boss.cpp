@@ -479,8 +479,10 @@ void Boss::UpdateAppear() {
 				(rand() % 11 - 5) * 0.02f
 			};
 
-			// 大気摩擦で燃えているような 濃いオレンジ と 赤色
-			Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 0.3f, 0.0f, 0.8f } : Vector4{ 1.0f, 0.1f, 0.0f, 0.8f };
+			// 分身ボス:青炎、通常ボス:オレンジ/赤炎
+			Vector4 color = isSplitBehaviorEnabled_
+				? ((rand() % 2 == 0) ? Vector4{ 0.0f, 0.5f, 1.0f, 0.8f } : Vector4{ 0.2f, 0.3f, 1.0f, 0.8f })
+				: ((rand() % 2 == 0) ? Vector4{ 1.0f, 0.3f, 0.0f, 0.8f } : Vector4{ 1.0f, 0.1f, 0.0f, 0.8f });
 
 			float scale = 0.8f + (rand() % 10) * 0.1f;
 
