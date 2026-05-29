@@ -245,9 +245,9 @@ void TitleScene::Update() {
 	camera_->SetFarClip(200.0f);
 	camera_->Update();
 
-	
 
-	auto* light = Obj3dCommon::GetInstance()->GetLightData();
+
+	auto *light = Obj3dCommon::GetInstance()->GetLightData();
 	/*if (light) {
 		light->direction = Normalize({ 0.038f, -0.997f, -0.074f });
 		light->color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -273,7 +273,7 @@ void TitleScene::Update() {
 		titleLogoSprite_->Update();
 	}
 
-	Input* input = Input::GetInstance();
+	Input *input = Input::GetInstance();
 	const bool canAcceptMenuInput = !SceneManager::GetInstance()->IsFading();
 	if (HasControllerPromptInput(input)) {
 		isControllerUiMode_ = true;
@@ -304,170 +304,171 @@ void TitleScene::Update() {
 			currentSelection_ = static_cast<TitleChoice>(current);
 			};
 
-	// 上入力は W / ↑ / 上D-Pad / 左スティック上
-	if (canAcceptMenuInput && (
-		input->Triggerkey(DIK_W) ||
-		input->Triggerkey(DIK_UP) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP) ||
-		(isStickUp && !wasStickUp)
-		) {
-		moveSelection(-1);
-	}
-
-	// 下入力は S / ↓ / 下D-Pad / 左スティック下
-	if (canAcceptMenuInput && (
-		input->Triggerkey(DIK_S) ||
-		input->Triggerkey(DIK_DOWN) ||
-		input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN) ||
-		(isStickDown && !wasStickDown)
-		) {
-		moveSelection(1);
-	}
-	if (currentSelection_ != previousSelection) {
-		GameSE::CursorMove();
-	}
-	}
-
-	// 次フレーム用に保存する
-	wasStickUp = isStickUp;
-	wasStickDown = isStickDown;
-
-	if (isCreditOpen_ &&
-		(input->Triggerkey(DIK_ESCAPE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
-		isCreditOpen_ = false;
-	}
-
-	// ==========================================
-	// スプライトのサイズ変更と更新
-	// ==========================================
-	const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
-	const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
-
-	// 元のキャンバスの縦横比（1280 / 1920）
-	float baseRatio = 1280.0f / 1920.0f;
-
-	// キャンバス全体を画面の約80%の大きさで描画する（Title.pngの0.78fに合わせる）
-	float normalW = screenW * 0.78f;
-
-	Vector2 normalSize = { normalW, normalW * baseRatio };
-
-	// 置きたい高さ（画面割合）
-	float centerX = screenW * 0.5f;
-	float centerY = screenH * 0.5f;
-	const float selectedScale = 1.09f;
-	const float menuLineGap = screenH * 0.095f;
-	const float playY = centerY + screenH * 0.03f;
-	const float tutorialY = playY + menuLineGap;
-	const float creditY = tutorialY + menuLineGap;
-	const float operateX = centerX + screenW * 0.13f;
-	const float operateY = creditY + screenH * 0.10f;
-	const Vector2 creditScreenSize = { screenW * 0.95f, screenW * 0.95f * baseRatio };
-	const Vector2 playSize = { screenW * 0.19f, screenW * 0.19f * (195.0f / 470.0f) };
-	const Vector2 tutorialSize = { screenW * 0.37f, screenW * 0.37f * (185.0f / 910.0f) };
-	const Vector2 creditSize = { screenW * 0.28f, screenW * 0.28f * (190.0f / 685.0f) };
-	const Vector2 playActiveSize = { playSize.x * selectedScale, playSize.y * selectedScale };
-	const Vector2 tutorialActiveSize = { tutorialSize.x * selectedScale, tutorialSize.y * selectedScale };
-	const Vector2 creditActiveSize = { creditSize.x * selectedScale, creditSize.y * selectedScale };
-
-	// --- プレイボタンの更新 ---
-	if (playBlueSprite_ && playWhiteSprite_) {
-		if (currentSelection_ == TitleChoice::StartGame) {
-			playBlueSprite_->SetSize(playActiveSize);
-			playBlueSprite_->SetPosition({ centerX, playY });
-			playBlueSprite_->Update();
-		} else {
-			playWhiteSprite_->SetSize(playSize);
-			playWhiteSprite_->SetPosition({ centerX, playY });
-			playWhiteSprite_->Update();
+		// 上入力は W / ↑ / 上D-Pad / 左スティック上
+		if (canAcceptMenuInput && (
+			input->Triggerkey(DIK_W) ||
+			input->Triggerkey(DIK_UP) ||
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_UP) ||
+			(isStickUp && !wasStickUp)
+			)) {
+			moveSelection(-1);
 		}
-	}
 
-	// --- チュートリアルボタンの更新 ---
-	if (tutorialBlueSprite_ && tutorialWhiteSprite_) {
-		if (currentSelection_ == TitleChoice::Tutorial) {
-			tutorialBlueSprite_->SetSize(tutorialActiveSize);
-			tutorialBlueSprite_->SetPosition({ centerX, tutorialY });
-			tutorialBlueSprite_->Update();
-		} else {
-			tutorialWhiteSprite_->SetSize(tutorialSize);
-			tutorialWhiteSprite_->SetPosition({ centerX, tutorialY });
-			tutorialWhiteSprite_->Update();
+		// 下入力は S / ↓ / 下D-Pad / 左スティック下
+		if (canAcceptMenuInput && (
+			input->Triggerkey(DIK_S) ||
+			input->Triggerkey(DIK_DOWN) ||
+			input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_DOWN) ||
+			(isStickDown && !wasStickDown)
+			)) {
+			moveSelection(1);
 		}
-	}
-
-	// 操作説明の更新
-	if (creditBlueSprite_ && creditWhiteSprite_) {
-		if (currentSelection_ == TitleChoice::Credit) {
-			creditBlueSprite_->SetSize(creditActiveSize);
-			creditBlueSprite_->SetPosition({ centerX, creditY });
-			creditBlueSprite_->Update();
-		} else {
-			creditWhiteSprite_->SetSize(creditSize);
-			creditWhiteSprite_->SetPosition({ centerX, creditY });
-			creditWhiteSprite_->Update();
+		if (currentSelection_ != previousSelection) {
+			GameSE::CursorMove();
 		}
-	}
 
-	if (creditDimSprite_) {
-		creditDimSprite_->SetPosition({ centerX, centerY });
-		creditDimSprite_->SetSize({ screenW, screenH });
-		creditDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.65f });
-		creditDimSprite_->Update();
-	}
-	if (creditSprite_) {
-		creditSprite_->SetPosition({ centerX, centerY });
-		creditSprite_->SetSize(creditScreenSize);
-		creditSprite_->Update();
-	}
-	if (creditUiSprite_) {
-		creditUiSprite_->SetPosition({ centerX, centerY });
-		creditUiSprite_->SetSize(creditScreenSize);
-		creditUiSprite_->Update();
-	}
 
-	if (operateSprite_) {
-		// 非選択状態と同じ「通常サイズ（normalSize）」で中央に置く
-		operateSprite_->SetSize(normalSize);
-		operateSprite_->SetPosition({ centerX, centerY });
-		operateSprite_->Update();
-	}
-	if (controllerOperateSprite_) {
-		controllerOperateSprite_->SetSize(normalSize);
-		controllerOperateSprite_->SetPosition({ centerX, centerY });
-		controllerOperateSprite_->Update();
-	}
+		// 次フレーム用に保存する
+		wasStickUp = isStickUp;
+		wasStickDown = isStickDown;
 
-	// SPACEでゲーム開始
-	// SPACE に加えて A ボタンでも決定できるようにする
-	if (!hasConfirmedSelection_ &&
-		!isCreditOpen_ &&
-		(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
-		if (currentSelection_ != TitleChoice::Credit) {
-			hasConfirmedSelection_ = true;
+		if (isCreditOpen_ &&
+			(input->Triggerkey(DIK_ESCAPE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
+			isCreditOpen_ = false;
 		}
-		GameSE::Confirm();
-		if (currentSelection_ == TitleChoice::StartGame) {
-			// 通常プレイ
-			GamePlayScene::RequestTutorialStart(false);
-			SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
-		} else if (currentSelection_ == TitleChoice::Tutorial) {
-			// チュートリアル
-			GamePlayScene::RequestTutorialStart(true);
-			SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
-		} else if (currentSelection_ == TitleChoice::Credit) {
-			isCreditOpen_ = true;
+
+		// ==========================================
+		// スプライトのサイズ変更と更新
+		// ==========================================
+		const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
+		const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
+
+		// 元のキャンバスの縦横比（1280 / 1920）
+		float baseRatio = 1280.0f / 1920.0f;
+
+		// キャンバス全体を画面の約80%の大きさで描画する（Title.pngの0.78fに合わせる）
+		float normalW = screenW * 0.78f;
+
+		Vector2 normalSize = { normalW, normalW * baseRatio };
+
+		// 置きたい高さ（画面割合）
+		float centerX = screenW * 0.5f;
+		float centerY = screenH * 0.5f;
+		const float selectedScale = 1.09f;
+		const float menuLineGap = screenH * 0.095f;
+		const float playY = centerY + screenH * 0.03f;
+		const float tutorialY = playY + menuLineGap;
+		const float creditY = tutorialY + menuLineGap;
+		const float operateX = centerX + screenW * 0.13f;
+		const float operateY = creditY + screenH * 0.10f;
+		const Vector2 creditScreenSize = { screenW * 0.95f, screenW * 0.95f * baseRatio };
+		const Vector2 playSize = { screenW * 0.19f, screenW * 0.19f * (195.0f / 470.0f) };
+		const Vector2 tutorialSize = { screenW * 0.37f, screenW * 0.37f * (185.0f / 910.0f) };
+		const Vector2 creditSize = { screenW * 0.28f, screenW * 0.28f * (190.0f / 685.0f) };
+		const Vector2 playActiveSize = { playSize.x * selectedScale, playSize.y * selectedScale };
+		const Vector2 tutorialActiveSize = { tutorialSize.x * selectedScale, tutorialSize.y * selectedScale };
+		const Vector2 creditActiveSize = { creditSize.x * selectedScale, creditSize.y * selectedScale };
+
+		// --- プレイボタンの更新 ---
+		if (playBlueSprite_ && playWhiteSprite_) {
+			if (currentSelection_ == TitleChoice::StartGame) {
+				playBlueSprite_->SetSize(playActiveSize);
+				playBlueSprite_->SetPosition({ centerX, playY });
+				playBlueSprite_->Update();
+			} else {
+				playWhiteSprite_->SetSize(playSize);
+				playWhiteSprite_->SetPosition({ centerX, playY });
+				playWhiteSprite_->Update();
+			}
 		}
-		return;
-	}
 
-	
-	// パーティクル更新
-	ParticleManager::GetInstance()->Update(camera_.get());
+		// --- チュートリアルボタンの更新 ---
+		if (tutorialBlueSprite_ && tutorialWhiteSprite_) {
+			if (currentSelection_ == TitleChoice::Tutorial) {
+				tutorialBlueSprite_->SetSize(tutorialActiveSize);
+				tutorialBlueSprite_->SetPosition({ centerX, tutorialY });
+				tutorialBlueSprite_->Update();
+			} else {
+				tutorialWhiteSprite_->SetSize(tutorialSize);
+				tutorialWhiteSprite_->SetPosition({ centerX, tutorialY });
+				tutorialWhiteSprite_->Update();
+			}
+		}
 
-	// 3Dオブジェクト更新
-	for (auto& obj : object3ds_) {
-		if (obj) {
-			obj->Update();
+		// 操作説明の更新
+		if (creditBlueSprite_ && creditWhiteSprite_) {
+			if (currentSelection_ == TitleChoice::Credit) {
+				creditBlueSprite_->SetSize(creditActiveSize);
+				creditBlueSprite_->SetPosition({ centerX, creditY });
+				creditBlueSprite_->Update();
+			} else {
+				creditWhiteSprite_->SetSize(creditSize);
+				creditWhiteSprite_->SetPosition({ centerX, creditY });
+				creditWhiteSprite_->Update();
+			}
+		}
+
+		if (creditDimSprite_) {
+			creditDimSprite_->SetPosition({ centerX, centerY });
+			creditDimSprite_->SetSize({ screenW, screenH });
+			creditDimSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.65f });
+			creditDimSprite_->Update();
+		}
+		if (creditSprite_) {
+			creditSprite_->SetPosition({ centerX, centerY });
+			creditSprite_->SetSize(creditScreenSize);
+			creditSprite_->Update();
+		}
+		if (creditUiSprite_) {
+			creditUiSprite_->SetPosition({ centerX, centerY });
+			creditUiSprite_->SetSize(creditScreenSize);
+			creditUiSprite_->Update();
+		}
+
+		if (operateSprite_) {
+			// 非選択状態と同じ「通常サイズ（normalSize）」で中央に置く
+			operateSprite_->SetSize(normalSize);
+			operateSprite_->SetPosition({ centerX, centerY });
+			operateSprite_->Update();
+		}
+		if (controllerOperateSprite_) {
+			controllerOperateSprite_->SetSize(normalSize);
+			controllerOperateSprite_->SetPosition({ centerX, centerY });
+			controllerOperateSprite_->Update();
+		}
+
+		// SPACEでゲーム開始
+		// SPACE に加えて A ボタンでも決定できるようにする
+		if (!hasConfirmedSelection_ &&
+			!isCreditOpen_ &&
+			(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
+			if (currentSelection_ != TitleChoice::Credit) {
+				hasConfirmedSelection_ = true;
+			}
+			GameSE::Confirm();
+			if (currentSelection_ == TitleChoice::StartGame) {
+				// 通常プレイ
+				GamePlayScene::RequestTutorialStart(false);
+				SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+			} else if (currentSelection_ == TitleChoice::Tutorial) {
+				// チュートリアル
+				GamePlayScene::RequestTutorialStart(true);
+				SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+			} else if (currentSelection_ == TitleChoice::Credit) {
+				isCreditOpen_ = true;
+			}
+			return;
+		}
+
+
+		// パーティクル更新
+		ParticleManager::GetInstance()->Update(camera_.get());
+
+		// 3Dオブジェクト更新
+		for (auto &obj : object3ds_) {
+			if (obj) {
+				obj->Update();
+			}
 		}
 	}
 }
