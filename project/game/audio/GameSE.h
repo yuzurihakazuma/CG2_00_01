@@ -17,8 +17,8 @@ namespace GameSE {
 	// --- カード操作系 ---
 	inline constexpr const char *kCardPickup = "resources/Audio/決定ボタンを押す13.mp3"; // カードを拾う
 	inline constexpr const char *kCardMove = "resources/Audio/カーソル移動2.mp3"; // カードを移動させる
-	inline constexpr const char *kCardUseAttack = "resources/Audio/決定ボタンを押す43.mp3"; // 攻撃カードの使用
-	inline constexpr const char *kCardUseMagic = "resources/Audio/中パンチ.mp3"; // 魔法カードの使用
+	//inline constexpr const char *kCardUseAttack = "resources/Audio/決定ボタンを押す43.mp3"; // 攻撃カードの使用
+	//inline constexpr const char *kCardUseMagic = "resources/Audio/中パンチ.mp3"; // 魔法カードの使用
 
 	// --- バトル・進行状態系 ---
 	inline constexpr const char *kAttackHit = "resources/Audio/打撃2.mp3"; // 攻撃のヒット
@@ -86,19 +86,19 @@ namespace GameSE {
 	// --- カード操作系 ---
 	inline void CardPickup() { Play(kCardPickup, 0.70f, 0.05f, 4, 0.02f); }
 	inline void CardMove() { Play(kCardMove, 0.45f, 0.05f, 4, 0.03f); }
-	inline void CardUseAttack() { Play(kCardUseAttack, 0.80f, 0.04f, 6, 0.02f); }
-	inline void CardUseMagic() { Play(kCardUseMagic, 0.78f, 0.08f, 6, 0.02f); }
+	//inline void CardUseAttack() { Play(kCardUseAttack, 0.95f, 0.04f, 6, 0.02f); }
+	//inline void CardUseMagic() { Play(kCardUseMagic, 0.78f, 0.08f, 6, 0.02f); }
 
 	// --- バトル・進行状態系 ---
 	inline void AttackHit() { Play(kAttackHit, 0.85f, 0.06f, 8, 0.015f); }
 	inline void PlayerDamage() { Play(kPlayerDamage, 0.90f, 0.04f, 3, 0.08f); }
 	inline void Dodge() { Play(kDodge, 0.65f, 0.08f, 3, 0.12f); }
-	inline void Stairs() { Play(kStairs, 0.70f, 0.04f, 2, 0.20f); }
+	inline void Stairs() { Play(kStairs, 2.30f, 0.04f, 2, 0.20f); }
 	//inline void SceneTransition() { Play(kSceneTransition, 0.55f, 0.02f, 2, 0.20f); }
 	inline void CostShortage() { Play(kCostShortage, 0.55f, 0.0f, 2, 0.15f); }
 	inline void LevelUp() { Play(kLevelUp, 0.90f, 0.05f, 2, 0.10f); }
 	inline void EnemyDeath() { Play(kEnemyDeath, 0.85f, 0.08f, 6, 0.03f); }
-	inline void BossAppear() { Play(kBossAppear, 0.95f, 0.02f, 2, 0.50f); }
+	inline void BossAppear() { Play(kBossAppear, 0.00f, 0.02f, 2, 0.50f); }
 	inline void BossDeath() { Play(kBossDeath, 1.00f, 0.03f, 2, 0.50f); }
 
 	// --- 武器・物理攻撃系 ---
