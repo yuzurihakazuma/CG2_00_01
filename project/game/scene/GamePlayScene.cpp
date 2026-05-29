@@ -2219,7 +2219,7 @@ void GamePlayScene::Draw() {
 
 	// 敵描画
 	if (enemyManager_) {
-		enemyManager_->Draw(camera_.get(), minimap_.get());
+		enemyManager_->Draw(camera_.get(), minimap_.get(), bossManager_.get()); // ボス情報も渡す
 	}
 
 	// カード使用演出描画
