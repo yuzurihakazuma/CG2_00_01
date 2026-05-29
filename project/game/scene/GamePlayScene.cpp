@@ -686,7 +686,15 @@ void GamePlayScene::Update() {
 
 	const bool isLocalTransitionFading = transitionState_ != TransitionState::None;
 	const bool isSceneTransitionFading = SceneManager::GetInstance()->IsFading();
-	const bool shouldBlockPause = isLocalTransitionFading || isSceneTransitionFading;
+	const bool isBossIntroPlayingForPause = bossManager_ ? bossManager_->IsBossIntroPlaying() : false;
+	const bool isBossDeathCinematicForPause =
+		isBossDeathCinematicPlaying_ ||
+		(bossManager_ ? bossManager_->IsBossDeathAnimationPlaying() : false);
+	const bool shouldBlockPause =
+		isLocalTransitionFading ||
+		isSceneTransitionFading ||
+		isBossIntroPlayingForPause ||
+		isBossDeathCinematicForPause;
 
 
 	// ポーズ切り替え

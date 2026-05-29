@@ -24,6 +24,7 @@ using namespace VectorMath;
 namespace {
 	constexpr float kNormalBossVisualYOffset = 2.05f;
 	constexpr float kSplitBossVisualYOffset = 0.05f;
+	constexpr float kBossWallHalfSize = 1.45f;
 	constexpr const char* kSplitBossUnionModelName = "Boss10Union";
 	constexpr const char* kSplitBossModelNames[2] = { "Boss10L", "Boss10R" };
 
@@ -498,8 +499,8 @@ void BossManager::Update(
 
 		// ボスと壁の当たり判定
 		AABB bossAABB;
-		bossAABB.min = { bossPos.x - 1.0f, bossPos.y - 1.0f, bossPos.z - 1.0f };
-		bossAABB.max = { bossPos.x + 1.0f, bossPos.y + 1.0f, bossPos.z + 1.0f };
+		bossAABB.min = { bossPos.x - kBossWallHalfSize, bossPos.y - 1.0f, bossPos.z - kBossWallHalfSize };
+		bossAABB.max = { bossPos.x + kBossWallHalfSize, bossPos.y + 1.0f, bossPos.z + kBossWallHalfSize };
 
 		const LevelData& level = mapManager->GetLevelData();
 
@@ -594,8 +595,8 @@ void BossManager::Update(
 					Vector3 bossPos = splitBosses_[i]->GetPosition();
 
 					AABB bossAABB;
-					bossAABB.min = { bossPos.x - 1.0f, bossPos.y - 1.0f, bossPos.z - 1.0f };
-					bossAABB.max = { bossPos.x + 1.0f, bossPos.y + 1.0f, bossPos.z + 1.0f };
+					bossAABB.min = { bossPos.x - kBossWallHalfSize, bossPos.y - 1.0f, bossPos.z - kBossWallHalfSize };
+					bossAABB.max = { bossPos.x + kBossWallHalfSize, bossPos.y + 1.0f, bossPos.z + kBossWallHalfSize };
 
 					const LevelData& level = mapManager->GetLevelData();
 
@@ -802,7 +803,8 @@ void BossManager::Update(
 					enemyManager->SpawnBossMinions(
 						splitBoss->GetSummonCount(),
 						summonCenter,
-						camera
+						camera,
+						mapManager
 					);
 				}
 				splitBoss->ClearSummonRequest();
@@ -816,7 +818,8 @@ void BossManager::Update(
 				enemyManager->SpawnBossMinions(
 					boss_->GetSummonCount(),
 					summonCenter,
-					camera
+					camera,
+					mapManager
 				);
 			}
 			boss_->ClearSummonRequest();

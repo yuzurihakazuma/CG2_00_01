@@ -8,6 +8,10 @@
 
 using namespace VectorMath;
 
+namespace {
+	constexpr float kBossChargeWallRadius = 1.45f;
+}
+
 void BossChargeEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
 	// この効果はプレイヤー使用を想定していない
 	(void)isPlayerCaster;
@@ -87,7 +91,7 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 	Vector3 nextPos = currentPos + direction_ * speed_;
 
 	// 突進先が壁に当たるなら壁衝突エフェクトを出して終了する
-	if (Collision::CheckBlockCollision(nextPos, 1.0f, level)) {
+	if (Collision::CheckBlockCollision(nextPos, kBossChargeWallRadius, level)) {
 		// 壁衝突：爆発的な赤白の飛び散り
 		for (int i = 0; i < 30; i++) {
 			float a = static_cast<float>(rand() % 628) * 0.01f;
