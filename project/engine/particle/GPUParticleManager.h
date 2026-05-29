@@ -22,12 +22,18 @@ struct GPUParticleData{
     float    pad[2];      //  8
 };
 
-// Computeシェーダーに渡す定数バッファ
+// Computeシェーダーに渡す定数バッファ (Update CS)
 struct GPUParticleUpdateCB{
     float    deltaTime;
     float    gravityY;
     uint32_t maxParticles;
     float    pad;
+};
+
+// Emit CSに渡す定数バッファ
+struct GPUParticleEmitCB{
+    uint32_t emitCount;
+    float    pad[3];
 };
 
 // 描画時にVSに渡すカメラ行列
@@ -89,6 +95,7 @@ private:
     GPUParticleManager& operator=(const GPUParticleManager&) = delete;
 
     void CreateParticleBuffer();   // UAVバッファ作成
+    void CreateFreeListBuffers();  // FreeListバッファ作成
     void CreateConstantBuffers();  // CB作成
     void CreateVertexBuffer();     // 板ポリ作成
 
@@ -99,18 +106,28 @@ private:
     DirectXCommon* dxCommon_ = nullptr;
     SrvManager* srvManager_ = nullptr;
 
-    // パーティクルバッファ (Default Heap)
+    // パーティクルバッファ (Default Heap, UAV+SRV)
     Microsoft::WRL::ComPtr<ID3D12Resource> particleBuffer_;
     uint32_t uavIndex_ = 0; // Compute時に使うUAVのインデックス
     uint32_t srvIndex_ = 0; // Draw時に使うSRVのインデックス
 
-    // Emit用のUploadバッファ (CPU→GPU転送に使う)
+    // FreeList バッファ (Default Heap, UAV)
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexBuffer_; // uint[1]: スタックトップ
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListBuffer_;      // uint[kMaxParticles]: スタック本体
+    uint32_t uavFreeListIndexIdx_ = 0;
+    uint32_t uavFreeListIdx_ = 0;
+
+    // Emit用のUploadバッファ (CPU→GPU, SRVとして参照される)
     Microsoft::WRL::ComPtr<ID3D12Resource> emitUploadBuffer_;
     GPUParticleData* emitUploadData_ = nullptr; // Mapしたポインタ
+    uint32_t srvEmitRequestIdx_ = 0; // EmitCS用SRVインデックス
 
     // 定数バッファ
     Microsoft::WRL::ComPtr<ID3D12Resource> updateCBResource_;
     GPUParticleUpdateCB* updateCBData_ = nullptr;
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> emitCBResource_;
+    GPUParticleEmitCB* emitCBData_ = nullptr;
 
     Microsoft::WRL::ComPtr<ID3D12Resource> cameraCBResource_;
     GPUParticleCameraCB* cameraCBData_ = nullptr;
@@ -129,13 +146,13 @@ private:
     // 1フレームに発生できる最大数
     static constexpr uint32_t kMaxEmitPerFrame = 1000;
 
-    // Emit用 (スロット番号 + データ のペア)
-    struct EmitEntry { uint32_t slot; GPUParticleData data; };
-    std::vector<EmitEntry> emitQueue_;
-    uint32_t nextFreeSlot_ = 0; // 循環インデックス
+    // Emit用 (FreeListがスロットを決めるのでデータのみ保持)
+    std::vector<GPUParticleData> emitQueue_;
 
-	// 初期化用バッファ (全パーティクルをalive=0で初期化するための一時バッファ)
+	// 初期化用一時バッファ (CommandList実行まで保持が必要)
     Microsoft::WRL::ComPtr<ID3D12Resource> initBuffer_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListInitUpload0_; // freeListIndex初期化用
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListInitUpload1_; // freeList初期化用
 
     float gravityY_ = -0.098f;
 

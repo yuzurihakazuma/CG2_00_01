@@ -12,7 +12,11 @@ struct GPUParticleData
 };
 
 // u0: 読み書き可能なパーティクルバッファ
-RWStructuredBuffer<GPUParticleData> gParticles : register(u0);
+RWStructuredBuffer<GPUParticleData> gParticles      : register(u0);
+// u1: FreeListのスタックトップ (空きスロット数)
+RWStructuredBuffer<uint>            gFreeListIndex  : register(u1);
+// u2: FreeListの本体 (空きスロット番号の配列)
+RWStructuredBuffer<uint>            gFreeList       : register(u2);
 
 // b0: 更新用定数バッファ
 cbuffer UpdateCB : register(b0)
@@ -35,10 +39,14 @@ void main(uint3 id : SV_DispatchThreadID)
     // 時間を進める
     gParticles[i].currentTime += deltaTime;
 
-    // 寿命を超えたら死亡
+    // 寿命を超えたら死亡 → インデックスをFreeListに返却
     if (gParticles[i].currentTime >= gParticles[i].lifeTime)
     {
         gParticles[i].alive = 0;
+
+        uint slot;
+        InterlockedAdd(gFreeListIndex[0], 1, slot);
+        gFreeList[slot] = i;
         return;
     }
 

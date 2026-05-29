@@ -106,7 +106,7 @@ void Obj3dCommon::Initialize(DirectXCommon* dxCommon){
 	// 初期値（スライド資料の通り、位置を(0,2,0)にしておく）
 	pointLightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	pointLightData_->position = { 0.0f, 2.0f, 0.0f };
-	pointLightData_->intensity = 1.0f;
+	pointLightData_->intensity = 0.0f; // 一時的にオフ
 	pointLightData_->radius = 10.0f;
 	pointLightData_->decay = 1.0f;
 
@@ -118,7 +118,7 @@ void Obj3dCommon::Initialize(DirectXCommon* dxCommon){
 	spotLightData_->position = { 0.0f, 1.25f, 0.0f };
 	spotLightData_->distance = 7.0f;
 	spotLightData_->direction = Normalize({ -1.0f, -1.0f, 0.0f });
-	spotLightData_->intensity = 4.0f;
+	spotLightData_->intensity = 0.0f; // 一時的にオフ
 	spotLightData_->decay = 2.0f;
 	spotLightData_->cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f); // 約0.5 (60度)
 	spotLightData_->cosFalloffStart = 1.0f; // 1.0なら最初から減衰が始まる
