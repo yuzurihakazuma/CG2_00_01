@@ -130,6 +130,7 @@ private:
 	std::unique_ptr<Sprite> creditDimSprite_ = nullptr;
 	std::unique_ptr<Sprite> creditSprite_ = nullptr;
 	std::unique_ptr<Sprite> creditUiSprite_ = nullptr;
+	std::unique_ptr<Sprite> creditUiControllerSprite_ = nullptr;
 	bool isControllerUiMode_ = false;
 	bool hasConfirmedSelection_ = false;
 	bool isCreditOpen_ = false;

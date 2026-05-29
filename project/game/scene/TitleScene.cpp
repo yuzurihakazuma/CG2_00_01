@@ -210,6 +210,7 @@ void TitleScene::Initialize() {
 	creditDimSprite_ = Sprite::Create("resources/white1x1.png", { screenW * 0.5f, screenH * 0.5f }, { 0.0f, 0.0f, 0.0f, 0.65f });
 	creditSprite_ = Sprite::Create("resources/UI/Credit.png", { screenW * 0.5f, screenH * 0.5f });
 	creditUiSprite_ = Sprite::Create("resources/UI/CreditUI.png", { screenW * 0.5f, screenH * 0.5f });
+	creditUiControllerSprite_ = Sprite::Create("resources/UI/CreditUIC.png", { screenW * 0.5f, screenH * 0.5f });
 
 	// モデル読み込み（カード）
 	ModelManager::GetInstance()->LoadModel("cardR", "resources/card", "CardR.obj");
@@ -326,16 +327,16 @@ void TitleScene::Update() {
 		if (currentSelection_ != previousSelection) {
 			GameSE::CursorMove();
 		}
+	}
 
+	// 次フレーム用に保存する
+	wasStickUp = isStickUp;
+	wasStickDown = isStickDown;
 
-		// 次フレーム用に保存する
-		wasStickUp = isStickUp;
-		wasStickDown = isStickDown;
-
-		if (isCreditOpen_ &&
-			(input->Triggerkey(DIK_ESCAPE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
-			isCreditOpen_ = false;
-		}
+	if (isCreditOpen_ &&
+		(input->Triggerkey(DIK_ESCAPE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_B))) {
+		isCreditOpen_ = false;
+	}
 
 		// ==========================================
 		// スプライトのサイズ変更と更新
@@ -419,10 +420,17 @@ void TitleScene::Update() {
 			creditSprite_->SetSize(creditScreenSize);
 			creditSprite_->Update();
 		}
+		const float creditUiOffsetY = -80.0f;
+
 		if (creditUiSprite_) {
-			creditUiSprite_->SetPosition({ centerX, centerY });
+			creditUiSprite_->SetPosition({ centerX, centerY + creditUiOffsetY });
 			creditUiSprite_->SetSize(creditScreenSize);
 			creditUiSprite_->Update();
+		}
+		if (creditUiControllerSprite_) {
+			creditUiControllerSprite_->SetPosition({ centerX, centerY + creditUiOffsetY });
+			creditUiControllerSprite_->SetSize(creditScreenSize);
+			creditUiControllerSprite_->Update();
 		}
 
 		if (operateSprite_) {
@@ -470,7 +478,6 @@ void TitleScene::Update() {
 				obj->Update();
 			}
 		}
-	}
 }
 
 void TitleScene::DrawDebugUI() {
@@ -589,7 +596,9 @@ void TitleScene::Draw(){
 	if (isCreditOpen_) {
 		if (creditDimSprite_) creditDimSprite_->Draw();
 		if (creditSprite_) creditSprite_->Draw();
-		if (creditUiSprite_) creditUiSprite_->Draw();
+		
+		Sprite* activeCreditUi = isControllerUiMode_ ? creditUiControllerSprite_.get() : creditUiSprite_.get();
+		if (activeCreditUi) activeCreditUi->Draw();
 	}
 
 	// エディタ用の出力設定
@@ -611,6 +620,7 @@ void TitleScene::Finalize() {
 	creditDimSprite_.reset();
 	creditSprite_.reset();
 	creditUiSprite_.reset();
+	creditUiControllerSprite_.reset();
 	mapManager_.reset();
 	debugCamera_.reset();
 	camera_.reset();
