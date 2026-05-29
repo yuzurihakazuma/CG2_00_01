@@ -148,7 +148,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("bossSummon", "resources/card", "BossSummonCard.obj");
 	ModelManager::GetInstance()->LoadModel("ruinBeam", "resources/card", "BossBeamCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossCharge", "resources/card", "BossRushCard.obj");
-	ModelManager::GetInstance()->LoadModel("bossKick", "resources/card", "kickCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossKick", "resources/card", "BossKickCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossSpear", "resources/card", "BossSpearCard.obj");
 
 
@@ -350,8 +350,8 @@ void GamePlayScene::Initialize() {
 	}
 	avoidanceControllerUiSprite_ = Sprite::Create("resources/UI/avoidanceUIC.png", { 0.0f, 0.0f });
 	if (avoidanceControllerUiSprite_) {
-		avoidanceControllerUiSprite_->SetTextureRect(1600.0f, 1150.0f, 200.0f, 73.0f);
-		avoidanceControllerUiSprite_->SetSize({ 136.0f, 73.0f });
+		avoidanceControllerUiSprite_->SetTextureRect(1600.0f, 1140.0f, 200.0f, 78.0f);
+		avoidanceControllerUiSprite_->SetSize({ 150.0f, 59.0f });
 		avoidanceControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
 	cardSelectUiSprite_ = Sprite::Create("resources/UI/avoidance2UI.png", { 0.0f, 0.0f });
@@ -362,7 +362,7 @@ void GamePlayScene::Initialize() {
 	}
 	cardSelectControllerUiSprite_ = Sprite::Create("resources/UI/avoidance2UIC.png", { 0.0f, 0.0f });
 	if (cardSelectControllerUiSprite_) {
-		cardSelectControllerUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
+		cardSelectControllerUiSprite_->SetTextureRect(1600.0f, 1140.0f, 200.0f, 78.0f);
 		cardSelectControllerUiSprite_->SetSize({ 150.0f, 59.0f });
 		cardSelectControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
@@ -550,7 +550,7 @@ void GamePlayScene::UpdateMoveUiLayout() {
 	const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 	const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 	const Vector2 moveIconSize = { 150.0f, 104.0f };
-	const Vector2 avoidanceIconSize = { 136.0f, 73.0f };
+	const Vector2 avoidanceIconSize = { 150.0f, 59.0f };
 	const Vector2 cardSelectIconSize = { 150.0f, 59.0f };
 	const Vector2 slideMoveIconSize = { 150.0f, 59.0f };
 	const float iconColumnWidth = 150.0f;
