@@ -125,5 +125,6 @@ private:
 	std::unique_ptr<Sprite> operateSprite_ = nullptr;
 	std::unique_ptr<Sprite> controllerOperateSprite_ = nullptr;
 	bool isControllerUiMode_ = false;
+	bool hasConfirmedSelection_ = false;
 
 };

@@ -91,6 +91,8 @@ GameOverScene::GameOverScene() = default;
 GameOverScene::~GameOverScene() = default;
 
 void GameOverScene::Initialize(){
+    hasConfirmedReturn_ = false;
+
     // ゲームオーバーシーンに入ったら専用BGMへ切り替える
     GameBGM::GameOver(0.8f);
 
@@ -291,10 +293,10 @@ void GameOverScene::Update(){
     }
 
     // 決定入力でタイトルへ戻る
-    if (
-        input->Triggerkey(DIK_SPACE) ||
-        input->TriggerJoystickButton(XINPUT_GAMEPAD_A)
-        ) {
+    if (!hasConfirmedReturn_ &&
+        (input->Triggerkey(DIK_SPACE) ||
+         input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
+        hasConfirmedReturn_ = true;
         GameSE::Confirm();
         SceneManager::GetInstance()->ChangeScene("TITLE");
         return;

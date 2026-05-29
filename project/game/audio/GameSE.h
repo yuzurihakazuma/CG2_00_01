@@ -26,7 +26,7 @@ namespace GameSE {
 	inline constexpr const char *kPlayerDamage = "resources/Audio/小キック.mp3"; // プレイヤーの被弾
 	inline constexpr const char *kDodge = "resources/Audio/ジャンプ.mp3"; // 回避アクション
 	inline constexpr const char *kStairs = "resources/Audio/アスファルトの上を歩く2.mp3"; // 階段の昇降
-	inline constexpr const char *kSceneTransition = "resources/Audio/中パンチ.mp3"; // シーン遷移
+	//inline constexpr const char *kSceneTransition = "resources/Audio/打撃2.mp3"; // シーン遷移
 	inline constexpr const char *kCostShortage = "resources/Audio/ビープ音4.mp3"; // コスト不足エラー
 	inline constexpr const char *kLevelUp = "resources/Audio/レベルアップ.mp3"; // レベルアップ
 	inline constexpr const char *kEnemyDeath = "resources/Audio/倒れる.mp3"; // 敵の撃破
@@ -96,7 +96,7 @@ namespace GameSE {
 	inline void PlayerDamage() { Play(kPlayerDamage, 0.90f, 0.04f, 3, 0.08f); }
 	inline void Dodge() { Play(kDodge, 0.65f, 0.08f, 3, 0.12f); }
 	inline void Stairs() { Play(kStairs, 0.70f, 0.04f, 2, 0.20f); }
-	inline void SceneTransition() { Play(kSceneTransition, 0.55f, 0.02f, 2, 0.20f); }
+	//inline void SceneTransition() { Play(kSceneTransition, 0.55f, 0.02f, 2, 0.20f); }
 	inline void CostShortage() { Play(kCostShortage, 0.55f, 0.0f, 2, 0.15f); }
 	inline void LevelUp() { Play(kLevelUp, 0.90f, 0.05f, 2, 0.10f); }
 	inline void EnemyDeath() { Play(kEnemyDeath, 0.85f, 0.08f, 6, 0.03f); }

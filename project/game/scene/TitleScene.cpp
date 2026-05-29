@@ -74,6 +74,8 @@ TitleScene::TitleScene() {}
 TitleScene::~TitleScene() {}
 
 void TitleScene::Initialize() {
+	hasConfirmedSelection_ = false;
+
 	// ゲームシーンで付いたままのポストエフェクトをリセット
 	auto* pe = PostEffect::GetInstance();
 	pe->SetEffectActive(PostEffectType::Vignetting, false);
@@ -355,7 +357,9 @@ void TitleScene::Update() {
 
 	// SPACEでゲーム開始
 	// SPACE に加えて A ボタンでも決定できるようにする
-	if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
+	if (!hasConfirmedSelection_ &&
+		(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
+		hasConfirmedSelection_ = true;
 		GameSE::Confirm();
 		if (currentSelection_ == TitleChoice::StartGame) {
 			// 通常プレイ

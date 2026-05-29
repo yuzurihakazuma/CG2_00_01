@@ -56,6 +56,7 @@ private:
     std::unique_ptr<Sprite> spaceSprite_ = nullptr;
     std::unique_ptr<Sprite> controllerSpaceSprite_ = nullptr;
     bool isControllerUiMode_ = false;
+    bool hasConfirmedReturn_ = false;
 
     // Animated card particles for the clear effect.
     std::vector<ClearCardParticle> clearCardParticles_;
