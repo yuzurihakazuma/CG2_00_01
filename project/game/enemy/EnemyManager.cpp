@@ -12,6 +12,7 @@
 #include "engine/base/DirectXCommon.h"
 #include "engine/3d/obj/Obj3dCommon.h"
 #include "engine/graphics/PipelineManager.h"
+#include "game/enemy/BossManager.h" // ボス一覧を使うため
 
 #include <cmath>
 #include <algorithm>
@@ -904,7 +905,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 }
 
 
-void EnemyManager::Draw(Camera *camera, Minimap *minimap) {
+void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManager) {
 	std::vector<Vector3> enemyPositions;
 
 	for (size_t i = 0; i < enemies_.size(); ++i) {
@@ -1025,6 +1026,22 @@ void EnemyManager::Draw(Camera *camera, Minimap *minimap) {
 					});
 				cardObj->Update();
 				cardObj->Draw();
+			}
+		}
+	}
+
+	if (bossManager) {
+		if (bossManager->IsSplitBossBattle()) {
+			for (int i = 0; i < 2; ++i) {
+				Boss* boss = bossManager->GetBossAt(i);
+				if (boss && !boss->IsDead()) {
+					enemyPositions.push_back(boss->GetPosition()); // 分裂ボスもミニマップに出す
+				}
+			}
+		} else {
+			Boss* boss = bossManager->GetBoss();
+			if (boss && !boss->IsDead()) {
+				enemyPositions.push_back(boss->GetPosition()); // 通常ボスをミニマップに出す
 			}
 		}
 	}

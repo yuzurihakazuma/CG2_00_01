@@ -15,6 +15,7 @@ class CardUseSystem;
 class CardPickupManager;
 class Boss;
 class Minimap;
+class BossManager;
 
 class EnemyManager {
 public:
@@ -26,7 +27,7 @@ public:
 	void Update(Player *player, CardPickupManager *cardPickupManager, MapManager* mapManager,Boss *boss, const Vector3 &targetPos);
 
 	// 描画
-	void Draw(Camera *camera, Minimap *minimap = nullptr);
+	void Draw(Camera* camera, Minimap* minimap = nullptr, BossManager* bossManager = nullptr);
 
 	// ボスの雑魚敵召喚
 	void SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera);

@@ -22,7 +22,7 @@ void Minimap::Initialize() {
 
 	playerSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
 	playerSprite_->SetAnchorPoint({ 0.5f, 0.5f });
-	playerSprite_->SetSize({ 18.0f, 18.0f }); // 大きいマップでも見やすくする
+	playerSprite_->SetSize({ 14.0f, 14.0f }); // 大きいマップでも見やすくする
 	playerSprite_->SetColor({ 1.0f, 1.0f, 0.0f, 0.3f });
 	playerSprite_->Update();
 }
@@ -486,7 +486,17 @@ void Minimap::Update() {
 	for (size_t i = 0; i < enemySprites_.size(); ++i) {
 		if (i < enemyWorldPositions_.size() &&
 			IsWorldPositionInDiscoveredChunk(enemyWorldPositions_[i])) {
+
 			enemySprites_[i]->SetPosition(WorldToMinimapPosition(enemyWorldPositions_[i]));
+
+			const bool isBossMarker = (i == enemyWorldPositions_.size() - 1); // 最後に追加した1個をボス扱いにする
+			if (isBossMarker) {
+				enemySprites_[i]->SetSize({ 18.0f, 18.0f }); // ボスだけ少し大きくする
+				enemySprites_[i]->SetColor({ 0.75f, 0.35f, 1.0f, 0.45f }); // ボスは紫にする
+			} else {
+				enemySprites_[i]->SetSize({ 14.0f, 14.0f }); // 通常敵サイズ
+				enemySprites_[i]->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 通常敵は赤系
+			}
 		} else {
 			enemySprites_[i]->SetPosition({ -1000.0f, -1000.0f });
 		}
