@@ -2039,8 +2039,8 @@ void GamePlayScene::Update() {
 		// チュートリアル練習中のファイヤーボールは時間切れで消費しない
 		const bool keepTutorialMagicCard =
 			tutorial_ &&
-			tutorial_->IsReusableCombatPracticeStep() &&
-			readiedCard_.id == 2;
+			tutorial_->ShouldKeepPracticeCards() &&
+			readiedCard_.id == 2; // チュートリアル中の練習用ファイヤーボールは消費しない
 
 		if (cardReadyTimer_ <= 0) {
 			EndMagicCast(!keepTutorialMagicCard);
@@ -2397,9 +2397,10 @@ void GamePlayScene::Draw() {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
-#ifdef USE_IMGUI
 	DrawFireballPredictionLines();
 	DrawBossPredictionLines();
+#ifdef USE_IMGUI
+
 	DrawCharacterHitboxesDebug();
 #endif
 	DrawBossIntroLetterbox();
@@ -3339,8 +3340,8 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	// チュートリアルの命中練習中は、けりとファイヤーボールのコストを消費しない
 	const bool isReusableTutorialCard =
 		tutorial_ &&
-		tutorial_->IsReusableCombatPracticeStep() &&
-		(selectedCard.id == 2 || selectedCard.id == 13);
+		tutorial_->ShouldKeepPracticeCards() &&
+		(selectedCard.id == 2 || selectedCard.id == 13); // チュートリアル中の練習用カードは消費しない
 
 	if (!isReusableTutorialCard) {
 		playerManager_->UseCost(selectedCard.cost);
@@ -3924,9 +3925,7 @@ void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, fl
 }
 
 void GamePlayScene::DrawFireballPredictionLines() const {
-#ifndef USE_IMGUI
-	return;
-#endif
+
 	ImDrawList* drawList = ImGui::GetBackgroundDrawList();
 	if (!drawList) {
 		return;

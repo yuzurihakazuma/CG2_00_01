@@ -993,3 +993,14 @@ bool Tutorial::IsCombatPracticeCompleted() const {
 	// 攻撃カードと魔法カードの両方を当てたら完了
 	return combatPracticeAttackHitChecked_ && combatPracticeMagicHitChecked_;
 }
+
+bool Tutorial::ShouldKeepPracticeCards() const {
+	// けりとファイヤーボールを練習用として保持したい区間
+	return isActive_ && (
+		step_ == Step::FirstRoomCardControlIntro || // ポーション説明後、戦闘練習へ行く前
+		step_ == Step::PickCard ||                  // 2枚のカードを拾う部屋
+		step_ == Step::StatusIntro ||               // カード種別説明
+		step_ == Step::CombatIntro ||               // 戦闘練習の説明
+		step_ == Step::DefeatEnemy                  // 実際の戦闘練習中
+		);
+}
