@@ -21,9 +21,9 @@ void Minimap::Initialize() {
 	frameSprite_->Update();
 
 	playerSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
-	playerSprite_->SetAnchorPoint({ 0.5f, 0.5f });
-	playerSprite_->SetSize({ 14.0f, 14.0f }); // 大きいマップでも見やすくする
-	playerSprite_->SetColor({ 1.0f, 1.0f, 0.0f, 0.3f });
+	playerSprite_->SetAnchorPoint({ 0.5f, 0.5f }); // 中心基準で滑らかに動かす
+	playerSprite_->SetSize({ drawTileSize_, drawTileSize_ }); // 壁と同じ1マスサイズで描く
+	playerSprite_->SetColor({ 1.0f, 1.0f, 0.0f, 0.3f }); // プレイヤー色
 	playerSprite_->Update();
 }
 
@@ -70,9 +70,9 @@ void Minimap::SetCardPositions(const std::vector<Vector3>& worldPositions) {
 void Minimap::EnsureEnemySprites(size_t count) {
 	while (enemySprites_.size() < count) {
 		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
-		sprite->SetAnchorPoint({ 0.5f, 0.5f });
-		sprite->SetSize({ 14.0f, 14.0f }); // 大マップ用に敵アイコンを見やすくする
-		sprite->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 少し透明にする
+		sprite->SetAnchorPoint({ 0.5f, 0.5f }); // 中心基準で滑らかに動かす
+		sprite->SetSize({ drawTileSize_, drawTileSize_ }); // 壁と同じ1マスサイズで描く
+		sprite->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 通常敵の色
 		sprite->Update();
 		enemySprites_.push_back(std::move(sprite));
 	}
@@ -85,9 +85,9 @@ void Minimap::EnsureEnemySprites(size_t count) {
 void Minimap::EnsureCardSprites(size_t count) {
 	while (cardSprites_.size() < count) {
 		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
-		sprite->SetAnchorPoint({ 0.5f, 0.5f });
-		sprite->SetSize({ 12.0f, 12.0f }); // 大マップ用にカードアイコンを見やすくする
-		sprite->SetColor({ 0.2f, 1.0f, 0.4f, 0.3f }); // 少し透明にする
+		sprite->SetAnchorPoint({ 0.5f, 0.5f }); // 中心基準にして滑らかに動かす
+		sprite->SetSize({ 12.0f, 12.0f }); // 実サイズはUpdate側でタイルに合わせて毎フレーム更新する
+		sprite->SetColor({ 0.2f, 1.0f, 0.4f, 0.3f }); // カード色
 		sprite->Update();
 		cardSprites_.push_back(std::move(sprite));
 	}
@@ -454,19 +454,58 @@ bool Minimap::IsWorldPositionInDiscoveredChunk(const Vector3& worldPos) const {
 Vector2 Minimap::WorldToMinimapPosition(const Vector3& worldPos) const {
 	Vector2 result = mapLeftTop_;
 
-	if (!levelData_) {
+	if (!levelData_ || levelData_->tileSize <= 0.0f) {
 		return result;
 	}
 
+	// ワールド座標をタイル座標へ変換する
 	const float tileX = worldPos.x / levelData_->tileSize;
 	const float tileZ = worldPos.z / levelData_->tileSize;
 
-	result.x = mapLeftTop_.x + (tileX + 0.5f) * drawTileSize_;
-	result.y = mapLeftTop_.y + ((levelData_->height - 1 - tileZ) + 0.5f) * drawTileSize_;
+	// このゲームの床配置は「マス中心 = x * tileSize, z * tileSize」なので round で今いるマスを取る
+	const int currentTileX = std::clamp(static_cast<int>(std::round(tileX)), 0, levelData_->width - 1);
+	const int currentTileZ = std::clamp(static_cast<int>(std::round(tileZ)), 0, levelData_->height - 1);
+
+	// 現在マスの中心をミニマップ座標に変換する
+	const float centerX = mapLeftTop_.x + (static_cast<float>(currentTileX) + 0.5f) * drawTileSize_;
+	const float centerY = mapLeftTop_.y + ((static_cast<float>(levelData_->height - 1 - currentTileZ)) + 0.5f) * drawTileSize_;
+
+	// 現在マス中心からのずれ量だけ滑らかに動かす
+	result.x = centerX + (tileX - static_cast<float>(currentTileX)) * drawTileSize_;
+	result.y = centerY - (tileZ - static_cast<float>(currentTileZ)) * drawTileSize_; // ミニマップは上下反転なので符号を反転する
+
+	// 通行可能マス判定。0 と 3 は通れるマスとして扱う
+	auto isWalkableTile = [this](int x, int z) -> bool {
+		if (x < 0 || x >= levelData_->width || z < 0 || z >= levelData_->height) {
+			return false; // マップ外は壁扱い
+		}
+
+		const int tile = levelData_->tiles[z][x];
+		return tile == 0 || tile == 3;
+		};
+
+	// 左が壁で、左へ寄ろうとした時だけ止める
+	if (!isWalkableTile(currentTileX - 1, currentTileZ) && result.x < centerX) {
+		result.x = centerX;
+	}
+
+	// 右が壁で、右へ寄ろうとした時だけ止める
+	if (!isWalkableTile(currentTileX + 1, currentTileZ) && result.x > centerX) {
+		result.x = centerX;
+	}
+
+	// ミニマップ上の上側は z + 1 のマス
+	if (!isWalkableTile(currentTileX, currentTileZ + 1) && result.y < centerY) {
+		result.y = centerY;
+	}
+
+	// ミニマップ上の下側は z - 1 のマス
+	if (!isWalkableTile(currentTileX, currentTileZ - 1) && result.y > centerY) {
+		result.y = centerY;
+	}
 
 	return result;
 }
-
 void Minimap::Update() {
 	UpdateLayoutIfNeeded();
 
@@ -480,6 +519,7 @@ void Minimap::Update() {
 
 	if (playerSprite_) {
 		playerSprite_->SetPosition(WorldToMinimapPosition(playerWorldPos_));
+		playerSprite_->SetSize({ drawTileSize_, drawTileSize_ }); // 毎フレーム1マスサイズにそろえる
 		playerSprite_->Update();
 	}
 
@@ -488,17 +528,27 @@ void Minimap::Update() {
 			IsWorldPositionInDiscoveredChunk(enemyWorldPositions_[i])) {
 
 			enemySprites_[i]->SetPosition(WorldToMinimapPosition(enemyWorldPositions_[i]));
+			enemySprites_[i]->SetSize({ drawTileSize_, drawTileSize_ }); // 全敵マーカーを1マスサイズに統一する
 
-			const bool isBossMarker = (i == enemyWorldPositions_.size() - 1); // 最後に追加した1個をボス扱いにする
+			const bool isBossMarker = (i == enemyWorldPositions_.size() - 1); // 最後の1体をボス扱いにする
 			if (isBossMarker) {
-				enemySprites_[i]->SetSize({ 18.0f, 18.0f }); // ボスだけ少し大きくする
-				enemySprites_[i]->SetColor({ 0.75f, 0.35f, 1.0f, 0.45f }); // ボスは紫にする
+				enemySprites_[i]->SetColor({ 0.75f, 0.35f, 1.0f, 0.45f }); // ボスは色だけ変える
 			} else {
-				enemySprites_[i]->SetSize({ 14.0f, 14.0f }); // 通常敵サイズ
-				enemySprites_[i]->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 通常敵は赤系
+				enemySprites_[i]->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 通常敵の色
 			}
 		} else {
-			enemySprites_[i]->SetPosition({ -1000.0f, -1000.0f });
+			const float markerInset = std::max(1.0f, drawTileSize_ * 0.12f); // 1マスより少しだけ内側にして埋まり見えを防ぐ
+			const float markerSize = std::max(2.0f, drawTileSize_ - markerInset * 2.0f); // 壁とほぼ同サイズで見せつつ少しだけ縮める
+
+			enemySprites_[i]->SetPosition(WorldToMinimapPosition(enemyWorldPositions_[i]));
+			enemySprites_[i]->SetSize({ drawTileSize_, drawTileSize_ }); // 壁と同じ1マスサイズで描く
+
+			const bool isBossMarker = (i == enemyWorldPositions_.size() - 1); // 最後の1体をボス扱いにする
+			if (isBossMarker) {
+				enemySprites_[i]->SetColor({ 0.75f, 0.35f, 1.0f, 0.45f }); // ボスは色だけ変える
+			} else {
+				enemySprites_[i]->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 通常敵の色
+			}
 		}
 		enemySprites_[i]->Update();
 	}
@@ -506,7 +556,11 @@ void Minimap::Update() {
 	for (size_t i = 0; i < cardSprites_.size(); ++i) {
 		if (i < cardWorldPositions_.size() &&
 			IsWorldPositionInDiscoveredChunk(cardWorldPositions_[i])) {
+			const float markerInset = std::max(1.0f, drawTileSize_ * 0.12f); // 1マスより少しだけ内側にして埋まり見えを防ぐ
+			const float markerSize = std::max(2.0f, drawTileSize_ - markerInset * 2.0f); // 他マーカーと見た目をそろえる
+
 			cardSprites_[i]->SetPosition(WorldToMinimapPosition(cardWorldPositions_[i]));
+			cardSprites_[i]->SetSize({ markerSize, markerSize }); // カードも同じルールで描く
 		} else {
 			cardSprites_[i]->SetPosition({ -1000.0f, -1000.0f });
 		}
