@@ -5,25 +5,30 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+constexpr const char* kSquareMarkerTexture = "resources/white1x1.png";
+constexpr const char* kCircleMarkerTexture = "resources/minimapCircle.png";
+}
+
 void Minimap::Initialize() {
 	UpdateLayoutIfNeeded();
 
-	backgroundSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
+	backgroundSprite_.reset(Sprite::Create(kSquareMarkerTexture, mapLeftTop_).release());
 	backgroundSprite_->SetAnchorPoint({ 0.0f, 0.0f });
 	backgroundSprite_->SetSize(mapSize_);
 	backgroundSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.0f }); // 背景を消す
 	backgroundSprite_->Update();
 
-	frameSprite_.reset(Sprite::Create("resources/white1x1.png", { mapLeftTop_.x - 2.0f, mapLeftTop_.y - 2.0f }).release());
+	frameSprite_.reset(Sprite::Create(kSquareMarkerTexture, { mapLeftTop_.x - 2.0f, mapLeftTop_.y - 2.0f }).release());
 	frameSprite_->SetAnchorPoint({ 0.0f, 0.0f });
 	frameSprite_->SetSize({ mapSize_.x + 4.0f, mapSize_.y + 4.0f });
 	frameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.0f }); // 枠も消す
 	frameSprite_->Update();
 
-	playerSprite_.reset(Sprite::Create("resources/white1x1.png", mapLeftTop_).release());
+	playerSprite_.reset(Sprite::Create(kCircleMarkerTexture, mapLeftTop_).release());
 	playerSprite_->SetAnchorPoint({ 0.5f, 0.5f }); // 中心基準で滑らかに動かす
 	playerSprite_->SetSize({ drawTileSize_, drawTileSize_ }); // 壁と同じ1マスサイズで描く
-	playerSprite_->SetColor({ 1.0f, 1.0f, 0.0f, 0.3f }); // プレイヤー色
+	playerSprite_->SetColor({ 0.2f, 0.75f, 1.0f, 0.45f }); // プレイヤー色
 	playerSprite_->Update();
 }
 
@@ -69,7 +74,7 @@ void Minimap::SetCardPositions(const std::vector<Vector3>& worldPositions) {
 
 void Minimap::EnsureEnemySprites(size_t count) {
 	while (enemySprites_.size() < count) {
-		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
+		auto sprite = std::unique_ptr<Sprite>(Sprite::Create(kCircleMarkerTexture, mapLeftTop_));
 		sprite->SetAnchorPoint({ 0.5f, 0.5f }); // 中心基準で滑らかに動かす
 		sprite->SetSize({ drawTileSize_, drawTileSize_ }); // 壁と同じ1マスサイズで描く
 		sprite->SetColor({ 1.0f, 0.35f, 0.35f, 0.3f }); // 通常敵の色
@@ -84,7 +89,7 @@ void Minimap::EnsureEnemySprites(size_t count) {
 
 void Minimap::EnsureCardSprites(size_t count) {
 	while (cardSprites_.size() < count) {
-		auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", mapLeftTop_));
+		auto sprite = std::unique_ptr<Sprite>(Sprite::Create(kSquareMarkerTexture, mapLeftTop_));
 		sprite->SetAnchorPoint({ 0.5f, 0.5f }); // 中心基準にして滑らかに動かす
 		sprite->SetSize({ 12.0f, 12.0f }); // 実サイズはUpdate側でタイルに合わせて毎フレーム更新する
 		sprite->SetColor({ 0.2f, 1.0f, 0.4f, 0.3f }); // カード色
@@ -180,7 +185,7 @@ void Minimap::BuildChunkSprites() {
 				drawPos.x = mapLeftTop_.x + startX * drawTileSize_;
 				drawPos.y = mapLeftTop_.y + (levelData_->height - 1 - z) * drawTileSize_;
 
-				auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", drawPos));
+				auto sprite = std::unique_ptr<Sprite>(Sprite::Create(kSquareMarkerTexture, drawPos));
 				sprite->SetAnchorPoint({ 0.0f, 0.0f });
 				sprite->SetSize({ drawTileSize_ * length, drawTileSize_ });
 				sprite->SetColor({ 0.45f, 0.85f, 1.0f, 0.1f }); // 道を薄い水色の半透明で表示する
@@ -202,7 +207,7 @@ void Minimap::BuildChunkSprites() {
 			};
 
 		auto addOutline = [&chunk, outlineColor](Vector2 pos, Vector2 size) {
-			auto sprite = std::unique_ptr<Sprite>(Sprite::Create("resources/white1x1.png", pos));
+			auto sprite = std::unique_ptr<Sprite>(Sprite::Create(kSquareMarkerTexture, pos));
 			sprite->SetAnchorPoint({ 0.0f, 0.0f });
 			sprite->SetSize(size);
 			sprite->SetColor(outlineColor);
@@ -263,7 +268,7 @@ void Minimap::BuildChunkSprites() {
 				// 上
 				{
 					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
-						"resources/white1x1.png",
+						kSquareMarkerTexture,
 						{ drawPos.x - outlineExpand, drawPos.y - outlineExpand }
 					));
 					sprite->SetAnchorPoint({ 0.0f, 0.0f });
@@ -276,7 +281,7 @@ void Minimap::BuildChunkSprites() {
 				// 下
 				{
 					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
-						"resources/white1x1.png",
+						kSquareMarkerTexture,
 						{ drawPos.x - outlineExpand, drawPos.y + drawTileSize_ + outlineExpand - borderThickness }
 					));
 					sprite->SetAnchorPoint({ 0.0f, 0.0f });
@@ -289,7 +294,7 @@ void Minimap::BuildChunkSprites() {
 				// 左
 				{
 					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
-						"resources/white1x1.png",
+						kSquareMarkerTexture,
 						{ drawPos.x - outlineExpand, drawPos.y - outlineExpand }
 					));
 					sprite->SetAnchorPoint({ 0.0f, 0.0f });
@@ -302,7 +307,7 @@ void Minimap::BuildChunkSprites() {
 				// 右
 				{
 					auto sprite = std::unique_ptr<Sprite>(Sprite::Create(
-						"resources/white1x1.png",
+						kSquareMarkerTexture,
 						{ drawPos.x + drawTileSize_ + outlineExpand - borderThickness, drawPos.y - outlineExpand }
 					));
 					sprite->SetAnchorPoint({ 0.0f, 0.0f });

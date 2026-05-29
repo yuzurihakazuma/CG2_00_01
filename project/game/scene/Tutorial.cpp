@@ -14,6 +14,7 @@
 #include "game/map/Minimap.h"
 #include "game/player/PlayerManager.h"
 #include "game/card/HandManager.h"
+#include "engine/base/WindowProc.h"
 
 void Tutorial::Initialize(const Context& context) {
 	context_ = context;
@@ -635,22 +636,32 @@ void Tutorial::UpdateTexts() const {
 	}
 
 	TextManager* text = TextManager::GetInstance();
-	text->SetPosition("TutorialTitle", 20.0f, 140.0f);      // タイトルをさらに上に移動
-	text->SetPosition("TutorialBody", 20.0f, 185.0f);       // 本文をさらに上に移動
+	WindowProc* windowProc = WindowProc::GetInstance();
+
+	const float screenWidth = static_cast<float>(windowProc->GetClientWidth());
+	const float screenHeight = static_cast<float>(windowProc->GetClientHeight());
+
+	const float leftMargin = 20.0f; // 左側テキストの基準余白
+	const float topMargin = screenHeight * 0.08f; // タイトルを画面上部寄りに保つ
+	const float lineGap = 45.0f; // タイトルと本文の間隔
+
+	const float guideRightMargin = 260.0f; // 右下ガイドの右端余白
+	const float guideBottomMargin = 100.0f; // 右下ガイドの下端余白
+
+	text->SetPosition("TutorialTitle", leftMargin, topMargin); // 画面サイズに応じた上側位置に置く
+	text->SetPosition("TutorialBody", leftMargin, topMargin + lineGap); // タイトルの少し下に本文を置く
 	text->SetCentered("TutorialTitle", false);
 	text->SetCentered("TutorialBody", false);
 
-	// 右下ガイドを少し上に移動
-	text->SetPosition("TutorialGuide", 1450.0f, 620.0f);
+	text->SetPosition("TutorialGuide", screenWidth - guideRightMargin, screenHeight - guideBottomMargin); // 右下基準で配置する
 	text->SetCentered("TutorialGuide", false);
 	text->SetScale("TutorialGuide", 0.8f);
 	text->SetColor("TutorialGuide", 1.0f, 1.0f, 1.0f, 0.9f);
 	text->SetText("TutorialGuide", "");
 
-	// 通常チェック項目を上に移動
-	text->SetPosition("TutorialCheckMove", 20.0f, 300.0f);
-	text->SetPosition("TutorialCheckDodge", 20.0f, 335.0f);
-	text->SetPosition("TutorialCheckCard", 20.0f, 370.0f);
+	text->SetPosition("TutorialCheckMove", leftMargin, topMargin + 160.0f); // チェック項目も本文基準で並べる
+	text->SetPosition("TutorialCheckDodge", leftMargin, topMargin + 195.0f);
+	text->SetPosition("TutorialCheckCard", leftMargin, topMargin + 230.0f);
 
 	text->SetCentered("TutorialCheckMove", false);
 	text->SetCentered("TutorialCheckDodge", false);
@@ -660,9 +671,8 @@ void Tutorial::UpdateTexts() const {
 	text->SetScale("TutorialCheckDodge", 0.8f);
 	text->SetScale("TutorialCheckCard", 0.8f);
 
-	// けり / ファイヤーボール確認用は少し下にして本文とかぶらないようにする
-	text->SetPosition("TutorialCheckAttack", 20.0f, 355.0f);
-	text->SetPosition("TutorialCheckMagic", 20.0f, 390.0f);
+	text->SetPosition("TutorialCheckAttack", leftMargin, topMargin + 215.0f); // 戦闘練習用チェックも同じ基準で置く
+	text->SetPosition("TutorialCheckMagic", leftMargin, topMargin + 250.0f);
 
 	text->SetCentered("TutorialCheckAttack", false);
 	text->SetCentered("TutorialCheckMagic", false);

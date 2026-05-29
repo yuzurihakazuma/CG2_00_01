@@ -30,7 +30,7 @@ public:
 	void Draw(Camera* camera, Minimap* minimap = nullptr, BossManager* bossManager = nullptr);
 
 	// ボスの雑魚敵召喚
-	void SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera);
+	void SpawnBossMinions(int spawnCount, const Vector3 &summonCenter, Camera *camera, MapManager *mapManager);
 
 	// 通常の敵をランダムに配置する
 	void SpawnEnemiesRandom(int enemyCount, int margin, SpawnManager *spawnManager, MapManager* mapManager, const Vector3 &playerPos, Camera *camera, int maxAliveEnemies = 5);
