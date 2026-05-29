@@ -19,7 +19,6 @@ namespace GameSE {
 	inline constexpr const char *kCardMove = "resources/Audio/カーソル移動2.mp3"; // カードを移動させる
 	inline constexpr const char *kCardUseAttack = "resources/Audio/決定ボタンを押す43.mp3"; // 攻撃カードの使用
 	inline constexpr const char *kCardUseMagic = "resources/Audio/中パンチ.mp3"; // 魔法カードの使用
-	inline constexpr const char *kCardVanish = "resources/Audio/中パンチ.mp3"; // カードの消滅
 
 	// --- バトル・進行状態系 ---
 	inline constexpr const char *kAttackHit = "resources/Audio/打撃2.mp3"; // 攻撃のヒット
@@ -54,7 +53,7 @@ namespace GameSE {
 	inline constexpr const char *kScanner = "resources/Audio/魔法反射.mp3"; // マップ表示
 
 	// --- ボス専用アクション系 ---
-	inline constexpr const char *kBossCharge = "resources/Audio/中パンチ.mp3"; // ボスの溜め動作
+	inline constexpr const char *kBossCharge = "resources/Audio/逃走.mp3"; // 突進攻撃
 	inline constexpr const char *kBossSummon = "resources/Audio/魔法陣を展開.mp3"; // ボスの手下召喚
 	inline constexpr const char *kBossBeam = "resources/Audio/聖魔法.mp3"; // ボスのビーム攻撃
 
@@ -89,7 +88,6 @@ namespace GameSE {
 	inline void CardMove() { Play(kCardMove, 0.45f, 0.05f, 4, 0.03f); }
 	inline void CardUseAttack() { Play(kCardUseAttack, 0.80f, 0.04f, 6, 0.02f); }
 	inline void CardUseMagic() { Play(kCardUseMagic, 0.78f, 0.08f, 6, 0.02f); }
-	inline void CardVanish() { Play(kCardVanish, 0.60f, 0.08f, 4, 0.04f); }
 
 	// --- バトル・進行状態系 ---
 	inline void AttackHit() { Play(kAttackHit, 0.85f, 0.06f, 8, 0.015f); }

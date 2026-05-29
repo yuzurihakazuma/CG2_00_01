@@ -787,7 +787,6 @@ void HandManager::StartDissolveSelectedCard() {
 	dissolveThresholds_[selectedCardIndex_] = 0.0f;
 	pendingReturnToFist_ = hand_[selectedCardIndex_].id != 1;
 	manualSelectionAfterUse_ = false;
-	GameSE::CardVanish();
 
 	if (handModels_[selectedCardIndex_]) {
 		ApplyCardDissolveColor(handModels_[selectedCardIndex_].get(), hand_[selectedCardIndex_]);
