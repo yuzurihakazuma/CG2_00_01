@@ -76,10 +76,16 @@ public:
     Obj3d* GetBossObj() const { return bossObj_.get(); }
 
     // HPバーUI取得
+    Sprite* GetBossHpShadowSprite() const { return bossHpShadowSprite_.get(); }
+    Sprite* GetBossHpFrameSprite() const { return bossHpFrameSprite_.get(); }
     Sprite* GetBossHpBackSprite() const { return bossHpBackSprite_.get(); }
     Sprite* GetBossHpFillSprite() const { return bossHpFillSprite_.get(); }
+    Sprite* GetBossHpGlossSprite() const { return bossHpGlossSprite_.get(); }
+    Sprite* GetSplitBossHpShadowSprite(int index) const { return splitBossHpShadowSprites_[index].get(); }
+    Sprite* GetSplitBossHpFrameSprite(int index) const { return splitBossHpFrameSprites_[index].get(); }
     Sprite* GetSplitBossHpBackSprite(int index) const { return splitBossHpBackSprites_[index].get(); }
     Sprite* GetSplitBossHpFillSprite(int index) const { return splitBossHpFillSprites_[index].get(); }
+    Sprite* GetSplitBossHpGlossSprite(int index) const { return splitBossHpGlossSprites_[index].get(); }
 
     // 登場演出状態
     bool IsBossIntroPlaying() const { return isBossIntroPlaying_; }
@@ -170,10 +176,16 @@ private:
     bool splitBossFirstDefeatExpAwarded_ = false; // 分裂ボスの1体目撃破経験値を渡したか
 
     // HPバー
+    std::unique_ptr<Sprite> bossHpShadowSprite_ = nullptr;
+    std::unique_ptr<Sprite> bossHpFrameSprite_ = nullptr;
     std::unique_ptr<Sprite> bossHpBackSprite_ = nullptr;
     std::unique_ptr<Sprite> bossHpFillSprite_ = nullptr;
+    std::unique_ptr<Sprite> bossHpGlossSprite_ = nullptr;
+    std::array<std::unique_ptr<Sprite>, 2> splitBossHpShadowSprites_{};
+    std::array<std::unique_ptr<Sprite>, 2> splitBossHpFrameSprites_{};
     std::array<std::unique_ptr<Sprite>, 2> splitBossHpBackSprites_{};
     std::array<std::unique_ptr<Sprite>, 2> splitBossHpFillSprites_{};
+    std::array<std::unique_ptr<Sprite>, 2> splitBossHpGlossSprites_{};
 
     // 登場演出
     IntroCameraState bossIntroCameraState_ = IntroCameraState::None;

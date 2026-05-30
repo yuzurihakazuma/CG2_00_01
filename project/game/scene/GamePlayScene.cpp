@@ -1707,12 +1707,16 @@ void GamePlayScene::Update() {
 		const float splitBackHeight = 14.0f;
 		const float splitFillMaxWidth = 112.0f;
 		const float splitFillHeight = 8.0f;
+		const float splitGlossHeight = 3.0f;
 
 		for (int i = 0; i < 2; ++i) {
 			Boss* splitBoss = bossManager_->GetBossAt(i);
+			Sprite* splitShadowSprite = bossManager_->GetSplitBossHpShadowSprite(i);
+			Sprite* splitFrameSprite = bossManager_->GetSplitBossHpFrameSprite(i);
 			Sprite* splitBackSprite = bossManager_->GetSplitBossHpBackSprite(i);
 			Sprite* splitFillSprite = bossManager_->GetSplitBossHpFillSprite(i);
-			if (!splitBoss || splitBoss->IsDead() || !splitBackSprite || !splitFillSprite) {
+			Sprite* splitGlossSprite = bossManager_->GetSplitBossHpGlossSprite(i);
+			if (!splitBoss || splitBoss->IsDead() || !splitShadowSprite || !splitFrameSprite || !splitBackSprite || !splitFillSprite || !splitGlossSprite) {
 				continue;
 			}
 
@@ -1724,34 +1728,71 @@ void GamePlayScene::Update() {
 			if (hpRate < 0.0f) hpRate = 0.0f;
 			if (hpRate > 1.0f) hpRate = 1.0f;
 
-			splitBackSprite->SetPosition(screenPos);
-			splitBackSprite->SetSize({ splitBackWidth, splitBackHeight });
-			splitBackSprite->Update();
+			const bool isRangedBoss = splitBoss->GetCombatRole() == Boss::CombatRole::Ranged;
+			Vector4 frameColor = isRangedBoss
+				? Vector4{ 0.12f, 0.58f, 1.0f, 0.78f }
+				: Vector4{ 0.95f, 0.18f, 0.22f, 0.78f };
+			Vector4 backColor = isRangedBoss
+				? Vector4{ 0.01f, 0.04f, 0.10f, 0.90f }
+				: Vector4{ 0.10f, 0.01f, 0.02f, 0.90f };
+			Vector4 glossColor = isRangedBoss
+				? Vector4{ 0.62f, 0.88f, 1.0f, 0.30f }
+				: Vector4{ 1.0f, 0.72f, 0.72f, 0.30f };
 
 			Vector4 hpColor{};
-			if (hpRate > 0.6f) {
-				hpColor = { 0.2f, 1.0f, 0.2f, 1.0f };
-			}
-			else if (hpRate > 0.3f) {
-				hpColor = { 1.0f, 0.9f, 0.2f, 1.0f };
-			}
-			else {
-				hpColor = { 1.0f, 0.2f, 0.2f, 1.0f };
+			if (isRangedBoss) {
+				if (hpRate > 0.6f) {
+					hpColor = { 0.08f, 0.52f, 1.0f, 1.0f };
+				}
+				else if (hpRate > 0.3f) {
+					hpColor = { 0.35f, 0.78f, 1.0f, 1.0f };
+				}
+				else {
+					hpColor = { 0.65f, 0.92f, 1.0f, 1.0f };
+				}
+			} else {
+				if (hpRate > 0.6f) {
+					hpColor = { 0.95f, 0.08f, 0.16f, 1.0f };
+				}
+				else if (hpRate > 0.3f) {
+					hpColor = { 1.0f, 0.30f, 0.12f, 1.0f };
+				}
+				else {
+					hpColor = { 1.0f, 0.08f, 0.05f, 1.0f };
+				}
 			}
 
 			float fillWidth = splitFillMaxWidth * hpRate;
 			float backLeft = screenPos.x - splitBackWidth * 0.5f;
 			float fillLeft = backLeft + 4.0f;
 			float fillCenterX = fillLeft + fillWidth * 0.5f;
-			Vector2 fillPos = {
-				fillCenterX,
-				screenPos.y + 1.0f
-			};
+			Vector2 fillPos = { fillCenterX, screenPos.y + 1.0f };
+			Vector2 shadowPos = { screenPos.x + 2.0f, screenPos.y + 2.0f };
+			Vector2 glossPos = { fillCenterX, screenPos.y - 2.0f };
+
+			splitShadowSprite->SetPosition(shadowPos);
+			splitShadowSprite->SetSize({ splitBackWidth + 8.0f, splitBackHeight + 8.0f });
+			splitShadowSprite->Update();
+
+			splitFrameSprite->SetPosition(screenPos);
+			splitFrameSprite->SetSize({ splitBackWidth + 4.0f, splitBackHeight + 4.0f });
+			splitFrameSprite->SetColor(frameColor);
+			splitFrameSprite->Update();
+
+			splitBackSprite->SetPosition(screenPos);
+			splitBackSprite->SetSize({ splitBackWidth, splitBackHeight });
+			splitBackSprite->SetColor(backColor);
+			splitBackSprite->Update();
 
 			splitFillSprite->SetPosition(fillPos);
 			splitFillSprite->SetSize({ fillWidth, splitFillHeight });
 			splitFillSprite->SetColor(hpColor);
 			splitFillSprite->Update();
+
+			splitGlossSprite->SetPosition(glossPos);
+			splitGlossSprite->SetSize({ fillWidth, splitGlossHeight });
+			splitGlossSprite->SetColor(glossColor);
+			splitGlossSprite->Update();
 		}
 	}
 
@@ -1759,11 +1800,9 @@ void GamePlayScene::Update() {
 		boss && !boss->IsDead() && mapManager_ && mapManager_->IsBossMap() &&
 		bossHpBackSprite && bossHpFillSprite && camera_) {
 
-		// 分裂ボス時は2体の中心位置にHPバーを出す
+		// ボスの注視位置を基準にHPバーを出す
 		Vector3 bossHeadPos = bossManager_->GetBossFocusPosition();
 		bossHeadPos.y += 2.8f;
-
-
 		Vector2 screenPos = WorldToScreen(bossHeadPos);
 
 		// バーサイズ
@@ -1771,29 +1810,37 @@ void GamePlayScene::Update() {
 		const float backHeight = 16.0f;
 		const float fillMaxWidth = 152.0f;
 		const float fillHeight = 10.0f;
+		const float glossHeight = 4.0f;
 
 		// HP割合
-				// 分裂ボス時は2体合計HPの割合を使う
 		float hpRate = bossManager_->GetBossHpRate();
-
 		if (hpRate < 0.0f) hpRate = 0.0f;
 		if (hpRate > 1.0f) hpRate = 1.0f;
 
-		// 背景バーは中央基準でそのまま配置
-		bossHpBackSprite->SetPosition(screenPos);
-		bossHpBackSprite->SetSize({ backWidth, backHeight });
-		bossHpBackSprite->Update();
-
 		// HP割合で色変更
+		Vector4 shadowColor = { 0.0f, 0.0f, 0.0f, 0.48f };
+		Vector4 frameColor = { 0.62f, 0.20f, 1.0f, 0.82f };
+		Vector4 backColor = { 0.06f, 0.01f, 0.10f, 0.90f };
+		Vector4 glossColor = { 0.92f, 0.70f, 1.0f, 0.34f };
+
 		Vector4 hpColor{};
 		if (hpRate > 0.6f) {
-			hpColor = { 0.2f, 1.0f, 0.2f, 1.0f }; // 緑
+			hpColor = { 0.62f, 0.18f, 1.0f, 1.0f };
 		}
 		else if (hpRate > 0.3f) {
-			hpColor = { 1.0f, 0.9f, 0.2f, 1.0f }; // 黄
+			hpColor = { 0.82f, 0.30f, 1.0f, 1.0f };
 		}
 		else {
-			hpColor = { 1.0f, 0.2f, 0.2f, 1.0f }; // 赤
+			hpColor = { 1.0f, 0.22f, 0.95f, 1.0f };
+		}
+
+		if (boss->IsEnraged()) {
+			float pulse = 0.5f + 0.5f * std::sinf(static_cast<float>(boss->GetAnimationTimer()) * 0.22f);
+			shadowColor = { 0.46f, 0.0f, 0.72f, 0.34f + pulse * 0.22f };
+			frameColor = { 0.78f + pulse * 0.18f, 0.10f + pulse * 0.12f, 1.0f, 0.88f + pulse * 0.12f };
+			backColor = { 0.09f, 0.0f, 0.14f, 0.94f };
+			glossColor = { 1.0f, 0.76f + pulse * 0.18f, 1.0f, 0.42f + pulse * 0.26f };
+			hpColor = { 0.78f + pulse * 0.20f, 0.08f + pulse * 0.12f, 1.0f, 1.0f };
 		}
 
 		// 本体バーの現在幅
@@ -1803,17 +1850,42 @@ void GamePlayScene::Update() {
 		float backLeft = screenPos.x - backWidth * 0.5f;
 		float fillLeft = backLeft + 4.0f;
 		float fillCenterX = fillLeft + fillWidth * 0.5f;
+		Vector2 fillPos = { fillCenterX, screenPos.y + 1.0f };
+		Vector2 shadowPos = { screenPos.x + 2.0f, screenPos.y + 2.0f };
+		Vector2 glossPos = { fillCenterX, screenPos.y - 3.0f };
 
-		// 背景の中央から少し下に本体バーを置く
-		Vector2 fillPos = {
-			fillCenterX,
-			screenPos.y + 1.0f
-		};
+		Sprite* bossHpShadowSprite = bossManager_->GetBossHpShadowSprite();
+		Sprite* bossHpFrameSprite = bossManager_->GetBossHpFrameSprite();
+		Sprite* bossHpGlossSprite = bossManager_->GetBossHpGlossSprite();
+		if (bossHpShadowSprite) {
+			bossHpShadowSprite->SetPosition(shadowPos);
+			bossHpShadowSprite->SetSize({ backWidth + 10.0f, backHeight + 10.0f });
+			bossHpShadowSprite->SetColor(shadowColor);
+			bossHpShadowSprite->Update();
+		}
+		if (bossHpFrameSprite) {
+			bossHpFrameSprite->SetPosition(screenPos);
+			bossHpFrameSprite->SetSize({ backWidth + 4.0f, backHeight + 4.0f });
+			bossHpFrameSprite->SetColor(frameColor);
+			bossHpFrameSprite->Update();
+		}
+
+		bossHpBackSprite->SetPosition(screenPos);
+		bossHpBackSprite->SetSize({ backWidth, backHeight });
+		bossHpBackSprite->SetColor(backColor);
+		bossHpBackSprite->Update();
 
 		bossHpFillSprite->SetPosition(fillPos);
 		bossHpFillSprite->SetSize({ fillWidth, fillHeight });
 		bossHpFillSprite->SetColor(hpColor);
 		bossHpFillSprite->Update();
+
+		if (bossHpGlossSprite) {
+			bossHpGlossSprite->SetPosition(glossPos);
+			bossHpGlossSprite->SetSize({ fillWidth, glossHeight });
+			bossHpGlossSprite->SetColor(glossColor);
+			bossHpGlossSprite->Update();
+		}
 	}
 	// その他3Dオブジェクトの更新
 	for (auto& obj : object3ds_) {
@@ -4050,6 +4122,139 @@ void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw
 	previewObj->Update();
 	previewObj->Draw();
 }
+
+void GamePlayScene::DrawFireballPredictionLines() {
+	fireballPredictionLineSpriteCount_ = 0;
+	GetFireballPredictionPreviewPoolCount() = 0;
+
+	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_ && readiedCard_.id == 2) {
+		const float yaw = playerManager_->GetRotationY();
+		Vector3 start = playerPos_ + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * kFireballSpawnOffset;
+		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+		const float visibleLength = ComputeFireballPredictionVisibleLength(
+			start,
+			yaw,
+			kFireballPredictionLength
+		);
+
+		if (visibleLength > 0.01f) {
+			DrawProjectedPredictionStrip(
+				start,
+				yaw,
+				kFireballPredictionHalfWidth,
+				visibleLength,
+				1.0f
+			);
+		}
+	}
+
+	if (enemyManager_) {
+		for (const auto& enemy : enemyManager_->GetEnemies()) {
+			if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
+				continue;
+			}
+			if (enemy->GetCurrentUseCard().id != 2) {
+				continue;
+			}
+
+			const float yaw = enemy->GetRotation().y;
+			Vector3 start = enemy->GetPosition() + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * (kFireballSpawnOffset + 1.5f);
+			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+			const float visibleLength = ComputeFireballPredictionVisibleLength(
+				start,
+				yaw,
+				kFireballPredictionLength
+			);
+
+			if (visibleLength > 0.01f) {
+				DrawProjectedPredictionStrip(
+					start,
+					yaw,
+					kFireballPredictionHalfWidth,
+					visibleLength,
+					1.0f
+				);
+			}
+		}
+	}
+
+	if (!bossManager_) {
+		return;
+	}
+
+	auto drawBossFireballPrediction = [&](Boss* boss) {
+		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsVisible() || !boss->IsCasting()) {
+			return;
+		}
+		if (boss->GetSelectedCard().id != 102) {
+			return;
+		}
+
+		const int kBossFireCount = 6;
+		const float baseYaw = boss->GetRotation().y;
+		for (int i = 0; i < kBossFireCount; i++) {
+			const float yaw = baseYaw + (3.14159265f * 2.0f / static_cast<float>(kBossFireCount)) * static_cast<float>(i);
+			Vector3 start = boss->GetPosition();
+			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+			const float visibleLength = ComputeFireballPredictionVisibleLength(
+				start,
+				yaw,
+				kBossFireballPredictionLength
+			);
+
+			if (visibleLength > 0.01f) {
+				DrawProjectedPredictionStrip(
+					start,
+					yaw,
+					kFireballPredictionHalfWidth,
+					visibleLength,
+					1.0f
+				);
+			}
+		}
+	};
+
+	if (bossManager_->IsSplitBossBattle()) {
+		drawBossFireballPrediction(bossManager_->GetBossAt(0));
+		drawBossFireballPrediction(bossManager_->GetBossAt(1));
+	} else {
+		drawBossFireballPrediction(bossManager_->GetBoss());
+	}
+}
+
+float GamePlayScene::ComputeFireballPredictionVisibleLength(const Vector3& start, float yaw, float maxLength) const {
+	if (!mapManager_) {
+		return maxLength;
+	}
+
+	const LevelData& level = mapManager_->GetLevelData();
+	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+	const float kStep = 0.1f;
+	const float kFireballRadius = 0.5f;
+	float visibleLength = maxLength;
+
+	for (float dist = 0.0f; dist <= maxLength; dist += kStep) {
+		Vector3 checkPos = start + forward * dist;
+		checkPos.y = start.y;
+
+		if (Collision::CheckBlockCollision(checkPos, kFireballRadius, level)) {
+			visibleLength = dist + kFireballRadius - (kStep * 0.35f);
+			break;
+		}
+	}
+
+	if (visibleLength < 0.0f) {
+		visibleLength = 0.0f;
+	}
+	if (visibleLength > maxLength) {
+		visibleLength = maxLength;
+	}
+	return visibleLength;
+}
+
 void GamePlayScene::DrawBossPredictionLines() const {
 #ifndef USE_IMGUI
 	return;
@@ -4060,11 +4265,18 @@ void GamePlayScene::DrawBossPredictionLines() const {
 	if (!drawList) return;
 
 	auto drawPredictionForBoss = [&](Boss* boss) {
-		if (!boss || boss->IsDead() || boss->GetState() != Boss::State::UseCard || !boss->IsCasting()) return;
-		int cardId = boss->GetSelectedCard().id;
+		if (!boss || boss->IsDead()) return;
+		const bool isClawRepeatWarning = boss->IsClawRepeatWarningActive();
+		if (!isClawRepeatWarning && (boss->GetState() != Boss::State::UseCard || !boss->IsCasting())) return;
+		int cardId = isClawRepeatWarning ? boss->GetRepeatWarningCardId() : boss->GetSelectedCard().id;
 		if (cardId != 101 && cardId != 102 && cardId != 105 && cardId != 106) return;
 
 		float progress = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(boss->GetCastDurationCurrent());
+		if (isClawRepeatWarning) {
+			const int warningDuration = boss->GetClawRepeatWarningDuration() > 1 ? boss->GetClawRepeatWarningDuration() : 1;
+			progress = 1.0f - static_cast<float>(boss->GetClawRepeatWarningTimer()) /
+				static_cast<float>(warningDuration);
+		}
 		progress = std::clamp(progress, 0.0f, 1.0f);
 
 		float yaw = boss->GetRotation().y;
@@ -4075,8 +4287,13 @@ void GamePlayScene::DrawBossPredictionLines() const {
 		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
 		// 分身ボス:青、通常ボス:赤
 		const bool isSplit = boss->IsSplitBehaviorEnabled();
-		const unsigned int fillColor = isSplit ? IM_COL32(30, 100, 255, fillAlpha) : IM_COL32(255, 30, 30, fillAlpha);
-		const unsigned int lineColor = isSplit ? IM_COL32(50, 130, 255, lineAlpha) : IM_COL32(255, 50, 50, lineAlpha);
+		const bool isRangedSplit = isSplit && boss->GetCombatRole() == Boss::CombatRole::Ranged;
+		const unsigned int fillColor = isSplit
+			? (isRangedSplit ? IM_COL32(30, 100, 255, fillAlpha) : IM_COL32(255, 30, 35, fillAlpha))
+			: IM_COL32(255, 30, 30, fillAlpha);
+		const unsigned int lineColor = isSplit
+			? (isRangedSplit ? IM_COL32(50, 130, 255, lineAlpha) : IM_COL32(255, 55, 45, lineAlpha))
+			: IM_COL32(255, 50, 50, lineAlpha);
 
 		auto drawRect = [&](float angle, float halfWidth, float length) {
 			Vector3 forward = { std::sinf(angle), 0.0f, std::cosf(angle) };
@@ -4420,149 +4637,3 @@ bool GamePlayScene::ConsumeTutorialStartRequest() {
 
 
 void GamePlayScene::UpdatePostEffects(){}
-
-
-
-void GamePlayScene::DrawFireballPredictionLines() {
-	// 旧スプライト方式の使用数は毎フレーム初期化しておく
-	fireballPredictionLineSpriteCount_ = 0;
-	GetFireballPredictionPreviewPoolCount() = 0; // 予測線Obj3dプールの使用数も毎フレーム初期化する
-
-	// プレイヤーのファイヤーボールは詠唱中ずっと予測帯を表示する
-	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_ && readiedCard_.id == 2) {
-		const float yaw = playerManager_->GetRotationY();
-		Vector3 start = playerPos_ + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * kFireballSpawnOffset;
-		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
-		const float visibleLength = ComputeFireballPredictionVisibleLength(
-			start,
-			yaw,
-			kFireballPredictionLength
-		);
-
-		if (visibleLength > 0.01f) {
-			DrawProjectedPredictionStrip(
-				start,
-				yaw,
-				kFireballPredictionHalfWidth,
-				visibleLength,
-				1.0f
-			);
-		}
-	}
-
-	// 敵のファイヤーボールも詠唱中ずっと表示する
-	if (enemyManager_) {
-		for (const auto& enemy : enemyManager_->GetEnemies()) {
-			if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
-				continue;
-			}
-			if (enemy->GetCurrentUseCard().id != 2) {
-				continue;
-			}
-
-			const float yaw = enemy->GetRotation().y;
-			Vector3 start = enemy->GetPosition() + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * (kFireballSpawnOffset + 1.5f);
-			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
-			const float visibleLength = ComputeFireballPredictionVisibleLength(
-				start,
-				yaw,
-				kFireballPredictionLength
-			);
-
-			if (visibleLength > 0.01f) {
-				DrawProjectedPredictionStrip(
-					start,
-					yaw,
-					kFireballPredictionHalfWidth,
-					visibleLength,
-					1.0f
-				);
-			}
-		}
-	}
-
-	// ボスのファイヤーボール予測線も詠唱中ずっと表示する
-	if (!bossManager_) {
-		return;
-	}
-
-	auto drawBossFireballPrediction = [&](Boss* boss) {
-		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsVisible() || !boss->IsCasting()) {
-			return;
-		}
-
-		// ボスの火球カードは id 102
-		if (boss->GetSelectedCard().id != 102) {
-			return;
-		}
-
-		const int kBossFireCount = 6; // ボス火球は6方向に飛ぶ
-		const float baseYaw = boss->GetRotation().y;
-
-		for (int i = 0; i < kBossFireCount; i++) {
-			const float yaw = baseYaw + (3.14159265f * 2.0f / static_cast<float>(kBossFireCount)) * static_cast<float>(i);
-
-			// 実弾どおり、ボス中心から6方向へ予測線を出す
-			Vector3 start = boss->GetPosition();
-			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
-			const float visibleLength = ComputeFireballPredictionVisibleLength(
-				start,
-				yaw,
-				kBossFireballPredictionLength
-			);
-
-			if (visibleLength > 0.01f) {
-				DrawProjectedPredictionStrip(
-					start,
-					yaw,
-					kFireballPredictionHalfWidth,
-					visibleLength,
-					1.0f
-				);
-			}
-		}
-	};
-
-	if (bossManager_->IsSplitBossBattle()) {
-		drawBossFireballPrediction(bossManager_->GetBossAt(0));
-		drawBossFireballPrediction(bossManager_->GetBossAt(1));
-	} else {
-		drawBossFireballPrediction(bossManager_->GetBoss());
-	}
-}
-float GamePlayScene::ComputeFireballPredictionVisibleLength(const Vector3& start, float yaw, float maxLength) const {
-	if (!mapManager_) {
-		return maxLength; // マップ情報がないときは最大長のまま使う
-	}
-
-	const LevelData& level = mapManager_->GetLevelData();
-	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
-
-	const float kStep = 0.1f;           // 少しずつ前進して壁判定する
-	const float kFireballRadius = 0.5f; // 本体と同じ当たり半径
-	float visibleLength = maxLength;
-
-	for (float dist = 0.0f; dist <= maxLength; dist += kStep) {
-		Vector3 checkPos = start + forward * dist;
-		checkPos.y = start.y; // 本体と同じ高さ基準で判定する
-
-		if (Collision::CheckBlockCollision(checkPos, kFireballRadius, level)) {
-			// 衝突した中心位置から、弾の半径ぶんだけ先まで予測線を伸ばして見た目を合わせる
-			visibleLength = dist + kFireballRadius - (kStep * 0.35f);
-			break;
-		}
-	}
-
-	if (visibleLength < 0.0f) {
-		visibleLength = 0.0f; // 発射直後に壁なら描かない
-	}
-
-	if (visibleLength > maxLength) {
-		visibleLength = maxLength; // 元の最大長は超えない
-	}
-
-	return visibleLength;
-}

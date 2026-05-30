@@ -1,6 +1,7 @@
 ﻿#include "BossSummonEffect.h"
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "game/enemy/EnemyManager.h"
 #include "engine/particle/GPUParticleManager.h"
 
@@ -27,13 +28,10 @@ void BossSummonEffect::Start(const Vector3& casterPos, float casterYaw, bool isP
         Model* model = obj_->GetModel();
         if (model) {
             model->SetTexture("resources/white1x1.png");
-            Model::Material* material = model->GetMaterial();
-            if (material) {
-                //  最初は完全に透明（Alpha=0.0f）にしておく
-                material->color = { 1.0f, 0.0f, 0.0f, 0.0f };
-                material->emissive = 0.0f;
-            }
         }
+        //  最初は完全に透明（Alpha=0.0f）にしておく
+        obj_->SetColor(BossVisualColor::Primary(casterBoss_, 0.0f));
+        obj_->SetEmissive(0.0f, 0);
         obj_->Update();
     }
 }
@@ -55,13 +53,9 @@ void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
         // 🌟 1. 魔法陣が「フワァ…」と浮かび上がる（フェードイン）演出
         float progress = static_cast<float>(60 - timer_) / 60.0f; // 0.0 〜 1.0
 
-        Model* model = obj_->GetModel();
-        if (model && model->GetMaterial()) {
-            Model::Material* material = model->GetMaterial();
-            // 時間経過で透明度(Alpha)と発光(Emissive)を上げていく
-            material->color.w = progress * 0.5f; // 最大で半透明(0.5f)まで
-            material->emissive = progress * 3.0f; // 最大で3.0fまで光る
-        }
+        // 時間経過で透明度(Alpha)と発光(Emissive)を上げていく
+        obj_->SetColor(BossVisualColor::Primary(casterBoss_, progress * 0.5f)); // 最大で半透明(0.5f)まで
+        obj_->SetEmissive(progress * 3.0f, 0); // 最大で3.0fまで光る
 
         // 回転させる
         Vector3 rot = obj_->GetRotation();
@@ -86,7 +80,7 @@ void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
             // 上に向かって立ち昇るオーラ
             Vector3 emitVel = { 0.0f, 0.1f + static_cast<float>(rand() % 5) * 0.02f, 0.0f };
             // パーティクルも時間経過で徐々に濃く(Alpha値を高く)する
-            Vector4 auraColor = { 1.0f, 0.1f, 0.1f, progress * 0.8f };
+            Vector4 auraColor = BossVisualColor::Secondary(casterBoss_, progress * 0.8f);
 
             GPUParticleManager::GetInstance()->Emit(emitPos, emitVel, 1.0f, 0.1f, auraColor);
         }
@@ -100,7 +94,10 @@ void BossSummonEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
                 (rand() % 11 - 5) * 0.3f + 0.2f, // 上方向へ散らす
                 (rand() % 11 - 5) * 0.3f
             };
-            GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.5f, 0.15f, { 1.0f, 0.2f, 0.0f, 1.0f });
+            Vector4 sparkColor = (rand() % 2 == 0)
+                ? BossVisualColor::Primary(casterBoss_, 1.0f)
+                : BossVisualColor::Secondary(casterBoss_, 1.0f);
+            GPUParticleManager::GetInstance()->Emit(pos_, sparkVel, 0.5f, 0.15f, sparkColor);
         }
 
         // 発動元のボス本人へ召喚要求を返す

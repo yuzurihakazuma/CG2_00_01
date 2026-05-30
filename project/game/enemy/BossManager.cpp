@@ -78,6 +78,22 @@ namespace {
 
 		return resolved;
 	}
+
+	void ApplyNormalBossVisualState(Obj3d* obj, const Boss& boss) {
+		if (!obj) {
+			return;
+		}
+
+		if (!boss.IsDead() && boss.IsEnraged()) {
+			float pulse = 0.5f + 0.5f * std::sinf(static_cast<float>(boss.GetAnimationTimer()) * 0.18f);
+			obj->SetColor({ 1.0f, 0.72f + pulse * 0.16f, 1.0f, 1.0f });
+			obj->SetEmissive(0.85f + pulse * 0.65f, 0);
+			return;
+		}
+
+		obj->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		obj->SetEmissive(0.0f, 0);
+	}
 }
 
 void BossManager::Initialize(Camera* camera) {
@@ -93,6 +109,7 @@ void BossManager::Initialize(Camera* camera) {
     if (bossObj_) {
         bossObj_->SetCamera(camera);
         bossObj_->SetScale(boss_->GetScale());
+		ApplyNormalBossVisualState(bossObj_.get(), *boss_);
     }
 
 	splitBossUnionObj_ = std::unique_ptr<Obj3d>(Obj3d::Create(kSplitBossUnionModelName));
@@ -118,6 +135,7 @@ void BossManager::Initialize(Camera* camera) {
 			splitBossObjs_[i]->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
 			splitBossObjs_[i]->Update();
 		}
+
 	}
 
 
@@ -145,23 +163,41 @@ void BossManager::Initialize(Camera* camera) {
     bossCardSystem_->Initialize(camera);
 
     // ボスHPバー背景
+    bossHpShadowSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+    bossHpShadowSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.48f });
+
+    bossHpFrameSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+    bossHpFrameSprite_->SetColor({ 0.95f, 0.18f, 0.32f, 0.82f });
+
     bossHpBackSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
     bossHpBackSprite_->SetSize({ 160.0f, 16.0f });
-    bossHpBackSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 0.75f });
+    bossHpBackSprite_->SetColor({ 0.06f, 0.01f, 0.03f, 0.90f });
 
     // ボスHPバー本体
     bossHpFillSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
     bossHpFillSprite_->SetSize({ 152.0f, 10.0f });
-    bossHpFillSprite_->SetColor({ 0.2f, 1.0f, 0.2f, 1.0f });
+    bossHpFillSprite_->SetColor({ 1.0f, 0.08f, 0.18f, 1.0f });
+
+    bossHpGlossSprite_ = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+    bossHpGlossSprite_->SetColor({ 1.0f, 0.78f, 0.86f, 0.34f });
 
     for (int i = 0; i < 2; ++i) {
+        splitBossHpShadowSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+        splitBossHpShadowSprites_[i]->SetColor({ 0.0f, 0.0f, 0.0f, 0.46f });
+
+        splitBossHpFrameSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+        splitBossHpFrameSprites_[i]->SetColor({ 0.95f, 0.18f, 0.32f, 0.78f });
+
         splitBossHpBackSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
         splitBossHpBackSprites_[i]->SetSize({ 120.0f, 14.0f });
-        splitBossHpBackSprites_[i]->SetColor({ 0.0f, 0.0f, 0.0f, 0.75f });
+        splitBossHpBackSprites_[i]->SetColor({ 0.06f, 0.01f, 0.03f, 0.90f });
 
         splitBossHpFillSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
         splitBossHpFillSprites_[i]->SetSize({ 112.0f, 8.0f });
-        splitBossHpFillSprites_[i]->SetColor({ 0.2f, 1.0f, 0.2f, 1.0f });
+        splitBossHpFillSprites_[i]->SetColor({ 1.0f, 0.08f, 0.18f, 1.0f });
+
+        splitBossHpGlossSprites_[i] = Sprite::Create("resources/white1x1.png", { 0.0f, 0.0f });
+        splitBossHpGlossSprites_[i]->SetColor({ 1.0f, 0.78f, 0.86f, 0.30f });
     }
 
     bossDeadHandled_ = false;
@@ -186,11 +222,17 @@ void BossManager::Finalize() {
     bossCastCardObjs_.clear();
     bossCardSystem_.reset();
     beamWarningObj_.reset();
+    bossHpShadowSprite_.reset();
+    bossHpFrameSprite_.reset();
     bossHpBackSprite_.reset();
     bossHpFillSprite_.reset();
+    bossHpGlossSprite_.reset();
     for (int i = 0; i < 2; ++i) {
+        splitBossHpShadowSprites_[i].reset();
+        splitBossHpFrameSprites_[i].reset();
         splitBossHpBackSprites_[i].reset();
         splitBossHpFillSprites_[i].reset();
+        splitBossHpGlossSprites_[i].reset();
     }
     bossObj_.reset();
 	splitBossUnionObj_.reset();
@@ -238,6 +280,12 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
             bossObj_->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
             bossObj_->Update();
         }
+		for (int i = 0; i < 2; ++i) {
+			if (splitBossObjs_[i]) {
+				splitBossObjs_[i]->SetTranslation({ 9999.0f, -9999.0f, 9999.0f });
+				splitBossObjs_[i]->Update();
+			}
+		}
         return;
     }
 
@@ -336,6 +384,7 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 		bossObj_->SetTranslation(GetBossVisualPosition(*boss_, kNormalBossVisualYOffset));
 		bossObj_->SetRotation(boss_->GetRotation());
 		bossObj_->SetScale(boss_->GetScale());
+		ApplyNormalBossVisualState(bossObj_.get(), *boss_);
 		bossObj_->Update();
 	}
 
@@ -585,6 +634,7 @@ void BossManager::Update(
 			bossObj_->SetTranslation(GetBossVisualPosition(*boss_, kNormalBossVisualYOffset));
 			bossObj_->SetRotation(boss_->GetRotation());
 			bossObj_->SetScale(boss_->GetScale());
+			ApplyNormalBossVisualState(bossObj_.get(), *boss_);
 			bossObj_->Update();
 		}
 	}
@@ -1190,19 +1240,37 @@ void BossManager::DrawHpBar(MapManager* mapManager) {
 					continue;
 				}
 
+				if (splitBossHpShadowSprites_[i]) {
+					splitBossHpShadowSprites_[i]->Draw();
+				}
+				if (splitBossHpFrameSprites_[i]) {
+					splitBossHpFrameSprites_[i]->Draw();
+				}
 				if (splitBossHpBackSprites_[i]) {
 					splitBossHpBackSprites_[i]->Draw();
 				}
 				if (splitBossHpFillSprites_[i]) {
 					splitBossHpFillSprites_[i]->Draw();
 				}
+				if (splitBossHpGlossSprites_[i]) {
+					splitBossHpGlossSprites_[i]->Draw();
+				}
 			}
 		} else {
+			if (bossHpShadowSprite_) {
+				bossHpShadowSprite_->Draw();
+			}
+			if (bossHpFrameSprite_) {
+				bossHpFrameSprite_->Draw();
+			}
 			if (bossHpBackSprite_) {
 				bossHpBackSprite_->Draw();
 			}
 			if (bossHpFillSprite_) {
 				bossHpFillSprite_->Draw();
+			}
+			if (bossHpGlossSprite_) {
+				bossHpGlossSprite_->Draw();
 			}
 		}
 	}

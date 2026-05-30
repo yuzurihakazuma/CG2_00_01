@@ -81,6 +81,12 @@ public:
     bool IsCasting() const { return isCasting_; }
     int GetCastTimer() const { return castTimer_; }
     int GetCastDurationCurrent() const { return castDurationCurrent_; }
+    void StartCardRepeatWarning(int cardId, int durationFrames);
+    void StartClawRepeatWarning(int durationFrames);
+    bool IsClawRepeatWarningActive() const { return clawRepeatWarningTimer_ > 0; }
+    int GetClawRepeatWarningTimer() const { return clawRepeatWarningTimer_; }
+    int GetClawRepeatWarningDuration() const { return clawRepeatWarningDuration_; }
+    int GetRepeatWarningCardId() const { return repeatWarningCardId_; }
 
     void SetAttackIntervalRangeFrames(int minFrames, int maxFrames) { // 攻撃間隔の範囲を設定
         attackIntervalMinFrames_ = minFrames;
@@ -134,6 +140,7 @@ public:
     bool IsStunned() const { return isStunned_; } // スタン中か確認
 
     void SetRotation(const Vector3& rot) { rot_ = rot; }
+    int GetAnimationTimer() const { return animationTimer_; }
 
 private:
     void DecideNextState();
@@ -206,6 +213,9 @@ private:
     int summonCount_ = 0;
 
     bool cardUseRequest_ = false;
+    int clawRepeatWarningTimer_ = 0;
+    int clawRepeatWarningDuration_ = 0;
+    int repeatWarningCardId_ = 101;
     std::unordered_map<int, int> cardCooldownTimers_;
 
     CombatRole combatRole_ = CombatRole::Melee; // 個体ごとの役割

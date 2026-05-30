@@ -921,6 +921,7 @@ bool Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
 
     if ( shieldHitCount_ > 0 ) {
         shieldHitCount_--;
+        GameSE::ShieldBlock();
 
         // 画面全体の青いビネットフラッシュ
         shieldFlashTimer_ = shieldFlashDuration_;
@@ -1163,6 +1164,7 @@ void Player::TakeContinuousDamage(int damage) {
 
     if (shieldHitCount_ > 0) {
         shieldHitCount_--;
+        GameSE::ShieldBlock();
         return;
     }
 

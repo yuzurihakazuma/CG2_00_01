@@ -5,6 +5,7 @@
 #include <cmath>
 #include "game/audio/GameSE.h"
 #include "game/card/CardDatabase.h"
+#include "game/enemy/BossVisualColor.h"
 #include "engine/particle/GPUParticleManager.h" 
 #include "game/particle/StunEffectManager.h"
 #include <algorithm>
@@ -56,6 +57,8 @@ void Boss::Initialize() {
 	cardUseRequest_ = false;
 	selectedCard_ = { -1, "", 0 };
 	lastUsedCardId_ = -1;
+	clawRepeatWarningTimer_ = 0;
+	clawRepeatWarningDuration_ = 0;
 
 	isAttackDebuffed_ = false;
 
@@ -305,6 +308,7 @@ void Boss::ResetPose() {
 void Boss::Update() {
 	if (isDead_) {
 		state_ = State::Dead;
+		clawRepeatWarningTimer_ = 0;
 		// 死亡時はマスクエフェクトを無効化
 		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedDistortion, false);
 		PostEffect::GetInstance()->SetEffectActive(PostEffectType::MaskedSepia, false);
@@ -342,6 +346,10 @@ void Boss::Update() {
 
 	if (attackIntervalTimer_ > 0) {
 		attackIntervalTimer_--; // 共通攻撃待ち時間を減らす
+	}
+
+	if (clawRepeatWarningTimer_ > 0) {
+		clawRepeatWarningTimer_--;
 	}
 
 	for (auto& [cardId, timer] : cardCooldownTimers_) {
@@ -479,10 +487,17 @@ void Boss::UpdateAppear() {
 				(rand() % 11 - 5) * 0.02f
 			};
 
-			// 分身ボス:青炎、通常ボス:オレンジ/赤炎
-			Vector4 color = isSplitBehaviorEnabled_
-				? ((rand() % 2 == 0) ? Vector4{ 0.0f, 0.5f, 1.0f, 0.8f } : Vector4{ 0.2f, 0.3f, 1.0f, 0.8f })
-				: ((rand() % 2 == 0) ? Vector4{ 1.0f, 0.3f, 0.0f, 0.8f } : Vector4{ 1.0f, 0.1f, 0.0f, 0.8f });
+			Vector4 color{};
+			if (isSplitBehaviorEnabled_) {
+				const bool isRanged = combatRole_ == CombatRole::Ranged;
+				color = isRanged
+					? ((rand() % 2 == 0) ? Vector4{ 0.05f, 0.45f, 1.0f, 0.8f } : Vector4{ 0.25f, 0.75f, 1.0f, 0.7f })
+					: ((rand() % 2 == 0) ? Vector4{ 1.0f, 0.05f, 0.08f, 0.78f } : Vector4{ 1.0f, 0.28f, 0.05f, 0.68f });
+			} else {
+				color = (rand() % 2 == 0)
+					? Vector4{ 0.55f, 0.12f, 1.0f, 0.78f }
+					: Vector4{ 0.85f, 0.28f, 1.0f, 0.62f };
+			}
 
 			float scale = 0.8f + (rand() % 10) * 0.1f;
 
@@ -534,7 +549,13 @@ void Boss::UpdateAppear() {
 				0.0f,
 				std::cosf(angle) * speed
 			};
-			GPUParticleManager::GetInstance()->Emit(landPos, ringVel, 0.8f, 1.5f, { 1.0f, 1.0f, 0.8f, 1.0f });
+			Vector4 ringColor = { 0.82f, 0.45f, 1.0f, 1.0f };
+			if (isSplitBehaviorEnabled_) {
+				ringColor = combatRole_ == CombatRole::Ranged
+					? Vector4{ 0.35f, 0.78f, 1.0f, 1.0f }
+					: Vector4{ 1.0f, 0.18f, 0.12f, 1.0f };
+			}
+			GPUParticleManager::GetInstance()->Emit(landPos, ringVel, 0.8f, 1.5f, ringColor);
 		}
 		for (int i = 0; i < 40; i++) {
 			Vector3 sparkVel = {
@@ -543,7 +564,13 @@ void Boss::UpdateAppear() {
 				(rand() % 21 - 10) * 0.05f
 			};
 			float scale = 0.5f + (rand() % 5) * 0.1f;
-			GPUParticleManager::GetInstance()->Emit(landPos, sparkVel, 1.0f, scale, { 1.0f, 0.6f, 0.1f, 1.0f });
+			Vector4 sparkColor = { 0.78f, 0.22f, 1.0f, 1.0f };
+			if (isSplitBehaviorEnabled_) {
+				sparkColor = combatRole_ == CombatRole::Ranged
+					? Vector4{ 0.12f, 0.55f, 1.0f, 1.0f }
+					: Vector4{ 1.0f, 0.12f, 0.06f, 1.0f };
+			}
+			GPUParticleManager::GetInstance()->Emit(landPos, sparkVel, 1.0f, scale, sparkColor);
 		}
 	
 		state_ = State::Idle;
@@ -582,7 +609,7 @@ void Boss::SetStun(int durationFrames) {
 		GPUParticleManager::GetInstance()->Emit( stunCenter, { 0, 0, 0 }, 0.10f, 7.5f, { 1.0f, 1.0f, 1.0f, 1.0f } );
 		GPUParticleManager::GetInstance()->Emit( stunCenter, { 0, 0, 0 }, 0.22f, 5.0f,
 			isSplitBehaviorEnabled_
-				? Vector4{ 0.4f, 0.8f, 1.0f, 0.85f }    // 分裂ボス：青白フラッシュ
+				? BossVisualColor::Secondary(this, 0.85f)
 				: Vector4{ 1.0f, 0.95f, 0.25f, 0.85f }  // 通常ボス：黄白フラッシュ
 		);
 
@@ -596,7 +623,7 @@ void Boss::SetStun(int durationFrames) {
 				std::cosf( angle ) * speed + ( rand() % 5 - 2 ) * 0.04f
 			};
 			Vector4 boltColor = isSplitBehaviorEnabled_
-				? Vector4{ 0.3f, 0.75f, 1.0f, 1.0f }    // 分裂ボス：青電撃
+				? BossVisualColor::Primary(this, 1.0f)
 				: Vector4{ 1.0f, 0.95f, 0.2f, 1.0f };   // 通常ボス：黄電撃
 			GPUParticleManager::GetInstance()->Emit( stunCenter, boltVel, 0.22f, 0.4f + ( rand() % 5 ) * 0.07f, boltColor );
 		}
@@ -614,7 +641,7 @@ void Boss::SetStun(int durationFrames) {
 				( rand() % 9 - 4 ) * 0.04f
 			};
 			Vector4 riseColor = isSplitBehaviorEnabled_
-				? Vector4{ 0.55f, 0.9f, 1.0f, 0.9f }
+				? BossVisualColor::Secondary(this, 0.9f)
 				: Vector4{ 1.0f, 1.0f, 0.45f, 0.9f };
 			GPUParticleManager::GetInstance()->Emit( risePos, riseVel, 0.32f, 0.5f + ( rand() % 4 ) * 0.1f, riseColor );
 		}
@@ -756,10 +783,11 @@ void Boss::UpdateChase() {
 				footBase.y,
 				footBase.z + ( rand() % 5 - 2 ) * 0.12f
 			};
-			// 分裂ボスは青白塵、通常ボスは茶灰色塵
 			Vector4 dustColor = isSplitBehaviorEnabled_
-				? Vector4{ 0.55f, 0.7f, 0.8f, 0.9f }
-				: Vector4{ 0.55f, 0.45f, 0.33f, 0.9f };
+				? BossVisualColor::Secondary(this, 0.9f)
+				: ( isEnraged
+					? Vector4{ 0.35f, 0.02f, 0.55f, 0.72f } // 通常ボス暴走：紫
+					: Vector4{ 0.85f, 0.85f, 0.90f, 0.70f } ); // 通常ボス通常時：白
 			GPUParticleManager::GetInstance()->Emit( dustPos, dustVel, 0.6f, 2.5f + ( rand() % 6 ) * 0.4f, dustColor );
 		}
 
@@ -774,8 +802,8 @@ void Boss::UpdateChase() {
 					std::cosf( angle ) * speed
 				};
 				Vector4 sparkColor = isSplitBehaviorEnabled_
-					? Vector4{ 0.3f, 0.7f, 1.0f, 1.0f }   // 分裂ボス：青白電光
-					: Vector4{ 1.0f, 0.2f, 0.0f, 1.0f };  // 通常ボス：赤い火花
+					? BossVisualColor::Primary(this, 1.0f)
+					: Vector4{ 0.85f, 0.12f, 1.0f, 1.0f }; // 通常ボス：紫の火花
 				GPUParticleManager::GetInstance()->Emit( footBase, sparkVel, 0.4f, 1.2f + ( rand() % 5 ) * 0.3f, sparkColor );
 			}
 		}
@@ -877,10 +905,24 @@ void Boss::UpdateUseCard() {
 			);
 		}
 
-		// 候補が空なら、使えるものをとにかく入れる
+		// 候補が空なら、役割に合う使えるものをとにかく入れる
 		if (candidates.empty()) {
 			for (const auto& card : heldCards_) {
-				if (IsCardReady(card.id)) candidates.push_back(card);
+				if (!IsCardReady(card.id)) {
+					continue;
+				}
+				if (isSplitBehaviorEnabled_) {
+					if (useMeleeRole) {
+						if (card.id != 105 && card.id != 107) {
+							continue;
+						}
+					} else {
+						if (card.id != 101 && card.id != 102 && card.id != 104 && card.id != 106) {
+							continue;
+						}
+					}
+				}
+				candidates.push_back(card);
 			}
 		}
 
@@ -955,7 +997,7 @@ void Boss::UpdateUseCard() {
 					float clusterScale = 0.6f + t * 1.6f; // 0.6 → 2.2 に成長
 					float alpha = 0.55f + t * 0.45f;
 					Vector4 color = (rand() % 2 == 0)
-						? Vector4{ 1.0f, 1.0f, 0.65f, alpha }
+						? BossVisualColor::BeamSecondary(this, alpha)
 						: Vector4{ 1.0f, 1.0f, 1.0f,  alpha };
 					GPUParticleManager::GetInstance()->Emit(clusterPos, clusterVel, 0.14f, clusterScale, color);
 				}
@@ -984,7 +1026,7 @@ void Boss::UpdateUseCard() {
 						 std::cosf(angle) * tanSpeed + (corePos.z - orbitPos.z) * inSpeed
 					};
 					float orbitScale = 0.3f + t * 0.5f;
-					GPUParticleManager::GetInstance()->Emit(orbitPos, orbitVel, 0.16f, orbitScale, { 1.0f, 1.0f, 0.4f, 0.9f });
+					GPUParticleManager::GetInstance()->Emit(orbitPos, orbitVel, 0.16f, orbitScale, BossVisualColor::BeamSecondary(this, 0.9f));
 				}
 			}
 
@@ -1013,7 +1055,7 @@ void Boss::UpdateUseCard() {
 					Vector3 particleVel = { toCore.x * 0.055f, toCore.y * 0.055f, toCore.z * 0.055f };
 
 					Vector4 color = (rand() % 2 == 0)
-						? Vector4{ 1.0f, 1.0f, 0.5f, 1.0f }
+						? BossVisualColor::BeamSecondary(this, 1.0f)
 						: Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
 					float scale = 0.2f + (t * 0.6f) + (rand() % 5) * 0.1f;
 					GPUParticleManager::GetInstance()->Emit(spawnPos, particleVel, 0.32f, scale, color);
@@ -1023,11 +1065,16 @@ void Boss::UpdateUseCard() {
 			// ======== 魔法陣リングパーティクル（ビーム以外のカード詠唱中） ========
 			// カード距離タイプに応じた色を決める (近=土茶 / 中=黄 / 遠=青)
 			Vector4 circleColor;
-			switch (selectedCard_.attackRangeType) {
-			case CardAttackRangeType::Melee: circleColor = { 0.6f, 0.35f, 0.1f, 0.9f }; break; // 近距離: 土・茶
-			case CardAttackRangeType::Mid:   circleColor = { 1.0f, 0.85f, 0.1f, 0.9f }; break; // 中距離: 黄
-			case CardAttackRangeType::Long:  circleColor = { 0.2f, 0.55f, 1.0f, 0.9f }; break; // 遠距離: 青
-			default:                         circleColor = { 0.5f, 0.20f, 0.9f, 0.9f }; break;
+			if (selectedCard_.id == 101 || selectedCard_.id == 102 || selectedCard_.id == 103 ||
+				selectedCard_.id == 105 || selectedCard_.id == 107) {
+				circleColor = BossVisualColor::Secondary(this, 0.9f);
+			} else {
+				switch (selectedCard_.attackRangeType) {
+				case CardAttackRangeType::Melee: circleColor = { 0.6f, 0.35f, 0.1f, 0.9f }; break; // 近距離: 土・茶
+				case CardAttackRangeType::Mid:   circleColor = { 1.0f, 0.85f, 0.1f, 0.9f }; break; // 中距離: 黄
+				case CardAttackRangeType::Long:  circleColor = { 0.2f, 0.55f, 1.0f, 0.9f }; break; // 遠距離: 青
+				default:                         circleColor = { 0.5f, 0.20f, 0.9f, 0.9f }; break;
+				}
 			}
 
 			// 詠唱の進捗に合わせて魔法陣が広がる (半径 0.5 → 3.0)
@@ -1139,8 +1186,8 @@ void Boss::UpdateEnrageEffect(){
 		hasEnrageTriggered_ = true;
 
 		if ( isSplitBehaviorEnabled_ ) {
-			// ===== 分裂ボス専用：青白電撃系 =====
-			// ① 電撃の柱（青白）
+			// ===== 分裂ボス専用：役割色の電撃系 =====
+			// ① 電撃の柱
 			for ( int i = 0; i < 50; i++ ) {
 				Vector3 p = {
 					pos_.x + ( rand() % 9 - 4 ) * 0.2f,
@@ -1153,11 +1200,11 @@ void Boss::UpdateEnrageEffect(){
 					( rand() % 7 - 3 ) * 0.04f
 				};
 				Vector4 c = ( rand() % 2 == 0 )
-					? Vector4{ 0.4f, 0.8f, 1.0f, 1.0f }
-					: Vector4{ 0.7f, 0.95f, 1.0f, 1.0f };
+					? BossVisualColor::Primary(this, 1.0f)
+					: BossVisualColor::Secondary(this, 1.0f);
 				GPUParticleManager::GetInstance()->Emit(p, v, 0.7f, 1.0f + ( rand() % 8 ) * 0.2f, c);
 			}
-			// ② 衝撃波リング 3段（青）
+			// ② 衝撃波リング 3段
 			for ( int ring = 0; ring < 3; ring++ ) {
 				float height = 0.3f + ring * 1.2f;
 				float speed = 0.7f + ring * 0.15f;
@@ -1166,12 +1213,12 @@ void Boss::UpdateEnrageEffect(){
 					float a = ( 3.14159f * 2.0f / 24.0f ) * i;
 					Vector3 rv = { std::sinf(a) * speed, 0.0f, std::cosf(a) * speed };
 					GPUParticleManager::GetInstance()->Emit(
-						{ pos_.x, pos_.y + height, pos_.z }, rv, 0.45f, size, { 0.2f, 0.6f, 1.0f, 1.0f });
+						{ pos_.x, pos_.y + height, pos_.z }, rv, 0.45f, size, BossVisualColor::Primary(this, 1.0f));
 				}
 			}
-			// ③ 超大フラッシュ（白→青の2連）
+			// ③ 超大フラッシュ（白→役割色の2連）
 			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 2.5f, pos_.z }, { 0,0,0 }, 0.12f, 8.0f, { 1.0f, 1.0f, 1.0f, 1.0f });
-			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 2.5f, pos_.z }, { 0,0,0 }, 0.5f,  6.0f, { 0.2f, 0.5f, 1.0f, 0.75f });
+			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 2.5f, pos_.z }, { 0,0,0 }, 0.5f,  6.0f, BossVisualColor::Secondary(this, 0.75f));
 			// ④ 冷気の霧（余韻）
 			for ( int i = 0; i < 25; i++ ) {
 				Vector3 sp = {
@@ -1180,43 +1227,43 @@ void Boss::UpdateEnrageEffect(){
 					pos_.z + ( rand() % 21 - 10 ) * 0.18f
 				};
 				Vector3 sv = { ( rand() % 11 - 5 ) * 0.04f, 0.12f + ( rand() % 10 ) * 0.04f, ( rand() % 11 - 5 ) * 0.04f };
-				GPUParticleManager::GetInstance()->Emit(sp, sv, 1.5f, 1.4f, { 0.1f, 0.2f, 0.5f, 0.75f });
+				GPUParticleManager::GetInstance()->Emit(sp, sv, 1.5f, 1.4f, BossVisualColor::DarkSmoke(this, 0.75f));
 			}
 		} else {
-			// ===== 通常ボス専用：赤炎系（既存） =====
-			// ① 真上に吹き上がる炎の柱
+			// ===== 通常ボス専用：紫の魔力オーラ =====
+			// ① 真上に吹き上がる魔力の柱
 			for ( int i = 0; i < 60; i++ ) {
 				Vector3 pillarPos = {
 					pos_.x + ( rand() % 9 - 4 ) * 0.2f,
-					pos_.y + ( rand() % 5 ) * 0.3f,
+					pos_.y + ( rand() % 5 ) * 0.22f,
 					pos_.z + ( rand() % 9 - 4 ) * 0.2f
 				};
 				Vector3 pillarVel = {
 					( rand() % 7 - 3 ) * 0.04f,
-					0.5f + ( rand() % 20 ) * 0.08f,
+					0.45f + ( rand() % 18 ) * 0.07f,
 					( rand() % 7 - 3 ) * 0.04f
 				};
 				Vector4 color = ( rand() % 2 == 0 )
-					? Vector4{ 1.0f, 0.15f, 0.0f, 1.0f }
-					: Vector4{ 1.0f, 0.55f, 0.0f, 1.0f };
-				float scale = 1.0f + ( rand() % 8 ) * 0.2f;
-				GPUParticleManager::GetInstance()->Emit(pillarPos, pillarVel, 0.8f, scale, color);
+					? Vector4{ 0.58f, 0.08f, 1.0f, 0.88f }
+					: Vector4{ 0.95f, 0.30f, 1.0f, 0.72f };
+				float scale = 0.75f + ( rand() % 8 ) * 0.12f;
+				GPUParticleManager::GetInstance()->Emit(pillarPos, pillarVel, 0.7f, scale, color);
 			}
 			// ② 衝撃波リング 3段
 			for ( int ring = 0; ring < 3; ring++ ) {
 				float height = 0.3f + ring * 1.2f;
 				float speed = 0.7f + ring * 0.15f;
-				float size = 2.2f - ring * 0.3f;
+				float size = 2.0f - ring * 0.25f;
 				for ( int i = 0; i < 24; i++ ) {
 					float ringAngle = ( 3.14159f * 2.0f / 24.0f ) * i;
 					Vector3 ringVel = { std::sinf(ringAngle) * speed, 0.0f, std::cosf(ringAngle) * speed };
 					GPUParticleManager::GetInstance()->Emit(
-						{ pos_.x, pos_.y + height, pos_.z }, ringVel, 0.45f, size, { 1.0f, 0.08f, 0.0f, 1.0f });
+						{ pos_.x, pos_.y + height, pos_.z }, ringVel, 0.45f, size, { 0.78f, 0.10f, 1.0f, 0.95f });
 				}
 			}
-			// ③ 超大フラッシュ（白→赤）
+			// ③ 超大フラッシュ（白→紫）
 			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 2.5f, pos_.z }, { 0,0,0 }, 0.12f, 8.0f, { 1.0f, 1.0f, 1.0f, 1.0f });
-			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 2.5f, pos_.z }, { 0,0,0 }, 0.5f,  6.0f, { 1.0f, 0.05f, 0.0f, 0.75f });
+			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 2.5f, pos_.z }, { 0,0,0 }, 0.5f,  5.2f, { 0.62f, 0.08f, 1.0f, 0.65f });
 			// ④ 足元から這い上がる黒煙
 			for ( int i = 0; i < 25; i++ ) {
 				Vector3 smokePos = {
@@ -1225,18 +1272,73 @@ void Boss::UpdateEnrageEffect(){
 					pos_.z + ( rand() % 21 - 10 ) * 0.18f
 				};
 				Vector3 smokeVel = { ( rand() % 11 - 5 ) * 0.04f, 0.12f + ( rand() % 10 ) * 0.04f, ( rand() % 11 - 5 ) * 0.04f };
-				GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.5f, 1.4f, { 0.1f, 0.0f, 0.0f, 0.85f });
+				GPUParticleManager::GetInstance()->Emit(smokePos, smokeVel, 1.5f, 1.25f, { 0.12f, 0.0f, 0.18f, 0.78f });
 			}
 		}
 	}
 
+	// 通常ボスは足元から立ち上がる紫のダストで暴走感を出す。
+	// 顔を隠さないよう、発生位置は低め・外周寄りに絞る。
+	if ( !isSplitBehaviorEnabled_ ) {
+		if ( animationTimer_ % 2 != 0 ) {
+			return;
+		}
+
+		Vector3 footBase = { pos_.x, pos_.y - 2.0f, pos_.z };
+		const int dustCount = 7;
+		for ( int i = 0; i < dustCount; i++ ) {
+			float angle = static_cast<float>( rand() % 628 ) * 0.01f;
+			float radius = 1.35f + ( rand() % 9 ) * 0.12f;
+			float height = ( rand() % 7 ) * 0.08f;
+			Vector3 auraPos = {
+				footBase.x + std::sinf( angle ) * radius,
+				footBase.y + height,
+				footBase.z + std::cosf( angle ) * radius
+			};
+			Vector3 auraVel = {
+				std::sinf( angle ) * ( 0.02f + ( rand() % 3 ) * 0.01f ),
+				0.18f + ( rand() % 8 ) * 0.03f,
+				std::cosf( angle ) * ( 0.02f + ( rand() % 3 ) * 0.01f )
+			};
+			Vector4 auraColor = ( rand() % 4 == 0 )
+				? Vector4{ 1.0f, 0.55f, 1.0f, 0.50f }
+				: Vector4{ 0.35f, 0.02f, 0.55f, 0.58f };
+			float scale = 1.0f + ( rand() % 6 ) * 0.14f;
+			GPUParticleManager::GetInstance()->Emit( auraPos, auraVel, 0.55f, scale, auraColor );
+		}
+
+		if ( animationTimer_ % 6 == 0 ) {
+			for ( int i = 0; i < 4; i++ ) {
+				float offsetX = ( rand() % 11 - 5 ) * 0.18f;
+				float offsetZ = ( rand() % 11 - 5 ) * 0.18f;
+				Vector3 flarePos = {
+					footBase.x + offsetX,
+					footBase.y + 0.15f,
+					footBase.z + offsetZ
+				};
+				Vector3 flareVel = {
+					offsetX * 0.025f,
+					0.28f + ( rand() % 8 ) * 0.035f,
+					offsetZ * 0.025f
+				};
+				GPUParticleManager::GetInstance()->Emit(
+					flarePos, flareVel, 0.34f, 0.55f + ( rand() % 5 ) * 0.08f, { 0.9f, 0.18f, 1.0f, 0.72f } );
+			}
+		}
+		return;
+	}
+
 	// 3フレームに1回だけオーラを出す（GPU負荷軽減）
 	if ( animationTimer_ % 3 != 0 ) return;
-	for ( int i = 0; i < 3; i++ ) {
+
+	const int auraCount = 3;
+	for ( int i = 0; i < auraCount; i++ ) {
+		float auraHeight = ( rand() % 21 ) * 0.1f;
+		float spread = 0.1f;
 		Vector3 auraPos = {
-			pos_.x + ( rand() % 31 - 15 ) * 0.1f,
-			pos_.y + ( rand() % 21 ) * 0.1f,
-			pos_.z + ( rand() % 31 - 15 ) * 0.1f
+			pos_.x + ( rand() % 31 - 15 ) * spread,
+			pos_.y + auraHeight,
+			pos_.z + ( rand() % 31 - 15 ) * spread
 		};
 		Vector3 auraVel = {
 			( rand() % 11 - 5 ) * 0.01f,
@@ -1244,19 +1346,18 @@ void Boss::UpdateEnrageEffect(){
 			( rand() % 11 - 5 ) * 0.01f
 		};
 		Vector4 color;
-		if ( isSplitBehaviorEnabled_ ) {
-			// 分裂ボス：青白電光オーラ
+		if ( combatRole_ == CombatRole::Ranged ) {
 			color = ( rand() % 2 == 0 )
-				? Vector4{ 0.3f, 0.7f, 1.0f, 0.55f }
-				: Vector4{ 0.6f, 0.9f, 1.0f, 0.35f };
+				? Vector4{ 0.25f, 0.70f, 1.0f, 0.55f }
+				: Vector4{ 0.60f, 0.90f, 1.0f, 0.35f };
 		} else {
-			// 通常ボス：赤炎オーラ（既存）
 			color = ( rand() % 2 == 0 )
-				? Vector4{ 0.8f, 0.0f, 0.0f, 0.6f }
-				: Vector4{ 1.0f, 0.2f, 0.0f, 0.4f };
+				? Vector4{ 1.0f, 0.12f, 0.16f, 0.55f }
+				: Vector4{ 1.0f, 0.35f, 0.18f, 0.35f };
 		}
 		float scale = 0.8f + ( rand() % 5 ) * 0.1f;
-		GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
+		float life = 0.8f;
+		GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, life, scale, color);
 	}
 }
 
@@ -1392,7 +1493,7 @@ void Boss::TakeDamage(int damage) {
 				pos_.z + ( rand() % 7 - 3 ) * 0.1f
 			};
 			Vector4 smokeColor = isSplitBehaviorEnabled_
-				? Vector4{ 0.05f, 0.08f, 0.25f, 0.88f }   // 分裂ボス：暗青煙
+				? BossVisualColor::DarkSmoke(this, 0.88f)
 				: Vector4{ 0.55f, 0.0f, 0.0f, 0.88f };    // 通常ボス：暗赤煙
 			GPUParticleManager::GetInstance()->Emit( trailPos, trailVel, 0.32f, 0.7f + ( rand() % 4 ) * 0.1f, smokeColor );
 		}
@@ -1410,7 +1511,7 @@ void Boss::TakeDamage(int damage) {
 				pos_.z + ( rand() % 9 - 4 ) * 0.14f
 			};
 			Vector4 spColor = isSplitBehaviorEnabled_
-				? Vector4{ 0.4f, 0.8f, 1.0f, 1.0f }
+				? BossVisualColor::Secondary(this, 1.0f)
 				: Vector4{ 1.0f, 0.05f, 0.0f, 1.0f };
 			GPUParticleManager::GetInstance()->Emit( spPos, spVel, 0.28f, 0.45f + ( rand() % 5 ) * 0.08f, spColor );
 		}
@@ -1457,7 +1558,9 @@ void Boss::TakeDamage(int damage) {
 				(rand() % 21 - 10) * 0.2f + 0.3f,
 				(rand() % 21 - 10) * 0.2f
 			};
-			Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 0.2f, 0.0f, 1.0f } : Vector4{ 1.0f, 0.6f, 0.0f, 1.0f };
+			Vector4 color = isSplitBehaviorEnabled_
+				? ( (rand() % 2 == 0) ? BossVisualColor::Primary(this, 1.0f) : BossVisualColor::Secondary(this, 1.0f) )
+				: ( (rand() % 2 == 0) ? Vector4{ 1.0f, 0.2f, 0.0f, 1.0f } : Vector4{ 1.0f, 0.6f, 0.0f, 1.0f } );
 
 			// サイズを 1.5~3.0 -> 0.8~1.3 に縮小
 			float scale = 0.8f + (rand() % 6) * 0.1f;
@@ -1484,6 +1587,16 @@ void Boss::TakeDamage(int damage) {
 void Boss::SetActionLock(int frame) {
 	isActionLocked_ = true;
 	actionLockTimer_ = frame;
+}
+
+void Boss::StartCardRepeatWarning(int cardId, int durationFrames) {
+	repeatWarningCardId_ = cardId;
+	clawRepeatWarningDuration_ = durationFrames > 1 ? durationFrames : 1;
+	clawRepeatWarningTimer_ = clawRepeatWarningDuration_;
+}
+
+void Boss::StartClawRepeatWarning(int durationFrames) {
+	StartCardRepeatWarning(101, durationFrames);
 }
 
 bool Boss::IsVisible() const {

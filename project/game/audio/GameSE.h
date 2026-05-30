@@ -23,6 +23,7 @@ namespace GameSE {
 	// --- バトル・進行状態系 ---
 	inline constexpr const char *kAttackHit = "resources/Audio/打撃2.mp3"; // 攻撃のヒット
 	inline constexpr const char *kPlayerDamage = "resources/Audio/小キック.mp3"; // プレイヤーの被弾
+	inline constexpr const char *kShieldBlock = "resources/Audio/刀で打ち合う1.mp3"; // シールドで被弾
 	inline constexpr const char *kDodge = "resources/Audio/ジャンプ.mp3"; // 回避アクション
 	inline constexpr const char *kStairs = "resources/Audio/アスファルトの上を歩く2.mp3"; // 階段の昇降
 	inline constexpr const char *kSceneTransition = "resources/Audio/CardShutter.mp3"; // シーン遷移
@@ -55,7 +56,7 @@ namespace GameSE {
 	// --- ボス専用アクション系 ---
 	inline constexpr const char *kBossCharge = "resources/Audio/逃走.mp3"; // 突進攻撃
 	inline constexpr const char *kBossSummon = "resources/Audio/魔法陣を展開.mp3"; // ボスの手下召喚
-	inline constexpr const char *kBossBeam = "resources/Audio/聖魔法.mp3"; // ボスのビーム攻撃
+	inline constexpr const char *kBossBeam = "resources/Audio/ビーム砲3.mp3"; // ボスのビーム攻撃
 
 
 	// ==============================================================================
@@ -92,6 +93,7 @@ namespace GameSE {
 	// --- バトル・進行状態系 ---
 	inline void AttackHit() { Play(kAttackHit, 0.85f, 0.06f, 8, 0.015f); }
 	inline void PlayerDamage() { Play(kPlayerDamage, 0.90f, 0.04f, 3, 0.08f); }
+	inline void ShieldBlock() { Play(kShieldBlock, 0.75f, 0.04f, 4, 0.05f); }
 	inline void Dodge() { Play(kDodge, 0.45f, 0.08f, 3, 0.12f); }
 	inline void Stairs() { Play(kStairs, 2.30f, 0.04f, 2, 0.20f); }
 	inline void SceneTransition() { Play(kSceneTransition, 0.75f, 0.02f, 2, 0.20f); }

@@ -47,12 +47,16 @@ private:
 	int timer_ = 0;
 
 	// 突進時間
-	int duration_ = 18;
+	int duration_ = 24;
 
 	// 1回でも当たったか
 	bool hasHit_ = false;
 
 	// 終了したか
+	// 10階暴走時の追加突進回数
+	int repeatCount_ = 0;
+	int repeatDelayTimer_ = 0;
+
 	bool isFinished_ = false;
 
 	// 突進速度

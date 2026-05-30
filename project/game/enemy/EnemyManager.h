@@ -63,7 +63,7 @@ private:
 
 	EnemyVisual CreateEnemyVisual(Enemy::Type type, Camera* camera, bool useBossMinionModel = false) const;
 	void UpdateEnemyVisual(EnemyVisual& visual, const Enemy& enemy, const Vector3& previousPosition) const;
-	void DrawEnemyVisual(const EnemyVisual& visual) const;
+	void DrawEnemyVisual(const EnemyVisual& visual, bool drawBody = true) const;
 
 	// 敵のリスト
 	std::vector<std::unique_ptr<Enemy>> enemies_;

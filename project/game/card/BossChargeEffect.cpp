@@ -1,6 +1,7 @@
 #include "BossChargeEffect.h"
 #include "game/player/Player.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/camera/Camera.h"
@@ -23,6 +24,8 @@ void BossChargeEffect::Start(const Vector3& casterPos, float casterYaw, bool isP
 
 	isFinished_ = false;
 	hasHit_ = false;
+	repeatCount_ = 0;
+	repeatDelayTimer_ = 0;
 	timer_ = duration_;
 	pos_ = casterPos;
 
@@ -47,8 +50,8 @@ void BossChargeEffect::Start(const Vector3& casterPos, float casterYaw, bool isP
 			Model::Material* material = model->GetMaterial();
 			if (material) {
 				// 突進予兆が分かりやすいように赤寄りで発光させる
-				material->color = { 1.0f, 0.2f, 0.2f, 0.45f };
-				material->emissive = 2.8f;
+				obj_->SetColor(BossVisualColor::Primary(casterBoss_, 0.45f));
+				obj_->SetEmissive(2.8f, 0);
 			}
 		}
 
@@ -59,14 +62,14 @@ void BossChargeEffect::Start(const Vector3& casterPos, float casterYaw, bool isP
 	for (int i = 0; i < 16; i++) {
 		float a = (3.14159f * 2.0f / 16.0f) * i;
 		Vector3 v = { std::sinf(a) * 1.2f, 0.1f, std::cosf(a) * 1.2f };
-		GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.5f, pos_.z }, v, 0.25f, 0.35f, { 1.0f, 0.2f, 0.1f, 1.0f });
+		GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.5f, pos_.z }, v, 0.25f, 0.35f, BossVisualColor::Primary(casterBoss_, 1.0f));
 	}
 	// 前方方向へ集中する赤い突進予告ライン
 	for (int i = 0; i < 12; i++) {
 		float spread = static_cast<float>(rand() % 11 - 5) * 0.06f;
 		float fwdSp  = 1.5f + static_cast<float>(rand() % 8) * 0.2f;
 		Vector3 v = { direction_.x * fwdSp + spread, 0.05f + static_cast<float>(rand() % 5) * 0.03f, direction_.z * fwdSp + spread };
-		GPUParticleManager::GetInstance()->Emit(pos_, v, 0.2f, 0.22f, { 1.0f, 0.35f, 0.1f, 0.9f });
+		GPUParticleManager::GetInstance()->Emit(pos_, v, 0.2f, 0.22f, BossVisualColor::Secondary(casterBoss_, 0.9f));
 	}
 }
 
@@ -87,6 +90,56 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 	}
 
 	// ボス本体を突進方向へ進める
+	if (repeatDelayTimer_ > 0) {
+		pos_ = casterBoss_->GetPosition();
+
+		if (player && !player->IsDead()) {
+			Vector3 playerPos = player->GetPosition();
+			Vector3 toPlayer = {
+				playerPos.x - pos_.x,
+				0.0f,
+				playerPos.z - pos_.z
+			};
+			if (Length(toPlayer) > 0.01f) {
+				direction_ = Normalize(toPlayer);
+				Vector3 rot = casterBoss_->GetRotation();
+				rot.y = std::atan2f(direction_.x, direction_.z);
+				casterBoss_->SetRotation(rot);
+			}
+		}
+
+		for (int i = 0; i < 18; i++) {
+			float distance = 2.0f + static_cast<float>(i) * 1.3f;
+			Vector3 warningPos = {
+				pos_.x + direction_.x * distance,
+				pos_.y + 0.12f,
+				pos_.z + direction_.z * distance
+			};
+			Vector3 warningVel = {
+				(rand() % 7 - 3) * 0.01f,
+				0.02f,
+				(rand() % 7 - 3) * 0.01f
+			};
+			Vector4 warningColor = (i % 2 == 0)
+				? BossVisualColor::Primary(casterBoss_, 0.85f)
+				: BossVisualColor::Secondary(casterBoss_, 0.65f);
+			GPUParticleManager::GetInstance()->Emit(warningPos, warningVel, 0.18f, 0.35f, warningColor);
+		}
+
+		if (obj_) {
+			Vector3 rot = casterBoss_->GetRotation();
+			obj_->SetTranslation(pos_);
+			obj_->SetRotation({ 0.0f, rot.y, 0.0f });
+			obj_->SetScale(scale_);
+			obj_->SetColor(BossVisualColor::Primary(casterBoss_, 0.35f));
+			obj_->SetEmissive(2.5f, 0);
+			obj_->Update();
+		}
+
+		repeatDelayTimer_--;
+		return;
+	}
+
 	Vector3 currentPos = casterBoss_->GetPosition();
 	Vector3 nextPos = currentPos + direction_ * speed_;
 
@@ -107,15 +160,15 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 			float sp = 0.8f + static_cast<float>(rand() % 12) * 0.15f;
 			Vector3 v = { std::cosf(a) * sp, 0.5f + static_cast<float>(rand() % 8) * 0.15f, std::sinf(a) * sp };
 			Vector4 c = (rand() % 2 == 0)
-				? Vector4{ 1.0f, 0.3f, 0.1f, 1.0f }
-				: Vector4{ 1.0f, 0.85f, 0.6f, 1.0f };
+				? BossVisualColor::Primary(casterBoss_, 1.0f)
+				: BossVisualColor::Secondary(casterBoss_, 1.0f);
 			GPUParticleManager::GetInstance()->Emit(pos_, v, 0.4f, 0.25f + static_cast<float>(rand() % 4) * 0.06f, c);
 		}
 		// 壁衝突リング
 		for (int i = 0; i < 20; i++) {
 			float a = (3.14159f * 2.0f / 20.0f) * i;
 			Vector3 v = { std::sinf(a) * 1.4f, 0.05f, std::cosf(a) * 1.4f };
-			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.3f, pos_.z }, v, 0.3f, 0.35f, { 1.0f, 0.5f, 0.2f, 1.0f });
+			GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.3f, pos_.z }, v, 0.3f, 0.35f, BossVisualColor::Secondary(casterBoss_, 1.0f));
 		}
 		// 壁衝突のカメラシェイク
 		if ( camera_ ) { camera_->TriggerShake(0.35f, 20); }
@@ -147,8 +200,8 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 			-direction_.z * 0.2f + (rand() % 9 - 4) * 0.02f
 		};
 		Vector4 col = (rand() % 2 == 0)
-			? Vector4{ 1.0f, 0.25f, 0.1f, 0.9f }
-			: Vector4{ 1.0f, 0.6f,  0.2f, 0.7f };
+			? BossVisualColor::Primary(casterBoss_, 0.9f)
+			: BossVisualColor::Secondary(casterBoss_, 0.7f);
 		GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, 0.3f, 0.28f, col);
 	}
 	// ② 地面をえぐる土煙（足元左右に広がる）
@@ -160,7 +213,7 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 			 direction_.x * side * (0.4f + static_cast<float>(rand() % 5) * 0.1f)
 		};
 		GPUParticleManager::GetInstance()->Emit(
-			{ pos_.x, pos_.y + 0.1f, pos_.z }, dustVel, 0.4f, 0.3f, { 0.7f, 0.4f, 0.2f, 0.6f });
+			{ pos_.x, pos_.y + 0.1f, pos_.z }, dustVel, 0.4f, 0.3f, BossVisualColor::DarkSmoke(casterBoss_, 0.6f));
 	}
 	// ③ 白熱コア（ボス直後の白い閃光点）
 	GPUParticleManager::GetInstance()->Emit(
@@ -173,6 +226,8 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 		obj_->SetTranslation(pos_);
 		obj_->SetRotation({ 0.0f, rot.y, 0.0f });
 		obj_->SetScale(scale_);
+		obj_->SetColor(BossVisualColor::Primary(casterBoss_, 0.45f));
+		obj_->SetEmissive(2.8f, 0);
 		obj_->Update();
 	}
 
@@ -206,20 +261,63 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 				Vector3 sv = { std::cosf(a) * sp, 0.6f + static_cast<float>(rand() % 8) * 0.15f, std::sinf(a) * sp };
 				Vector4 sc = (rand() % 3 == 0)
 					? Vector4{ 1.0f, 1.0f, 0.8f, 1.0f }
-					: Vector4{ 1.0f, 0.3f, 0.1f, 1.0f };
+					: BossVisualColor::Primary(casterBoss_, 1.0f);
 				GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.35f, 0.22f + static_cast<float>(rand() % 4) * 0.06f, sc);
 			}
 			// 衝撃波リング
 			for (int i = 0; i < 20; ++i) {
 				float a = (3.14159f * 2.0f / 20.0f) * i;
 				Vector3 rv = { std::sinf(a) * 1.6f, 0.0f, std::cosf(a) * 1.6f };
-				GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.4f, pos_.z }, rv, 0.25f, 0.3f, { 1.0f, 0.5f, 0.2f, 1.0f });
+				GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y + 0.4f, pos_.z }, rv, 0.25f, 0.3f, BossVisualColor::Secondary(casterBoss_, 1.0f));
 			}
 		}
 	}
 
 	timer_--;
 	if (timer_ <= 0) {
+		const bool canRepeatCharge =
+			repeatCount_ == 0 &&
+			casterBoss_ &&
+			!casterBoss_->IsDead() &&
+			casterBoss_->IsSplitBehaviorEnabled() &&
+			casterBoss_->GetCombatRole() == Boss::CombatRole::Melee &&
+			casterBoss_->GetHP() <= (casterBoss_->GetMaxHP() / 2);
+
+		if (canRepeatCharge) {
+			repeatCount_++;
+			timer_ = duration_;
+			repeatDelayTimer_ = 30;
+			hasHit_ = false;
+			pos_ = casterBoss_->GetPosition();
+
+			if (player && !player->IsDead()) {
+				Vector3 playerPos = player->GetPosition();
+				Vector3 toPlayer = {
+					playerPos.x - pos_.x,
+					0.0f,
+					playerPos.z - pos_.z
+				};
+				if (Length(toPlayer) > 0.01f) {
+					direction_ = Normalize(toPlayer);
+					Vector3 rot = casterBoss_->GetRotation();
+					rot.y = std::atan2f(direction_.x, direction_.z);
+					casterBoss_->SetRotation(rot);
+				}
+			}
+
+			casterBoss_->SetActionLock(duration_ + repeatDelayTimer_ + 6);
+			casterBoss_->StartCardRepeatWarning(105, repeatDelayTimer_);
+
+			for (int i = 0; i < 16; i++) {
+				float a = (3.14159f * 2.0f / 16.0f) * i;
+				Vector3 v = { std::sinf(a) * 1.1f, 0.1f, std::cosf(a) * 1.1f };
+				GPUParticleManager::GetInstance()->Emit(
+					{ pos_.x, pos_.y + 0.5f, pos_.z }, v, 0.22f, 0.32f,
+					BossVisualColor::Primary(casterBoss_, 1.0f));
+			}
+			return;
+		}
+
 		isFinished_ = true;
 	}
 }
