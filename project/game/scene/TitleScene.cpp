@@ -91,6 +91,7 @@ void TitleScene::Initialize() {
 
 	// BGMロード
 	// タイトル用BGMを再生
+	AudioManager::GetInstance()->SetBGMVolume(0.22f);
 	GameBGM::Title();
 
 	// モデル読み込み

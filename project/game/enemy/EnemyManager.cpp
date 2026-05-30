@@ -447,6 +447,9 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, co
 	if (ShouldShowEnemyCardRing(enemy)) {
 		Vector3 ringPosition = enemy.GetPosition();
 		ringPosition.y -= enemy.GetScale().y;
+		if (visual.useWallWalkAnimation) {
+			ringPosition.y += 0.33f;
+		}
 		ringPosition.y += 0.02f;
 		const float baseRadius = (std::max)(enemy.GetScale().x, enemy.GetScale().z) * 0.95f;
 		const float outerRadius = baseRadius + 0.3f;

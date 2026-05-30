@@ -134,6 +134,8 @@ private: // メンバ変数
 	std::unique_ptr<EnemyManager> enemyManager_;
 
 	std::unique_ptr<BossManager> bossManager_ = nullptr;
+	bool hasStartedSceneBgm_ = false;
+	bool isTutorialMode_ = false;
 
 	int enemySpawnCount_ = 5;   // 出したい敵の数
 	int enemySpawnMargin_ = 2;  // 壁から何マス離すか

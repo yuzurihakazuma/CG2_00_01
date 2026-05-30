@@ -8,6 +8,7 @@
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/camera/Camera.h"
+#include "game/audio/GameSE.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -169,6 +170,7 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				}
 				if ( !fang.hasEmergedParticle && fang.currentY >= fang.pos.y ) {
 					fang.hasEmergedParticle = true;
+					GameSE::Fang();
 
 					// カメラシェイクは全体で1回だけ（最初のトゲ出現時のみ）
 					if ( camera_ && !hasShaken_ ) {

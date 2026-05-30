@@ -2,6 +2,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
+#include "game/audio/GameSE.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <cmath>
@@ -64,6 +65,10 @@ void BossSpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* b
     if (timer_ > t4) {
         isFinished_ = true;
         return;
+    }
+
+    if (timer_ == t0 + 1 || timer_ == t2 + 1) {
+        GameSE::Spear();
     }
 
     for (int i = 0; i < 3; i++) {

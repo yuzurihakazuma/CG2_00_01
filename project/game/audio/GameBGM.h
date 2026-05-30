@@ -8,6 +8,7 @@ namespace GameBGM {
 	// 今はすべて Morning.mp3 を仮で入れてあり、あとで個別に差し替えやすい形にしている
 	inline constexpr const char* kTitle = "resources/Audio/Caravan.mp3";
 	inline constexpr const char* kGameScene = "resources/Audio/Battle_in_the_Moonlight.mp3";
+	inline constexpr const char* kTutorial = "resources/Audio/TutorialBGM.mp3";
 	inline constexpr const char* kBoss = "resources/Audio/全てを創造する者「Dominus_Deus」.mp3";
 	inline constexpr const char* kGameClear = "resources/Audio/栄光のファンファーレ.mp3";
 	inline constexpr const char* kGameOver = "resources/Audio/絶望の淵から.mp3";
@@ -41,6 +42,7 @@ namespace GameBGM {
 	// シーンごとの呼び出し関数
 	inline void Title(float fadeInSec = 0.0f) { Play(kTitle, fadeInSec); }
 	inline void GameScene(float fadeInSec = 0.0f) { Play(kGameScene, fadeInSec); }
+	inline void Tutorial(float fadeInSec = 0.0f) { Play(kTutorial, fadeInSec); }
 	inline void Boss(float fadeSec = 0.5f) { Change(kBoss, fadeSec); }
 	inline void GameClear(float fadeSec = 0.5f) { Change(kGameClear, fadeSec); }
 	inline void GameOver(float fadeSec = 0.5f) { Change(kGameOver, fadeSec); }

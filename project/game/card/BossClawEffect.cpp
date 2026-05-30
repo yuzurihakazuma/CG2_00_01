@@ -3,6 +3,7 @@
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
 #include "game/enemy/EnemyManager.h"
+#include "game/audio/GameSE.h"
 #include "engine/particle/GPUParticleManager.h" 
 #include <algorithm>
 #include <cmath>
@@ -52,6 +53,10 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 	// X斬り2撃目に入る直前に当たり判定をリセット
 	if (timer_ == 30) {
 		hasHit_ = false;
+	}
+
+	if (timer_ == 22 || timer_ == 30) {
+		GameSE::Claw();
 	}
 
 	if (obj_) {

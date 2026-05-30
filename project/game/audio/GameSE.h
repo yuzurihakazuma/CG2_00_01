@@ -25,7 +25,7 @@ namespace GameSE {
 	inline constexpr const char *kPlayerDamage = "resources/Audio/小キック.mp3"; // プレイヤーの被弾
 	inline constexpr const char *kDodge = "resources/Audio/ジャンプ.mp3"; // 回避アクション
 	inline constexpr const char *kStairs = "resources/Audio/アスファルトの上を歩く2.mp3"; // 階段の昇降
-	//inline constexpr const char *kSceneTransition = "resources/Audio/打撃2.mp3"; // シーン遷移
+	inline constexpr const char *kSceneTransition = "resources/Audio/CardShutter.mp3"; // シーン遷移
 	inline constexpr const char *kCostShortage = "resources/Audio/ビープ音4.mp3"; // コスト不足エラー
 	inline constexpr const char *kLevelUp = "resources/Audio/レベルアップ.mp3"; // レベルアップ
 	inline constexpr const char *kEnemyDeath = "resources/Audio/倒れる.mp3"; // 敵の撃破
@@ -36,7 +36,7 @@ namespace GameSE {
 	inline constexpr const char *kFist = "resources/Audio/中パンチ.mp3"; // 素手・拳
 	inline constexpr const char *kKick = "resources/Audio/中キック.mp3"; // キック
 	inline constexpr const char *kSword = "resources/Audio/剣で斬る3.mp3"; // 剣
-	inline constexpr const char *kSpear = "resources/Audio/槍.mp3"; // 槍
+	inline constexpr const char *kSpear = "resources/Audio/刀の素振り2.mp3"; // 槍
 	inline constexpr const char *kHammer = "resources/Audio/打撃3.mp3"; // ハンマー
 	inline constexpr const char *kClaw = "resources/Audio/剣で斬る2.mp3"; // クロー
 
@@ -84,7 +84,7 @@ namespace GameSE {
 	inline void Cancel() { Play(kCancel, 0.55f, 0.02f, 3, 0.08f); }
 
 	// --- カード操作系 ---
-	inline void CardPickup() { Play(kCardPickup, 0.70f, 0.05f, 4, 0.02f); }
+	inline void CardPickup() { Play(kCardPickup, 0.55f, 0.05f, 4, 0.02f); }
 	inline void CardMove() { Play(kCardMove, 0.45f, 0.05f, 4, 0.03f); }
 	//inline void CardUseAttack() { Play(kCardUseAttack, 0.95f, 0.04f, 6, 0.02f); }
 	//inline void CardUseMagic() { Play(kCardUseMagic, 0.78f, 0.08f, 6, 0.02f); }
@@ -92,9 +92,9 @@ namespace GameSE {
 	// --- バトル・進行状態系 ---
 	inline void AttackHit() { Play(kAttackHit, 0.85f, 0.06f, 8, 0.015f); }
 	inline void PlayerDamage() { Play(kPlayerDamage, 0.90f, 0.04f, 3, 0.08f); }
-	inline void Dodge() { Play(kDodge, 0.65f, 0.08f, 3, 0.12f); }
+	inline void Dodge() { Play(kDodge, 0.45f, 0.08f, 3, 0.12f); }
 	inline void Stairs() { Play(kStairs, 2.30f, 0.04f, 2, 0.20f); }
-	//inline void SceneTransition() { Play(kSceneTransition, 0.55f, 0.02f, 2, 0.20f); }
+	inline void SceneTransition() { Play(kSceneTransition, 0.75f, 0.02f, 2, 0.20f); }
 	inline void CostShortage() { Play(kCostShortage, 0.55f, 0.0f, 2, 0.15f); }
 	inline void LevelUp() { Play(kLevelUp, 0.90f, 0.05f, 2, 0.10f); }
 	inline void EnemyDeath() { Play(kEnemyDeath, 0.85f, 0.08f, 6, 0.03f); }
@@ -102,17 +102,17 @@ namespace GameSE {
 	inline void BossDeath() { Play(kBossDeath, 1.00f, 0.03f, 2, 0.50f); }
 
 	// --- 武器・物理攻撃系 ---
-	inline void Fist() { Play(kFist, 0.80f, 0.04f, 6, 0.02f); }
-	inline void Kick() { Play(kKick, 0.80f, 0.04f, 6, 0.02f); }
+	inline void Fist() { Play(kFist, 0.55f, 0.04f, 6, 0.02f); }
+	inline void Kick() { Play(kKick, 1.00f, 0.04f, 6, 0.02f); }
 	inline void Sword() { Play(kSword, 0.80f, 0.04f, 6, 0.02f); }
-	inline void Spear() { Play(kSpear, 0.80f, 0.04f, 6, 0.02f); }
-	inline void Hammer() { Play(kHammer, 0.80f, 0.04f, 6, 0.02f); }
+	inline void Spear() { Play(kSpear, 0.55f, 0.04f, 6, 0.02f); }
+	inline void Hammer() { Play(kHammer, 1.00f, 0.04f, 6, 0.02f); }
 	inline void Claw() { Play(kClaw, 0.80f, 0.04f, 6, 0.02f); }
 
 	// --- 魔法・アイテム・スキル系 ---
 	inline void Fireball() { Play(kFireball, 0.78f, 0.08f, 6, 0.02f); }
 	inline void Ice() { Play(kIce, 0.78f, 0.08f, 6, 0.02f); }
-	inline void Fang() { Play(kFang, 0.78f, 0.08f, 6, 0.02f); }
+	inline void Fang() { Play(kFang, 0.38f, 0.08f, 5, 0.03f); }
 	inline void Potion() { Play(kPotion, 0.78f, 0.08f, 6, 0.02f); }
 	inline void SpeedUp() { Play(kSpeedUp, 0.78f, 0.08f, 6, 0.02f); }
 	inline void Shield() { Play(kShield, 0.78f, 0.08f, 6, 0.02f); }

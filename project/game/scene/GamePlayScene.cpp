@@ -67,8 +67,7 @@ void GamePlayScene::Initialize() {
 
 	// BGMロード (シングルトン)
 	AudioManager::GetInstance()->SetBGMVolume(0.22f);
-	// 通常ゲーム用BGMを再生
-	GameBGM::GameScene();
+	hasStartedSceneBgm_ = false;
 	// モデル読み込み (シングルトン)
 	ModelManager::GetInstance()->LoadModel("fence", "resources", "fence.obj");
 
@@ -514,7 +513,8 @@ void GamePlayScene::Initialize() {
 	.handManager = &handManager_ // チュートリアルから手札へポーションを追加できるようにする
 		});
 
-	if (ConsumeTutorialStartRequest()) {
+	isTutorialMode_ = ConsumeTutorialStartRequest();
+	if (isTutorialMode_) {
 		tutorial_->Start();
 		if (playerManager_) {
 			playerPos_ = playerManager_->GetPosition();
@@ -638,6 +638,16 @@ void GamePlayScene::UpdateControlUiMode(Input* input) {
 }
 
 void GamePlayScene::Update() {
+	if (!hasStartedSceneBgm_ && !SceneManager::GetInstance()->IsFading()) {
+		if (isTutorialMode_) {
+			AudioManager::GetInstance()->SetBGMVolume(0.40f);
+			GameBGM::Tutorial();
+		} else {
+			AudioManager::GetInstance()->SetBGMVolume(0.22f);
+			GameBGM::GameScene();
+		}
+		hasStartedSceneBgm_ = true;
+	}
 
 	// デバッグカメラ更新
 	if (debugCamera_) {
@@ -862,6 +872,7 @@ void GamePlayScene::Update() {
 				bossManager_->StartBossIntro();
 			} else {
 				// ボス部屋以外では通常ゲーム用BGMに戻す
+				AudioManager::GetInstance()->SetBGMVolume(0.22f);
 				GameBGM::GameScene(0.5f);
 				bossManager_->EndBossIntro();
 			}

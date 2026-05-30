@@ -2,6 +2,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
+#include "game/audio/GameSE.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/camera/Camera.h"
@@ -66,6 +67,10 @@ void SpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss,
     if ( cycle >= 3 ) {
         isFinished_ = true;
         return;
+    }
+
+    if ( localTimer == 7 ) {
+        GameSE::Spear();
     }
 
     Vector3 forwardVec = { std::sinf(casterYaw_), 0.0f, std::cosf(casterYaw_) };
