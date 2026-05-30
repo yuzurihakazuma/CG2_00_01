@@ -168,7 +168,7 @@ private:
     float moveRange_ = 3.0f;    // 旧巡回範囲
 
     float chaseRange_ = 14.0f;       // プレイヤーを追跡し始める距離
-    float bossRoomChaseRange_ = 30.0f; // ボス部屋での追跡距離
+    float bossRoomChaseRange_ = 9999.0f; // ボス部屋での追跡距離
     float cardUseEnterRange_ = 6.0f; // カード使用に入る距離
     float cardUseExitRange_ = 7.5f;  // カード使用をやめる距離
     float retreatEnterRange_ = 3.0f; // 離れる行動に入る距離

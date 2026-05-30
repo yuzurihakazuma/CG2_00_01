@@ -372,7 +372,7 @@ void CardUseSystem::EnsureShieldVisual(Player* player) {
 	}
 
 	auto shieldEffect = std::make_unique<ShieldEffect>();
-	shieldEffect->RestoreVisual(player->GetPosition(), camera_);
+	shieldEffect->RestoreVisual(player->GetPosition(), camera_, player->GetShieldHits());
 	activeEffects_.push_back(std::move(shieldEffect));
 }
 

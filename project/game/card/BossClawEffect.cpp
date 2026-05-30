@@ -4,6 +4,7 @@
 #include "game/enemy/Boss.h"
 #include "game/enemy/EnemyManager.h"
 #include "engine/particle/GPUParticleManager.h" 
+#include <algorithm>
 #include <cmath>
 
 using namespace VectorMath;
@@ -21,6 +22,7 @@ void BossClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
 	// ボスの位置と向きを記憶
 	casterYaw_ = casterYaw;
 	casterPos_ = casterPos;
+	lastSafeBossPos_ = casterPos;
 
 	
 
@@ -72,6 +74,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 				casterPos_.y,
 				casterPos_.z - std::cosf(casterYaw_) * backOffset
 			};
+			bossMovedPos = ApplyBossPosition(bossMovedPos, level);
 			if (casterBoss_) casterBoss_->SetPosition(bossMovedPos);
 
 			// クローはボスの少し前に構える
@@ -95,6 +98,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 				casterPos_.y + heightArc,
 				casterPos_.z + std::cosf(casterYaw_) * leapOffset
 			};
+			bossLeapPos = ApplyBossPosition(bossLeapPos, level);
 			if (casterBoss_) casterBoss_->SetPosition(bossLeapPos);
 
 			// クローはボスに追従
@@ -111,6 +115,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 		// --------------------------------------------------
 		else if (timer_ < 30) {
 			// ボスは着地点で静止
+			landPos_ = ApplyBossPosition(landPos_, level);
 			if (casterBoss_) casterBoss_->SetPosition(landPos_);
 
 			float t = static_cast<float>(timer_ - 22) / 8.0f;
@@ -129,6 +134,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 		// Phase 4: X斬り2撃目 左上→右下 (30〜38フレーム)
 		// --------------------------------------------------
 		else if (timer_ < 38) {
+			landPos_ = ApplyBossPosition(landPos_, level);
 			if (casterBoss_) casterBoss_->SetPosition(landPos_);
 
 			float t = static_cast<float>(timer_ - 30) / 8.0f;
@@ -147,6 +153,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 		// Phase 終了後: ボスを着地点に固定
 		// --------------------------------------------------
 		else {
+			landPos_ = ApplyBossPosition(landPos_, level);
 			if (casterBoss_) casterBoss_->SetPosition(landPos_);
 		}
 
@@ -306,6 +313,49 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 	if (timer_ >= 45) {
 		isFinished_ = true;
 	}
+}
+
+bool BossClawEffect::IsBossPositionBlocked(const Vector3& position, const LevelData& level) const {
+	if (level.width <= 0 || level.height <= 0 || level.tileSize <= 0.0f) {
+		return false;
+	}
+
+	constexpr float kBossWallHalfSize = 2.05f;
+	constexpr float kWallHalfSize = 1.0f;
+	const float blockDistance = kBossWallHalfSize + kWallHalfSize;
+
+	int bossGridX = static_cast<int>(std::round(position.x / level.tileSize));
+	int bossGridZ = static_cast<int>(std::round(position.z / level.tileSize));
+	int startX = std::max(0, bossGridX - 2);
+	int endX = std::min(level.width - 1, bossGridX + 2);
+	int startZ = std::max(0, bossGridZ - 2);
+	int endZ = std::min(level.height - 1, bossGridZ + 2);
+
+	for (int z = startZ; z <= endZ; z++) {
+		for (int x = startX; x <= endX; x++) {
+			if (level.tiles[z][x] != 1 && level.tiles[z][x] != 2) {
+				continue;
+			}
+
+			float worldX = x * level.tileSize;
+			float worldZ = z * level.tileSize;
+			if (std::fabs(position.x - worldX) < blockDistance &&
+				std::fabs(position.z - worldZ) < blockDistance) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+Vector3 BossClawEffect::ApplyBossPosition(const Vector3& position, const LevelData& level) {
+	if (!IsBossPositionBlocked(position, level)) {
+		lastSafeBossPos_ = position;
+		return position;
+	}
+
+	return { lastSafeBossPos_.x, position.y, lastSafeBossPos_.z };
 }
 
 void BossClawEffect::Draw() {

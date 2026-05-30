@@ -23,6 +23,8 @@ public:
 	bool IsFinished() const override { return isFinished_; }
 
 private:
+	bool IsBossPositionBlocked(const Vector3& position, const LevelData& level) const;
+	Vector3 ApplyBossPosition(const Vector3& position, const LevelData& level);
 
 	// エフェクトの状態（フェーズ）
 	enum class Phase {
@@ -44,6 +46,7 @@ private:
 	float casterYaw_ = 0.0f;
 	Vector3 casterPos_ = { 0.0f, 0.0f, 0.0f };
 	Vector3 landPos_ = { 0.0f, 0.0f, 0.0f }; // 飛び込み着地点
+	Vector3 lastSafeBossPos_ = { 0.0f, 0.0f, 0.0f };
 
 	// この攻撃を発動したボス本人
 // 今回の爪攻撃では未使用だが、全ボス攻撃クラスで受け口を統一するため保持する

@@ -2232,7 +2232,7 @@ void GamePlayScene::Draw() {
 	}
 
 	// カード使用演出描画
-	if (playerCardSystem_) {
+	if (playerCardSystem_ && !isBossCinematicPlaying) {
 		// カードエフェクトの3Dオブジェクトが正しいパイプラインで描画されるようにする
 		Obj3dCommon::GetInstance()->PreDraw(commandList);
 		PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);

@@ -24,7 +24,7 @@ using namespace VectorMath;
 namespace {
 	constexpr float kNormalBossVisualYOffset = 2.05f;
 	constexpr float kSplitBossVisualYOffset = 0.05f;
-	constexpr float kBossWallHalfSize = 1.45f;
+	constexpr float kBossWallHalfSize = 2.05f;
 	constexpr const char* kSplitBossUnionModelName = "Boss10Union";
 	constexpr const char* kSplitBossModelNames[2] = { "Boss10L", "Boss10R" };
 
@@ -32,6 +32,51 @@ namespace {
 		Vector3 position = boss.GetPosition();
 		position.y += visualYOffset;
 		return position;
+	}
+
+	Vector3 ResolveBossWallPosition(const Vector3& position, const LevelData& level) {
+		Vector3 resolved = position;
+		constexpr float kWallHalfSize = 1.0f;
+		constexpr float kPushEpsilon = 0.03f;
+
+		for (int iteration = 0; iteration < 4; ++iteration) {
+			int bossGridX = static_cast<int>(std::round(resolved.x / level.tileSize));
+			int bossGridZ = static_cast<int>(std::round(resolved.z / level.tileSize));
+			int startX = std::max(0, bossGridX - 2);
+			int endX = std::min(level.width - 1, bossGridX + 2);
+			int startZ = std::max(0, bossGridZ - 2);
+			int endZ = std::min(level.height - 1, bossGridZ + 2);
+
+			bool pushed = false;
+			for (int z = startZ; z <= endZ; ++z) {
+				for (int x = startX; x <= endX; ++x) {
+					if (level.tiles[z][x] != 1 && level.tiles[z][x] != 2) {
+						continue;
+					}
+
+					float wallX = x * level.tileSize;
+					float wallZ = z * level.tileSize;
+					float overlapX = (kBossWallHalfSize + kWallHalfSize) - std::fabs(resolved.x - wallX);
+					float overlapZ = (kBossWallHalfSize + kWallHalfSize) - std::fabs(resolved.z - wallZ);
+					if (overlapX <= 0.0f || overlapZ <= 0.0f) {
+						continue;
+					}
+
+					if (overlapX < overlapZ) {
+						resolved.x += (resolved.x < wallX ? -1.0f : 1.0f) * (overlapX + kPushEpsilon);
+					} else {
+						resolved.z += (resolved.z < wallZ ? -1.0f : 1.0f) * (overlapZ + kPushEpsilon);
+					}
+					pushed = true;
+				}
+			}
+
+			if (!pushed) {
+				break;
+			}
+		}
+
+		return resolved;
 	}
 }
 
@@ -485,10 +530,8 @@ void BossManager::Update(
 		mapManager->IsBossMap()) {
 
 		// 衝突で戻すために更新前の位置を保存
-		Vector3 oldBossPos = boss_->GetPosition();
-
-
 		// プレイヤー位置を教えてAI更新
+		Vector3 oldBossPos = boss_->GetPosition();
 		boss_->SetPlayerPosition(targetPos);
 		// 登場演出中は、Appearの間だけ更新する
 		if (!isBossIntroPlaying_ || boss_->IsAppearing()) {
@@ -537,6 +580,7 @@ void BossManager::Update(
 		}
 
 		// 見た目に反映
+		boss_->SetPosition(ResolveBossWallPosition(boss_->GetPosition(), level));
 		if (bossObj_) {
 			bossObj_->SetTranslation(GetBossVisualPosition(*boss_, kNormalBossVisualYOffset));
 			bossObj_->SetRotation(boss_->GetRotation());
@@ -631,6 +675,11 @@ void BossManager::Update(
 							}
 						}
 					}
+				}
+
+				if (!splitBosses_[i]->IsDead()) {
+					const LevelData& level = mapManager->GetLevelData();
+					splitBosses_[i]->SetPosition(ResolveBossWallPosition(splitBosses_[i]->GetPosition(), level));
 				}
 
 				if (splitBossObjs_[i]) {

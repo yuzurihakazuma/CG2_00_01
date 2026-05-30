@@ -8,7 +8,7 @@ public:
 	
 	// 初期化
 	void Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss)override;
-	void RestoreVisual(const Vector3 &casterPos, Camera *camera);
+	void RestoreVisual(const Vector3 &casterPos, Camera *camera, int shieldHits = 3);
 
 	// 更新
 	void Update(Player *player, EnemyManager *enemyManager, Boss *boss, Boss *extraBoss, const Vector3 &bossPos, const LevelData &level)override;
@@ -19,7 +19,7 @@ public:
 	bool IsFinished()const override { return isFinished_; }
 
 private:
-	void CreateShieldObject(const Vector3 &casterPos, Camera *camera);
+	void CreateShieldObject(const Vector3 &casterPos, Camera *camera, int shieldHits);
 
 	std::unique_ptr<Obj3d> obj_ = nullptr;
 	Vector3 scale_ = { 1.5f,1.5f,1.5f }; // シールドの大きさ

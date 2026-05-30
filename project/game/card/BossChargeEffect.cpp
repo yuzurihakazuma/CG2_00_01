@@ -9,7 +9,7 @@
 using namespace VectorMath;
 
 namespace {
-	constexpr float kBossChargeWallRadius = 1.45f;
+	constexpr float kBossChargeWallRadius = 2.05f;
 }
 
 void BossChargeEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
@@ -92,6 +92,15 @@ void BossChargeEffect::Update(Player* player, EnemyManager* enemyManager, Boss* 
 
 	// 突進先が壁に当たるなら壁衝突エフェクトを出して終了する
 	if (Collision::CheckBlockCollision(nextPos, kBossChargeWallRadius, level)) {
+		for (int step = 1; step <= 8; ++step) {
+			Vector3 retreatPos = currentPos - direction_ * (speed_ * 0.25f * static_cast<float>(step));
+			if (!Collision::CheckBlockCollision(retreatPos, kBossChargeWallRadius, level)) {
+				casterBoss_->SetPosition(retreatPos);
+				pos_ = retreatPos;
+				break;
+			}
+		}
+
 		// 壁衝突：爆発的な赤白の飛び散り
 		for (int i = 0; i < 30; i++) {
 			float a = static_cast<float>(rand() % 628) * 0.01f;
