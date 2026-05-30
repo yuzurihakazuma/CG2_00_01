@@ -57,6 +57,18 @@
 using namespace VectorMath;
 using namespace MatrixMath;
 
+namespace {
+std::vector<std::unique_ptr<Obj3d>>& GetFireballPredictionPreviewPool() {
+	static std::vector<std::unique_ptr<Obj3d>> pool;
+	return pool;
+}
+
+size_t& GetFireballPredictionPreviewPoolCount() {
+	static size_t count = 0;
+	return count;
+}
+}
+
 // 初期化
 void GamePlayScene::Initialize() {
 	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
@@ -3969,7 +3981,26 @@ void GamePlayScene::DrawPredictionLineSegment(const Vector2& start, const Vector
 void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw, float halfWidth, float length, float progress) {
 	(void)progress; // 今回は詠唱の進行度で見た目を変えない
 
-	if (!fireballPredictionPreviewObj_ || !camera_) {
+	if (!camera_) {
+		return;
+	}
+
+	auto& previewPool = GetFireballPredictionPreviewPool();
+	size_t& previewCount = GetFireballPredictionPreviewPoolCount();
+
+	while (previewPool.size() <= previewCount) {
+		auto previewObj = Obj3d::Create("Predictionline");
+		if (!previewObj) {
+			return;
+		}
+		previewObj->SetCamera(camera_.get());
+		previewObj->SetNoiseTexture(textures_["noise0"].srvIndex); // Obj3d描画で必要なノイズSRVを設定する
+		previewPool.push_back(std::move(previewObj));
+	}
+
+	Obj3d* previewObj = previewPool[previewCount].get();
+	previewCount++;
+	if (!previewObj) {
 		return;
 	}
 
@@ -3980,14 +4011,14 @@ void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw
 	center.y += 0.02f; // 床にめり込みすぎないよう少しだけ上げる
 
 	// Predictionline モデルを薄い予測帯として使う
-	fireballPredictionPreviewObj_->SetCamera(camera_.get());
-	fireballPredictionPreviewObj_->SetTranslation(center);
-	fireballPredictionPreviewObj_->SetRotation({ 0.0f, yaw, 0.0f });
+	previewObj->SetCamera(camera_.get());
+	previewObj->SetTranslation(center);
+	previewObj->SetRotation({ 0.0f, yaw, 0.0f });
 
 	// obj が立方体なので、幅は halfWidth、高さはかなり薄く、長さは length * 0.5 にする
-	fireballPredictionPreviewObj_->SetScale({ halfWidth, 0.1f, length * 0.5f });
+	previewObj->SetScale({ halfWidth, 0.1f, length * 0.5f });
 	// PNG の赤はそのまま使い、透明度だけ少し下げる
-	if (Model* model = fireballPredictionPreviewObj_->GetModel()) {
+	if (Model* model = previewObj->GetModel()) {
 		if (Model::Material* material = model->GetMaterial()) {
 			material->color = { 1.0f, 1.0f, 1.0f, 0.35f }; // PNGの赤をそのまま使って少し透明にする
 			material->enableLighting = false;             // ライティングを切って三角の明るさ差を消す
@@ -3995,8 +4026,8 @@ void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw
 		}
 	}
 
-	fireballPredictionPreviewObj_->Update();
-	fireballPredictionPreviewObj_->Draw();
+	previewObj->Update();
+	previewObj->Draw();
 }
 void GamePlayScene::DrawBossPredictionLines() const {
 #ifndef USE_IMGUI
@@ -4374,6 +4405,7 @@ void GamePlayScene::UpdatePostEffects(){}
 void GamePlayScene::DrawFireballPredictionLines() {
 	// 旧スプライト方式の使用数は毎フレーム初期化しておく
 	fireballPredictionLineSpriteCount_ = 0;
+	GetFireballPredictionPreviewPoolCount() = 0; // 予測線Obj3dプールの使用数も毎フレーム初期化する
 
 	// プレイヤーのファイヤーボールは詠唱中ずっと予測帯を表示する
 	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_ && readiedCard_.id == 2) {
@@ -4448,12 +4480,12 @@ void GamePlayScene::DrawFireballPredictionLines() {
 		const int kBossFireCount = 6; // ボス火球は6方向に飛ぶ
 		const float baseYaw = boss->GetRotation().y;
 
-		// 実弾はボス位置からそのまま出るので、予測線も同じ始点にする
-		Vector3 start = boss->GetPosition();
-		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
 		for (int i = 0; i < kBossFireCount; i++) {
 			const float yaw = baseYaw + (3.14159265f * 2.0f / static_cast<float>(kBossFireCount)) * static_cast<float>(i);
+
+			// 実弾どおり、ボス中心から6方向へ予測線を出す
+			Vector3 start = boss->GetPosition();
+			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
 
 			const float visibleLength = ComputeFireballPredictionVisibleLength(
 				start,
@@ -4471,7 +4503,7 @@ void GamePlayScene::DrawFireballPredictionLines() {
 				);
 			}
 		}
-		};
+	};
 
 	if (bossManager_->IsSplitBossBattle()) {
 		drawBossFireballPrediction(bossManager_->GetBossAt(0));
