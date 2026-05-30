@@ -153,6 +153,7 @@ private: // メンバ変数
 	void EnsurePredictionLineSprite(size_t index); // 予測線描画用Spriteを必要数だけ確保する
 	void DrawPredictionLineSegment(const Vector2& start, const Vector2& end, const Vector4& color, float thickness); // 2点間を1本のSpriteで描く
 	void DrawProjectedPredictionStrip(const Vector3& start, float yaw, float halfWidth, float length, float progress); // 予測帯を複数Spriteで描く
+	void DrawProjectedPredictionDisc(const Vector3& center, float radiusX, float radiusZ, const Vector4& color);
 	void StartFireballPredictionAttack(const Card& card);
 	void UpdateFireballPredictionAttack(Player* player);
 	void ResetFireballPredictionAttack();

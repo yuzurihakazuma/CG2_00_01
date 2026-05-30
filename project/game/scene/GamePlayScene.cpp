@@ -67,6 +67,16 @@ size_t& GetFireballPredictionPreviewPoolCount() {
 	static size_t count = 0;
 	return count;
 }
+
+std::vector<std::unique_ptr<Obj3d>>& GetAreaPredictionPreviewPool() {
+	static std::vector<std::unique_ptr<Obj3d>> pool;
+	return pool;
+}
+
+size_t& GetAreaPredictionPreviewPoolCount() {
+	static size_t count = 0;
+	return count;
+}
 }
 
 // 初期化
@@ -2190,6 +2200,7 @@ void GamePlayScene::Update() {
 	if (player && player->IsDead() && playerCardSystem_) {
 		playerCardSystem_->Reset();
 	}
+	TextManager::GetInstance()->SetText("CardCastingTitle", "");
 	for (auto& block : blocks_) {
 		block->Update();
 	}
@@ -2230,7 +2241,6 @@ void GamePlayScene::Update() {
 		if (isCardReady_) {
 			const int remainingSeconds = (cardReadyTimer_ + 59) / 60;
 			displayText =
-				"詠唱中\n"
 				"SPACEで発動\n"
 				"残り : " + std::to_string(remainingSeconds) + "秒\n"
 				+ descText;
@@ -2250,7 +2260,7 @@ void GamePlayScene::Update() {
 
 		// 枠のサイズ
 		float bgWidth = 440.0f;  // ミニマップの横幅に合わせると綺麗です
-		float bgHeight = 250.0f;
+		float bgHeight = 270.0f;
 
 		// 右端・上端からの余白
 		float marginLeft = 15.0f;
@@ -2273,12 +2283,24 @@ void GamePlayScene::Update() {
 		}
 
 		// 3. 文字の位置（枠の左上に合わせる）
-		float textPosY = screenH - marginBottom - bgHeight + 15.0f;
-		TextManager::GetInstance()->SetPosition("CardT", textPosX + 25.0f, textPosY);
+		float textPosY = screenH - marginBottom - bgHeight + 17.0f;
+		TextManager* textMgr = TextManager::GetInstance();
+		if (isCardReady_) {
+			textMgr->SetText("CardCastingTitle", "詠唱中");
+			textMgr->SetScale("CardCastingTitle", 1.0f);
+			textMgr->SetColor("CardCastingTitle", 1.0f, 0.92f, 0.18f, 1.0f);
+			textMgr->SetOutline("CardCastingTitle", false);
+			textMgr->SetPosition("CardCastingTitle", textPosX + 25.0f, textPosY);
+			textMgr->SetPosition("CardT", textPosX + 25.0f, textPosY + 46.0f);
+		} else {
+			textMgr->SetText("CardCastingTitle", "");
+			textMgr->SetPosition("CardT", textPosX + 25.0f, textPosY);
+		}
 	}
 	else {
 		// 手札がない時は文字を消す
 		TextManager::GetInstance()->SetText("CardT", "");
+		TextManager::GetInstance()->SetText("CardCastingTitle", "");
 		if (descBgSprite_) {
 			descBgSprite_->SetPosition({ -1000.0f, -1000.0f });
 			descBgSprite_->Update();
@@ -2514,7 +2536,6 @@ void GamePlayScene::Draw() {
 
 	
 #ifdef USE_IMGUI
-	DrawBossPredictionLines(); // ボス予測線はまだImGui版のまま
 	DrawCharacterHitboxesDebug(); // 当たり判定デバッグもImGui版のまま
 #endif
 	DrawBossIntroLetterbox();
@@ -2866,6 +2887,7 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 	if (handManager_.GetHandSize() > 0) {
 		int selectedIdx = handManager_.GetSelectedCardIndex();
 		Card selectedCard = handManager_.GetCard(selectedIdx);
+		TextManager::GetInstance()->SetText("CardCastingTitle", "");
 
 		std::string descText = selectedCard.description;
 		size_t pos = descText.find("\\n");
@@ -2880,7 +2902,7 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 		float bgWidth = 440.0f;
-		float bgHeight = 250.0f;
+		float bgHeight = 270.0f;
 		float marginLeft = 15.0f;
 		float marginBottom = 400.0f;
 
@@ -4123,9 +4145,46 @@ void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw
 	previewObj->Draw();
 }
 
+void GamePlayScene::DrawProjectedPredictionDisc(const Vector3& center, float radiusX, float radiusZ, const Vector4& color) {
+	if (!camera_) {
+		return;
+	}
+
+	auto& previewPool = GetAreaPredictionPreviewPool();
+	size_t& previewCount = GetAreaPredictionPreviewPoolCount();
+
+	while (previewPool.size() <= previewCount) {
+		auto previewObj = Obj3d::Create("sphere");
+		if (!previewObj) {
+			return;
+		}
+		previewObj->SetCamera(camera_.get());
+		previewPool.push_back(std::move(previewObj));
+	}
+
+	Obj3d* previewObj = previewPool[previewCount].get();
+	previewCount++;
+	if (!previewObj) {
+		return;
+	}
+
+	previewObj->SetCamera(camera_.get());
+	previewObj->SetTranslation(center);
+	previewObj->SetRotation({ 0.0f, 0.0f, 0.0f });
+	previewObj->SetScale({ radiusX, 0.02f, radiusZ });
+	previewObj->SetColor(color);
+	previewObj->SetEmissive(0.1f, 0);
+	if (Model* model = previewObj->GetModel()) {
+		model->SetTexture("resources/white1x1.png");
+	}
+	previewObj->Update();
+	previewObj->Draw();
+}
+
 void GamePlayScene::DrawFireballPredictionLines() {
 	fireballPredictionLineSpriteCount_ = 0;
 	GetFireballPredictionPreviewPoolCount() = 0;
+	GetAreaPredictionPreviewPoolCount() = 0;
 
 	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_ && readiedCard_.id == 2) {
 		const float yaw = playerManager_->GetRotationY();
@@ -4146,6 +4205,24 @@ void GamePlayScene::DrawFireballPredictionLines() {
 				visibleLength,
 				1.0f
 			);
+		}
+	}
+
+	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_) {
+		const float yaw = playerManager_->GetRotationY();
+		const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+		const float floorY = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : playerPos_.y - 1.45f;
+
+		if (readiedCard_.id == 6) {
+			Vector3 center = playerPos_ + forward * 5.0f;
+			center.y = floorY;
+			DrawProjectedPredictionDisc(center, 4.0f, 4.0f, { 1.0f, 0.08f, 0.06f, 0.18f });
+		} else if (readiedCard_.id == 7) {
+			for (int i = 0; i < 5; ++i) {
+				Vector3 center = playerPos_ + forward * (1.5f + static_cast<float>(i) * 2.0f);
+				center.y = floorY;
+				DrawProjectedPredictionDisc(center, 1.5f, 1.5f, { 1.0f, 0.08f, 0.06f, 0.18f });
+			}
 		}
 	}
 

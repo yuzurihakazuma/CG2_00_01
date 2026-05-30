@@ -18,11 +18,12 @@ namespace {
 Vector4 GetFireballMainColor(bool isPlayerCaster) {
 	return isPlayerCaster ? Vector4{ 1.0f, 0.35f, 0.0f, 1.0f } : Vector4{ 1.0f, 0.04f, 0.0f, 1.0f };
 }
+
+constexpr float kNormalFireballTravelDistance = 10.0f;
+constexpr float kBossFireballTravelDistance = 30.0f;
 }
 
 void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss){
-	// この効果は発動元ボスを使わない
-	(void)casterBoss;
 	// 使用者情報を保存
 	isPlayerCaster_ = isPlayerCaster;
 	camera_ = camera;
@@ -41,6 +42,8 @@ void FireballEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
 		casterPos.y,
 		casterPos.z + forward.z * 1.5f
 	};
+	startPos_ = pos_;
+	maxTravelDistance_ = casterBoss ? kBossFireballTravelDistance : kNormalFireballTravelDistance;
 
 	// 発射速度を設定する
 	velocity_ = {
@@ -79,6 +82,11 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
 	// 弾を進める
 	pos_ += velocity_;
+	Vector3 traveled = { pos_.x - startPos_.x, 0.0f, pos_.z - startPos_.z };
+	if ( Length(traveled) >= maxTravelDistance_ ) {
+		isFinished_ = true;
+		return;
+	}
 
 	const float kPI = 3.14159265f;
 	rotAngle_ += 0.15f;   // 1フレームあたりの回転速度（大きいほど速く回る）

@@ -33,27 +33,31 @@ void IceBulletEffect::Start(const Vector3& casterPos, float casterYaw, bool isPl
     Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
     pos_ = {
         casterPos.x + forward.x * 5.0f,
-        casterPos.y, // 地面
+        casterPos.y - 1.5f, // プレイヤー中心ではなく床の高さに合わせる
         casterPos.z + forward.z * 5.0f
     };
 
     // 範囲インジケーター（危険表示）を作成
-    indicatorObj_ = Obj3d::Create("sphere");
-    if ( indicatorObj_ ) {
-        indicatorObj_->SetCamera(camera);
-        indicatorObj_->SetTranslation(pos_);
-        indicatorObj_->SetScale({ range_, 0.05f, range_ });
+    // プレイヤー版は詠唱中の予測表示を使うため、発動後の円は出さない
+    indicatorObj_.reset();
+    if ( !isPlayerCaster_ ) {
+        indicatorObj_ = Obj3d::Create("sphere");
+        if ( indicatorObj_ ) {
+            indicatorObj_->SetCamera(camera);
+            indicatorObj_->SetTranslation(pos_);
+            indicatorObj_->SetScale({ range_, 0.05f, range_ });
 
-        Model* model = indicatorObj_->GetModel();
-        if ( model ) {
-            model->SetTexture("resources/white1x1.png");
-            Model::Material* material = model->GetMaterial();
-            if ( material ) {
-                material->color = GetIceBulletColor(isPlayerCaster_, 0.1f);
-                material->emissive = 1.0f;
+            Model* model = indicatorObj_->GetModel();
+            if ( model ) {
+                model->SetTexture("resources/white1x1.png");
+                Model::Material* material = model->GetMaterial();
+                if ( material ) {
+                    material->color = GetIceBulletColor(isPlayerCaster_, 0.1f);
+                    material->emissive = 1.0f;
+                }
             }
+            indicatorObj_->Update();
         }
-        indicatorObj_->Update();
     }
 
     // =========================================

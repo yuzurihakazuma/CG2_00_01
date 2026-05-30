@@ -75,24 +75,28 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		const Vector3& fangPos = fangs_.back().pos;
 		// ==========================================
 		// ★ 追加：IceBulletと同じ「赤い予兆円」の作成
+		// プレイヤー版は詠唱中の予測表示を使うため、発動後の円は出さない
 		// ==========================================
-		auto indicator = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
-		if (indicator) {
-			indicator->SetCamera(camera);
-			// 地面にめり込まないよう、少しだけ浮かせる(y + 0.05f)
-			indicator->SetTranslation({ fangPos.x, fangPos.y + 0.05f, fangPos.z });
+		std::unique_ptr<Obj3d> indicator;
+		if ( !isPlayerCaster_ ) {
+			indicator = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
+			if (indicator) {
+				indicator->SetCamera(camera);
+				// 地面にめり込まないよう、少しだけ浮かせる(y + 0.05f)
+				indicator->SetTranslation({ fangPos.x, fangPos.y + 0.05f, fangPos.z });
 
-			// 当たり判定の範囲(半径1.5f)に合わせた大きさで平たくする
-			indicator->SetScale({ 1.0f, 0.05f, 1.5f });
+				// 当たり判定の範囲(半径1.5f)に合わせた大きさで平たくする
+				indicator->SetScale({ 1.0f, 0.05f, 1.5f });
 
-			Model *model = indicator->GetModel();
-			if (model) {
-				model->SetTexture("resources/white1x1.png");
+				Model *model = indicator->GetModel();
+				if (model) {
+					model->SetTexture("resources/white1x1.png");
+				}
+				// 氷魔法と同じように赤色で最初は薄く(0.1f)設定
+				indicator->SetColor({ 1.0f, 0.0f, 0.0f, 0.1f });
+				indicator->SetEmissive(1.0f, 0);
+				indicator->Update();
 			}
-			// 氷魔法と同じように赤色で最初は薄く(0.1f)設定
-			indicator->SetColor({ 1.0f, 0.0f, 0.0f, 0.1f });
-			indicator->SetEmissive(1.0f, 0);
-			indicator->Update();
 		}
 		indicators_.push_back(std::move(indicator));
 	}
