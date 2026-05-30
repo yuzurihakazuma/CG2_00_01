@@ -550,7 +550,7 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, co
 	}
 }
 
-void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual) const {
+void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual, bool drawBody) const {
 	if (visual.cardRing) {
 		SetEnemyObjectPipeline();
 		visual.cardRing->Draw();
@@ -558,6 +558,10 @@ void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual) const {
 	if (visual.cardRingFill) {
 		SetEnemyObjectPipeline();
 		visual.cardRingFill->Draw();
+	}
+
+	if (!drawBody) {
+		return;
 	}
 
 	if (visual.skinned) {
@@ -917,8 +921,13 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManag
 		if (enemies_[i] && !enemies_[i]->IsDead()) {
 
 			// 点滅中は表示するフレームだけ描画
-			if (i < enemyVisuals_.size() && enemies_[i]->IsVisible()) {
-				DrawEnemyVisual(enemyVisuals_[i]);
+			if (i < enemyVisuals_.size()) {
+				const bool drawEnemyBody = enemies_[i]->IsVisible();
+				DrawEnemyVisual(enemyVisuals_[i], drawEnemyBody);
+
+				if (!drawEnemyBody) {
+					continue;
+				}
 
 				Enemy *enemy = enemies_[i].get();
 				EnemyVisual &visual = enemyVisuals_[i];
@@ -1129,7 +1138,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 				0.15f + (rand() % 10) * 0.03f,
 				(rand() % 11 - 5) * 0.015f
 			};
-			Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.0f, 0.0f, 0.85f } : Vector4{ 0.4f, 0.0f, 0.6f, 0.85f };
+			Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.62f, 0.04f, 0.95f, 0.85f } : Vector4{ 0.32f, 0.0f, 0.58f, 0.85f };
 			float scale = 2.0f + (rand() % 8) * 0.2f; // 2.0~3.4 に拡大
 			GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
 		}
@@ -1158,7 +1167,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 				0.4f + (rand() % 8) * 0.05f,
 				(rand() % 5 - 2) * 0.02f
 			};
-			Vector4 colColor = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.1f, 0.4f, 0.9f } : Vector4{ 0.6f, 0.0f, 0.8f, 0.85f };
+			Vector4 colColor = (rand() % 2 == 0) ? Vector4{ 0.72f, 0.08f, 1.0f, 0.9f } : Vector4{ 0.48f, 0.0f, 0.82f, 0.85f };
 			float colScale = 1.5f + (rand() % 5) * 0.2f;
 			GPUParticleManager::GetInstance()->Emit(colPos, colVel, 0.5f, colScale, colColor);
 		}
@@ -1187,7 +1196,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 				0.35f + (rand() % 8) * 0.02f,
 				(rand() % 11 - 5) * 0.04f
 			};
-			Vector4 debrisColor = (rand() % 2 == 0) ? Vector4{ 0.6f, 0.05f, 0.0f, 0.85f } : Vector4{ 0.3f, 0.0f, 0.5f, 0.8f };
+			Vector4 debrisColor = (rand() % 2 == 0) ? Vector4{ 0.46f, 0.02f, 0.74f, 0.85f } : Vector4{ 0.24f, 0.0f, 0.46f, 0.8f };
 			float debrisScale = 1.0f + (rand() % 6) * 0.2f;
 			GPUParticleManager::GetInstance()->Emit(debrisPos, debrisVel, 1.0f, debrisScale, debrisColor);
 		}

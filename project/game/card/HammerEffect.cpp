@@ -227,7 +227,8 @@ void HammerEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss
                 }
             }
             if ( extraBoss && !extraBoss->IsDead() ) {
-                Vector3 diff = { bossPos.x - pos_.x, 0.0f, bossPos.z - pos_.z };
+                Vector3 extraBossPos = extraBoss->GetPosition();
+                Vector3 diff = { extraBossPos.x - pos_.x, 0.0f, extraBossPos.z - pos_.z };
                 if ( Length(diff) < 5.0f ) {
                     extraBoss->TakeDamage(randomDamage);
                     extraBoss->SetStun(90);

@@ -2,6 +2,7 @@
 #include "game/player/Player.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "game/audio/GameSE.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
@@ -37,7 +38,7 @@ void BossSpearEffect::Start(const Vector3& casterPos, float casterYaw, bool isPl
             Model* model = spears_[i].obj->GetModel();
             if (model && model->GetMaterial()) {
                 Model::Material* mat = model->GetMaterial();
-                mat->color = { 0.7f, 0.2f, 1.0f, 1.0f };
+                mat->color = BossVisualColor::Primary(casterBoss_, 1.0f);
                 mat->emissive = 2.8f;
             }
         }
@@ -128,7 +129,7 @@ void BossSpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* b
         if (timer_ > t0 && timer_ <= t1) {
             for (int p = 0; p < 6; p++) {
                 Vector3 pv = forward * (3.0f + (rand() % 5) * 0.2f);
-                GPUParticleManager::GetInstance()->Emit(spears_[i].pos, pv, 0.1f, 0.4f, { 0.7f, 0.2f, 1.0f, 0.5f });
+                GPUParticleManager::GetInstance()->Emit(spears_[i].pos, pv, 0.1f, 0.4f, BossVisualColor::Secondary(casterBoss_, 0.5f));
             }
         }
 
@@ -139,7 +140,7 @@ void BossSpearEffect::Update(Player* player, EnemyManager* enemyManager, Boss* b
                 float spreadY = (rand() % 21 - 10) * 0.04f;
                 Vector3 dir = { forward.x + spreadX, spreadY, forward.z + spreadX };
                 float sp = 1.5f + (rand() % 10) * 0.2f;
-                GPUParticleManager::GetInstance()->Emit(spears_[i].pos, dir * sp, 0.2f, 0.8f, { 0.9f, 0.5f, 1.0f, 0.7f });
+                GPUParticleManager::GetInstance()->Emit(spears_[i].pos, dir * sp, 0.2f, 0.8f, BossVisualColor::Secondary(casterBoss_, 0.7f));
             }
         }
     }

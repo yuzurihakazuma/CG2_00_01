@@ -25,6 +25,7 @@ public:
 private:
 	bool IsBossPositionBlocked(const Vector3& position, const LevelData& level) const;
 	Vector3 ApplyBossPosition(const Vector3& position, const LevelData& level);
+	Vector3 ApplyBossPositionSwept(const Vector3& from, const Vector3& to, const LevelData& level);
 
 	// エフェクトの状態（フェーズ）
 	enum class Phase {
@@ -40,6 +41,7 @@ private:
 
 	int damage_ = 20;     // ダメージ量
 	int timer_ = 0;       // 演出の進行タイマー
+	int repeatCount_ = 0; // 暴走時の追加クロー回数
 	bool hasHit_ = false; // 現在の攻撃が当たったかどうか
 	bool isFinished_ = false;
 

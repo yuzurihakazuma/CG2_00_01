@@ -2,6 +2,7 @@
 #include "game/player/Player.h"
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "game/enemy/EnemyManager.h"
 #include "game/audio/GameSE.h"
 #include "engine/particle/GPUParticleManager.h" 
@@ -13,6 +14,7 @@ using namespace VectorMath;
 void BossClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
 	isFinished_ = false;
 	timer_ = 0; // 例：24フレーム（約0.4秒）で攻撃の判定が消える
+	repeatCount_ = 0;
 	hasHit_ = false;
 
 
@@ -39,7 +41,7 @@ void BossClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
 		Model *model = obj_->GetModel();
 		if (model && model->GetMaterial()) {
 			Model::Material *mat = model->GetMaterial();
-			mat->color = { 0.7f, 0.0f, 1.0f, 1.0f }; // ボスらしい凶悪な赤色
+			mat->color = BossVisualColor::Primary(casterBoss_, 1.0f);
 			mat->emissive = 3.0f;                    // 限界まで発光
 		}
 	}
@@ -171,7 +173,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 
 		if (timer_ < 12) {
 			// ため中: 紫の蓄積エフェクト
-			GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.3f, 2.0f, { 0.6f, 0.0f, 1.0f, 0.5f });
+			GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.3f, 2.0f, BossVisualColor::Primary(casterBoss_, 0.5f));
 		} else if (timer_ < 22) {
 			// -----------------------------------------------
 			// 踏み切り爆発 (timer_==12 の1フレームだけ)
@@ -186,13 +188,11 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 						(rand() % 5) * 0.3f,       // 少し上にも飛ぶ
 						std::sinf(angle) * speed
 					};
-					// 土色〜砂色
-					float brown = 0.55f + (rand() % 10) * 0.03f;
 					GPUParticleManager::GetInstance()->Emit(
 						casterPos_, dustVel, 0.35f, 1.8f,
-						{ brown, brown * 0.7f, 0.1f, 0.8f });
+						BossVisualColor::DarkSmoke(casterBoss_, 0.8f));
 				}
-				// 中心の爆発フラッシュ (白〜黄)
+				// 中心の爆発フラッシュ
 				for (int i = 0; i < 8; i++) {
 					Vector3 flashVel = {
 						(rand() % 7 - 3) * 0.5f,
@@ -201,12 +201,12 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 					};
 					GPUParticleManager::GetInstance()->Emit(
 						casterPos_, flashVel, 0.2f, 2.5f,
-						{ 1.0f, 0.95f, 0.6f, 0.9f });
+						BossVisualColor::Secondary(casterBoss_, 0.9f));
 				}
 			}
 
 			// -----------------------------------------------
-			// 飛翔中トレイル: 進行方向の逆に流れる青白い残像
+			// 飛翔中トレイル: 進行方向の逆に流れるボス色の残像
 			// -----------------------------------------------
 			{
 				// 進行方向の逆ベクトル (後方へ流す)
@@ -218,9 +218,9 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 				// メインの白トレイル
 				GPUParticleManager::GetInstance()->Emit(
 					tracePos, backDir, 0.18f, 2.0f,
-					{ 0.85f, 0.9f, 1.0f, 0.75f });
+					BossVisualColor::Secondary(casterBoss_, 0.75f));
 
-				// 周囲にランダムな残像粒子 (青みがかった白)
+				// 周囲にランダムな残像粒子
 				for (int i = 0; i < 4; i++) {
 					Vector3 trailVel = {
 						backDir.x + (rand() % 7 - 3) * 0.4f,
@@ -234,7 +234,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 					};
 					GPUParticleManager::GetInstance()->Emit(
 						trailPos, trailVel, 0.12f, 1.2f,
-						{ 0.6f, 0.75f, 1.0f, 0.55f });
+						BossVisualColor::Primary(casterBoss_, 0.55f));
 				}
 			}
 
@@ -257,7 +257,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 						landPos_, debrisVel, 0.4f, 1.5f,
 						{ gray, gray, gray, 0.9f });
 				}
-				// 着地点の爆発フラッシュ (紫〜白)
+				// 着地点の爆発フラッシュ
 				for (int i = 0; i < 12; i++) {
 					Vector3 flashVel = {
 						(rand() % 9 - 4) * 0.8f,
@@ -266,7 +266,7 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 					};
 					GPUParticleManager::GetInstance()->Emit(
 						landPos_, flashVel, 0.25f, 3.0f,
-						{ 0.8f, 0.4f, 1.0f, 0.95f });
+						BossVisualColor::Secondary(casterBoss_, 0.95f));
 				}
 				// 地面に沿って広がるリング状の衝撃波
 				for (int i = 0; i < 20; i++) {
@@ -279,19 +279,19 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 					};
 					GPUParticleManager::GetInstance()->Emit(
 						landPos_, ringVel, 0.2f, 0.8f,
-						{ 1.0f, 1.0f, 1.0f, 0.7f });
+						BossVisualColor::Primary(casterBoss_, 0.7f));
 				}
 			}
 		} else {
-			// X斬り中: 禍々しい赤い火花
-			GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.25f, 3.0f, { 1.0f, 0.1f, 0.1f, 0.6f });
+			// X斬り中: 発動元ボスの色に合わせた火花
+			GPUParticleManager::GetInstance()->Emit(tracePos, { 0,0,0 }, 0.25f, 3.0f, BossVisualColor::Primary(casterBoss_, 0.6f));
 			for (int i = 0; i < 5; i++) {
 				Vector3 sparkVel = {
 					(rand() % 11 - 5) * 1.5f,
 					(rand() % 11 - 5) * 1.5f,
 					(rand() % 11 - 5) * 1.5f
 				};
-				GPUParticleManager::GetInstance()->Emit(tracePos, sparkVel, 0.15f, 0.15f, { 1.0f, 0.4f, 0.0f, 1.0f });
+				GPUParticleManager::GetInstance()->Emit(tracePos, sparkVel, 0.15f, 0.15f, BossVisualColor::Secondary(casterBoss_, 1.0f));
 			}
 		}
 	}
@@ -316,6 +316,43 @@ void BossClawEffect::Update(Player *player, EnemyManager *enemyManager, Boss *bo
 	}
 
 	if (timer_ >= 45) {
+		const bool canRepeatClaw =
+			repeatCount_ == 0 &&
+			casterBoss_ &&
+			!casterBoss_->IsDead() &&
+			casterBoss_->GetHP() <= (casterBoss_->GetMaxHP() / 2) &&
+			(!casterBoss_->IsSplitBehaviorEnabled() ||
+				casterBoss_->GetCombatRole() == Boss::CombatRole::Ranged);
+
+		if (canRepeatClaw) {
+			repeatCount_++;
+			timer_ = 0;
+			hasHit_ = false;
+
+			casterPos_ = casterBoss_->GetPosition();
+			lastSafeBossPos_ = casterPos_;
+			landPos_ = casterPos_;
+
+			if (player && !player->IsDead()) {
+				Vector3 playerPos = player->GetPosition();
+				Vector3 dir = {
+					playerPos.x - casterPos_.x,
+					0.0f,
+					playerPos.z - casterPos_.z
+				};
+				if (Length(dir) > 0.01f) {
+					casterYaw_ = std::atan2f(dir.x, dir.z);
+					Vector3 rot = casterBoss_->GetRotation();
+					rot.y = casterYaw_;
+					casterBoss_->SetRotation(rot);
+				}
+			}
+
+			casterBoss_->SetActionLock(45);
+			casterBoss_->StartClawRepeatWarning(22);
+			return;
+		}
+
 		isFinished_ = true;
 	}
 }
@@ -355,12 +392,33 @@ bool BossClawEffect::IsBossPositionBlocked(const Vector3& position, const LevelD
 }
 
 Vector3 BossClawEffect::ApplyBossPosition(const Vector3& position, const LevelData& level) {
-	if (!IsBossPositionBlocked(position, level)) {
-		lastSafeBossPos_ = position;
-		return position;
+	return ApplyBossPositionSwept(lastSafeBossPos_, position, level);
+}
+
+Vector3 BossClawEffect::ApplyBossPositionSwept(const Vector3& from, const Vector3& to, const LevelData& level) {
+	Vector3 safePos = lastSafeBossPos_;
+	const float dx = to.x - from.x;
+	const float dz = to.z - from.z;
+	const float distance = std::sqrt(dx * dx + dz * dz);
+	const int steps = std::max(1, static_cast<int>(std::ceil(distance / 0.5f)));
+
+	for (int i = 1; i <= steps; i++) {
+		float t = static_cast<float>(i) / static_cast<float>(steps);
+		Vector3 checkPos = {
+			from.x + (to.x - from.x) * t,
+			from.y + (to.y - from.y) * t,
+			from.z + (to.z - from.z) * t
+		};
+
+		if (IsBossPositionBlocked(checkPos, level)) {
+			return { safePos.x, to.y, safePos.z };
+		}
+
+		safePos = checkPos;
 	}
 
-	return { lastSafeBossPos_.x, position.y, lastSafeBossPos_.z };
+	lastSafeBossPos_ = to;
+	return to;
 }
 
 void BossClawEffect::Draw() {
