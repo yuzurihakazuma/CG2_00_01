@@ -75,6 +75,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("grass", "resources", "terrain.obj");
 	ModelManager::GetInstance()->LoadModel("block", "resources/block", "block.obj");
 	ModelManager::GetInstance()->LoadModel("wall", "resources/wall", "wall.obj");
+	ModelManager::GetInstance()->LoadModel("Predictionline", "resources/Predictionline", "Predictionline.obj");
 	ModelManager::GetInstance()->LoadModel("stairs", "resources/stairs", "stairs.obj");
 
 	// プレイヤーモデル読み込み
@@ -175,13 +176,19 @@ void GamePlayScene::Initialize() {
 	camera_ = std::make_unique<Camera>(windowProc->GetClientWidth(), windowProc->GetClientHeight(), dxCommon);
 	camera_->SetTranslation({ 0.0f, 2.0f, -15.0f });
 
-	//UI専用カメラの初期化
+	// ファイヤーボール予測線用の専用モデルを1個だけ作って使い回す
+	fireballPredictionPreviewObj_ = Obj3d::Create("Predictionline");
+	if (fireballPredictionPreviewObj_) {
+		fireballPredictionPreviewObj_->SetCamera(camera_.get());
+		fireballPredictionPreviewObj_->SetNoiseTexture(textures_["noise0"].srvIndex); // Obj3d描画で必要なノイズSRVを設定する
+	}
+
+	// UI用カメラを初期化する
 	uiCamera_ = std::make_unique<Camera>(
 		windowProc->GetClientWidth(),
 		windowProc->GetClientHeight(),
 		dxCommon
 	);
-
 	// デバッグカメラ生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 	debugCamera_->Initialize();
@@ -2057,7 +2064,7 @@ void GamePlayScene::Update() {
 	}
 
 	// プレイヤー用カードシステム更新
-	UpdateFireballPredictionAttack(player);
+	//UpdateFireballPredictionAttack(player);
 
 	const bool shouldUpdatePlayerCardSystem =
 		playerCardSystem_ &&
@@ -2250,7 +2257,10 @@ void GamePlayScene::Draw() {
 
 	// マップ描画
 	mapManager_->Draw(playerPos_);
-
+	// ファイヤーボール予測線は Obj3d なので 3D 描画パス中に描く
+	Obj3dCommon::GetInstance()->PreDraw(commandList);
+	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
+	DrawFireballPredictionLines();
 	// --- GPUパーティクル描画 ---
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
@@ -2397,11 +2407,10 @@ void GamePlayScene::Draw() {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
-	DrawFireballPredictionLines();
-	DrawBossPredictionLines();
+	
 #ifdef USE_IMGUI
-
-	DrawCharacterHitboxesDebug();
+	DrawBossPredictionLines(); // ボス予測線はまだImGui版のまま
+	DrawCharacterHitboxesDebug(); // 当たり判定デバッグもImGui版のまま
 #endif
 	DrawBossIntroLetterbox();
 }
@@ -3264,16 +3273,12 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	}
 
 	if (isCardReady_) {
-		if (readiedCard_.id == 2) {
-			if (isFireballPredictionActive_) {
-				return;
-			}
-			StartFireballPredictionAttack(readiedCard_);
-			return;
-		}
+		// ファイヤーボールも他の詠唱カードと同じく、再入力した瞬間に発動する
+		// 予測線の表示は DrawFireballPredictionLines() 側で詠唱中ずっと出す
 		if (magicRepeatCooldownTimer_ > 0) {
 			return;
 		}
+
 		if (playerCardSystem_) {
 			playerCardSystem_->UseCardImmediately(
 				readiedCard_,
@@ -3285,6 +3290,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 				false
 			);
 		}
+
 		magicRepeatCooldownTimer_ = kMagicRepeatCooldownDuration;
 		return;
 	}
@@ -3924,144 +3930,74 @@ void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, fl
 	}
 }
 
-void GamePlayScene::DrawFireballPredictionLines() const {
-
-	ImDrawList* drawList = ImGui::GetBackgroundDrawList();
-	if (!drawList) {
-		return;
-	}
-
-	if (isFireballPredictionActive_) {
-		float progress = 1.0f;
-		if (kFireballPredictionDuration > 0) {
-			progress = 1.0f - static_cast<float>(fireballPredictionTimer_) / static_cast<float>(kFireballPredictionDuration);
-		}
-		progress = std::clamp(progress, 0.0f, 1.0f);
-
-		float yaw = fireballPredictionYaw_;
-		Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
-		Vector3 start = fireballPredictionCasterPos_ + forward * kFireballSpawnOffset;
-		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
-		Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
-		float halfWidth = kFireballPredictionHalfWidth;
-		float length = kFireballPredictionLength;
-
-		std::array<Vector3, 4> corners = {
-			start - right * halfWidth,
-			start + right * halfWidth,
-			start + right * halfWidth + forward * length,
-			start - right * halfWidth + forward * length
-		};
-
-		std::array<Vector2, 4> screenCorners{};
-		std::array<bool, 4> visible{};
-		for (size_t i = 0; i < corners.size(); ++i) {
-			visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
-		}
-
-		const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
-		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
-		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
-		const unsigned int fillColor = IM_COL32(255, 70, 25, fillAlpha);
-		const unsigned int lineColor = IM_COL32(255, 90, 35, lineAlpha);
-		if (allVisible) {
-			const ImVec2 fillPoints[4] = {
-				ImVec2(screenCorners[0].x, screenCorners[0].y),
-				ImVec2(screenCorners[1].x, screenCorners[1].y),
-				ImVec2(screenCorners[2].x, screenCorners[2].y),
-				ImVec2(screenCorners[3].x, screenCorners[3].y),
-			};
-			drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
-		}
-
-		for (int i = 0; i < 4; ++i) {
-			const int next = (i + 1) % 4;
-			if (!visible[i] || !visible[next]) {
-				continue;
-			}
-
-			drawList->AddLine(
-				ImVec2(screenCorners[i].x, screenCorners[i].y),
-				ImVec2(screenCorners[next].x, screenCorners[next].y),
-				lineColor,
-				kFireballPredictionLineThickness
-			);
-		}
-	}
-
-
-	if (!enemyManager_) {
-		return;
-	}
-
-	for (const auto& enemy : enemyManager_->GetEnemies()) {
-		if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
-			continue;
-		}
-		if (enemy->GetCurrentUseCard().id != 2) {
-			continue;
-		}
-		if (enemy->GetCastTimer() > kFireballPredictionDuration) {
-			continue;
-		}
-
-		float progress = enemy->GetCastProgress();
-		progress = std::clamp(progress, 0.0f, 1.0f);
-
-		float yaw = enemy->GetRotation().y;
-		Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
-		Vector3 start = enemy->GetPosition() + forward * (kFireballSpawnOffset + 1.5f);
-		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
-		Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
-		float halfWidth = kFireballPredictionHalfWidth;
-		float length = kFireballPredictionLength;
-
-		std::array<Vector3, 4> corners = {
-			start - right * halfWidth,
-			start + right * halfWidth,
-			start + right * halfWidth + forward * length,
-			start - right * halfWidth + forward * length
-		};
-
-		std::array<Vector2, 4> screenCorners{};
-		std::array<bool, 4> visible{};
-		for (size_t i = 0; i < corners.size(); ++i) {
-			visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
-		}
-
-		const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
-		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
-		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
-		const unsigned int fillColor = IM_COL32(255, 70, 25, fillAlpha);
-		const unsigned int lineColor = IM_COL32(255, 90, 35, lineAlpha);
-		if (allVisible) {
-			const ImVec2 fillPoints[4] = {
-				ImVec2(screenCorners[0].x, screenCorners[0].y),
-				ImVec2(screenCorners[1].x, screenCorners[1].y),
-				ImVec2(screenCorners[2].x, screenCorners[2].y),
-				ImVec2(screenCorners[3].x, screenCorners[3].y),
-			};
-			drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
-		}
-
-		for (int i = 0; i < 4; ++i) {
-			const int next = (i + 1) % 4;
-			if (!visible[i] || !visible[next]) {
-				continue;
-			}
-
-			drawList->AddLine(
-				ImVec2(screenCorners[i].x, screenCorners[i].y),
-				ImVec2(screenCorners[next].x, screenCorners[next].y),
-				lineColor,
-				kFireballPredictionLineThickness
-			);
-		}
+void GamePlayScene::EnsurePredictionLineSprite(size_t index) {
+	while (fireballPredictionLineSprites_.size() <= index) {
+		auto sprite = Sprite::Create("resources/white1x1.png", { -1000.0f, -1000.0f });
+		sprite->SetAnchorPoint({ 0.0f, 0.5f }); // 線分の始点基準で回転しやすくする
+		sprite->SetColor({ 1.0f, 1.0f, 1.0f, 0.0f });
+		sprite->SetSize({ 1.0f, 1.0f });
+		sprite->Update();
+		fireballPredictionLineSprites_.push_back(std::move(sprite));
 	}
 }
 
+void GamePlayScene::DrawPredictionLineSegment(const Vector2& start, const Vector2& end, const Vector4& color, float thickness) {
+	const float dx = end.x - start.x;
+	const float dy = end.y - start.y;
+	const float length = std::sqrtf(dx * dx + dy * dy);
+	if (length <= 0.5f) {
+		return; // 短すぎる線は描かない
+	}
+
+	EnsurePredictionLineSprite(fireballPredictionLineSpriteCount_);
+	Sprite* sprite = fireballPredictionLineSprites_[fireballPredictionLineSpriteCount_].get();
+	fireballPredictionLineSpriteCount_++;
+
+	if (!sprite) {
+		return;
+	}
+
+	sprite->SetAnchorPoint({ 0.0f, 0.5f }); // 左端を始点にして線分として扱う
+	sprite->SetPosition(start);
+	sprite->SetRotation(std::atan2f(dy, dx)); // スクリーン上の角度へ回転する
+	sprite->SetSize({ length, thickness });
+	sprite->SetColor(color);
+	sprite->Update();
+	sprite->Draw();
+}
+
+void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw, float halfWidth, float length, float progress) {
+	(void)progress; // 今回は詠唱の進行度で見た目を変えない
+
+	if (!fireballPredictionPreviewObj_ || !camera_) {
+		return;
+	}
+
+	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+
+	// 立方体モデルは -1 ～ 1 の大きさなので、中心を少し前に出して床すれすれに置く
+	Vector3 center = start + forward * (length * 0.5f);
+	center.y += 0.02f; // 床にめり込みすぎないよう少しだけ上げる
+
+	// Predictionline モデルを薄い予測帯として使う
+	fireballPredictionPreviewObj_->SetCamera(camera_.get());
+	fireballPredictionPreviewObj_->SetTranslation(center);
+	fireballPredictionPreviewObj_->SetRotation({ 0.0f, yaw, 0.0f });
+
+	// obj が立方体なので、幅は halfWidth、高さはかなり薄く、長さは length * 0.5 にする
+	fireballPredictionPreviewObj_->SetScale({ halfWidth, 0.1f, length * 0.5f });
+	// PNG の赤はそのまま使い、透明度だけ少し下げる
+	if (Model* model = fireballPredictionPreviewObj_->GetModel()) {
+		if (Model::Material* material = model->GetMaterial()) {
+			material->color = { 1.0f, 1.0f, 1.0f, 0.35f }; // PNGの赤をそのまま使って少し透明にする
+			material->enableLighting = false;             // ライティングを切って三角の明るさ差を消す
+			material->emissive = 0.0f;                    // 発光は使わない
+		}
+	}
+
+	fireballPredictionPreviewObj_->Update();
+	fireballPredictionPreviewObj_->Draw();
+}
 void GamePlayScene::DrawBossPredictionLines() const {
 #ifndef USE_IMGUI
 	return;
@@ -4434,3 +4370,146 @@ bool GamePlayScene::ConsumeTutorialStartRequest() {
 void GamePlayScene::UpdatePostEffects(){}
 
 
+
+void GamePlayScene::DrawFireballPredictionLines() {
+	// 旧スプライト方式の使用数は毎フレーム初期化しておく
+	fireballPredictionLineSpriteCount_ = 0;
+
+	// プレイヤーのファイヤーボールは詠唱中ずっと予測帯を表示する
+	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_ && readiedCard_.id == 2) {
+		const float yaw = playerManager_->GetRotationY();
+		Vector3 start = playerPos_ + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * kFireballSpawnOffset;
+		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+		const float visibleLength = ComputeFireballPredictionVisibleLength(
+			start,
+			yaw,
+			kFireballPredictionLength
+		);
+
+		if (visibleLength > 0.01f) {
+			DrawProjectedPredictionStrip(
+				start,
+				yaw,
+				kFireballPredictionHalfWidth,
+				visibleLength,
+				1.0f
+			);
+		}
+	}
+
+	// 敵のファイヤーボールも詠唱中ずっと表示する
+	if (enemyManager_) {
+		for (const auto& enemy : enemyManager_->GetEnemies()) {
+			if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
+				continue;
+			}
+			if (enemy->GetCurrentUseCard().id != 2) {
+				continue;
+			}
+
+			const float yaw = enemy->GetRotation().y;
+			Vector3 start = enemy->GetPosition() + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * (kFireballSpawnOffset + 1.5f);
+			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+			const float visibleLength = ComputeFireballPredictionVisibleLength(
+				start,
+				yaw,
+				kFireballPredictionLength
+			);
+
+			if (visibleLength > 0.01f) {
+				DrawProjectedPredictionStrip(
+					start,
+					yaw,
+					kFireballPredictionHalfWidth,
+					visibleLength,
+					1.0f
+				);
+			}
+		}
+	}
+
+	// ボスのファイヤーボール予測線も詠唱中ずっと表示する
+	if (!bossManager_) {
+		return;
+	}
+
+	auto drawBossFireballPrediction = [&](Boss* boss) {
+		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsVisible() || !boss->IsCasting()) {
+			return;
+		}
+
+		// ボスの火球カードは id 102
+		if (boss->GetSelectedCard().id != 102) {
+			return;
+		}
+
+		const int kBossFireCount = 6; // ボス火球は6方向に飛ぶ
+		const float baseYaw = boss->GetRotation().y;
+
+		// 実弾はボス位置からそのまま出るので、予測線も同じ始点にする
+		Vector3 start = boss->GetPosition();
+		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+		for (int i = 0; i < kBossFireCount; i++) {
+			const float yaw = baseYaw + (3.14159265f * 2.0f / static_cast<float>(kBossFireCount)) * static_cast<float>(i);
+
+			const float visibleLength = ComputeFireballPredictionVisibleLength(
+				start,
+				yaw,
+				kBossFireballPredictionLength
+			);
+
+			if (visibleLength > 0.01f) {
+				DrawProjectedPredictionStrip(
+					start,
+					yaw,
+					kFireballPredictionHalfWidth,
+					visibleLength,
+					1.0f
+				);
+			}
+		}
+		};
+
+	if (bossManager_->IsSplitBossBattle()) {
+		drawBossFireballPrediction(bossManager_->GetBossAt(0));
+		drawBossFireballPrediction(bossManager_->GetBossAt(1));
+	} else {
+		drawBossFireballPrediction(bossManager_->GetBoss());
+	}
+}
+float GamePlayScene::ComputeFireballPredictionVisibleLength(const Vector3& start, float yaw, float maxLength) const {
+	if (!mapManager_) {
+		return maxLength; // マップ情報がないときは最大長のまま使う
+	}
+
+	const LevelData& level = mapManager_->GetLevelData();
+	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+
+	const float kStep = 0.1f;           // 少しずつ前進して壁判定する
+	const float kFireballRadius = 0.5f; // 本体と同じ当たり半径
+	float visibleLength = maxLength;
+
+	for (float dist = 0.0f; dist <= maxLength; dist += kStep) {
+		Vector3 checkPos = start + forward * dist;
+		checkPos.y = start.y; // 本体と同じ高さ基準で判定する
+
+		if (Collision::CheckBlockCollision(checkPos, kFireballRadius, level)) {
+			// 衝突した中心位置から、弾の半径ぶんだけ先まで予測線を伸ばして見た目を合わせる
+			visibleLength = dist + kFireballRadius - (kStep * 0.35f);
+			break;
+		}
+	}
+
+	if (visibleLength < 0.0f) {
+		visibleLength = 0.0f; // 発射直後に壁なら描かない
+	}
+
+	if (visibleLength > maxLength) {
+		visibleLength = maxLength; // 元の最大長は超えない
+	}
+
+	return visibleLength;
+}

@@ -159,30 +159,36 @@ void FireballEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
 			}
 
-			// --- Layer3: 軌跡（トレイル）― 進行方向と逆側に暗い炎を残す ---
+			// --- Layer3: 軌跡（トレイル）--- 全部赤色で少し透明、長さも短めにする
 			{
+				// 軌跡の基準位置を弾の少し後ろにして、長さを短くする
 				Vector3 trailBase = {
-					pos_.x - velocity_.x * 3.0f,
+					pos_.x - velocity_.x * 1.8f,
 					pos_.y,
-					pos_.z - velocity_.z * 3.0f
+					pos_.z - velocity_.z * 1.8f
 				};
-				for ( int i = 0; i < 4; i++ ) {
+
+				for (int i = 0; i < 4; i++) {
 					Vector3 trailPos = {
-						trailBase.x + ( rand() % 5 - 2 ) * 0.2f,
+						trailBase.x + (rand() % 5 - 2) * 0.15f,
 						trailBase.y,
-						trailBase.z + ( rand() % 5 - 2 ) * 0.2f
+						trailBase.z + (rand() % 5 - 2) * 0.15f
 					};
+
 					Vector3 trailVel = {
-						( rand() % 3 - 1 ) * 0.2f,
-						0.5f + static_cast< float >(rand() % 5) * 0.1f,
-						( rand() % 3 - 1 ) * 0.2f
+						(rand() % 3 - 1) * 0.15f,
+						0.4f + static_cast<float>(rand() % 4) * 0.08f,
+						(rand() % 3 - 1) * 0.15f
 					};
-					float g = 0.1f + static_cast< float >( rand() % 3 ) * 0.1f;
-					Vector4 trailColor = isPlayerCaster_
-						? Vector4{ 0.8f, g, 0.0f, 0.9f }
-						: Vector4{ 0.9f, 0.02f, 0.0f, 0.9f };
-					float trailScale = 0.6f + static_cast< float >( rand() % 4 ) * 0.1f;
-					GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, 0.6f, trailScale, trailColor);
+
+					// トレイルを全部赤色にして、少し透明にする
+					Vector4 trailColor = Vector4{ 1.0f, 0.0f, 0.0f, 0.55f };
+
+					// 少し細めにして短く見せる
+					float trailScale = 0.45f + static_cast<float>(rand() % 3) * 0.08f;
+
+					// 生存時間も少し短くして、軌跡が長く残りすぎないようにする
+					GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, 0.35f, trailScale, trailColor);
 				}
 			}
 
