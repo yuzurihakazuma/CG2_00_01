@@ -2364,6 +2364,11 @@ void GamePlayScene::Draw() {
 			slideMoveUi->Draw();
 		}
 
+		if (!isPaused_) {
+			SpriteCommon::GetInstance()->PreDraw(commandList);
+			TextManager::GetInstance()->Draw();
+		}
+
 		if (!SceneManager::GetInstance()->IsFading()) {
 			levelUpBonusManager_.Draw();
 		}
@@ -2371,10 +2376,7 @@ void GamePlayScene::Draw() {
 		
 		DrawPauseUI();
 
-		if (!isPaused_) {
-			SpriteCommon::GetInstance()->PreDraw(commandList);
-			TextManager::GetInstance()->Draw();
-		}
+		
 	}
 
 	// チュートリアルの停止中は、ポーズ画面とは別の暗幕だけを描く

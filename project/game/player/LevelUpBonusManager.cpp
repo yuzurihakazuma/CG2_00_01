@@ -11,8 +11,9 @@
 
 void LevelUpBonusManager::Initialize() {
     isSelecting_ = false;
-	previousPlayerLevel_ = 1;
+    previousPlayerLevel_ = 1;
     currentSelectedChoice_ = Choice::IncreaseMaxHandSize;
+    canIncreaseMaxHandSize_ = true;
     wasRightStickLeft_ = false;
     wasRightStickRight_ = false;
     const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
@@ -40,7 +41,7 @@ void LevelUpBonusManager::Initialize() {
         choiceVisuals_[(int)Choice::GetRandomCard]->SetPosition({ 740.0f, 210.0f }); // 中央から少し右
     }
 
-   // テキストUI
+    // テキストUI
     UISprite_ = Sprite::Create("resources/UI/LevelUpUi.png", { 0.0f,0.0f });
     if (UISprite_) {
         UISprite_->SetAnchorPoint({ 0.5f,0.5f });
@@ -66,12 +67,13 @@ void LevelUpBonusManager::Initialize() {
         choiceArrowSprite_->SetSize({ 36.0f, 68.0f });
         choiceArrowSprite_->SetRotation(1.570796f);
     }
-   
+
 }
 
 void LevelUpBonusManager::Reset(int currentLevel) {
     isSelecting_ = false;
-	previousPlayerLevel_ = currentLevel;
+    previousPlayerLevel_ = currentLevel;
+    canIncreaseMaxHandSize_ = true;
     wasRightStickLeft_ = false;
     wasRightStickRight_ = false;
 }
@@ -91,7 +93,12 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
             isSelecting_ = true;
             wasRightStickLeft_ = false;
             wasRightStickRight_ = false;
-            currentSelectedChoice_ = Choice::IncreaseMaxHandSize; // デフォルトは枠増加
+
+            // 最大手札が10以上なら、手札上限アップは表示・選択しない
+            canIncreaseMaxHandSize_ = handManager->GetMaxHandSize() < 10;
+            currentSelectedChoice_ = canIncreaseMaxHandSize_
+                ? Choice::IncreaseMaxHandSize
+                : Choice::GetRandomCard;
 
             // 画面が出た直後、30フレーム(0.5秒)は入力を受け付けない！
             inputDelayTimer_ = 30;
@@ -115,12 +122,13 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
 
         // 選択画面表示中：入力処理（A/Dキー または 左右矢印キー）
        // Aキーと左キーに加えて 左D-Pad でも左選択できるようにする
-        if (
-            input->Triggerkey(DIK_A) ||
-            input->Triggerkey(DIK_LEFT) ||
-            input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT) ||
-            (isRightStickLeft && !wasRightStickLeft_)
-            ) {
+        if (canIncreaseMaxHandSize_ &&
+            (
+                input->Triggerkey(DIK_A) ||
+                input->Triggerkey(DIK_LEFT) ||
+                input->TriggerJoystickButton(XINPUT_GAMEPAD_DPAD_LEFT) ||
+                (isRightStickLeft && !wasRightStickLeft_)
+                )) {
             currentSelectedChoice_ = Choice::IncreaseMaxHandSize;
         }
         // Dキーと右キーに加えて 右D-Pad でも右選択できるようにする
@@ -143,6 +151,11 @@ LevelUpResult LevelUpBonusManager::Update(PlayerManager *playerManager, HandMana
 
         if (input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A)) {
             GameSE::Confirm();
+            // 念のため、上限到達中に手札上限アップが選ばれていたらカード獲得に補正
+            if (!canIncreaseMaxHandSize_ && currentSelectedChoice_ == Choice::IncreaseMaxHandSize) {
+                currentSelectedChoice_ = Choice::GetRandomCard;
+            }
+
             // 選択されたボーナスを適用
             finalResult = ApplyBonus(handManager, currentSelectedChoice_);
 
@@ -175,12 +188,19 @@ void LevelUpBonusManager::Draw() {
 
     // 選択肢の描画
     for (int i = 0; i < (int)Choice::Count; ++i) {
+        // 最大手札が10以上なら Change.png（手札上限アップ）は出さない
+        if (!canIncreaseMaxHandSize_ && i == (int)Choice::IncreaseMaxHandSize) {
+            continue;
+        }
+
         if (choiceVisuals_[i]) {
             // 画面横幅の 20% 程度を中央からオフセットさせる
             float offsetX = screenW * 0.15f;
             Vector2 basePos;
 
-            if (i == (int)Choice::IncreaseMaxHandSize) {
+            if (!canIncreaseMaxHandSize_ && i == (int)Choice::GetRandomCard) {
+                basePos = { centerX, centerY }; // 手札上限アップ非表示時は中央
+            } else if (i == (int)Choice::IncreaseMaxHandSize) {
                 basePos = { centerX - offsetX, centerY }; // 左側
             } else {
                 basePos = { centerX + offsetX, centerY }; // 右側
@@ -195,7 +215,7 @@ void LevelUpBonusManager::Draw() {
                 choiceVisuals_[i]->SetPosition(basePos);
             }
 
-           
+
 
             choiceVisuals_[i]->Update();
             choiceVisuals_[i]->Draw();
@@ -212,7 +232,9 @@ void LevelUpBonusManager::Draw() {
     if (choiceArrowSprite_) {
         const float offsetX = screenW * 0.15f;
         Vector2 selectedBasePos = { centerX - offsetX, centerY };
-        if (currentSelectedChoice_ == Choice::GetRandomCard) {
+        if (!canIncreaseMaxHandSize_) {
+            selectedBasePos = { centerX, centerY };
+        } else if (currentSelectedChoice_ == Choice::GetRandomCard) {
             selectedBasePos = { centerX + offsetX, centerY };
         }
 
@@ -221,24 +243,26 @@ void LevelUpBonusManager::Draw() {
         choiceArrowSprite_->Draw();
     }
 
-    
 
-    // 左のテキスト画像の描画（左パネルの下）
-    if (leftTextSprite_) {
-        // centerX - panelOffsetX で、左パネルの真下にピタッと合わせます
-        leftTextSprite_->SetPosition({ centerX + panelOffsetX_, centerY  });
+
+    // 手札上限アップのテキスト画像
+    if (canIncreaseMaxHandSize_ && leftTextSprite_) {
+        leftTextSprite_->SetPosition({ centerX + panelOffsetX_, centerY });
         leftTextSprite_->Update();
         leftTextSprite_->Draw();
     }
 
-    // 右のテキスト画像の描画（右パネルの下）
+    // カード獲得のテキスト画像（LevelUpCardUi.png）
     if (rightTextSprite_) {
-        // centerX + panelOffsetX で、右パネルの真下にピタッと合わせます
-        rightTextSprite_->SetPosition({ centerX - panelOffsetX_, centerY });
+        float cardTextX = canIncreaseMaxHandSize_
+            ? centerX - panelOffsetX_
+            : centerX - (panelOffsetX_ * 2.3f);
+
+        rightTextSprite_->SetPosition({ cardTextX, centerY });
         rightTextSprite_->Update();
         rightTextSprite_->Draw();
     }
-    
+
 }
 
 LevelUpResult LevelUpBonusManager::ApplyBonus(HandManager *handManager, Choice choice) {
