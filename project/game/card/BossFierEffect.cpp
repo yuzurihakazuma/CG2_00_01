@@ -32,7 +32,7 @@ void BossFierEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     isSplitBoss_ = casterBoss && casterBoss->IsSplitBehaviorEnabled();
 
     pos_ = casterPos;
-    pos_.y += 1.0f;
+    pos_.y += 0.0f;
 
     Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
 
@@ -76,11 +76,36 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             if ( !mf.active ) continue;
             anyActive = true;
 
+            // 小さい火球も移動中に壁をまたがないように移動前位置を持つ
+            Vector3 previousMiniPos = mf.pos;
+
             mf.pos += mf.vel;
             mf.timer--;
 
-            // メイン弾と同じパーティクル（小炎版・少し小さめ）
+            // メイン炎と同じパーティクル・回転演出
             mf.rotAngle += 0.20f;
+
+            // 小さい火球も途中点を見ながら壁判定する
+            const int kMiniWallCheckSteps = 4;
+            for (int step = 1; step <= kMiniWallCheckSteps; step++) {
+                const float t = static_cast<float>(step) / static_cast<float>(kMiniWallCheckSteps);
+
+                Vector3 checkPos = {
+                    previousMiniPos.x + (mf.pos.x - previousMiniPos.x) * t,
+                    previousMiniPos.y + (mf.pos.y - previousMiniPos.y) * t,
+                    previousMiniPos.z + (mf.pos.z - previousMiniPos.z) * t
+                };
+
+                if (Collision::CheckBlockCollision(checkPos, 0.6f, level)) {
+                    mf.pos = checkPos; // 当たった位置で消す
+                    mf.active = false;
+                    break;
+                }
+            }
+
+            if (!mf.active) {
+                continue;
+            }
 
             // --- 内側リング（3個）---
             for ( int ri = 0; ri < 3; ri++ ) {
@@ -164,32 +189,55 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         return; // 分裂後はメイン弾の処理をスキップ
     }
 
-    // =========================================================
-    // メイン弾：前へ進める
-    // =========================================================
+    // メイン炎の移動前位置を保存する
+    Vector3 previousPos = pos_;
+
+    // メイン炎を前へ進める
     pos_ += velocity_;
+
+    // 移動中に壁をまたいでも消えるように、途中点も含めて当たり判定する
+    bool hitWall = false;
+    const int kWallCheckSteps = 4;
+
+    for (int step = 1; step <= kWallCheckSteps; step++) {
+        const float t = static_cast<float>(step) / static_cast<float>(kWallCheckSteps);
+
+        Vector3 checkPos = {
+            previousPos.x + (pos_.x - previousPos.x) * t,
+            previousPos.y + (pos_.y - previousPos.y) * t,
+            previousPos.z + (pos_.z - previousPos.z) * t
+        };
+
+        if (Collision::CheckBlockCollision(checkPos, 1.0f, level)) {
+            pos_ = checkPos; // 当たった位置で爆発させる
+            hitWall = true;
+            break;
+        }
+    }
 
     // =============================================
     // 壁衝突判定
     // =============================================
-    if ( Collision::CheckBlockCollision( pos_, 1.0f, level ) ) {
-        // 壁ヒット：炎の爆散
-        for ( int i = 0; i < 10; i++ ) {
-            float a = static_cast<float>( rand() % 628 ) * 0.01f;
-            float sp = 0.7f + static_cast<float>( rand() % 10 ) * 0.12f;
-            Vector3 v = { std::cosf( a ) * sp, 0.3f + static_cast<float>( rand() % 6 ) * 0.1f, std::sinf( a ) * sp };
+    if (hitWall) {
+        // 壁に当たったときの火花を出す
+        for (int i = 0; i < 10; i++) {
+            float a = static_cast<float>(rand() % 628) * 0.01f;
+            float sp = 0.7f + static_cast<float>(rand() % 10) * 0.12f;
+            Vector3 v = { std::cosf(a) * sp, 0.3f + static_cast<float>(rand() % 6) * 0.1f, std::sinf(a) * sp };
             Vector4 c = (rand() % 2 == 0)
                 ? FirePrimary(isSplitBoss_, casterBoss_, 1.0f)
                 : FireSecondary(isSplitBoss_, casterBoss_, 0.9f);
-            GPUParticleManager::GetInstance()->Emit( pos_, v, 0.3f, 0.7f + static_cast<float>( rand() % 5 ) * 0.1f, c );
+            GPUParticleManager::GetInstance()->Emit(pos_, v, 0.3f, 0.7f + static_cast<float>(rand() % 5) * 0.1f, c);
         }
-        // 壁ヒットリング
-        for ( int i = 0; i < 8; i++ ) {
-            float a = ( 3.14159f * 2.0f / 8.0f ) * i;
-            Vector3 v = { std::sinf( a ) * 1.0f, 0.02f, std::cosf( a ) * 1.0f };
+
+        // 壁ヒット時のリング演出
+        for (int i = 0; i < 8; i++) {
+            float a = (3.14159f * 2.0f / 8.0f) * i;
+            Vector3 v = { std::sinf(a) * 1.0f, 0.02f, std::cosf(a) * 1.0f };
             Vector4 rc = FirePrimary(isSplitBoss_, casterBoss_, 0.9f);
-            GPUParticleManager::GetInstance()->Emit( { pos_.x, pos_.y - 0.3f, pos_.z }, v, 0.25f, 0.8f, rc );
+            GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y - 0.3f, pos_.z }, v, 0.25f, 0.8f, rc);
         }
+
         isFinished_ = true;
         return;
     }
