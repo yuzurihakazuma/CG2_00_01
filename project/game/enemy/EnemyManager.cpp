@@ -447,6 +447,9 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, co
 	if (ShouldShowEnemyCardRing(enemy)) {
 		Vector3 ringPosition = enemy.GetPosition();
 		ringPosition.y -= enemy.GetScale().y;
+		if (visual.useWallWalkAnimation) {
+			ringPosition.y += 0.33f;
+		}
 		ringPosition.y += 0.02f;
 		const float baseRadius = (std::max)(enemy.GetScale().x, enemy.GetScale().z) * 0.95f;
 		const float outerRadius = baseRadius + 0.3f;
@@ -547,7 +550,7 @@ void EnemyManager::UpdateEnemyVisual(EnemyVisual &visual, const Enemy &enemy, co
 	}
 }
 
-void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual) const {
+void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual, bool drawBody) const {
 	if (visual.cardRing) {
 		SetEnemyObjectPipeline();
 		visual.cardRing->Draw();
@@ -555,6 +558,10 @@ void EnemyManager::DrawEnemyVisual(const EnemyVisual &visual) const {
 	if (visual.cardRingFill) {
 		SetEnemyObjectPipeline();
 		visual.cardRingFill->Draw();
+	}
+
+	if (!drawBody) {
+		return;
 	}
 
 	if (visual.skinned) {
@@ -909,13 +916,19 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 
 void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManager) {
 	std::vector<Vector3> enemyPositions;
+	size_t bossMarkerCount = 0;
 
 	for (size_t i = 0; i < enemies_.size(); ++i) {
 		if (enemies_[i] && !enemies_[i]->IsDead()) {
 
 			// 点滅中は表示するフレームだけ描画
-			if (i < enemyVisuals_.size() && enemies_[i]->IsVisible()) {
-				DrawEnemyVisual(enemyVisuals_[i]);
+			if (i < enemyVisuals_.size()) {
+				const bool drawEnemyBody = enemies_[i]->IsVisible();
+				DrawEnemyVisual(enemyVisuals_[i], drawEnemyBody);
+
+				if (!drawEnemyBody) {
+					continue;
+				}
 
 				Enemy *enemy = enemies_[i].get();
 				EnemyVisual &visual = enemyVisuals_[i];
@@ -1038,18 +1051,20 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManag
 				Boss* boss = bossManager->GetBossAt(i);
 				if (boss && !boss->IsDead()) {
 					enemyPositions.push_back(boss->GetPosition()); // 分裂ボスもミニマップに出す
+					bossMarkerCount++;
 				}
 			}
 		} else {
 			Boss* boss = bossManager->GetBoss();
 			if (boss && !boss->IsDead()) {
 				enemyPositions.push_back(boss->GetPosition()); // 通常ボスをミニマップに出す
+				bossMarkerCount = 1;
 			}
 		}
 	}
 
 	if (minimap) {
-		minimap->SetEnemyPositions(enemyPositions);
+		minimap->SetEnemyPositions(enemyPositions, bossMarkerCount);
 	}
 }
 
@@ -1126,7 +1141,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 				0.15f + (rand() % 10) * 0.03f,
 				(rand() % 11 - 5) * 0.015f
 			};
-			Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.0f, 0.0f, 0.85f } : Vector4{ 0.4f, 0.0f, 0.6f, 0.85f };
+			Vector4 color = (rand() % 2 == 0) ? Vector4{ 0.62f, 0.04f, 0.95f, 0.85f } : Vector4{ 0.32f, 0.0f, 0.58f, 0.85f };
 			float scale = 2.0f + (rand() % 8) * 0.2f; // 2.0~3.4 に拡大
 			GPUParticleManager::GetInstance()->Emit(auraPos, auraVel, 0.8f, scale, color);
 		}
@@ -1155,7 +1170,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 				0.4f + (rand() % 8) * 0.05f,
 				(rand() % 5 - 2) * 0.02f
 			};
-			Vector4 colColor = (rand() % 2 == 0) ? Vector4{ 0.8f, 0.1f, 0.4f, 0.9f } : Vector4{ 0.6f, 0.0f, 0.8f, 0.85f };
+			Vector4 colColor = (rand() % 2 == 0) ? Vector4{ 0.72f, 0.08f, 1.0f, 0.9f } : Vector4{ 0.48f, 0.0f, 0.82f, 0.85f };
 			float colScale = 1.5f + (rand() % 5) * 0.2f;
 			GPUParticleManager::GetInstance()->Emit(colPos, colVel, 0.5f, colScale, colColor);
 		}
@@ -1184,7 +1199,7 @@ void EnemyManager::SpawnBossMinions(int spawnCount, const Vector3 &summonCenter,
 				0.35f + (rand() % 8) * 0.02f,
 				(rand() % 11 - 5) * 0.04f
 			};
-			Vector4 debrisColor = (rand() % 2 == 0) ? Vector4{ 0.6f, 0.05f, 0.0f, 0.85f } : Vector4{ 0.3f, 0.0f, 0.5f, 0.8f };
+			Vector4 debrisColor = (rand() % 2 == 0) ? Vector4{ 0.46f, 0.02f, 0.74f, 0.85f } : Vector4{ 0.24f, 0.0f, 0.46f, 0.8f };
 			float debrisScale = 1.0f + (rand() % 6) * 0.2f;
 			GPUParticleManager::GetInstance()->Emit(debrisPos, debrisVel, 1.0f, debrisScale, debrisColor);
 		}

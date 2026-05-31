@@ -30,14 +30,14 @@ private:
     static constexpr float kHitHalfWidthScale = 1.0f;
     static constexpr float kHitHalfLengthScale = 1.0f;
     static constexpr float kPlayerHitRadius = 0.6f;
-    static constexpr int kLifeDuration = 90;
-    static constexpr float kBeamTurnSpeed = 0.010f;
+    static constexpr int kLifeDuration = 95;
+    static constexpr float kBeamTurnSpeed = 0.014f;
 
     std::unique_ptr<Obj3d> obj_ = nullptr;
     Vector3 pos_ = { 0.0f, 0.0f, 0.0f };
     Vector3 rot_ = { 0.0f, 0.0f, 0.0f };
     Vector3 originPos_ = { 0.0f, 0.0f, 0.0f };
-    Vector3 baseScale_ = { 1.4f, 1.2f, 14.0f };
+    Vector3 baseScale_ = { 1.6f, 1.2f, 14.0f };
 
     int damage_ = 6;
     int lifeTimer_ = kLifeDuration;

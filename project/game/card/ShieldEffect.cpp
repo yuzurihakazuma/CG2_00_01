@@ -5,6 +5,20 @@
 #include "engine/postEffect/PostEffect.h"
 #include <cmath>
 
+namespace {
+Vector4 GetShieldColorForHits(int hits) {
+	if (hits >= 3) {
+		return { 0.2f, 0.8f, 1.0f, 0.4f };
+	}
+	if (hits == 2) {
+		return { 1.0f, 0.8f, 0.2f, 0.4f };
+	}
+	if (hits == 1) {
+		return { 1.0f, 0.2f, 0.2f, 0.4f };
+	}
+	return { 1.0f, 1.0f, 1.0f, 0.4f };
+}
+}
 
 void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlayerCaster, Camera *camera, Boss* casterBoss) {
 	// この効果は発動元ボスを使わない
@@ -19,20 +33,20 @@ void ShieldEffect::Start(const Vector3 &casterPos, float casterYaw, bool isPlaye
 	rotAngle_ = 0.0f;
 	breakFlashTimer_ = 0;
 
-	CreateShieldObject(casterPos, camera);
+	CreateShieldObject(casterPos, camera, 3);
 }
 
-void ShieldEffect::RestoreVisual(const Vector3 &casterPos, Camera *camera) {
+void ShieldEffect::RestoreVisual(const Vector3 &casterPos, Camera *camera, int shieldHits) {
 	isPlayerCaster_ = true;
 	isFinished_ = false;
 	isFirstFrame_ = false;
 	rotAngle_ = 0.0f;
 	breakFlashTimer_ = 0;
 
-	CreateShieldObject(casterPos, camera);
+	CreateShieldObject(casterPos, camera, shieldHits);
 }
 
-void ShieldEffect::CreateShieldObject(const Vector3 &casterPos, Camera *camera) {
+void ShieldEffect::CreateShieldObject(const Vector3 &casterPos, Camera *camera, int shieldHits) {
 	// シールド用オブジェクト生成
 	obj_ = Obj3d::Create("shield_sphere");
 	if (obj_) {
@@ -54,9 +68,9 @@ void ShieldEffect::CreateShieldObject(const Vector3 &casterPos, Camera *camera) 
 
 
 
-				material->color = { 0.5f, 0.8f, 1.0f, 1.0f }; // 水色
+				material->color = GetShieldColorForHits(shieldHits);
 
-				material->emissive = 1.8f; // Bloomに乗る強さまで自己発光を上げる
+				material->emissive = 0.8f; // Bloomに乗る強さまで自己発光を上げる
 
 
 			}
@@ -164,14 +178,7 @@ void ShieldEffect::Update(Player *player, EnemyManager *enemyManager, Boss *boss
 
 
 		//  ここで「ベースとなる色」を残り回数に応じて決定する
-		Vector4 baseColor = { 1.0f, 1.0f, 1.0f, 0.4f }; // デフォルト
-		if ( hits == 3 ) {
-			baseColor = { 0.2f, 0.8f, 1.0f, 0.4f }; // 青（余裕）
-		} else if ( hits == 2 ) {
-			baseColor = { 1.0f, 0.8f, 0.2f, 0.4f }; // 黄（注意）
-		} else if ( hits == 1 ) {
-			baseColor = { 1.0f, 0.2f, 0.2f, 0.4f }; // 赤（危険！）
-		}
+		Vector4 baseColor = GetShieldColorForHits(hits);
 
 
 		// 1. バリアモデル（球）の色と発光を更新

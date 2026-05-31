@@ -8,6 +8,7 @@
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/camera/Camera.h"
+#include "game/audio/GameSE.h"
 #include <cmath>
 
 using namespace VectorMath;
@@ -62,12 +63,9 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 			Model* fangModel = fang.obj->GetModel();
 			if ( fangModel ) {
 				fangModel->SetTexture("resources/white1x1.png");
-				Model::Material* mat = fangModel->GetMaterial();
-				if ( mat ) {
-					mat->color = isPlayerCaster_ ? kPlayerFangColor : kEnemyFangColor; // 敵版は赤茶で区別する
-					mat->emissive = 0.5f;
-				}
 			}
+			fang.obj->SetColor(isPlayerCaster_ ? kPlayerFangColor : kEnemyFangColor); // 敵版は赤茶で区別する
+			fang.obj->SetEmissive(0.5f, 0);
 			fang.obj->SetTranslation({ 0.0f, -1000.0f, 0.0f });
 			fang.obj->Update();
 		}
@@ -77,27 +75,28 @@ void FangEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 		const Vector3& fangPos = fangs_.back().pos;
 		// ==========================================
 		// ★ 追加：IceBulletと同じ「赤い予兆円」の作成
+		// プレイヤー版は詠唱中の予測表示を使うため、発動後の円は出さない
 		// ==========================================
-		auto indicator = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
-		if (indicator) {
-			indicator->SetCamera(camera);
-			// 地面にめり込まないよう、少しだけ浮かせる(y + 0.05f)
-			indicator->SetTranslation({ fangPos.x, fangPos.y + 0.05f, fangPos.z });
+		std::unique_ptr<Obj3d> indicator;
+		if ( !isPlayerCaster_ ) {
+			indicator = std::unique_ptr<Obj3d>(Obj3d::Create("sphere"));
+			if (indicator) {
+				indicator->SetCamera(camera);
+				// 地面にめり込まないよう、少しだけ浮かせる(y + 0.05f)
+				indicator->SetTranslation({ fangPos.x, fangPos.y + 0.05f, fangPos.z });
 
-			// 当たり判定の範囲(半径1.5f)に合わせた大きさで平たくする
-			indicator->SetScale({ 1.0f, 0.05f, 1.5f });
+				// 当たり判定の範囲(半径1.5f)に合わせた大きさで平たくする
+				indicator->SetScale({ 1.0f, 0.05f, 1.5f });
 
-			Model *model = indicator->GetModel();
-			if (model) {
-				model->SetTexture("resources/white1x1.png");
-				Model::Material *material = model->GetMaterial();
-				if (material) {
-					// 氷魔法と同じように赤色で最初は薄く(0.1f)設定
-					material->color = { 1.0f, 0.0f, 0.0f, 0.1f };
-					material->emissive = 1.0f;
+				Model *model = indicator->GetModel();
+				if (model) {
+					model->SetTexture("resources/white1x1.png");
 				}
+				// 氷魔法と同じように赤色で最初は薄く(0.1f)設定
+				indicator->SetColor({ 1.0f, 0.0f, 0.0f, 0.1f });
+				indicator->SetEmissive(1.0f, 0);
+				indicator->Update();
 			}
-			indicator->Update();
 		}
 		indicators_.push_back(std::move(indicator));
 	}
@@ -126,18 +125,13 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 			// ★ 追加：予兆円の透明度を更新（だんだん濃くする）
 			// ==========================================
 			if (i < indicators_.size() && indicators_[i]) {
-				Model *model = indicators_[i]->GetModel();
-				if (model && model->GetMaterial()) {
-					Model::Material *material = model->GetMaterial();
+				// それぞれのトゲの初期待機時間(30 + i*8)を計算
+				float maxDelay = 30.0f + (i * 8.0f);
+				// 残り時間から進行度(0.0〜1.0)を出す
+				float progress = 1.0f - (static_cast<float>(fang.delayTimer) / maxDelay);
 
-					// それぞれのトゲの初期待機時間(30 + i*8)を計算
-					float maxDelay = 30.0f + (i * 8.0f);
-					// 残り時間から進行度(0.0〜1.0)を出す
-					float progress = 1.0f - (static_cast<float>(fang.delayTimer) / maxDelay);
-
-					// 透明度を 0.1（薄い）から 0.5（濃い）へ変化させる
-					material->color.w = 0.1f + (progress * 0.4f);
-				}
+				// 透明度を 0.1（薄い）から 0.5（濃い）へ変化させる
+				indicators_[i]->SetColor({ 1.0f, 0.0f, 0.0f, 0.1f + (progress * 0.4f) });
 				indicators_[i]->Update();
 			}
 			// 待機が終わったら有効化
@@ -169,6 +163,7 @@ void FangEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 				}
 				if ( !fang.hasEmergedParticle && fang.currentY >= fang.pos.y ) {
 					fang.hasEmergedParticle = true;
+					GameSE::Fang();
 
 					// カメラシェイクは全体で1回だけ（最初のトゲ出現時のみ）
 					if ( camera_ && !hasShaken_ ) {

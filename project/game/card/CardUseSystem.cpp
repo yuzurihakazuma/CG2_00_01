@@ -274,14 +274,14 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 			GameSE::Shield(); break;
 		case 6:  // SE: アイスの音を再生
 			GameSE::Ice(); break;
-		case 7:  // SE: トゲの音を再生
-			GameSE::Fang(); break;
+		case 7:  // SE: トゲは出現時に FangEffect 側で再生
+			break;
 		case 8:  // SE: 身代わりの音を再生
 			GameSE::Decoy(); break;
 		case 9:  // SE: 攻撃力低下の音を再生
 			GameSE::AtkDown(); break;
-		case 10: // SE: クローの音を再生
-			GameSE::Claw(); break;
+		case 10: // SE: クローは攻撃ごとに ClawEffect 側で再生
+			break;
 		case 11: // SE: マップ表示の音を再生
 			GameSE::Scanner(); break;
 		case 12: // SE: コストブーストの音を再生
@@ -292,8 +292,8 @@ void CardUseSystem::ExecuteCard(const Card& card,const Vector3& casterPos,float 
 			GameSE::Sword(); break;
 		case 15: // SE: ハンマーの音を再生
 			GameSE::Hammer(); break;
-		case 16: // SE: 槍の音を再生
-			GameSE::Spear(); break;
+		case 16: // SE: 槍は突きごとに SpearEffect 側で再生
+			break;
 		// ボス用SE
 		case 102: // SE: ボスファイアーボールの使用音
 			GameSE::Fireball(); break; // 既存の火球音を流用する
@@ -372,7 +372,7 @@ void CardUseSystem::EnsureShieldVisual(Player* player) {
 	}
 
 	auto shieldEffect = std::make_unique<ShieldEffect>();
-	shieldEffect->RestoreVisual(player->GetPosition(), camera_);
+	shieldEffect->RestoreVisual(player->GetPosition(), camera_, player->GetShieldHits());
 	activeEffects_.push_back(std::move(shieldEffect));
 }
 

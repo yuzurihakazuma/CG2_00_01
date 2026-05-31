@@ -38,6 +38,8 @@ public:
 	bool ConsumeReturnToTitleRequest();
 	bool ConsumeAdvanceInputRequest();
 
+	bool ShouldKeepPracticeCards() const; // 練習用のけりとファイヤーボールを消費しない区間かどうか
+
 	void CheckPlayerGoal(const Vector3& playerWorldPos);
 	void NotifyFirstRoomCardUsed(int cardId); // 最初の部屋のカード使用を監視する
 	bool IsReusableCombatPracticeStep() const; // 練習用カードを無限使用にするステップかどうか

@@ -57,6 +57,12 @@
 using namespace VectorMath;
 using namespace MatrixMath;
 
+namespace {
+constexpr size_t kPredictionStripPrewarmCount = 12;
+constexpr size_t kPredictionAreaPrewarmCount = 8;
+constexpr Vector4 kPredictionWarningRed = { 1.0f, 0.08f, 0.06f, 0.22f };
+}
+
 // 初期化
 void GamePlayScene::Initialize() {
 	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
@@ -67,14 +73,14 @@ void GamePlayScene::Initialize() {
 
 	// BGMロード (シングルトン)
 	AudioManager::GetInstance()->SetBGMVolume(0.22f);
-	// 通常ゲーム用BGMを再生
-	GameBGM::GameScene();
+	hasStartedSceneBgm_ = false;
 	// モデル読み込み (シングルトン)
 	ModelManager::GetInstance()->LoadModel("fence", "resources", "fence.obj");
 
 	ModelManager::GetInstance()->LoadModel("grass", "resources", "terrain.obj");
 	ModelManager::GetInstance()->LoadModel("block", "resources/block", "block.obj");
 	ModelManager::GetInstance()->LoadModel("wall", "resources/wall", "wall.obj");
+	ModelManager::GetInstance()->LoadModel("Predictionline", "resources/Predictionline", "Predictionline.obj");
 	ModelManager::GetInstance()->LoadModel("stairs", "resources/stairs", "stairs.obj");
 
 	// プレイヤーモデル読み込み
@@ -148,7 +154,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("bossSummon", "resources/card", "BossSummonCard.obj");
 	ModelManager::GetInstance()->LoadModel("ruinBeam", "resources/card", "BossBeamCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossCharge", "resources/card", "BossRushCard.obj");
-	ModelManager::GetInstance()->LoadModel("bossKick", "resources/card", "kickCard.obj");
+	ModelManager::GetInstance()->LoadModel("bossKick", "resources/card", "BossKickCard.obj");
 	ModelManager::GetInstance()->LoadModel("bossSpear", "resources/card", "BossSpearCard.obj");
 
 
@@ -175,13 +181,44 @@ void GamePlayScene::Initialize() {
 	camera_ = std::make_unique<Camera>(windowProc->GetClientWidth(), windowProc->GetClientHeight(), dxCommon);
 	camera_->SetTranslation({ 0.0f, 2.0f, -15.0f });
 
-	//UI専用カメラの初期化
+	// ファイヤーボール予測線用の専用モデルを1個だけ作って使い回す
+	fireballPredictionPreviewObj_ = Obj3d::Create("Predictionline");
+	if (fireballPredictionPreviewObj_) {
+		fireballPredictionPreviewObj_->SetCamera(camera_.get());
+		fireballPredictionPreviewObj_->SetNoiseTexture(textures_["noise0"].srvIndex); // Obj3d描画で必要なノイズSRVを設定する
+	}
+
+	// Prediction previews are prewarmed to avoid first-use stalls.
+	predictionStripPreviewPool_.reserve(kPredictionStripPrewarmCount);
+	for (size_t i = 0; i < kPredictionStripPrewarmCount; ++i) {
+		auto previewObj = Obj3d::Create("Predictionline");
+		if (!previewObj) {
+			break;
+		}
+		previewObj->SetCamera(camera_.get());
+		previewObj->SetNoiseTexture(textures_["noise0"].srvIndex);
+		predictionStripPreviewPool_.push_back(std::move(previewObj));
+	}
+
+	predictionAreaPreviewPool_.reserve(kPredictionAreaPrewarmCount);
+	for (size_t i = 0; i < kPredictionAreaPrewarmCount; ++i) {
+		auto previewObj = Obj3d::Create("sphere");
+		if (!previewObj) {
+			break;
+		}
+		previewObj->SetCamera(camera_.get());
+		if (Model* model = previewObj->GetModel()) {
+			model->SetTexture(textures_["white"].srvIndex);
+		}
+		predictionAreaPreviewPool_.push_back(std::move(previewObj));
+	}
+
+	// UI用カメラを初期化する
 	uiCamera_ = std::make_unique<Camera>(
 		windowProc->GetClientWidth(),
 		windowProc->GetClientHeight(),
 		dxCommon
 	);
-
 	// デバッグカメラ生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 	debugCamera_->Initialize();
@@ -350,8 +387,8 @@ void GamePlayScene::Initialize() {
 	}
 	avoidanceControllerUiSprite_ = Sprite::Create("resources/UI/avoidanceUIC.png", { 0.0f, 0.0f });
 	if (avoidanceControllerUiSprite_) {
-		avoidanceControllerUiSprite_->SetTextureRect(1600.0f, 1150.0f, 200.0f, 73.0f);
-		avoidanceControllerUiSprite_->SetSize({ 136.0f, 73.0f });
+		avoidanceControllerUiSprite_->SetTextureRect(1600.0f, 1140.0f, 200.0f, 78.0f);
+		avoidanceControllerUiSprite_->SetSize({ 150.0f, 59.0f });
 		avoidanceControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
 	cardSelectUiSprite_ = Sprite::Create("resources/UI/avoidance2UI.png", { 0.0f, 0.0f });
@@ -362,7 +399,7 @@ void GamePlayScene::Initialize() {
 	}
 	cardSelectControllerUiSprite_ = Sprite::Create("resources/UI/avoidance2UIC.png", { 0.0f, 0.0f });
 	if (cardSelectControllerUiSprite_) {
-		cardSelectControllerUiSprite_->SetTextureRect(1600.0f, 1146.0f, 200.0f, 78.0f);
+		cardSelectControllerUiSprite_->SetTextureRect(1600.0f, 1140.0f, 200.0f, 78.0f);
 		cardSelectControllerUiSprite_->SetSize({ 150.0f, 59.0f });
 		cardSelectControllerUiSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 	}
@@ -514,7 +551,8 @@ void GamePlayScene::Initialize() {
 	.handManager = &handManager_ // チュートリアルから手札へポーションを追加できるようにする
 		});
 
-	if (ConsumeTutorialStartRequest()) {
+	isTutorialMode_ = ConsumeTutorialStartRequest();
+	if (isTutorialMode_) {
 		tutorial_->Start();
 		if (playerManager_) {
 			playerPos_ = playerManager_->GetPosition();
@@ -550,7 +588,7 @@ void GamePlayScene::UpdateMoveUiLayout() {
 	const float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 	const float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
 	const Vector2 moveIconSize = { 150.0f, 104.0f };
-	const Vector2 avoidanceIconSize = { 136.0f, 73.0f };
+	const Vector2 avoidanceIconSize = { 150.0f, 59.0f };
 	const Vector2 cardSelectIconSize = { 150.0f, 59.0f };
 	const Vector2 slideMoveIconSize = { 150.0f, 59.0f };
 	const float iconColumnWidth = 150.0f;
@@ -638,6 +676,16 @@ void GamePlayScene::UpdateControlUiMode(Input* input) {
 }
 
 void GamePlayScene::Update() {
+	if (!hasStartedSceneBgm_ && !SceneManager::GetInstance()->IsFading()) {
+		if (isTutorialMode_) {
+			AudioManager::GetInstance()->SetBGMVolume(0.40f);
+			GameBGM::Tutorial();
+		} else {
+			AudioManager::GetInstance()->SetBGMVolume(0.22f);
+			GameBGM::GameScene();
+		}
+		hasStartedSceneBgm_ = true;
+	}
 
 	// デバッグカメラ更新
 	if (debugCamera_) {
@@ -862,6 +910,7 @@ void GamePlayScene::Update() {
 				bossManager_->StartBossIntro();
 			} else {
 				// ボス部屋以外では通常ゲーム用BGMに戻す
+				AudioManager::GetInstance()->SetBGMVolume(0.22f);
 				GameBGM::GameScene(0.5f);
 				bossManager_->EndBossIntro();
 			}
@@ -1036,11 +1085,25 @@ void GamePlayScene::Update() {
 
 	if (player && mapManager_) {
 		const LevelData& level = mapManager_->GetLevelData();
-		int gridX = static_cast<int>(std::round(playerPos_.x / level.tileSize));
-		int gridZ = static_cast<int>(std::round(playerPos_.z / level.tileSize));
+		const auto& stairsTile = mapManager_->GetStairsTile();
 
-		if (gridX >= 0 && gridX < level.width && gridZ >= 0 && gridZ < level.height) {
-			if (level.tiles[gridZ][gridX] == 3) {
+		if (stairsTile.first >= 0 && stairsTile.second >= 0) {
+			// 階段タイル中心のワールド座標を計算する
+			const float stairsCenterX = static_cast<float>(stairsTile.first) * level.tileSize;
+			const float stairsCenterZ = static_cast<float>(stairsTile.second) * level.tileSize;
+
+			// 階段の当たり判定サイズを調整する
+			const float halfWidth = level.tileSize * 0.5f;   // 左右の広さ
+			const float frontRange = level.tileSize * 0.5f;  // 上側の広さ
+			const float backRange = level.tileSize * 0.8f;   // 下側の広さを少し広めにする
+
+			const bool isInsideStairsX =
+				std::abs(playerPos_.x - stairsCenterX) <= halfWidth;
+			const bool isInsideStairsZ =
+				playerPos_.z >= (stairsCenterZ - frontRange) &&
+				playerPos_.z <= (stairsCenterZ + backRange);
+
+			if (isInsideStairsX && isInsideStairsZ) {
 				const bool tutorialActive = tutorial_ && tutorial_->IsActive();
 				if (!tutorialActive && transitionState_ == TransitionState::None) {
 					// SE: 階段を下りる音を再生
@@ -1116,6 +1179,10 @@ void GamePlayScene::Update() {
 	}
 
 	if (!shouldFreezeGameplayForFade && bossManager_ && bossManager_->IsBossDeathAnimationPlaying()) {
+		if (!bossDeathCinematicPlayed_) {
+			AudioManager::GetInstance()->StopBGM(1.0f);
+			bossDeathCinematicPlayed_ = true;
+		}
 		if (!isBossDeathCinematicPlaying_) {
 			isBossDeathCinematicPlaying_ = true;
 			bossDeathCinematicTimer_ = bossDeathCinematicDuration_;
@@ -1296,6 +1363,9 @@ void GamePlayScene::Update() {
 
 				// 最初に上空からボス出現地点を見る
 				if (bossIntroState == BossManager::IntroCameraState::SkyLook) {
+					if (bossIntroTimer == 50) {
+						GameSE::BossAppear();
+					}
 
 					targetPos = {
 						bossPos.x,
@@ -1404,6 +1474,7 @@ void GamePlayScene::Update() {
 									bossManager_->SetBossIntroTimer(28);
 								} else {
 									// 5階など通常ボスはそのまま戦闘カメラへ
+									GameSE::BossAppearHorn();
 									bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
 									bossManager_->SetBossIntroTimer(40);
 								}
@@ -1420,6 +1491,10 @@ void GamePlayScene::Update() {
 					Boss* rightBoss = bossManager_ ? bossManager_->GetBossAt(1) : nullptr;
 
 					Vector3 centerPos = bossManager_->GetSplitBossCenterPosition();
+
+					if (bossIntroTimer == 28) {
+						GameSE::BossSplit();
+					}
 
 					// 0.0 -> 1.0 で中央から左右へ分裂する
 					float splitT = 1.0f - static_cast<float>(bossIntroTimer) / 28.0f;
@@ -1482,6 +1557,7 @@ void GamePlayScene::Update() {
 						}
 
 						if (bossManager_) {
+							GameSE::BossAppearHorn();
 							bossManager_->SetBossIntroCameraState(BossManager::IntroCameraState::ToBattle);
 							bossManager_->SetBossIntroTimer(40);
 						}
@@ -1528,6 +1604,14 @@ void GamePlayScene::Update() {
 					if (bossIntroTimer <= 0) {
 						if (bossManager_) {
 							bossManager_->EndBossIntro();
+						}
+						if (mapManager_ && mapManager_->IsBossMap()) {
+							AudioManager::GetInstance()->SetBGMVolume(0.22f);
+							if (mapManager_->GetCurrentFloor() == 5) {
+								GameBGM::BossFloor5(0.8f);
+							} else {
+								GameBGM::Boss(0.8f);
+							}
 						}
 						if (boss && !boss->IsDead()) {
 							boss->ClearPreBattlePose();
@@ -1677,12 +1761,16 @@ void GamePlayScene::Update() {
 		const float splitBackHeight = 14.0f;
 		const float splitFillMaxWidth = 112.0f;
 		const float splitFillHeight = 8.0f;
+		const float splitGlossHeight = 3.0f;
 
 		for (int i = 0; i < 2; ++i) {
 			Boss* splitBoss = bossManager_->GetBossAt(i);
+			Sprite* splitShadowSprite = bossManager_->GetSplitBossHpShadowSprite(i);
+			Sprite* splitFrameSprite = bossManager_->GetSplitBossHpFrameSprite(i);
 			Sprite* splitBackSprite = bossManager_->GetSplitBossHpBackSprite(i);
 			Sprite* splitFillSprite = bossManager_->GetSplitBossHpFillSprite(i);
-			if (!splitBoss || splitBoss->IsDead() || !splitBackSprite || !splitFillSprite) {
+			Sprite* splitGlossSprite = bossManager_->GetSplitBossHpGlossSprite(i);
+			if (!splitBoss || splitBoss->IsDead() || !splitShadowSprite || !splitFrameSprite || !splitBackSprite || !splitFillSprite || !splitGlossSprite) {
 				continue;
 			}
 
@@ -1694,34 +1782,71 @@ void GamePlayScene::Update() {
 			if (hpRate < 0.0f) hpRate = 0.0f;
 			if (hpRate > 1.0f) hpRate = 1.0f;
 
-			splitBackSprite->SetPosition(screenPos);
-			splitBackSprite->SetSize({ splitBackWidth, splitBackHeight });
-			splitBackSprite->Update();
+			const bool isRangedBoss = splitBoss->GetCombatRole() == Boss::CombatRole::Ranged;
+			Vector4 frameColor = isRangedBoss
+				? Vector4{ 0.12f, 0.58f, 1.0f, 0.78f }
+				: Vector4{ 0.95f, 0.18f, 0.22f, 0.78f };
+			Vector4 backColor = isRangedBoss
+				? Vector4{ 0.01f, 0.04f, 0.10f, 0.90f }
+				: Vector4{ 0.10f, 0.01f, 0.02f, 0.90f };
+			Vector4 glossColor = isRangedBoss
+				? Vector4{ 0.62f, 0.88f, 1.0f, 0.30f }
+				: Vector4{ 1.0f, 0.72f, 0.72f, 0.30f };
 
 			Vector4 hpColor{};
-			if (hpRate > 0.6f) {
-				hpColor = { 0.2f, 1.0f, 0.2f, 1.0f };
-			}
-			else if (hpRate > 0.3f) {
-				hpColor = { 1.0f, 0.9f, 0.2f, 1.0f };
-			}
-			else {
-				hpColor = { 1.0f, 0.2f, 0.2f, 1.0f };
+			if (isRangedBoss) {
+				if (hpRate > 0.6f) {
+					hpColor = { 0.08f, 0.52f, 1.0f, 1.0f };
+				}
+				else if (hpRate > 0.3f) {
+					hpColor = { 0.35f, 0.78f, 1.0f, 1.0f };
+				}
+				else {
+					hpColor = { 0.65f, 0.92f, 1.0f, 1.0f };
+				}
+			} else {
+				if (hpRate > 0.6f) {
+					hpColor = { 0.95f, 0.08f, 0.16f, 1.0f };
+				}
+				else if (hpRate > 0.3f) {
+					hpColor = { 1.0f, 0.30f, 0.12f, 1.0f };
+				}
+				else {
+					hpColor = { 1.0f, 0.08f, 0.05f, 1.0f };
+				}
 			}
 
 			float fillWidth = splitFillMaxWidth * hpRate;
 			float backLeft = screenPos.x - splitBackWidth * 0.5f;
 			float fillLeft = backLeft + 4.0f;
 			float fillCenterX = fillLeft + fillWidth * 0.5f;
-			Vector2 fillPos = {
-				fillCenterX,
-				screenPos.y + 1.0f
-			};
+			Vector2 fillPos = { fillCenterX, screenPos.y + 1.0f };
+			Vector2 shadowPos = { screenPos.x + 2.0f, screenPos.y + 2.0f };
+			Vector2 glossPos = { fillCenterX, screenPos.y - 2.0f };
+
+			splitShadowSprite->SetPosition(shadowPos);
+			splitShadowSprite->SetSize({ splitBackWidth + 8.0f, splitBackHeight + 8.0f });
+			splitShadowSprite->Update();
+
+			splitFrameSprite->SetPosition(screenPos);
+			splitFrameSprite->SetSize({ splitBackWidth + 4.0f, splitBackHeight + 4.0f });
+			splitFrameSprite->SetColor(frameColor);
+			splitFrameSprite->Update();
+
+			splitBackSprite->SetPosition(screenPos);
+			splitBackSprite->SetSize({ splitBackWidth, splitBackHeight });
+			splitBackSprite->SetColor(backColor);
+			splitBackSprite->Update();
 
 			splitFillSprite->SetPosition(fillPos);
 			splitFillSprite->SetSize({ fillWidth, splitFillHeight });
 			splitFillSprite->SetColor(hpColor);
 			splitFillSprite->Update();
+
+			splitGlossSprite->SetPosition(glossPos);
+			splitGlossSprite->SetSize({ fillWidth, splitGlossHeight });
+			splitGlossSprite->SetColor(glossColor);
+			splitGlossSprite->Update();
 		}
 	}
 
@@ -1729,11 +1854,9 @@ void GamePlayScene::Update() {
 		boss && !boss->IsDead() && mapManager_ && mapManager_->IsBossMap() &&
 		bossHpBackSprite && bossHpFillSprite && camera_) {
 
-		// 分裂ボス時は2体の中心位置にHPバーを出す
+		// ボスの注視位置を基準にHPバーを出す
 		Vector3 bossHeadPos = bossManager_->GetBossFocusPosition();
 		bossHeadPos.y += 2.8f;
-
-
 		Vector2 screenPos = WorldToScreen(bossHeadPos);
 
 		// バーサイズ
@@ -1741,29 +1864,37 @@ void GamePlayScene::Update() {
 		const float backHeight = 16.0f;
 		const float fillMaxWidth = 152.0f;
 		const float fillHeight = 10.0f;
+		const float glossHeight = 4.0f;
 
 		// HP割合
-				// 分裂ボス時は2体合計HPの割合を使う
 		float hpRate = bossManager_->GetBossHpRate();
-
 		if (hpRate < 0.0f) hpRate = 0.0f;
 		if (hpRate > 1.0f) hpRate = 1.0f;
 
-		// 背景バーは中央基準でそのまま配置
-		bossHpBackSprite->SetPosition(screenPos);
-		bossHpBackSprite->SetSize({ backWidth, backHeight });
-		bossHpBackSprite->Update();
-
 		// HP割合で色変更
+		Vector4 shadowColor = { 0.0f, 0.0f, 0.0f, 0.48f };
+		Vector4 frameColor = { 0.62f, 0.20f, 1.0f, 0.82f };
+		Vector4 backColor = { 0.06f, 0.01f, 0.10f, 0.90f };
+		Vector4 glossColor = { 0.92f, 0.70f, 1.0f, 0.34f };
+
 		Vector4 hpColor{};
 		if (hpRate > 0.6f) {
-			hpColor = { 0.2f, 1.0f, 0.2f, 1.0f }; // 緑
+			hpColor = { 0.62f, 0.18f, 1.0f, 1.0f };
 		}
 		else if (hpRate > 0.3f) {
-			hpColor = { 1.0f, 0.9f, 0.2f, 1.0f }; // 黄
+			hpColor = { 0.82f, 0.30f, 1.0f, 1.0f };
 		}
 		else {
-			hpColor = { 1.0f, 0.2f, 0.2f, 1.0f }; // 赤
+			hpColor = { 1.0f, 0.22f, 0.95f, 1.0f };
+		}
+
+		if (boss->IsEnraged()) {
+			float pulse = 0.5f + 0.5f * std::sinf(static_cast<float>(boss->GetAnimationTimer()) * 0.22f);
+			shadowColor = { 0.46f, 0.0f, 0.72f, 0.34f + pulse * 0.22f };
+			frameColor = { 0.78f + pulse * 0.18f, 0.10f + pulse * 0.12f, 1.0f, 0.88f + pulse * 0.12f };
+			backColor = { 0.09f, 0.0f, 0.14f, 0.94f };
+			glossColor = { 1.0f, 0.76f + pulse * 0.18f, 1.0f, 0.42f + pulse * 0.26f };
+			hpColor = { 0.78f + pulse * 0.20f, 0.08f + pulse * 0.12f, 1.0f, 1.0f };
 		}
 
 		// 本体バーの現在幅
@@ -1773,17 +1904,42 @@ void GamePlayScene::Update() {
 		float backLeft = screenPos.x - backWidth * 0.5f;
 		float fillLeft = backLeft + 4.0f;
 		float fillCenterX = fillLeft + fillWidth * 0.5f;
+		Vector2 fillPos = { fillCenterX, screenPos.y + 1.0f };
+		Vector2 shadowPos = { screenPos.x + 2.0f, screenPos.y + 2.0f };
+		Vector2 glossPos = { fillCenterX, screenPos.y - 3.0f };
 
-		// 背景の中央から少し下に本体バーを置く
-		Vector2 fillPos = {
-			fillCenterX,
-			screenPos.y + 1.0f
-		};
+		Sprite* bossHpShadowSprite = bossManager_->GetBossHpShadowSprite();
+		Sprite* bossHpFrameSprite = bossManager_->GetBossHpFrameSprite();
+		Sprite* bossHpGlossSprite = bossManager_->GetBossHpGlossSprite();
+		if (bossHpShadowSprite) {
+			bossHpShadowSprite->SetPosition(shadowPos);
+			bossHpShadowSprite->SetSize({ backWidth + 10.0f, backHeight + 10.0f });
+			bossHpShadowSprite->SetColor(shadowColor);
+			bossHpShadowSprite->Update();
+		}
+		if (bossHpFrameSprite) {
+			bossHpFrameSprite->SetPosition(screenPos);
+			bossHpFrameSprite->SetSize({ backWidth + 4.0f, backHeight + 4.0f });
+			bossHpFrameSprite->SetColor(frameColor);
+			bossHpFrameSprite->Update();
+		}
+
+		bossHpBackSprite->SetPosition(screenPos);
+		bossHpBackSprite->SetSize({ backWidth, backHeight });
+		bossHpBackSprite->SetColor(backColor);
+		bossHpBackSprite->Update();
 
 		bossHpFillSprite->SetPosition(fillPos);
 		bossHpFillSprite->SetSize({ fillWidth, fillHeight });
 		bossHpFillSprite->SetColor(hpColor);
 		bossHpFillSprite->Update();
+
+		if (bossHpGlossSprite) {
+			bossHpGlossSprite->SetPosition(glossPos);
+			bossHpGlossSprite->SetSize({ fillWidth, glossHeight });
+			bossHpGlossSprite->SetColor(glossColor);
+			bossHpGlossSprite->Update();
+		}
 	}
 	// その他3Dオブジェクトの更新
 	for (auto& obj : object3ds_) {
@@ -2047,8 +2203,8 @@ void GamePlayScene::Update() {
 		// チュートリアル練習中のファイヤーボールは時間切れで消費しない
 		const bool keepTutorialMagicCard =
 			tutorial_ &&
-			tutorial_->IsReusableCombatPracticeStep() &&
-			readiedCard_.id == 2;
+			tutorial_->ShouldKeepPracticeCards() &&
+			readiedCard_.id == 2; // チュートリアル中の練習用ファイヤーボールは消費しない
 
 		if (cardReadyTimer_ <= 0) {
 			EndMagicCast(!keepTutorialMagicCard);
@@ -2065,7 +2221,7 @@ void GamePlayScene::Update() {
 	}
 
 	// プレイヤー用カードシステム更新
-	UpdateFireballPredictionAttack(player);
+	//UpdateFireballPredictionAttack(player);
 
 	const bool shouldUpdatePlayerCardSystem =
 		playerCardSystem_ &&
@@ -2088,6 +2244,7 @@ void GamePlayScene::Update() {
 	if (player && player->IsDead() && playerCardSystem_) {
 		playerCardSystem_->Reset();
 	}
+	TextManager::GetInstance()->SetText("CardCastingTitle", "");
 	for (auto& block : blocks_) {
 		block->Update();
 	}
@@ -2128,7 +2285,6 @@ void GamePlayScene::Update() {
 		if (isCardReady_) {
 			const int remainingSeconds = (cardReadyTimer_ + 59) / 60;
 			displayText =
-				"詠唱中\n"
 				"SPACEで発動\n"
 				"残り : " + std::to_string(remainingSeconds) + "秒\n"
 				+ descText;
@@ -2148,7 +2304,7 @@ void GamePlayScene::Update() {
 
 		// 枠のサイズ
 		float bgWidth = 440.0f;  // ミニマップの横幅に合わせると綺麗です
-		float bgHeight = 250.0f;
+		float bgHeight = 270.0f;
 
 		// 右端・上端からの余白
 		float marginLeft = 15.0f;
@@ -2171,12 +2327,24 @@ void GamePlayScene::Update() {
 		}
 
 		// 3. 文字の位置（枠の左上に合わせる）
-		float textPosY = screenH - marginBottom - bgHeight + 15.0f;
-		TextManager::GetInstance()->SetPosition("CardT", textPosX + 25.0f, textPosY);
+		float textPosY = screenH - marginBottom - bgHeight + 17.0f;
+		TextManager* textMgr = TextManager::GetInstance();
+		if (isCardReady_) {
+			textMgr->SetText("CardCastingTitle", "詠唱中");
+			textMgr->SetScale("CardCastingTitle", 1.0f);
+			textMgr->SetColor("CardCastingTitle", 1.0f, 0.92f, 0.18f, 1.0f);
+			textMgr->SetOutline("CardCastingTitle", false);
+			textMgr->SetPosition("CardCastingTitle", textPosX + 25.0f, textPosY);
+			textMgr->SetPosition("CardT", textPosX + 25.0f, textPosY + 46.0f);
+		} else {
+			textMgr->SetText("CardCastingTitle", "");
+			textMgr->SetPosition("CardT", textPosX + 25.0f, textPosY);
+		}
 	}
 	else {
 		// 手札がない時は文字を消す
 		TextManager::GetInstance()->SetText("CardT", "");
+		TextManager::GetInstance()->SetText("CardCastingTitle", "");
 		if (descBgSprite_) {
 			descBgSprite_->SetPosition({ -1000.0f, -1000.0f });
 			descBgSprite_->Update();
@@ -2232,7 +2400,7 @@ void GamePlayScene::Draw() {
 	}
 
 	// カード使用演出描画
-	if (playerCardSystem_) {
+	if (playerCardSystem_ && !isBossCinematicPlaying) {
 		// カードエフェクトの3Dオブジェクトが正しいパイプラインで描画されるようにする
 		Obj3dCommon::GetInstance()->PreDraw(commandList);
 		PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
@@ -2258,7 +2426,10 @@ void GamePlayScene::Draw() {
 
 	// マップ描画
 	mapManager_->Draw(playerPos_);
-
+	// ファイヤーボール予測線は Obj3d なので 3D 描画パス中に描く
+	Obj3dCommon::GetInstance()->PreDraw(commandList);
+	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Object3D_CullNone);
+	DrawFireballPredictionLines();
 	// --- GPUパーティクル描画 ---
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
@@ -2364,6 +2535,11 @@ void GamePlayScene::Draw() {
 			slideMoveUi->Draw();
 		}
 
+		if (!isPaused_) {
+			SpriteCommon::GetInstance()->PreDraw(commandList);
+			TextManager::GetInstance()->Draw();
+		}
+
 		if (!SceneManager::GetInstance()->IsFading()) {
 			levelUpBonusManager_.Draw();
 		}
@@ -2371,10 +2547,7 @@ void GamePlayScene::Draw() {
 		
 		DrawPauseUI();
 
-		if (!isPaused_) {
-			SpriteCommon::GetInstance()->PreDraw(commandList);
-			TextManager::GetInstance()->Draw();
-		}
+		
 	}
 
 	// チュートリアルの停止中は、ポーズ画面とは別の暗幕だけを描く
@@ -2405,10 +2578,9 @@ void GamePlayScene::Draw() {
 		TextManager::GetInstance()->DrawText("FloorTransition");
 	}
 
+	
 #ifdef USE_IMGUI
-	DrawFireballPredictionLines();
-	DrawBossPredictionLines();
-	DrawCharacterHitboxesDebug();
+	DrawCharacterHitboxesDebug(); // 当たり判定デバッグもImGui版のまま
 #endif
 	DrawBossIntroLetterbox();
 }
@@ -2759,6 +2931,7 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 	if (handManager_.GetHandSize() > 0) {
 		int selectedIdx = handManager_.GetSelectedCardIndex();
 		Card selectedCard = handManager_.GetCard(selectedIdx);
+		TextManager::GetInstance()->SetText("CardCastingTitle", "");
 
 		std::string descText = selectedCard.description;
 		size_t pos = descText.find("\\n");
@@ -2772,10 +2945,10 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 
 		float screenW = static_cast<float>(WindowProc::GetInstance()->GetClientWidth());
 		float screenH = static_cast<float>(WindowProc::GetInstance()->GetClientHeight());
-		float bgWidth = 390.0f;
-		float bgHeight = 200.0f;
-		float marginLeft = 20.0f;
-		float marginBottom = 260.0f;
+		float bgWidth = 440.0f;
+		float bgHeight = 270.0f;
+		float marginLeft = 15.0f;
+		float marginBottom = 400.0f;
 
 		float textPosX = marginLeft;
 		if (textPosX + bgWidth > screenW - 20.0f) {
@@ -3271,16 +3444,12 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	}
 
 	if (isCardReady_) {
-		if (readiedCard_.id == 2) {
-			if (isFireballPredictionActive_) {
-				return;
-			}
-			StartFireballPredictionAttack(readiedCard_);
-			return;
-		}
+		// ファイヤーボールも他の詠唱カードと同じく、再入力した瞬間に発動する
+		// 予測線の表示は DrawFireballPredictionLines() 側で詠唱中ずっと出す
 		if (magicRepeatCooldownTimer_ > 0) {
 			return;
 		}
+
 		if (playerCardSystem_) {
 			playerCardSystem_->UseCardImmediately(
 				readiedCard_,
@@ -3292,6 +3461,7 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 				false
 			);
 		}
+
 		magicRepeatCooldownTimer_ = kMagicRepeatCooldownDuration;
 		return;
 	}
@@ -3347,8 +3517,8 @@ void GamePlayScene::UpdateCardUse(Input* input) {
 	// チュートリアルの命中練習中は、けりとファイヤーボールのコストを消費しない
 	const bool isReusableTutorialCard =
 		tutorial_ &&
-		tutorial_->IsReusableCombatPracticeStep() &&
-		(selectedCard.id == 2 || selectedCard.id == 13);
+		tutorial_->ShouldKeepPracticeCards() &&
+		(selectedCard.id == 2 || selectedCard.id == 13); // チュートリアル中の練習用カードは消費しない
 
 	if (!isReusableTutorialCard) {
 		playerManager_->UseCost(selectedCard.cost);
@@ -3630,6 +3800,10 @@ GamePlayScene::~GamePlayScene() {}
 void GamePlayScene::Finalize() {
 
 	object3ds_.clear();
+	predictionStripPreviewPool_.clear();
+	predictionStripPreviewPoolCount_ = 0;
+	predictionAreaPreviewPool_.clear();
+	predictionAreaPreviewPoolCount_ = 0;
 
 	// プレイヤー管理クラスを解放
 	if (playerManager_) {
@@ -3754,7 +3928,7 @@ void GamePlayScene::DrawBossBeamHitboxesDebug() const {
 
 		const float beamBaseLength = 14.0f;
 		const float playerHitRadius = 0.6f;
-		const float warningHalfWidth = 1.4f + playerHitRadius;
+		const float warningHalfWidth = 1.6f + playerHitRadius;
 		const float warningHalfLength = beamBaseLength + playerHitRadius;
 		const Vector3 warningCenter = {
 			bossPos.x + forward.x * (beamBaseLength * 0.90f),
@@ -3931,144 +4105,339 @@ void GamePlayScene::DrawDebugOrientedRectXZ(const Vector3& center, float yaw, fl
 	}
 }
 
-void GamePlayScene::DrawFireballPredictionLines() const {
-#ifndef USE_IMGUI
-	return;
-#endif
-	ImDrawList* drawList = ImGui::GetBackgroundDrawList();
-	if (!drawList) {
+void GamePlayScene::EnsurePredictionLineSprite(size_t index) {
+	while (fireballPredictionLineSprites_.size() <= index) {
+		auto sprite = Sprite::Create("resources/white1x1.png", { -1000.0f, -1000.0f });
+		sprite->SetAnchorPoint({ 0.0f, 0.5f }); // 線分の始点基準で回転しやすくする
+		sprite->SetColor({ 1.0f, 1.0f, 1.0f, 0.0f });
+		sprite->SetSize({ 1.0f, 1.0f });
+		sprite->Update();
+		fireballPredictionLineSprites_.push_back(std::move(sprite));
+	}
+}
+
+void GamePlayScene::DrawPredictionLineSegment(const Vector2& start, const Vector2& end, const Vector4& color, float thickness) {
+	const float dx = end.x - start.x;
+	const float dy = end.y - start.y;
+	const float length = std::sqrtf(dx * dx + dy * dy);
+	if (length <= 0.5f) {
+		return; // 短すぎる線は描かない
+	}
+
+	EnsurePredictionLineSprite(fireballPredictionLineSpriteCount_);
+	Sprite* sprite = fireballPredictionLineSprites_[fireballPredictionLineSpriteCount_].get();
+	fireballPredictionLineSpriteCount_++;
+
+	if (!sprite) {
 		return;
 	}
 
-	if (isFireballPredictionActive_) {
+	sprite->SetAnchorPoint({ 0.0f, 0.5f }); // 左端を始点にして線分として扱う
+	sprite->SetPosition(start);
+	sprite->SetRotation(std::atan2f(dy, dx)); // スクリーン上の角度へ回転する
+	sprite->SetSize({ length, thickness });
+	sprite->SetColor(color);
+	sprite->Update();
+	sprite->Draw();
+}
+
+void GamePlayScene::DrawProjectedPredictionStrip(const Vector3& start, float yaw, float halfWidth, float length, float progress, const Vector4& color) {
+	(void)progress; // 今回は詠唱の進行度で見た目を変えない
+
+	if (!camera_) {
+		return;
+	}
+
+	while (predictionStripPreviewPool_.size() <= predictionStripPreviewPoolCount_) {
+		auto previewObj = Obj3d::Create("Predictionline");
+		if (!previewObj) {
+			return;
+		}
+		previewObj->SetCamera(camera_.get());
+		previewObj->SetNoiseTexture(textures_["noise0"].srvIndex); // Obj3d描画で必要なノイズSRVを設定する
+		predictionStripPreviewPool_.push_back(std::move(previewObj));
+	}
+
+	Obj3d* previewObj = predictionStripPreviewPool_[predictionStripPreviewPoolCount_].get();
+	predictionStripPreviewPoolCount_++;
+	if (!previewObj) {
+		return;
+	}
+
+	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+
+	// 立方体モデルは -1 ～ 1 の大きさなので、中心を少し前に出して床すれすれに置く
+	Vector3 center = start + forward * (length * 0.5f);
+	center.y += 0.02f; // 床にめり込みすぎないよう少しだけ上げる
+
+	// Predictionline モデルを薄い予測帯として使う
+	previewObj->SetCamera(camera_.get());
+	previewObj->SetTranslation(center);
+	previewObj->SetRotation({ 0.0f, yaw, 0.0f });
+
+	// obj が立方体なので、幅は halfWidth、高さはかなり薄く、長さは length * 0.5 にする
+	previewObj->SetScale({ halfWidth, 0.1f, length * 0.5f });
+	// PNG の赤はそのまま使い、透明度だけ少し下げる
+	if (Model* model = previewObj->GetModel()) {
+		if (Model::Material* material = model->GetMaterial()) {
+			material->color = { 1.0f, 1.0f, 1.0f, 0.35f }; // PNGの赤をそのまま使って少し透明にする
+			material->enableLighting = false;             // ライティングを切って三角の明るさ差を消す
+			material->emissive = 0.0f;                    // 発光は使わない
+		}
+	}
+
+	previewObj->SetColor(color);
+	previewObj->Update();
+	previewObj->Draw();
+}
+
+void GamePlayScene::DrawProjectedPredictionDisc(const Vector3& center, float radiusX, float radiusZ, const Vector4& color) {
+	if (!camera_) {
+		return;
+	}
+
+	while (predictionAreaPreviewPool_.size() <= predictionAreaPreviewPoolCount_) {
+		auto previewObj = Obj3d::Create("sphere");
+		if (!previewObj) {
+			return;
+		}
+		previewObj->SetCamera(camera_.get());
+		if (Model* model = previewObj->GetModel()) {
+			model->SetTexture(textures_["white"].srvIndex);
+		}
+		predictionAreaPreviewPool_.push_back(std::move(previewObj));
+	}
+
+	Obj3d* previewObj = predictionAreaPreviewPool_[predictionAreaPreviewPoolCount_].get();
+	predictionAreaPreviewPoolCount_++;
+	if (!previewObj) {
+		return;
+	}
+
+	previewObj->SetCamera(camera_.get());
+	previewObj->SetTranslation(center);
+	previewObj->SetRotation({ 0.0f, 0.0f, 0.0f });
+	previewObj->SetScale({ radiusX, 0.02f, radiusZ });
+	previewObj->SetColor(color);
+	previewObj->SetEmissive(0.1f, 0);
+	if (Model* model = previewObj->GetModel()) {
+		model->SetTexture(textures_["white"].srvIndex);
+	}
+	previewObj->Update();
+	previewObj->Draw();
+}
+
+void GamePlayScene::DrawFireballPredictionLines() {
+	fireballPredictionLineSpriteCount_ = 0;
+	predictionStripPreviewPoolCount_ = 0;
+	predictionAreaPreviewPoolCount_ = 0;
+
+	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_ && readiedCard_.id == 2) {
+		const float yaw = playerManager_->GetRotationY();
+		Vector3 start = playerPos_ + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * kFireballSpawnOffset;
+		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+		const float visibleLength = ComputeFireballPredictionVisibleLength(
+			start,
+			yaw,
+			kFireballPredictionLength
+		);
+
+		if (visibleLength > 0.01f) {
+			DrawProjectedPredictionStrip(
+				start,
+				yaw,
+				kFireballPredictionHalfWidth,
+				visibleLength,
+				1.0f,
+				kPredictionWarningRed
+			);
+		}
+	}
+
+	if (playerManager_ && isCardReady_ && !isMagicCastPausedForSwap_) {
+		const float yaw = playerManager_->GetRotationY();
+		const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+		const float floorY = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : playerPos_.y - 1.45f;
+
+		if (readiedCard_.id == 6) {
+			Vector3 center = playerPos_ + forward * 5.0f;
+			center.y = floorY;
+			DrawProjectedPredictionDisc(center, 4.0f, 4.0f, { 1.0f, 0.08f, 0.06f, 0.18f });
+		} else if (readiedCard_.id == 7) {
+			for (int i = 0; i < 5; ++i) {
+				Vector3 center = playerPos_ + forward * (1.5f + static_cast<float>(i) * 2.0f);
+				center.y = floorY;
+				DrawProjectedPredictionDisc(center, 1.5f, 1.5f, { 1.0f, 0.08f, 0.06f, 0.18f });
+			}
+		}
+	}
+
+	if (enemyManager_) {
+		for (const auto& enemy : enemyManager_->GetEnemies()) {
+			if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
+				continue;
+			}
+			if (enemy->GetCurrentUseCard().id != 2) {
+				continue;
+			}
+
+			const float yaw = enemy->GetRotation().y;
+			Vector3 start = enemy->GetPosition() + Vector3{ std::sinf(yaw), 0.0f, std::cosf(yaw) } * (kFireballSpawnOffset + 1.5f);
+			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+			const float visibleLength = ComputeFireballPredictionVisibleLength(
+				start,
+				yaw,
+				kFireballPredictionLength
+			);
+
+			if (visibleLength > 0.01f) {
+				DrawProjectedPredictionStrip(
+					start,
+					yaw,
+					kFireballPredictionHalfWidth,
+					visibleLength,
+					1.0f,
+					kPredictionWarningRed
+				);
+			}
+		}
+	}
+
+	if (!bossManager_) {
+		return;
+	}
+
+	auto drawBossFireballPrediction = [&](Boss* boss) {
+		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsVisible() || !boss->IsCasting()) {
+			return;
+		}
+		if (boss->GetSelectedCard().id != 102) {
+			return;
+		}
+
+		const int kBossFireCount = 6;
+		const float baseYaw = boss->GetRotation().y;
+		for (int i = 0; i < kBossFireCount; i++) {
+			const float yaw = baseYaw + (3.14159265f * 2.0f / static_cast<float>(kBossFireCount)) * static_cast<float>(i);
+			Vector3 start = boss->GetPosition();
+			start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+
+			const float visibleLength = ComputeFireballPredictionVisibleLength(
+				start,
+				yaw,
+				kBossFireballPredictionLength,
+				1.0f,
+				1.0f
+			);
+
+			if (visibleLength > 0.01f) {
+				DrawProjectedPredictionStrip(
+					start,
+					yaw,
+					kFireballPredictionHalfWidth,
+					visibleLength,
+					1.0f,
+					kPredictionWarningRed
+				);
+			}
+		}
+	};
+
+	auto drawBossActionPrediction = [&](Boss* boss) {
+		if (!boss || boss->IsDead() || boss->IsAppearing() || !boss->IsVisible()) {
+			return;
+		}
+
+		const bool isRepeatWarning = boss->IsClawRepeatWarningActive();
+		if (!isRepeatWarning && !boss->IsCasting()) {
+			return;
+		}
+
+		const int cardId = isRepeatWarning ? boss->GetRepeatWarningCardId() : boss->GetSelectedCard().id;
+		if (cardId != 101 && cardId != 105 && cardId != 106) {
+			return;
+		}
+
 		float progress = 1.0f;
-		if (kFireballPredictionDuration > 0) {
-			progress = 1.0f - static_cast<float>(fireballPredictionTimer_) / static_cast<float>(kFireballPredictionDuration);
+		if (isRepeatWarning) {
+			const int warningDuration = boss->GetClawRepeatWarningDuration() > 1 ? boss->GetClawRepeatWarningDuration() : 1;
+			progress = 1.0f - static_cast<float>(boss->GetClawRepeatWarningTimer()) / static_cast<float>(warningDuration);
+		} else {
+			const int castDuration = boss->GetCastDurationCurrent() > 1 ? boss->GetCastDurationCurrent() : 1;
+			progress = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(castDuration);
 		}
 		progress = std::clamp(progress, 0.0f, 1.0f);
 
-		float yaw = fireballPredictionYaw_;
-		Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
-		Vector3 start = fireballPredictionCasterPos_ + forward * kFireballSpawnOffset;
+		const float yaw = boss->GetRotation().y;
+		const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+		Vector3 start = boss->GetPosition();
 		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
+		const Vector4 warningColor = { kPredictionWarningRed.x, kPredictionWarningRed.y, kPredictionWarningRed.z, 0.14f + 0.10f * progress };
 
-		Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
-		float halfWidth = kFireballPredictionHalfWidth;
-		float length = kFireballPredictionLength;
-
-		std::array<Vector3, 4> corners = {
-			start - right * halfWidth,
-			start + right * halfWidth,
-			start + right * halfWidth + forward * length,
-			start - right * halfWidth + forward * length
+		auto drawCenteredStrip = [&](const Vector3& center, float angle, float halfWidth, float length) {
+			const Vector3 stripForward = { std::sinf(angle), 0.0f, std::cosf(angle) };
+			Vector3 stripStart = center - stripForward * (length * 0.5f);
+			stripStart.y = start.y;
+			DrawProjectedPredictionStrip(stripStart, angle, halfWidth, length, progress, warningColor);
 		};
 
-		std::array<Vector2, 4> screenCorners{};
-		std::array<bool, 4> visible{};
-		for (size_t i = 0; i < corners.size(); ++i) {
-			visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
+		if (cardId == 101) {
+			Vector3 landPos = start + forward * 8.0f;
+			landPos.y = start.y;
+			constexpr float kPi4 = 3.14159265f * 0.25f;
+			drawCenteredStrip(landPos, yaw + kPi4, 1.0f, 9.0f);
+			drawCenteredStrip(landPos, yaw - kPi4, 1.0f, 9.0f);
+		} else if (cardId == 105) {
+			Vector3 stripStart = start + forward * 2.0f;
+			DrawProjectedPredictionStrip(stripStart, yaw, 2.6f, 15.0f, progress, warningColor);
+		} else if (cardId == 106) {
+			DrawProjectedPredictionDisc(start, 3.5f, 3.5f, warningColor);
 		}
+	};
 
-		const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
-		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
-		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
-		const unsigned int fillColor = IM_COL32(255, 70, 25, fillAlpha);
-		const unsigned int lineColor = IM_COL32(255, 90, 35, lineAlpha);
-		if (allVisible) {
-			const ImVec2 fillPoints[4] = {
-				ImVec2(screenCorners[0].x, screenCorners[0].y),
-				ImVec2(screenCorners[1].x, screenCorners[1].y),
-				ImVec2(screenCorners[2].x, screenCorners[2].y),
-				ImVec2(screenCorners[3].x, screenCorners[3].y),
-			};
-			drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
+	if (bossManager_->IsSplitBossBattle()) {
+		for (int i = 0; i < 2; ++i) {
+			Boss* boss = bossManager_->GetBossAt(i);
+			drawBossFireballPrediction(boss);
+			drawBossActionPrediction(boss);
 		}
+	} else {
+		Boss* boss = bossManager_->GetBoss();
+		drawBossFireballPrediction(boss);
+		drawBossActionPrediction(boss);
+	}
+}
 
-		for (int i = 0; i < 4; ++i) {
-			const int next = (i + 1) % 4;
-			if (!visible[i] || !visible[next]) {
-				continue;
-			}
+float GamePlayScene::ComputeFireballPredictionVisibleLength(const Vector3& start, float yaw, float maxLength, float step, float radius) const {
+	if (!mapManager_) {
+		return maxLength;
+	}
 
-			drawList->AddLine(
-				ImVec2(screenCorners[i].x, screenCorners[i].y),
-				ImVec2(screenCorners[next].x, screenCorners[next].y),
-				lineColor,
-				kFireballPredictionLineThickness
-			);
+	const LevelData& level = mapManager_->GetLevelData();
+	const Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
+	const float kStep = (std::max)(0.05f, step);
+	const float kFireballRadius = (std::max)(0.05f, radius);
+	float visibleLength = maxLength;
+
+	for (float dist = 0.0f; dist <= maxLength; dist += kStep) {
+		Vector3 checkPos = start + forward * dist;
+		checkPos.y = start.y;
+
+		if (Collision::CheckBlockCollision(checkPos, kFireballRadius, level)) {
+			visibleLength = dist + kFireballRadius - (kStep * 0.35f);
+			break;
 		}
 	}
 
-
-	if (!enemyManager_) {
-		return;
+	if (visibleLength < 0.0f) {
+		visibleLength = 0.0f;
 	}
-
-	for (const auto& enemy : enemyManager_->GetEnemies()) {
-		if (!enemy || enemy->IsDead() || !enemy->IsVisible() || !enemy->IsCasting()) {
-			continue;
-		}
-		if (enemy->GetCurrentUseCard().id != 2) {
-			continue;
-		}
-		if (enemy->GetCastTimer() > kFireballPredictionDuration) {
-			continue;
-		}
-
-		float progress = enemy->GetCastProgress();
-		progress = std::clamp(progress, 0.0f, 1.0f);
-
-		float yaw = enemy->GetRotation().y;
-		Vector3 forward = { std::sinf(yaw), 0.0f, std::cosf(yaw) };
-		Vector3 start = enemy->GetPosition() + forward * (kFireballSpawnOffset + 1.5f);
-		start.y = mapManager_ ? mapManager_->GetFloorSurfaceY(0.05f) : start.y + 0.05f;
-
-		Vector3 right = { std::cosf(yaw), 0.0f, -std::sinf(yaw) };
-		float halfWidth = kFireballPredictionHalfWidth;
-		float length = kFireballPredictionLength;
-
-		std::array<Vector3, 4> corners = {
-			start - right * halfWidth,
-			start + right * halfWidth,
-			start + right * halfWidth + forward * length,
-			start - right * halfWidth + forward * length
-		};
-
-		std::array<Vector2, 4> screenCorners{};
-		std::array<bool, 4> visible{};
-		for (size_t i = 0; i < corners.size(); ++i) {
-			visible[i] = ProjectWorldToScreen(corners[i], screenCorners[i]);
-		}
-
-		const bool allVisible = visible[0] && visible[1] && visible[2] && visible[3];
-		const int fillAlpha = static_cast<int>(55.0f + 45.0f * progress);
-		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
-		const unsigned int fillColor = IM_COL32(255, 70, 25, fillAlpha);
-		const unsigned int lineColor = IM_COL32(255, 90, 35, lineAlpha);
-		if (allVisible) {
-			const ImVec2 fillPoints[4] = {
-				ImVec2(screenCorners[0].x, screenCorners[0].y),
-				ImVec2(screenCorners[1].x, screenCorners[1].y),
-				ImVec2(screenCorners[2].x, screenCorners[2].y),
-				ImVec2(screenCorners[3].x, screenCorners[3].y),
-			};
-			drawList->AddConvexPolyFilled(fillPoints, 4, fillColor);
-		}
-
-		for (int i = 0; i < 4; ++i) {
-			const int next = (i + 1) % 4;
-			if (!visible[i] || !visible[next]) {
-				continue;
-			}
-
-			drawList->AddLine(
-				ImVec2(screenCorners[i].x, screenCorners[i].y),
-				ImVec2(screenCorners[next].x, screenCorners[next].y),
-				lineColor,
-				kFireballPredictionLineThickness
-			);
-		}
+	if (visibleLength > maxLength) {
+		visibleLength = maxLength;
 	}
+	return visibleLength;
 }
 
 void GamePlayScene::DrawBossPredictionLines() const {
@@ -4081,11 +4450,18 @@ void GamePlayScene::DrawBossPredictionLines() const {
 	if (!drawList) return;
 
 	auto drawPredictionForBoss = [&](Boss* boss) {
-		if (!boss || boss->IsDead() || boss->GetState() != Boss::State::UseCard || !boss->IsCasting()) return;
-		int cardId = boss->GetSelectedCard().id;
+		if (!boss || boss->IsDead()) return;
+		const bool isClawRepeatWarning = boss->IsClawRepeatWarningActive();
+		if (!isClawRepeatWarning && (boss->GetState() != Boss::State::UseCard || !boss->IsCasting())) return;
+		int cardId = isClawRepeatWarning ? boss->GetRepeatWarningCardId() : boss->GetSelectedCard().id;
 		if (cardId != 101 && cardId != 102 && cardId != 105 && cardId != 106) return;
 
 		float progress = 1.0f - static_cast<float>(boss->GetCastTimer()) / static_cast<float>(boss->GetCastDurationCurrent());
+		if (isClawRepeatWarning) {
+			const int warningDuration = boss->GetClawRepeatWarningDuration() > 1 ? boss->GetClawRepeatWarningDuration() : 1;
+			progress = 1.0f - static_cast<float>(boss->GetClawRepeatWarningTimer()) /
+				static_cast<float>(warningDuration);
+		}
 		progress = std::clamp(progress, 0.0f, 1.0f);
 
 		float yaw = boss->GetRotation().y;
@@ -4096,8 +4472,13 @@ void GamePlayScene::DrawBossPredictionLines() const {
 		const int lineAlpha = static_cast<int>(170.0f + 60.0f * progress);
 		// 分身ボス:青、通常ボス:赤
 		const bool isSplit = boss->IsSplitBehaviorEnabled();
-		const unsigned int fillColor = isSplit ? IM_COL32(30, 100, 255, fillAlpha) : IM_COL32(255, 30, 30, fillAlpha);
-		const unsigned int lineColor = isSplit ? IM_COL32(50, 130, 255, lineAlpha) : IM_COL32(255, 50, 50, lineAlpha);
+		const bool isRangedSplit = isSplit && boss->GetCombatRole() == Boss::CombatRole::Ranged;
+		const unsigned int fillColor = isSplit
+			? (isRangedSplit ? IM_COL32(30, 100, 255, fillAlpha) : IM_COL32(255, 30, 35, fillAlpha))
+			: IM_COL32(255, 30, 30, fillAlpha);
+		const unsigned int lineColor = isSplit
+			? (isRangedSplit ? IM_COL32(50, 130, 255, lineAlpha) : IM_COL32(255, 55, 45, lineAlpha))
+			: IM_COL32(255, 50, 50, lineAlpha);
 
 		auto drawRect = [&](float angle, float halfWidth, float length) {
 			Vector3 forward = { std::sinf(angle), 0.0f, std::cosf(angle) };
@@ -4441,5 +4822,3 @@ bool GamePlayScene::ConsumeTutorialStartRequest() {
 
 
 void GamePlayScene::UpdatePostEffects(){}
-
-

@@ -527,7 +527,7 @@ void Enemy::UpdateUseCard(){
 			// カード距離タイプに応じた魔法陣の色 (近=土茶 / 中=黄 / 遠=青)
 			Vector4 circleColor;
 			switch ( currentUseCard_.attackRangeType ) {
-			case CardAttackRangeType::Melee: circleColor = { 0.6f, 0.35f, 0.1f, 0.9f }; break; // 近距離: 土・茶
+			case CardAttackRangeType::Melee: circleColor = { 1.0f, 0.12f, 0.08f, 0.9f }; break; // 近距離: 赤
 			case CardAttackRangeType::Mid:   circleColor = { 1.0f, 0.85f, 0.1f, 0.9f }; break; // 中距離: 黄
 			case CardAttackRangeType::Long:  circleColor = { 0.2f, 0.55f, 1.0f, 0.9f }; break; // 遠距離: 青
 			default:                         circleColor = { 0.5f, 0.20f, 0.9f, 0.9f }; break;

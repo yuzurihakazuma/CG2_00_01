@@ -3,6 +3,7 @@
 #include "game/enemy/EnemyManager.h"
 #include "game/enemy/Boss.h"
 #include "game/card/BossTargetUtils.h"
+#include "game/audio/GameSE.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/camera/Camera.h"
@@ -26,6 +27,8 @@ void ClawEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerC
 	isFinished_ = false;
 	timer_ = 0;
 	hasHit_ = false;
+	hasPlayedFirstSlashSE_ = false;
+	hasPlayedSecondSlashSE_ = false;
 	casterYaw_ = casterYaw;
 
 	casterPos_ = casterPos;
@@ -61,6 +64,15 @@ void ClawEffect::Update(Player* player, EnemyManager* enemyManager, Boss* boss, 
 	// 10フレーム目に判定リセット（高速化に合わせて判定タイミングも早める）
 	if ( timer_ == 10 ) {
 		hasHit_ = false;
+	}
+
+	if ( timer_ == 2 && !hasPlayedFirstSlashSE_ ) {
+		GameSE::Claw();
+		hasPlayedFirstSlashSE_ = true;
+	}
+	if ( timer_ == 12 && !hasPlayedSecondSlashSE_ ) {
+		GameSE::Claw();
+		hasPlayedSecondSlashSE_ = true;
 	}
 
 	if ( obj_ ) {

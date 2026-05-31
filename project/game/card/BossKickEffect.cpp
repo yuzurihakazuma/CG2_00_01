@@ -1,6 +1,7 @@
 #include "BossKickEffect.h"
 #include "game/player/Player.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/camera/Camera.h"
@@ -37,7 +38,7 @@ void BossKickEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
             model->SetTexture("resources/white1x1.png");
             Model::Material* mat = model->GetMaterial();
             if (mat) {
-                mat->color   = { 0.7f, 0.2f, 1.0f, 1.0f };
+                mat->color   = BossVisualColor::Primary(casterBoss_, 1.0f);
                 mat->emissive = 2.0f;
             }
         }
@@ -70,7 +71,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         if (casterBoss_) casterBoss_->SetPosition(startPos_);
         pos_ = startPos_;
 
-        // 紫のオーラが収束してくる
+        // 役割色のオーラが収束してくる
         float orbitR = 4.0f * (1.0f - t * 0.6f);
         for (int i = 0; i < 4; i++) {
             float angle = (kPi * 2.0f / 4.0f) * i
@@ -88,7 +89,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             };
             GPUParticleManager::GetInstance()->Emit(
                 orbitPos, toCore, 0.18f, 0.8f + t * 0.6f,
-                { 0.7f + t * 0.2f, 0.1f, 1.0f, 0.6f + t * 0.3f });
+                BossVisualColor::Secondary(casterBoss_, 0.6f + t * 0.3f));
         }
         // A. 稲妻エフェクト (2フレームおきにランダムな位置へ閃光)
         if (timer_ % 2 == 0) {
@@ -103,7 +104,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 GPUParticleManager::GetInstance()->Emit(
                     { lx, startPos_.y + 0.5f, lz },
                     boltVel, 0.06f, 0.6f,
-                    { 0.9f, 0.7f, 1.0f, 0.95f }); // 白紫の稲妻
+                    BossVisualColor::Secondary(casterBoss_, 0.95f));
             }
         }
 
@@ -142,7 +143,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             };
             GPUParticleManager::GetInstance()->Emit(
                 pullStart, pullVel, 0.15f, 0.5f + t * 0.5f,
-                { 0.6f, 0.1f, 1.0f, 0.5f + t * 0.4f });
+                BossVisualColor::Primary(casterBoss_, 0.5f + t * 0.4f));
         }
 
         // 既存: 足元の地面エフェクト
@@ -152,7 +153,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 Vector3 v = { std::cosf(a) * 0.4f, 0.05f, std::sinf(a) * 0.4f };
                 GPUParticleManager::GetInstance()->Emit(
                     { startPos_.x, startPos_.y + 0.1f, startPos_.z },
-                    v, 0.25f, 0.4f, { 0.5f, 0.0f, 0.9f, 0.5f });
+                    v, 0.25f, 0.4f, BossVisualColor::Primary(casterBoss_, 0.5f));
             }
         }
 
@@ -187,11 +188,11 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                     { startPos_.x, baseY_ + 0.1f, startPos_.z },
                     v, 0.35f, 1.2f, { br, br*0.7f, 0.1f, 0.9f }); // 土煙
             }
-            // 中心の紫フラッシュ
+            // 中心の役割色フラッシュ
             for (int i = 0; i < 10; i++) {
                 Vector3 v = { (rand()%9-4)*0.4f, 1.5f+(rand()%5)*0.3f, (rand()%9-4)*0.4f };
                 GPUParticleManager::GetInstance()->Emit(
-                    startPos_, v, 0.2f, 1.5f, { 0.8f, 0.3f, 1.0f, 1.0f });
+                    startPos_, v, 0.2f, 1.5f, BossVisualColor::Primary(casterBoss_, 1.0f));
             }
         }
 
@@ -202,7 +203,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             Vector3 v = { 0.0f, -2.5f - (rand()%5)*0.3f, 0.0f }; // 下に流れる速い線
             GPUParticleManager::GetInstance()->Emit(
                 { rx, pos_.y, rz }, v, 0.07f, 0.4f,
-                { 0.9f, 0.8f, 1.0f, 0.7f });
+                BossVisualColor::Secondary(casterBoss_, 0.7f));
         }
 
         // F. 風圧リング (地面から外側へ広がる空気の輪)
@@ -226,7 +227,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             };
             GPUParticleManager::GetInstance()->Emit(
                 pos_, v, 0.15f, 1.0f,
-                { 0.8f, 0.4f, 1.0f, 0.6f });
+                BossVisualColor::Secondary(casterBoss_, 0.6f));
         }
 
         if (obj_) {
@@ -267,10 +268,10 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             obj_->Update();
         }
 
-        // 既存: 紫の弧トレイル
+        // 既存: 役割色の弧トレイル
         GPUParticleManager::GetInstance()->Emit(
             pos_, { 0,0,0 }, 0.2f, 1.4f,
-            { 0.8f, 0.2f, 1.0f, 0.7f });
+            BossVisualColor::Primary(casterBoss_, 0.7f));
         for (int i = 0; i < 4; i++) {
             Vector3 sparkVel = {
                 (rand() % 9 - 4) * 0.15f,
@@ -279,7 +280,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             };
             GPUParticleManager::GetInstance()->Emit(
                 pos_, sparkVel, 0.12f, 0.5f,
-                { 0.9f, 0.3f, 1.0f, 0.8f });
+                BossVisualColor::Secondary(casterBoss_, 0.8f));
         }
 
         // G. 衝撃波コーン (蹴り足の進行方向に扇形)
@@ -292,11 +293,11 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 float sp = 1.8f + (rand()%5)*0.2f;
                 Vector3 v = { std::sinf(a)*sp, 0.05f, std::cosf(a)*sp };
                 GPUParticleManager::GetInstance()->Emit(
-                    pos_, v, 0.15f, 0.6f, { 1.0f, 0.6f, 1.0f, 0.75f });
+                    pos_, v, 0.15f, 0.6f, BossVisualColor::Secondary(casterBoss_, 0.75f));
             }
         }
 
-        // H. 赤紫の飛沫 (蹴り跡に残る血しぶき風)
+        // H. 役割色の飛沫 (蹴り跡に残る血しぶき風)
         for (int i = 0; i < 3; i++) {
             Vector3 splatVel = {
                 -std::sinf(spinYaw_) * (1.0f + (rand()%5)*0.2f) + (rand()%5-2)*0.1f,
@@ -305,7 +306,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             };
             GPUParticleManager::GetInstance()->Emit(
                 pos_, splatVel, 0.25f, 0.45f,
-                { 0.9f, 0.05f, 0.7f, 0.85f }); // 赤紫の飛沫
+                BossVisualColor::Primary(casterBoss_, 0.85f));
         }
 
         // I. 回転リング (ボス中心に水平の光の輪)
@@ -322,7 +323,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 // リングは速度ゼロで短命に光る
                 GPUParticleManager::GetInstance()->Emit(
                     ringPos, {0,0,0}, 0.08f, 0.5f,
-                    { 0.8f, 0.5f, 1.0f, 0.65f });
+                    BossVisualColor::Secondary(casterBoss_, 0.65f));
             }
         }
 
@@ -344,7 +345,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
                 if (camera_) camera_->TriggerShake(0.25f, 12);
 
-                // 命中エフェクト: 紫の爆発
+                // 命中エフェクト: 役割色の爆発
                 for (int i = 0; i < 24; i++) {
                     float a = (kPi * 2.0f / 24.0f) * i;
                     float sp = 0.8f + (rand() % 8) * 0.15f;
@@ -354,8 +355,8 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                         std::sinf(a) * sp
                     };
                     Vector4 sc = (rand() % 2 == 0)
-                        ? Vector4{ 0.8f, 0.2f, 1.0f, 1.0f }
-                        : Vector4{ 1.0f, 0.7f, 1.0f, 1.0f };
+                        ? BossVisualColor::Primary(casterBoss_, 1.0f)
+                        : BossVisualColor::Secondary(casterBoss_, 1.0f);
                     GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.3f, 0.5f, sc);
                 }
             }
@@ -383,7 +384,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 Vector3 v = { std::cosf(a) * sp, 0.2f, std::sinf(a) * sp };
                 GPUParticleManager::GetInstance()->Emit(
                     { startPos_.x, baseY_ + 0.1f, startPos_.z },
-                    v, 0.3f, 0.8f, { 0.6f, 0.1f, 1.0f, 0.9f });
+                    v, 0.3f, 0.8f, BossVisualColor::Primary(casterBoss_, 0.9f));
             }
             if (camera_) camera_->TriggerShake(0.2f, 8);
 
@@ -414,7 +415,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 float smoke = 0.25f + (rand()%5)*0.06f;
                 GPUParticleManager::GetInstance()->Emit(
                     { rx, baseY_, rz }, v, 0.6f + (rand()%4)*0.1f, 2.0f,
-                    { smoke+0.2f, smoke*0.7f, smoke+0.3f, 0.55f }); // 灰紫の煙
+                    BossVisualColor::DarkSmoke(casterBoss_, 0.55f));
             }
         }
 
@@ -426,7 +427,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 Vector3 v = { std::cosf(a)*sp, 0.05f, std::sinf(a)*sp };
                 GPUParticleManager::GetInstance()->Emit(
                     { startPos_.x, baseY_+0.05f, startPos_.z },
-                    v, 0.2f, 0.5f, { 0.7f, 0.2f, 1.0f, 0.7f });
+                    v, 0.2f, 0.5f, BossVisualColor::Secondary(casterBoss_, 0.7f));
             }
         }
 
@@ -438,7 +439,7 @@ void BossKickEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 Vector3 v = { (rand()%5-2)*0.05f, 0.4f+(rand()%4)*0.08f, (rand()%5-2)*0.05f };
                 GPUParticleManager::GetInstance()->Emit(
                     { rx, baseY_, rz }, v, 0.5f, 1.8f,
-                    { 0.35f, 0.2f, 0.45f, 0.4f });
+                    BossVisualColor::DarkSmoke(casterBoss_, 0.4f));
             }
         }
 

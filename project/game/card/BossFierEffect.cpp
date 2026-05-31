@@ -2,11 +2,26 @@
 #include "game/player/Player.h"
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/postEffect/PostEffect.h"
 #include <cmath>
 
 using namespace VectorMath;
+
+namespace {
+Vector4 FirePrimary(bool isSplitBoss, Boss* casterBoss, float alpha = 1.0f) {
+    return isSplitBoss ? BossVisualColor::Primary(casterBoss, alpha) : Vector4{ 0.62f, 0.02f, 0.90f, alpha };
+}
+
+Vector4 FireSecondary(bool isSplitBoss, Boss* casterBoss, float alpha = 1.0f) {
+    return isSplitBoss ? BossVisualColor::Secondary(casterBoss, alpha) : Vector4{ 0.86f, 0.18f, 1.0f, alpha };
+}
+
+Vector4 FireCore(bool isSplitBoss, Boss* casterBoss, float alpha = 1.0f) {
+    return isSplitBoss ? BossVisualColor::Secondary(casterBoss, alpha) : Vector4{ 0.96f, 0.42f, 1.0f, alpha };
+}
+}
 
 void BossFierEffect::Start(const Vector3& casterPos, float casterYaw, bool isPlayerCaster, Camera* camera, Boss* casterBoss) {
     isFinished_ = false;
@@ -17,7 +32,7 @@ void BossFierEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     isSplitBoss_ = casterBoss && casterBoss->IsSplitBehaviorEnabled();
 
     pos_ = casterPos;
-    pos_.y += 1.0f;
+    pos_.y += 0.0f;
 
     Vector3 forward = { std::sinf(casterYaw), 0.0f, std::cosf(casterYaw) };
 
@@ -32,11 +47,11 @@ void BossFierEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     // 発射瞬間の閃光（魔力が凝縮されるエフェクト）
     // =============================================
     // 白い閃光
-    GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.10f, 2.5f, isSplitBoss_ ? Vector4{ 0.8f, 0.9f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.8f, 1.0f, 1.0f });
+    GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.10f, 2.5f, FireSecondary(isSplitBoss_, casterBoss_, 1.0f));
     // コア（通常:紫 / 分身:青）
-    GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.15f, 1.8f, isSplitBoss_ ? Vector4{ 0.0f, 0.4f, 1.0f, 1.0f } : Vector4{ 0.7f, 0.0f, 1.0f, 1.0f });
-    // 発射方向に粒子が弾ける（8個）
-    for ( int i = 0; i < 8; i++ ) {
+    GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.15f, 1.8f, FirePrimary(isSplitBoss_, casterBoss_, 1.0f));
+    // 発射方向に粒子が弾ける（4個）
+    for ( int i = 0; i < 4; i++ ) {
         float angle = static_cast<float>(rand() % 628) * 0.01f;
         float sp = 1.2f + static_cast<float>(rand() % 5) * 0.2f;
         Vector3 ev = {
@@ -44,7 +59,7 @@ void BossFierEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
             0.3f + static_cast<float>(rand() % 4) * 0.15f,
             std::sinf(angle) * sp
         };
-        GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.25f, 0.25f, isSplitBoss_ ? Vector4{ 0.2f, 0.5f, 1.0f, 0.9f } : Vector4{ 0.8f, 0.2f, 1.0f, 0.9f });
+        GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.25f, 0.25f, FirePrimary(isSplitBoss_, casterBoss_, 0.9f));
     }
 }
 
@@ -61,15 +76,40 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             if ( !mf.active ) continue;
             anyActive = true;
 
+            // 小さい火球も移動中に壁をまたがないように移動前位置を持つ
+            Vector3 previousMiniPos = mf.pos;
+
             mf.pos += mf.vel;
             mf.timer--;
 
-            // メイン弾と同じパーティクル（小炎版・少し小さめ）
+            // メイン炎と同じパーティクル・回転演出
             mf.rotAngle += 0.20f;
 
-            // --- 内側リング（6個）---
-            for ( int ri = 0; ri < 6; ri++ ) {
-                float ang = mf.rotAngle + ( 3.14159f * 2.0f / 6 ) * ri;
+            // 小さい火球も途中点を見ながら壁判定する
+            const int kMiniWallCheckSteps = 4;
+            for (int step = 1; step <= kMiniWallCheckSteps; step++) {
+                const float t = static_cast<float>(step) / static_cast<float>(kMiniWallCheckSteps);
+
+                Vector3 checkPos = {
+                    previousMiniPos.x + (mf.pos.x - previousMiniPos.x) * t,
+                    previousMiniPos.y + (mf.pos.y - previousMiniPos.y) * t,
+                    previousMiniPos.z + (mf.pos.z - previousMiniPos.z) * t
+                };
+
+                if (Collision::CheckBlockCollision(checkPos, 0.6f, level)) {
+                    mf.pos = checkPos; // 当たった位置で消す
+                    mf.active = false;
+                    break;
+                }
+            }
+
+            if (!mf.active) {
+                continue;
+            }
+
+            // --- 内側リング（3個）---
+            for ( int ri = 0; ri < 3; ri++ ) {
+                float ang = mf.rotAngle + ( 3.14159f * 2.0f / 3 ) * ri;
                 Vector3 ep = { mf.pos.x + std::cosf( ang ) * 0.28f,
                                mf.pos.y + std::sinf( ang * 0.8f ) * 0.12f,
                                mf.pos.z + std::sinf( ang ) * 0.28f };
@@ -77,12 +117,12 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                                 0.10f + static_cast<float>( rand() % 4 ) * 0.05f,
                                 std::cosf( ang ) * 0.8f + ( rand() % 3 - 1 ) * 0.04f };
                 float r = 0.6f + static_cast<float>( rand() % 4 ) * 0.1f;
-                Vector4 c = isSplitBoss_ ? Vector4{ 0.0f, r * 0.6f, 1.0f, 1.0f } : Vector4{ r, 0.0f, 1.0f, 1.0f };
+                Vector4 c = isSplitBoss_ ? BossVisualColor::Primary(casterBoss_, 1.0f) : Vector4{ 0.58f + r * 0.18f, 0.02f + r * 0.08f, 0.90f, 1.0f };
                 GPUParticleManager::GetInstance()->Emit( ep, rv, 0.22f, 0.18f, c );
             }
-            // --- 外側リング（5個・逆回転）---
-            for ( int ri = 0; ri < 5; ri++ ) {
-                float ang = -mf.rotAngle * 0.55f + ( 3.14159f * 2.0f / 5 ) * ri;
+            // --- 外側リング（3個・逆回転）---
+            for ( int ri = 0; ri < 3; ri++ ) {
+                float ang = -mf.rotAngle * 0.55f + ( 3.14159f * 2.0f / 3 ) * ri;
                 Vector3 ep = { mf.pos.x + std::cosf( ang ) * 0.52f,
                                mf.pos.y + std::sinf( ang * 0.5f ) * 0.10f,
                                mf.pos.z + std::sinf( ang ) * 0.52f };
@@ -90,11 +130,11 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                                0.06f + static_cast<float>( rand() % 3 ) * 0.04f,
                               -std::cosf( ang ) * 0.5f + ( rand() % 3 - 1 ) * 0.03f };
                 float b = 0.55f + static_cast<float>( rand() % 3 ) * 0.1f;
-                Vector4 c = isSplitBoss_ ? Vector4{ 0.0f, 0.35f, b, 0.9f } : Vector4{ 0.25f, 0.0f, b, 0.9f };
+                Vector4 c = isSplitBoss_ ? BossVisualColor::Secondary(casterBoss_, 0.9f) : Vector4{ 0.30f, 0.00f, 0.55f + b * 0.35f, 0.9f };
                 GPUParticleManager::GetInstance()->Emit( ep, rv, 0.30f, 0.26f, c );
             }
-            // --- コア（3個）---
-            for ( int ci = 0; ci < 3; ci++ ) {
+            // --- コア（2個）---
+            for ( int ci = 0; ci < 2; ci++ ) {
                 Vector3 cp = { mf.pos.x + ( rand() % 5 - 2 ) * 0.05f,
                                mf.pos.y + ( rand() % 5 - 2 ) * 0.05f,
                                mf.pos.z + ( rand() % 5 - 2 ) * 0.05f };
@@ -102,7 +142,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                                0.38f + static_cast<float>( rand() % 5 ) * 0.06f,
                                ( rand() % 3 - 1 ) * 0.10f };
                 float bright = ( ci < 2 ) ? 1.0f : 0.85f;
-                Vector4 c = isSplitBoss_ ? Vector4{ bright * 0.7f, bright, 1.0f, 1.0f } : Vector4{ bright, bright * 0.85f, 1.0f, 1.0f };
+                Vector4 c = isSplitBoss_ ? BossVisualColor::Secondary(casterBoss_, 1.0f) : Vector4{ bright * 0.95f, bright * 0.38f, 1.0f, 1.0f };
                 GPUParticleManager::GetInstance()->Emit( cp, cv, 0.14f, 0.22f, c );
             }
 
@@ -112,7 +152,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                     float a = static_cast<float>( rand() % 628 ) * 0.01f;
                     float sp = 0.5f + static_cast<float>( rand() % 6 ) * 0.08f;
                     Vector3 v = { std::cosf( a ) * sp, 0.25f + static_cast<float>( rand() % 4 ) * 0.08f, std::sinf( a ) * sp };
-                    Vector4 hc = isSplitBoss_ ? Vector4{ 0.0f, 0.5f, 1.0f, 1.0f } : Vector4{ 0.8f, 0.0f, 1.0f, 1.0f };
+                    Vector4 hc = FirePrimary(isSplitBoss_, casterBoss_, 1.0f);
                     GPUParticleManager::GetInstance()->Emit( mf.pos, v, 0.2f, 0.55f, hc );
                 }
                 mf.active = false;
@@ -133,7 +173,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                         float a = static_cast<float>( rand() % 628 ) * 0.01f;
                         float sp = 1.0f + static_cast<float>( rand() % 8 ) * 0.18f;
                         Vector3 v = { std::cosf( a ) * sp, 0.35f + static_cast<float>( rand() % 6 ) * 0.12f, std::sinf( a ) * sp };
-                        Vector4 hc2 = isSplitBoss_ ? Vector4{ 0.0f, 0.5f, 1.0f, 1.0f } : Vector4{ 0.8f, 0.0f, 1.0f, 1.0f };
+                        Vector4 hc2 = FirePrimary(isSplitBoss_, casterBoss_, 1.0f);
                     GPUParticleManager::GetInstance()->Emit( mf.pos, v, 0.28f, 0.45f, hc2 );
                     }
                     if ( camera_ ) camera_->TriggerShake( 0.1f, 6 );
@@ -149,32 +189,55 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         return; // 分裂後はメイン弾の処理をスキップ
     }
 
-    // =========================================================
-    // メイン弾：前へ進める
-    // =========================================================
+    // メイン炎の移動前位置を保存する
+    Vector3 previousPos = pos_;
+
+    // メイン炎を前へ進める
     pos_ += velocity_;
+
+    // 移動中に壁をまたいでも消えるように、途中点も含めて当たり判定する
+    bool hitWall = false;
+    const int kWallCheckSteps = 4;
+
+    for (int step = 1; step <= kWallCheckSteps; step++) {
+        const float t = static_cast<float>(step) / static_cast<float>(kWallCheckSteps);
+
+        Vector3 checkPos = {
+            previousPos.x + (pos_.x - previousPos.x) * t,
+            previousPos.y + (pos_.y - previousPos.y) * t,
+            previousPos.z + (pos_.z - previousPos.z) * t
+        };
+
+        if (Collision::CheckBlockCollision(checkPos, 1.0f, level)) {
+            pos_ = checkPos; // 当たった位置で爆発させる
+            hitWall = true;
+            break;
+        }
+    }
 
     // =============================================
     // 壁衝突判定
     // =============================================
-    if ( Collision::CheckBlockCollision( pos_, 1.0f, level ) ) {
-        // 壁ヒット：炎の爆散
-        for ( int i = 0; i < 20; i++ ) {
-            float a = static_cast<float>( rand() % 628 ) * 0.01f;
-            float sp = 0.7f + static_cast<float>( rand() % 10 ) * 0.12f;
-            Vector3 v = { std::cosf( a ) * sp, 0.3f + static_cast<float>( rand() % 6 ) * 0.1f, std::sinf( a ) * sp };
-            Vector4 c = isSplitBoss_
-                ? ( rand() % 2 == 0 ? Vector4{ 0.0f, 0.5f, 1.0f, 1.0f } : Vector4{ 0.0f, 0.3f, 0.85f, 0.9f } )
-                : ( rand() % 2 == 0 ? Vector4{ 0.8f, 0.0f, 1.0f, 1.0f } : Vector4{ 0.5f, 0.0f, 0.85f, 0.9f } );
-            GPUParticleManager::GetInstance()->Emit( pos_, v, 0.3f, 0.7f + static_cast<float>( rand() % 5 ) * 0.1f, c );
+    if (hitWall) {
+        // 壁に当たったときの火花を出す
+        for (int i = 0; i < 10; i++) {
+            float a = static_cast<float>(rand() % 628) * 0.01f;
+            float sp = 0.7f + static_cast<float>(rand() % 10) * 0.12f;
+            Vector3 v = { std::cosf(a) * sp, 0.3f + static_cast<float>(rand() % 6) * 0.1f, std::sinf(a) * sp };
+            Vector4 c = (rand() % 2 == 0)
+                ? FirePrimary(isSplitBoss_, casterBoss_, 1.0f)
+                : FireSecondary(isSplitBoss_, casterBoss_, 0.9f);
+            GPUParticleManager::GetInstance()->Emit(pos_, v, 0.3f, 0.7f + static_cast<float>(rand() % 5) * 0.1f, c);
         }
-        // 壁ヒットリング
-        for ( int i = 0; i < 16; i++ ) {
-            float a = ( 3.14159f * 2.0f / 16.0f ) * i;
-            Vector3 v = { std::sinf( a ) * 1.0f, 0.02f, std::cosf( a ) * 1.0f };
-            Vector4 rc = isSplitBoss_ ? Vector4{ 0.0f, 0.45f, 1.0f, 0.9f } : Vector4{ 0.7f, 0.0f, 1.0f, 0.9f };
-            GPUParticleManager::GetInstance()->Emit( { pos_.x, pos_.y - 0.3f, pos_.z }, v, 0.25f, 0.8f, rc );
+
+        // 壁ヒット時のリング演出
+        for (int i = 0; i < 8; i++) {
+            float a = (3.14159f * 2.0f / 8.0f) * i;
+            Vector3 v = { std::sinf(a) * 1.0f, 0.02f, std::cosf(a) * 1.0f };
+            Vector4 rc = FirePrimary(isSplitBoss_, casterBoss_, 0.9f);
+            GPUParticleManager::GetInstance()->Emit({ pos_.x, pos_.y - 0.3f, pos_.z }, v, 0.25f, 0.8f, rc);
         }
+
         isFinished_ = true;
         return;
     }
@@ -186,12 +249,12 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         && casterBoss_->GetHP() <= casterBoss_->GetMaxHP() / 2;
     if ( isEnraged && !hasSplit_ && timer_ == 60 ) {
         // 分裂バースト
-        GPUParticleManager::GetInstance()->Emit( pos_, { 0, 0.05f, 0 }, 0.12f, 3.5f, isSplitBoss_ ? Vector4{ 0.3f, 0.7f, 1.0f, 1.0f } : Vector4{ 0.9f, 0.3f, 1.0f, 1.0f } );
-        for ( int i = 0; i < 12; i++ ) {
+        GPUParticleManager::GetInstance()->Emit( pos_, { 0, 0.05f, 0 }, 0.12f, 3.5f, FireSecondary(isSplitBoss_, casterBoss_, 1.0f) );
+        for ( int i = 0; i < 6; i++ ) {
             float a = static_cast<float>( rand() % 628 ) * 0.01f;
             float sp = 0.8f + static_cast<float>( rand() % 6 ) * 0.1f;
             Vector3 v = { std::cosf( a ) * sp, 0.2f + static_cast<float>( rand() % 4 ) * 0.08f, std::sinf( a ) * sp };
-            GPUParticleManager::GetInstance()->Emit( pos_, v, 0.22f, 0.4f, isSplitBoss_ ? Vector4{ 0.0f, 0.4f, 1.0f, 1.0f } : Vector4{ 0.7f, 0.0f, 1.0f, 1.0f } );
+            GPUParticleManager::GetInstance()->Emit( pos_, v, 0.22f, 0.4f, FirePrimary(isSplitBoss_, casterBoss_, 1.0f) );
         }
 
         // 小炎3本：後ろ方向へ 左斜め↓ / 右斜め↓ / 上 の3方向に分裂
@@ -221,8 +284,8 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
 
     rotAngle_ += 0.20f;
 
-    // --- 内側リング（速く回転・明るい紫/ピンク、6個）---
-    const int kInnerCount = 6;
+    // --- 内側リング（速く回転・明るい紫/ピンク、3個）---
+    const int kInnerCount = 3;
     const float kInnerRadius = 0.38f;
     for ( int i = 0; i < kInnerCount; i++ ) {
         float angle = rotAngle_ + (3.14159f * 2.0f / kInnerCount) * i;
@@ -237,12 +300,12 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
              std::cosf(angle) * 1.0f + (rand() % 3 - 1) * 0.05f
         };
         float r = 0.6f + static_cast<float>(rand() % 4) * 0.1f;
-        Vector4 ic = isSplitBoss_ ? Vector4{ 0.0f, r * 0.6f, 1.0f, 1.0f } : Vector4{ r, 0.0f, 1.0f, 1.0f };
+        Vector4 ic = isSplitBoss_ ? BossVisualColor::Primary(casterBoss_, 1.0f) : Vector4{ 0.58f + r * 0.18f, 0.02f + r * 0.08f, 0.90f, 1.0f };
         GPUParticleManager::GetInstance()->Emit(emitPos, vel, 0.25f, 0.24f, ic);
     }
 
-    // --- 外側リング（逆回転、5個）---
-    const int kOuterCount = 5;
+    // --- 外側リング（逆回転、3個）---
+    const int kOuterCount = 3;
     const float kOuterRadius = 0.72f;
     for ( int i = 0; i < kOuterCount; i++ ) {
         float angle = -rotAngle_ * 0.55f + (3.14159f * 2.0f / kOuterCount) * i;
@@ -257,12 +320,12 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
            -std::cosf(angle) * 0.6f + (rand() % 3 - 1) * 0.04f
         };
         float b = 0.55f + static_cast<float>(rand() % 3) * 0.1f;
-        Vector4 oc = isSplitBoss_ ? Vector4{ 0.0f, 0.35f, b, 0.9f } : Vector4{ 0.25f, 0.0f, b, 0.9f };
+        Vector4 oc = isSplitBoss_ ? BossVisualColor::Secondary(casterBoss_, 0.9f) : Vector4{ 0.30f, 0.00f, 0.55f + b * 0.35f, 0.9f };
         GPUParticleManager::GetInstance()->Emit(emitPos, vel, 0.38f, 0.34f, oc);
     }
 
-    // --- コア（中心の白熱した核・4個）---
-    for ( int i = 0; i < 4; i++ ) {
+    // --- コア（中心の白熱した核・2個）---
+    for ( int i = 0; i < 2; i++ ) {
         Vector3 corePos = {
             pos_.x + (rand() % 5 - 2) * 0.06f,
             pos_.y + (rand() % 5 - 2) * 0.06f,
@@ -274,14 +337,14 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             (rand() % 3 - 1) * 0.12f
         };
         float bright = (i < 2) ? 1.0f : 0.85f;
-        Vector4 cc = isSplitBoss_ ? Vector4{ bright * 0.7f, bright, 1.0f, 1.0f } : Vector4{ bright, bright * 0.85f, 1.0f, 1.0f };
+        Vector4 cc = isSplitBoss_ ? BossVisualColor::Secondary(casterBoss_, 1.0f) : Vector4{ bright * 0.95f, bright * 0.38f, 1.0f, 1.0f };
         GPUParticleManager::GetInstance()->Emit(corePos, coreVel, 0.16f, 0.28f, cc);
     }
 
-    // --- 周期スパーク（3フレームに1回、8個飛び散る）---
+    // --- 周期スパーク（5フレームに1回、4個飛び散る）---
     sparkTimer_++;
-    if ( sparkTimer_ % 3 == 0 ) {
-        for ( int i = 0; i < 8; i++ ) {
+    if ( sparkTimer_ % 5 == 0 ) {
+        for ( int i = 0; i < 4; i++ ) {
             float sAngle = static_cast<float>(rand() % 628) * 0.01f;
             float sp = 1.8f + static_cast<float>(rand() % 8) * 0.3f;
             Vector3 sv = {
@@ -290,7 +353,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 std::sinf(sAngle) * sp
             };
             float r = 0.7f + static_cast<float>(rand() % 3) * 0.1f;
-            Vector4 sc = isSplitBoss_ ? Vector4{ 0.1f, r * 0.7f, 1.0f, 1.0f } : Vector4{ r, 0.1f, 1.0f, 1.0f };
+            Vector4 sc = isSplitBoss_ ? BossVisualColor::Primary(casterBoss_, 1.0f) : Vector4{ 0.68f + r * 0.12f, 0.04f + r * 0.10f, 0.95f, 1.0f };
             GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.22f, 0.16f, sc);
         }
     }
@@ -301,7 +364,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         pos_.y,
         pos_.z - velocity_.z * 2.8f
     };
-    for ( int i = 0; i < 5; i++ ) {
+    for ( int i = 0; i < 2; i++ ) {
         Vector3 trailPos = {
             trailBase.x + (rand() % 7 - 3) * 0.14f,
             trailBase.y + (rand() % 5 - 2) * 0.14f,
@@ -313,23 +376,8 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             (rand() % 3 - 1) * 0.12f
         };
         float b = 0.5f + static_cast<float>(rand() % 4) * 0.1f;
-        Vector4 tc = isSplitBoss_ ? Vector4{ 0.0f, 0.3f, b, 0.80f } : Vector4{ 0.25f, 0.0f, b, 0.80f };
+        Vector4 tc = isSplitBoss_ ? BossVisualColor::Secondary(casterBoss_, 0.80f) : Vector4{ 0.28f, 0.00f, 0.55f + b * 0.35f, 0.80f };
         GPUParticleManager::GetInstance()->Emit(trailPos, trailVel, 0.55f, 0.42f, tc);
-    }
-
-    // =============================================
-    // 飛行中の熱波歪み（弾の位置を毎フレーム更新し続ける）
-    // =============================================
-    if ( camera_ ) {
-        const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
-        float hcx = pos_.x*vp.m[0][0]+pos_.y*vp.m[1][0]+pos_.z*vp.m[2][0]+vp.m[3][0];
-        float hcy = pos_.x*vp.m[0][1]+pos_.y*vp.m[1][1]+pos_.z*vp.m[2][1]+vp.m[3][1];
-        float hcw = pos_.x*vp.m[0][3]+pos_.y*vp.m[1][3]+pos_.z*vp.m[2][3]+vp.m[3][3];
-        if ( hcw > 0.001f ) {
-            // タイマー3フレームで毎フレーム呼ぶ → 常に弾を追いかけて揺らぎ続ける
-            PostEffect::GetInstance()->TriggerDistortion(
-                hcx/hcw*0.5f+0.5f, -hcy/hcw*0.5f+0.5f, 0.13f, 3);
-        }
     }
 
     // =============================================
@@ -355,8 +403,8 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
             // =============================================
 
             // 白閃光 → コアの2段フラッシュ（通常:紫 / 分身:青）
-            GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.10f, 4.0f, { 1.0f, 0.85f, 1.0f, 1.0f });
-            GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.18f, 2.8f, isSplitBoss_ ? Vector4{ 0.0f, 0.5f, 1.0f, 1.0f } : Vector4{ 0.8f, 0.0f, 1.0f, 1.0f });
+            GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.10f, 4.0f, FireCore(isSplitBoss_, casterBoss_, 1.0f));
+            GPUParticleManager::GetInstance()->Emit(pos_, { 0,0,0 }, 0.18f, 2.8f, FirePrimary(isSplitBoss_, casterBoss_, 1.0f));
 
             // 外へ弾け飛ぶ破片（35個）
             for ( int j = 0; j < 35; j++ ) {
@@ -369,7 +417,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 };
                 float r = 0.4f + static_cast<float>(rand() % 4) * 0.12f;
                 float b = 0.7f + static_cast<float>(rand() % 3) * 0.1f;
-                Vector4 fc = isSplitBoss_ ? Vector4{ 0.0f, r * 0.8f, b, 1.0f } : Vector4{ r, 0.0f, b, 1.0f };
+                Vector4 fc = isSplitBoss_ ? BossVisualColor::Primary(casterBoss_, 1.0f) : Vector4{ 0.62f + r * 0.22f, 0.02f + r * 0.08f, 0.92f, 1.0f };
                 GPUParticleManager::GetInstance()->Emit(pos_, ev, 0.40f, 0.30f, fc);
             }
 
@@ -380,7 +428,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                     1.8f + static_cast<float>(rand() % 10) * 0.25f,
                     (rand() % 11 - 5) * 0.35f
                 };
-                GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.35f, 0.22f, isSplitBoss_ ? Vector4{ 0.6f, 0.9f, 1.0f, 1.0f } : Vector4{ 0.95f, 0.6f, 1.0f, 1.0f });
+                GPUParticleManager::GetInstance()->Emit(pos_, sv, 0.35f, 0.22f, FireCore(isSplitBoss_, casterBoss_, 1.0f));
             }
 
             // 地面リングバースト（20個）
@@ -389,7 +437,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 float angle = (3.14159f * 2.0f / 20.0f) * j;
                 float sp = 0.9f + static_cast<float>(rand() % 4) * 0.15f;
                 Vector3 rv = { std::sinf(angle) * sp, 0.04f, std::cosf(angle) * sp };
-                GPUParticleManager::GetInstance()->Emit(groundPos, rv, 0.35f, 0.65f, isSplitBoss_ ? Vector4{ 0.0f, 0.45f, 1.0f, 1.0f } : Vector4{ 0.6f, 0.0f, 1.0f, 1.0f });
+                GPUParticleManager::GetInstance()->Emit(groundPos, rv, 0.35f, 0.65f, FirePrimary(isSplitBoss_, casterBoss_, 1.0f));
             }
 
             // 中段リング（14個）
@@ -397,7 +445,7 @@ void BossFierEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 float angle = (3.14159f * 2.0f / 14.0f) * j;
                 Vector3 rv = { std::sinf(angle) * 0.6f, 0.06f, std::cosf(angle) * 0.6f };
                 GPUParticleManager::GetInstance()->Emit(
-                    { pos_.x, pos_.y + 0.5f, pos_.z }, rv, 0.30f, 0.5f, isSplitBoss_ ? Vector4{ 0.3f, 0.8f, 1.0f, 0.95f } : Vector4{ 0.9f, 0.3f, 1.0f, 0.95f });
+                    { pos_.x, pos_.y + 0.5f, pos_.z }, rv, 0.30f, 0.5f, FireSecondary(isSplitBoss_, casterBoss_, 0.95f));
             }
 
             // カメラシェイク

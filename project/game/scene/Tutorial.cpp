@@ -513,7 +513,7 @@ void Tutorial::SpawnCardSwapTutorialCards() {
 	);
 	context_.cardPickupManager->AddPickup(
 		GetTileWorldPosition(centerX + 3, centerZ, 0.01f),
-		CardDatabase::GetCardData(4) // スピードアップ
+		CardDatabase::GetCardData(12) // コストブースト
 	);
 
 	swapPickupSpawned_ = true;
@@ -775,7 +775,7 @@ void Tutorial::UpdateTexts() const {
 	case Step::CombatIntro:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
 		// 練習用なので、けりとファイヤーボールは何回でも使えることを説明する
-		text->SetText("TutorialBody", "次の部屋の敵に攻撃カードと魔法カードで攻撃し当ててみてください。\nこの部屋では練習なので何度もカードが使えます。\nSPACEで再開します。");
+		text->SetText("TutorialBody", "次の部屋の敵に攻撃カードと魔法カードで攻撃し当ててみてください。\nこの部屋では練習なので何度もカードが使えます。\n本番では攻撃カードは一回きり,\n魔法カードは詠唱時間中なら何度も打てます。\nSPACEで再開します。");
 		break;
 	case Step::DefeatEnemy:
 		text->SetText("TutorialTitle", "TUTORIAL 4 / 8");
@@ -992,4 +992,15 @@ bool Tutorial::ConsumeCombatPracticeClearRequest() {
 bool Tutorial::IsCombatPracticeCompleted() const {
 	// 攻撃カードと魔法カードの両方を当てたら完了
 	return combatPracticeAttackHitChecked_ && combatPracticeMagicHitChecked_;
+}
+
+bool Tutorial::ShouldKeepPracticeCards() const {
+	// けりとファイヤーボールを練習用として保持したい区間
+	return isActive_ && (
+		step_ == Step::FirstRoomCardControlIntro || // ポーション説明後、戦闘練習へ行く前
+		step_ == Step::PickCard ||                  // 2枚のカードを拾う部屋
+		step_ == Step::StatusIntro ||               // カード種別説明
+		step_ == Step::CombatIntro ||               // 戦闘練習の説明
+		step_ == Step::DefeatEnemy                  // 実際の戦闘練習中
+		);
 }

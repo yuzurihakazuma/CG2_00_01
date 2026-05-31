@@ -83,7 +83,7 @@ public:
 
     bool IsKnockback() const { return isKnockback_; } // ノックバック中か
 
-    void TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale = 1.0f); // ダメージ処理
+    bool TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale = 1.0f); // ダメージ処理
     void TakeContinuousDamage(int damage); // 継続ダメージ用。通常被弾の無敵とノックバックを発生させない
     void PlayCardUsePose(int durationFrames); // カード使用ポーズを再生する
     void PlayIdlePose(int durationFrames); // 通常姿勢へ戻す

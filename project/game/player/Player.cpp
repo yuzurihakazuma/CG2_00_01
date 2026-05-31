@@ -823,6 +823,11 @@ void Player::SetStun(int durationFrames) {
     }
     isStunned_ = true;
     stunTimer_ = durationFrames;
+    isHit_ = false;
+    hitTimer_ = 0;
+    if (model_) {
+        model_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+    }
 }
 
 void Player::LevelUp() {
@@ -909,13 +914,14 @@ void Player::UpdateCost() {
 }
 
 // ダメージ処理
-void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale){
+bool Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackScale){
     if ( isDead_ || dodgeInvincibleTimer_ > 0 || isInvincible_ || isDebugInvincible_ ) {
-        return;
+        return false;
     }
 
     if ( shieldHitCount_ > 0 ) {
         shieldHitCount_--;
+        GameSE::ShieldBlock();
 
         // 画面全体の青いビネットフラッシュ
         shieldFlashTimer_ = shieldFlashDuration_;
@@ -946,13 +952,16 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
             GPUParticleManager::GetInstance()->Emit(sc, sv, 0.5f, scale, { 0.5f, 0.9f, 1.0f, 0.9f });
         }
 
-        return;
+        return false;
     }
 
     GameSE::PlayerDamage();
 
     if ( isEnemyAtkDebuffed_ ) {
         damage /= 2;
+    }
+    if (damage <= 0) {
+        damage = 1;
     }
 
     int nextHp = hp_ - damage; // ダメージ適用後のHPを先に計算する
@@ -1051,6 +1060,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
 
     if ( hp_ <= 0 ) {
         isDead_ = true;
+        GameSE::PlayerDeath();
         deathAnimationTimer_ = deathAnimationDuration_;
         isActionLocked_ = true;
         actionLockTimer_ = deathAnimationDuration_;
@@ -1147,6 +1157,7 @@ void Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
             model_->Update();
         }
     }
+    return true;
 }
 
 // 継続ダメージ処理
@@ -1157,6 +1168,7 @@ void Player::TakeContinuousDamage(int damage) {
 
     if (shieldHitCount_ > 0) {
         shieldHitCount_--;
+        GameSE::ShieldBlock();
         return;
     }
 
@@ -1200,6 +1212,7 @@ void Player::TakeContinuousDamage(int damage) {
 
     if (hp_ <= 0) {
         isDead_ = true;
+        GameSE::PlayerDeath();
         deathAnimationTimer_ = deathAnimationDuration_;
         isActionLocked_ = true;
         actionLockTimer_ = deathAnimationDuration_;

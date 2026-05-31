@@ -2,6 +2,7 @@
 
 #include "engine/math/VectorMath.h"
 #include "game/enemy/Boss.h"
+#include "game/enemy/BossVisualColor.h"
 #include "game/player/Player.h"
 #include "engine/particle/GPUParticleManager.h"
 #include <cmath>
@@ -66,8 +67,8 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
             Model::Material *material = model->GetMaterial();
             if (material) {
                 // ビームの色と透明度を設定 { R, G, B, A }
-                // 禍々しい赤紫色（A=0.4f で少し透けるように設定）
-                material->color = { 1.0f, 0.0f, 0.5f, 0.4f };
+                // ボスごとの役割色（A=0.4f で少し透けるように設定）
+                material->color = BossVisualColor::BeamPrimary(casterBoss_, 0.4f);
 
                 // 発光（Emissive）を強くして、中央が白く光るようにする
                 material->emissive = 3.0f;
@@ -82,11 +83,11 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
     // コア位置（Boss.cpp の詠唱中と合わせる）
     Vector3 corePos = { casterPos.x, casterPos.y + 2.0f, casterPos.z };
 
-    // ① コア爆発フラッシュ（2段階で白→黄に膨らむ）
+    // ① コア爆発フラッシュ（2段階で白→役割色に膨らむ）
     GPUParticleManager::GetInstance()->Emit(corePos, { 0.0f, 0.0f, 0.0f }, 0.08f, 9.0f, { 1.0f, 1.0f, 0.9f, 1.0f });
-    GPUParticleManager::GetInstance()->Emit(corePos, { 0.0f, 0.0f, 0.0f }, 0.18f, 6.0f, { 1.0f, 0.95f, 0.3f, 0.85f });
+    GPUParticleManager::GetInstance()->Emit(corePos, { 0.0f, 0.0f, 0.0f }, 0.18f, 6.0f, BossVisualColor::BeamSecondary(casterBoss_, 0.85f));
 
-    // ② 溜めた光弾をビーム前方へ高速放出（白・黄色、詠唱時の色と統一）
+    // ② 溜めた光弾をビーム前方へ高速放出（白・役割色、詠唱時の色と統一）
     for (int i = 0; i < 80; i++) {
         float spread = (rand() % 11 - 5) * 0.04f;
         float speed  = 1.2f + (rand() % 20) * 0.12f;
@@ -97,7 +98,7 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
         };
         float scale = 0.25f + (rand() % 8) * 0.1f;
         Vector4 color = (rand() % 2 == 0)
-            ? Vector4{ 1.0f, 1.0f, 0.5f, 1.0f }
+            ? BossVisualColor::BeamSecondary(casterBoss_, 1.0f)
             : Vector4{ 1.0f, 1.0f, 1.0f, 1.0f };
         GPUParticleManager::GetInstance()->Emit(corePos, vel, 0.35f, scale, color);
     }
@@ -110,7 +111,7 @@ void RuinBeamEffect::Start(const Vector3& casterPos, float casterYaw, bool isPla
             (rand() % 21 - 10) * 0.14f
         };
         float scale = 0.2f + (rand() % 5) * 0.08f;
-        GPUParticleManager::GetInstance()->Emit(corePos, vel, 0.28f, scale, { 1.0f, 0.9f, 0.4f, 1.0f });
+        GPUParticleManager::GetInstance()->Emit(corePos, vel, 0.28f, scale, BossVisualColor::BeamSecondary(casterBoss_, 1.0f));
     }
 }
 
@@ -171,8 +172,10 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 (rand() % 11 - 5) * 0.05f,
                 forward.z * (0.2f + (rand() % 10) * 0.05f) + (rand() % 11 - 5) * 0.05f
             };
-            // 眩しい白とピンク
-            Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.4f, 1.0f, 1.0f };
+            // 眩しい白と役割色
+            Vector4 color = (rand() % 2 == 0)
+                ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f }
+                : BossVisualColor::BeamSecondary(casterBoss_, 1.0f);
             GPUParticleManager::GetInstance()->Emit(corePos, coreVel, 0.3f, 0.7f, color);
         }
 
@@ -198,8 +201,10 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 forward.z * (0.8f + (rand() % 5) * 0.1f) + (rand() % 11 - 5) * 0.02f
             };
 
-            // 色：中心を白（眩しさ）、周囲をピンク。
-            Vector4 color = (rand() % 10 < 3) ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.2f, 0.8f, 1.0f };
+            // 色：中心を白（眩しさ）、周囲を役割色。
+            Vector4 color = (rand() % 10 < 3)
+                ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f }
+                : BossVisualColor::BeamPrimary(casterBoss_, 1.0f);
 
             // サイズ：眩しく、一本の「芯」に見えるようにする。
             float scale = 0.4f + (rand() % 4) * 0.1f;
@@ -229,8 +234,8 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 forward.z * 0.3f + (rand() % 21 - 10) * 0.1f
             };
 
-            // 色：青紫色。ピンクと白の中に混ぜる。
-            Vector4 color = { 0.6f, 0.0f, 1.0f, 1.0f };
+            // 色：役割色。白の中に混ぜる。
+            Vector4 color = BossVisualColor::BeamSecondary(casterBoss_, 1.0f);
 
             // サイズ：不規則で雷のように見せる。
             float scale = 0.5f + (rand() % 6) * 0.1f;
@@ -253,8 +258,10 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
                 (rand() % 11 - 5) * 0.05f,
                 (rand() % 11 - 5) * 0.05f
             };
-            // 眩しい白とピンク。
-            Vector4 color = (rand() % 2 == 0) ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 1.0f, 0.4f, 1.0f, 1.0f };
+            // 眩しい白と役割色。
+            Vector4 color = (rand() % 2 == 0)
+                ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f }
+                : BossVisualColor::BeamSecondary(casterBoss_, 1.0f);
             // サイズを巨大に！ (1.0f 〜 2.0f)
             float scale = 1.0f + (rand() % 11) * 0.1f;
             // 寿命を長くして（1.0秒）残像を作る。
@@ -286,7 +293,7 @@ void RuinBeamEffect::Update(Player* player, EnemyManager* enemyManager, Boss* bo
         if (model && model->GetMaterial()) {
             Model::Material* material = model->GetMaterial();
             // grow と pulse に合わせた透明度アニメーション
-            material->color.w = grow * pulse * 0.6f;
+            material->color = BossVisualColor::BeamPrimary(casterBoss_, grow * pulse * 0.6f);
         }
         obj_->Update();
     }

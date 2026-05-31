@@ -42,9 +42,10 @@ private:
     bool isSelecting_ = false; // 選択画面表示中か
     int previousPlayerLevel_ = 1;
     Choice currentSelectedChoice_ = Choice::IncreaseMaxHandSize; // 現在カーソルが合っている選択肢
+    bool canIncreaseMaxHandSize_ = true; // 手札上限アップを選べるか
 
     // 画面を少し暗くする半透明の黒スプライト
-    std::unique_ptr<Sprite> blackOverlay_; 
+    std::unique_ptr<Sprite> blackOverlay_;
     // 2つの選択肢のスプライト（[手札上限], [カード獲得]）
     std::unique_ptr<Sprite> choiceVisuals_[(int)Choice::Count];
     // UI

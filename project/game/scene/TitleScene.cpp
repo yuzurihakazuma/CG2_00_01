@@ -91,6 +91,7 @@ void TitleScene::Initialize() {
 
 	// BGMロード
 	// タイトル用BGMを再生
+	AudioManager::GetInstance()->SetBGMVolume(0.22f);
 	GameBGM::Title();
 
 	// モデル読み込み
@@ -447,7 +448,8 @@ void TitleScene::Update() {
 
 		// SPACEでゲーム開始
 		// SPACE に加えて A ボタンでも決定できるようにする
-		if (!hasConfirmedSelection_ &&
+		if (canAcceptMenuInput &&
+			!hasConfirmedSelection_ &&
 			!isCreditOpen_ &&
 			(input->Triggerkey(DIK_SPACE) || input->TriggerJoystickButton(XINPUT_GAMEPAD_A))) {
 			if (currentSelection_ != TitleChoice::Credit) {
