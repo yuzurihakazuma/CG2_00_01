@@ -916,6 +916,7 @@ void EnemyManager::Update(Player *player, CardPickupManager *cardPickupManager, 
 
 void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManager) {
 	std::vector<Vector3> enemyPositions;
+	size_t bossMarkerCount = 0;
 
 	for (size_t i = 0; i < enemies_.size(); ++i) {
 		if (enemies_[i] && !enemies_[i]->IsDead()) {
@@ -1050,18 +1051,20 @@ void EnemyManager::Draw(Camera* camera, Minimap* minimap, BossManager* bossManag
 				Boss* boss = bossManager->GetBossAt(i);
 				if (boss && !boss->IsDead()) {
 					enemyPositions.push_back(boss->GetPosition()); // 分裂ボスもミニマップに出す
+					bossMarkerCount++;
 				}
 			}
 		} else {
 			Boss* boss = bossManager->GetBoss();
 			if (boss && !boss->IsDead()) {
 				enemyPositions.push_back(boss->GetPosition()); // 通常ボスをミニマップに出す
+				bossMarkerCount = 1;
 			}
 		}
 	}
 
 	if (minimap) {
-		minimap->SetEnemyPositions(enemyPositions);
+		minimap->SetEnemyPositions(enemyPositions, bossMarkerCount);
 	}
 }
 

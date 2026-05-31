@@ -960,6 +960,9 @@ bool Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
     if ( isEnemyAtkDebuffed_ ) {
         damage /= 2;
     }
+    if (damage <= 0) {
+        damage = 1;
+    }
 
     int nextHp = hp_ - damage; // ダメージ適用後のHPを先に計算する
 
@@ -1057,6 +1060,7 @@ bool Player::TakeDamage(int damage, const Vector3& attackFrom, float knockbackSc
 
     if ( hp_ <= 0 ) {
         isDead_ = true;
+        GameSE::PlayerDeath();
         deathAnimationTimer_ = deathAnimationDuration_;
         isActionLocked_ = true;
         actionLockTimer_ = deathAnimationDuration_;
@@ -1208,6 +1212,7 @@ void Player::TakeContinuousDamage(int damage) {
 
     if (hp_ <= 0) {
         isDead_ = true;
+        GameSE::PlayerDeath();
         deathAnimationTimer_ = deathAnimationDuration_;
         isActionLocked_ = true;
         actionLockTimer_ = deathAnimationDuration_;

@@ -19,7 +19,7 @@ Vector4 GetFireballMainColor(bool isPlayerCaster) {
 	return isPlayerCaster ? Vector4{ 1.0f, 0.35f, 0.0f, 1.0f } : Vector4{ 1.0f, 0.04f, 0.0f, 1.0f };
 }
 
-constexpr float kNormalFireballTravelDistance = 10.0f;
+constexpr float kNormalFireballTravelDistance = 12.0f;
 constexpr float kBossFireballTravelDistance = 30.0f;
 }
 

@@ -83,6 +83,10 @@ private: // メンバ変数
 
 	// 3Dオブジェクト
 	std::vector<std::unique_ptr<Obj3d>> object3ds_;
+	std::vector<std::unique_ptr<Obj3d>> predictionStripPreviewPool_;
+	size_t predictionStripPreviewPoolCount_ = 0;
+	std::vector<std::unique_ptr<Obj3d>> predictionAreaPreviewPool_;
+	size_t predictionAreaPreviewPoolCount_ = 0;
 
 	// スプライト
 	std::vector<std::unique_ptr<Sprite>> sprites_;
@@ -152,7 +156,7 @@ private: // メンバ変数
 	void DrawBossPredictionLines() const;
 	void EnsurePredictionLineSprite(size_t index); // 予測線描画用Spriteを必要数だけ確保する
 	void DrawPredictionLineSegment(const Vector2& start, const Vector2& end, const Vector4& color, float thickness); // 2点間を1本のSpriteで描く
-	void DrawProjectedPredictionStrip(const Vector3& start, float yaw, float halfWidth, float length, float progress); // 予測帯を複数Spriteで描く
+	void DrawProjectedPredictionStrip(const Vector3& start, float yaw, float halfWidth, float length, float progress, const Vector4& color = { 1.0f, 0.08f, 0.06f, 0.22f }); // 予測帯を複数Spriteで描く
 	void DrawProjectedPredictionDisc(const Vector3& center, float radiusX, float radiusZ, const Vector4& color);
 	void StartFireballPredictionAttack(const Card& card);
 	void UpdateFireballPredictionAttack(Player* player);
@@ -223,7 +227,7 @@ private: // メンバ変数
 
 	// ボス再配置
 	void RespawnBossInRoom();
-	float ComputeFireballPredictionVisibleLength(const Vector3& start, float yaw, float maxLength) const; // 壁に当たる直前までの予測線長さを求める
+	float ComputeFireballPredictionVisibleLength(const Vector3& start, float yaw, float maxLength, float step = 0.1f, float radius = 0.5f) const; // 壁に当たる直前までの予測線長さを求める
 	// 敵とカードのクリア
 	void ClearEnemiesAndCards();
 
@@ -319,8 +323,8 @@ private: // メンバ変数
 	int fireballPredictionTimer_ = 0;
 	static constexpr int kFireballPredictionDuration = 24;
 	static constexpr float kFireballPredictionHalfWidth = 0.8f;
-	static constexpr float kFireballPredictionLength = 10.0f;
-	static constexpr float kBossFireballPredictionLength = 30.0f;
+	static constexpr float kFireballPredictionLength = 12.0f;
+	static constexpr float kBossFireballPredictionLength = 60.0f;
 	static constexpr float kFireballSpawnOffset = 1.5f;
 	static constexpr float kFireballPredictionLineThickness = 2.0f;
 	int fistCooldownTimer_ = 0;

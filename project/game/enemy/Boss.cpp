@@ -15,7 +15,7 @@ using namespace VectorMath;
 
 namespace {
 	constexpr float kBossAppearDropHeight = 18.0f;
-	constexpr float kBeamFiringTurnSpeed = 0.010f;
+	constexpr float kBeamFiringTurnSpeed = 0.014f;
 
 	float NormalizeAngle(float angle) {
 		constexpr float pi = 3.14159265f;
@@ -958,7 +958,7 @@ void Boss::UpdateUseCard() {
 		castTimer_--;
 
 		const bool isBeamCard = selectedCard_.id == 104;
-		const int beamAimLockFrames = isEnraged ? 35 : 45;
+		const int beamAimLockFrames = isEnraged ? 34 : 42;
 		if (!isBeamCard || castTimer_ > beamAimLockFrames) {
 			Vector3 dir = {
 				playerPos_.x - pos_.x,

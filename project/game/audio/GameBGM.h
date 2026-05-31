@@ -9,7 +9,8 @@ namespace GameBGM {
 	inline constexpr const char* kTitle = "resources/Audio/Caravan.mp3";
 	inline constexpr const char* kGameScene = "resources/Audio/Battle_in_the_Moonlight.mp3";
 	inline constexpr const char* kTutorial = "resources/Audio/TutorialBGM.mp3";
-	inline constexpr const char* kBoss = "resources/Audio/全てを創造する者「Dominus_Deus」.mp3";
+	inline constexpr const char* kBossFloor5 = "resources/Audio/BossBGMFloor5.mp3";
+	inline constexpr const char* kBoss = "resources/Audio/BossBGMFloor10.mp3";
 	inline constexpr const char* kGameClear = "resources/Audio/栄光のファンファーレ.mp3";
 	inline constexpr const char* kGameOver = "resources/Audio/絶望の淵から.mp3";
 
@@ -43,6 +44,7 @@ namespace GameBGM {
 	inline void Title(float fadeInSec = 0.0f) { Play(kTitle, fadeInSec); }
 	inline void GameScene(float fadeInSec = 0.0f) { Play(kGameScene, fadeInSec); }
 	inline void Tutorial(float fadeInSec = 0.0f) { Play(kTutorial, fadeInSec); }
+	inline void BossFloor5(float fadeSec = 0.5f) { Change(kBossFloor5, fadeSec); }
 	inline void Boss(float fadeSec = 0.5f) { Change(kBoss, fadeSec); }
 	inline void GameClear(float fadeSec = 0.5f) { Change(kGameClear, fadeSec); }
 	inline void GameOver(float fadeSec = 0.5f) { Change(kGameOver, fadeSec); }

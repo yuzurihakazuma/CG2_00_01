@@ -62,8 +62,9 @@ void Minimap::SetPlayerPosition(const Vector3& worldPos) {
 	playerWorldPos_ = worldPos;
 }
 
-void Minimap::SetEnemyPositions(const std::vector<Vector3>& worldPositions) {
+void Minimap::SetEnemyPositions(const std::vector<Vector3>& worldPositions, size_t bossMarkerCount) {
 	enemyWorldPositions_ = worldPositions;
+	bossMarkerCount_ = (std::min)(bossMarkerCount, enemyWorldPositions_.size());
 	EnsureEnemySprites(enemyWorldPositions_.size());
 }
 
@@ -535,7 +536,7 @@ void Minimap::Update() {
 			enemySprites_[i]->SetPosition(WorldToMinimapPosition(enemyWorldPositions_[i]));
 			enemySprites_[i]->SetSize({ drawTileSize_, drawTileSize_ }); // 全敵マーカーを1マスサイズに統一する
 
-			const bool isBossMarker = (i == enemyWorldPositions_.size() - 1); // 最後の1体をボス扱いにする
+			const bool isBossMarker = (bossMarkerCount_ > 0 && i >= enemyWorldPositions_.size() - bossMarkerCount_); // 末尾のボス数ぶんをボス扱いにする
 			if (isBossMarker) {
 				enemySprites_[i]->SetColor({ 0.75f, 0.35f, 1.0f, 0.45f }); // ボスは色だけ変える
 			} else {
@@ -548,7 +549,7 @@ void Minimap::Update() {
 			enemySprites_[i]->SetPosition(WorldToMinimapPosition(enemyWorldPositions_[i]));
 			enemySprites_[i]->SetSize({ drawTileSize_, drawTileSize_ }); // 壁と同じ1マスサイズで描く
 
-			const bool isBossMarker = (i == enemyWorldPositions_.size() - 1); // 最後の1体をボス扱いにする
+			const bool isBossMarker = (bossMarkerCount_ > 0 && i >= enemyWorldPositions_.size() - bossMarkerCount_); // 末尾のボス数ぶんをボス扱いにする
 			if (isBossMarker) {
 				enemySprites_[i]->SetColor({ 0.75f, 0.35f, 1.0f, 0.45f }); // ボスは色だけ変える
 			} else {

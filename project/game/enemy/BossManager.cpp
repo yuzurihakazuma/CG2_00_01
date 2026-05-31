@@ -14,8 +14,8 @@
 #include "game/card/CardPickupManager.h"
 #include "game/card/CardDatabase.h"
 #include "engine/collision/Collision.h"
-#include "game/audio/GameBGM.h"
 #include "game/audio/GameSE.h"
+#include "engine/audio/AudioManager.h"
 #include "engine/math/VectorMath.h"
 #include "engine/particle/GPUParticleManager.h"
 
@@ -404,13 +404,15 @@ void BossManager::RespawnInRoom(MapManager* mapManager) {
 }
 
 void BossManager::StartBossIntro() {
+	if (isBossIntroPlaying_) {
+		return;
+	}
+
 	isBossIntroPlaying_ = true;
 	bossIntroCameraState_ = IntroCameraState::SkyLook;
 	bossIntroTimer_ = 50;
 	bossCardRainTimer_ = bossCardRainInterval_;
-	// ボス演出の開始時にボス用BGMへ切り替える
-	GameBGM::Boss(0.8f);
-	GameSE::BossAppear();
+	AudioManager::GetInstance()->StopBGM(0.35f);
 }
 
 
@@ -523,7 +525,7 @@ void BossManager::UpdateBeamWarning(MapManager* mapManager) {
 
 	const float beamBaseLength = 14.0f;
 	const float playerHitRadius = 0.6f;
-	const float warningHalfWidth = 1.4f + playerHitRadius;
+	const float warningHalfWidth = 1.6f + playerHitRadius;
 	const float warningHalfLength = beamBaseLength + playerHitRadius;
 	Vector3 warningPos = {
 		bossPos.x + forward.x * (beamBaseLength * 0.90f),

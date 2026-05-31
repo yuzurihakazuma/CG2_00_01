@@ -14,7 +14,7 @@ public:
 	void SetLevelData(const LevelData* levelData, bool keepDiscovery = true);
 
 	void SetPlayerPosition(const Vector3& worldPos);
-	void SetEnemyPositions(const std::vector<Vector3>& worldPositions);
+	void SetEnemyPositions(const std::vector<Vector3>& worldPositions, size_t bossMarkerCount = 0);
 	void SetCardPositions(const std::vector<Vector3>& worldPositions);
 
 	void Update();
@@ -78,6 +78,7 @@ private:
 
 	Vector3 playerWorldPos_{};
 	std::vector<Vector3> enemyWorldPositions_;
+	size_t bossMarkerCount_ = 0;
 	std::vector<Vector3> cardWorldPositions_;
 
 	// 旧: 全体一括保持

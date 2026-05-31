@@ -27,7 +27,7 @@ private:
 	Vector3 startPos_ = { 0.0f, 0.0f, 0.0f }; // 発射位置
 	Vector3 velocity_ = { 0.0f, 0.0f, 0.0f }; // 移動速度
 	Vector3 scale_ = { 0.8f, 0.8f, 0.8f };    // 大きさ
-	float maxTravelDistance_ = 10.0f;         // 予測線と合わせる最大飛距離
+	float maxTravelDistance_ = 12.0f;         // 予測線と合わせる最大飛距離
 
 	Camera* camera_ = nullptr;                // スクリーンUV変換用
 	bool isPlayerCaster_ = true;              // 使用者がプレイヤーか
