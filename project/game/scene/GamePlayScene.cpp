@@ -1085,11 +1085,25 @@ void GamePlayScene::Update() {
 
 	if (player && mapManager_) {
 		const LevelData& level = mapManager_->GetLevelData();
-		int gridX = static_cast<int>(std::round(playerPos_.x / level.tileSize));
-		int gridZ = static_cast<int>(std::round(playerPos_.z / level.tileSize));
+		const auto& stairsTile = mapManager_->GetStairsTile();
 
-		if (gridX >= 0 && gridX < level.width && gridZ >= 0 && gridZ < level.height) {
-			if (level.tiles[gridZ][gridX] == 3) {
+		if (stairsTile.first >= 0 && stairsTile.second >= 0) {
+			// 階段タイル中心のワールド座標を計算する
+			const float stairsCenterX = static_cast<float>(stairsTile.first) * level.tileSize;
+			const float stairsCenterZ = static_cast<float>(stairsTile.second) * level.tileSize;
+
+			// 階段の当たり判定サイズを調整する
+			const float halfWidth = level.tileSize * 0.5f;   // 左右の広さ
+			const float frontRange = level.tileSize * 0.5f;  // 上側の広さ
+			const float backRange = level.tileSize * 0.8f;   // 下側の広さを少し広めにする
+
+			const bool isInsideStairsX =
+				std::abs(playerPos_.x - stairsCenterX) <= halfWidth;
+			const bool isInsideStairsZ =
+				playerPos_.z >= (stairsCenterZ - frontRange) &&
+				playerPos_.z <= (stairsCenterZ + backRange);
+
+			if (isInsideStairsX && isInsideStairsZ) {
 				const bool tutorialActive = tutorial_ && tutorial_->IsActive();
 				if (!tutorialActive && transitionState_ == TransitionState::None) {
 					// SE: 階段を下りる音を再生
