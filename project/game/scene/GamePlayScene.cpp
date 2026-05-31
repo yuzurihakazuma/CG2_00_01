@@ -2309,7 +2309,9 @@ void GamePlayScene::Update() {
 
 		// 右端・上端からの余白
 		float marginLeft = 15.0f;
-		float marginBottom = 400.0f;
+		const bool shouldLowerTutorialCardInfo =
+			tutorial_ && tutorial_->IsActive() && screenH >= 850.0f;
+		float marginBottom = shouldLowerTutorialCardInfo ? 280.0f : 400.0f;
 
 		// 背景枠の位置（中心座標）
 		float textPosX = marginLeft;
@@ -2967,7 +2969,9 @@ void GamePlayScene::UpdateCardSwapMode(Input* input) {
 		float bgWidth = 440.0f;
 		float bgHeight = 270.0f;
 		float marginLeft = 15.0f;
-		float marginBottom = 400.0f;
+		const bool shouldLowerTutorialCardInfo =
+			tutorial_ && tutorial_->IsActive() && screenH >= 850.0f;
+		float marginBottom = shouldLowerTutorialCardInfo ? 280.0f : 400.0f;
 
 		float textPosX = marginLeft;
 		if (textPosX + bgWidth > screenW - 20.0f) {
