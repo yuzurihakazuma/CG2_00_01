@@ -45,6 +45,8 @@ public:
 	// リセット
 	void Reset();
 	void EnsureShieldVisual(Player* player);
+	// 階層移動後にスピードバフのビジュアルを復元する
+	void EnsureSpeedBuffVisual(Player* player, float multiplier, int remainingTimer);
 
 	void CancelCasting();
 

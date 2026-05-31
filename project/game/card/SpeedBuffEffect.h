@@ -6,8 +6,15 @@
 class SpeedBuffEffect : public ICardEffect {
 public:
 
-	// コンストラクタで倍率を受け取る
+	// 通常コンストラクタ
 	SpeedBuffEffect(float multiplier) : multiplier_(multiplier) {}
+	// 復元用コンストラクタ（階層移動後に残り時間を引き継ぐ）
+	SpeedBuffEffect(float multiplier, int remainingTimer)
+	    : multiplier_(multiplier), durationTimer_(remainingTimer) {}
+
+	// 残り時間・倍率の取得（ResetBattleDebug で保存するため）
+	int GetRemainingTimer() const { return durationTimer_; }
+	float GetMultiplier() const { return multiplier_; }
 
 	// 初期化
 	void Start(const Vector3 &casterPos, float casterYaw, bool isPLayerCaster, Camera *camera, Boss* casterBoss)override;

@@ -1,4 +1,5 @@
 #include "game/card/CardUseSystem.h"
+#include "game/card/SpeedBuffEffect.h"
 
 #include <cmath>
 
@@ -374,6 +375,22 @@ void CardUseSystem::EnsureShieldVisual(Player* player) {
 	auto shieldEffect = std::make_unique<ShieldEffect>();
 	shieldEffect->RestoreVisual(player->GetPosition(), camera_, player->GetShieldHits());
 	activeEffects_.push_back(std::move(shieldEffect));
+}
+
+void CardUseSystem::EnsureSpeedBuffVisual(Player* player, float multiplier, int remainingTimer) {
+	if (!player || remainingTimer <= 0) return;
+
+	// 既に有効なSpeedBuffEffectがあれば何もしない
+	for (const auto& effect : activeEffects_) {
+		if (dynamic_cast<SpeedBuffEffect*>(effect.get()) && !effect->IsFinished()) {
+			return;
+		}
+	}
+
+	// 残り時間を引き継いで復元
+	auto buffEffect = std::make_unique<SpeedBuffEffect>(multiplier, remainingTimer);
+	buffEffect->Start(player->GetPosition(), 0.0f, true, camera_, nullptr);
+	activeEffects_.push_back(std::move(buffEffect));
 }
 
 void CardUseSystem::CancelCasting() {

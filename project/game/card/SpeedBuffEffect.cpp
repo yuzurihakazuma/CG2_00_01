@@ -55,7 +55,8 @@ void SpeedBuffEffect::Update(Player *player, EnemyManager *enemyManager, Boss *b
             GPUParticleManager::GetInstance()->Emit(sparkPos, sparkVel, 0.4f, sparkScale, sparkColor);
         }
 
-        if ( durationTimer_ == 300 ) {
+        // 最初のフレームにバフ適用（通常発動・階層移動後の復元どちらにも対応）
+        if ( timer_ == 0 ) {
             player->ApplySpeedBuff(multiplier_, durationTimer_);
         }
 	}

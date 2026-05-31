@@ -40,6 +40,7 @@
 #include "game/card/CardUseSystem.h"
 #include "game/card/CardDatabase.h"
 #include "game/card/RuinBeamEffect.h"
+#include "game/card/SpeedBuffEffect.h"
 #include "game/map/Minimap.h"
 #include "game/map/MapManager.h"
 #include "Bloom.h"
@@ -2825,6 +2826,21 @@ void GamePlayScene::DrawDebugUI() {
 
 void GamePlayScene::ResetBattleDebug() {
 
+	// 階層移動前にスピードバフの残り状態を保存する
+	float savedSpeedMult = 1.0f;
+	int savedSpeedTimer = 0;
+	if (playerCardSystem_) {
+		for (const auto& effect : playerCardSystem_->GetActiveEffects()) {
+			if (auto* sb = dynamic_cast<SpeedBuffEffect*>(effect.get())) {
+				if (!sb->IsFinished()) {
+					savedSpeedMult = sb->GetMultiplier();
+					savedSpeedTimer = sb->GetRemainingTimer();
+					break;
+				}
+			}
+		}
+	}
+
 	// プレイヤー状態をリセット
 	if (playerManager_) {
 		playerManager_->Reset();
@@ -2846,6 +2862,9 @@ void GamePlayScene::ResetBattleDebug() {
 		playerCardSystem_->Reset();
 		if (playerManager_ && playerManager_->GetPlayer()) {
 			playerCardSystem_->EnsureShieldVisual(playerManager_->GetPlayer());
+			// スピードバフが残っていた場合、パーティクルと速度を引き継いで復元する
+			playerCardSystem_->EnsureSpeedBuffVisual(
+				playerManager_->GetPlayer(), savedSpeedMult, savedSpeedTimer);
 		}
 	}
 	fistCooldownTimer_ = 0;
