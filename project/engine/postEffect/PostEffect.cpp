@@ -89,8 +89,8 @@ void PostEffect::PostDrawScene(ID3D12GraphicsCommandList* commandList) {
 	renderTextures_[0]->PostDrawScene(commandList, dxCommon_);
 }
 
-void PostEffect::Draw(ID3D12GraphicsCommandList* commandList) {
-	
+void PostEffect::Draw(ID3D12GraphicsCommandList* commandList, bool drawToScreen) {
+
 	auto SetRenderTargetToSwapchain = [&]() {
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon_->GetBackBufferRtvHandle();
 		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon_->GetDsvHandle();
@@ -100,16 +100,20 @@ void PostEffect::Draw(ID3D12GraphicsCommandList* commandList) {
 		commandList->RSSetViewports(1, &viewport);
 		commandList->RSSetScissorRects(1, &scissorRect);
 		};
-	
-	
-	// エフェクト全体がOFFなら、そのまま画面に出して終了
-	if (!isActive_) {
-		SetRenderTargetToSwapchain();
 
-		PipelineManager::GetInstance()->SetPostEffectPipeline(commandList, PostEffectType::None);
-		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, renderTextures_[0]->GetSrvIndex());
-		commandList->DrawInstanced(3, 1, 0, 0);
+
+	// エフェクト全体がOFFなら、エフェクトなしで出力
+	if (!isActive_) {
+		finalResultIndex_ = 0; // 結果はそのまま 0番
+		// drawToScreen に関わらず常にバックバッファをRTVとしてセットする
+		// （スキップするとスプライト等の後続描画でリソース状態エラーが起きる）
+		SetRenderTargetToSwapchain();
+		if (drawToScreen) {
+			PipelineManager::GetInstance()->SetPostEffectPipeline(commandList, PostEffectType::None);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, renderTextures_[0]->GetSrvIndex());
+			commandList->DrawInstanced(3, 1, 0, 0);
+		}
 		return;
 	}
 
@@ -246,6 +250,31 @@ void PostEffect::ApplyEffect(
 }
 
 
+
+// 最終結果をバックバッファに書き出す（RTV リセット込み）
+// Bloom など内部 PostDrawScene 後に RTV が RenderTexture のままになる問題を吸収する
+void PostEffect::FinalBlit(ID3D12GraphicsCommandList* commandList, uint32_t finalSrv, bool editorActive){
+	// Bloom 等の後処理で RTV が RenderTexture を指したままになるため、常にバックバッファへ切り替える
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon_->GetBackBufferRtvHandle();
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon_->GetDsvHandle();
+	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+	D3D12_VIEWPORT viewport = { 0.0f, 0.0f,
+		static_cast<float>(dxCommon_->GetClientWidth()),
+		static_cast<float>(dxCommon_->GetClientHeight()), 0.0f, 1.0f };
+	D3D12_RECT scissorRect = { 0, 0,
+		static_cast<LONG>(dxCommon_->GetClientWidth()),
+		static_cast<LONG>(dxCommon_->GetClientHeight()) };
+	commandList->RSSetViewports(1, &viewport);
+	commandList->RSSetScissorRects(1, &scissorRect);
+
+	// エディタ非アクティブ時のみ最終描画を実行（アクティブ時は Game View に表示する）
+	if (!editorActive) {
+		PipelineManager::GetInstance()->SetPostEffectPipeline(commandList, PostEffectType::None);
+		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, finalSrv);
+		commandList->DrawInstanced(3, 1, 0, 0);
+	}
+}
 
 // デバッグ用UIの描画
 // デバッグ用UIの描画

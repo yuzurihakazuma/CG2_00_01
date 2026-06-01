@@ -85,8 +85,7 @@ void GamePlayScene::Initialize(){
 	skybox_->Initialize("resources/StandardCubeMap.dds", commandList);
 
 
-	// エディタマネージャーの生成
-	EditorManager::GetInstance()->Initialize();
+	// ※EditorManager::Initialize() は Framework::Initialize() で呼ばれるので、ここでは不要
 
 
 
@@ -442,31 +441,23 @@ void GamePlayScene::Draw(){
 	PostEffect::GetInstance()->PostDrawSceneMRT(commandList);
 
 
-	// 3. いつものPostEffect（色用のキャンバスだけに処理がかかります）
-	 PostEffect::GetInstance()->Draw(commandList); // ※もしこの関数を作っていれば
+	// 3. ポストエフェクト処理（バックバッファへの最終出力は FinalBlit に任せる）
+	PostEffect::GetInstance()->Draw(commandList, false);
 
 	// 4. エフェクト後の「色画像」と「マスク画像」の番号(SRV)をもらう
 	uint32_t colorSrv = PostEffect::GetInstance()->GetSrvIndex();
-	uint32_t maskSrv = PostEffect::GetInstance()->GetMaskSrvIndex();
+	uint32_t maskSrv  = PostEffect::GetInstance()->GetMaskSrvIndex();
 
-	// 5. Bloomに「色」と「マスク」を両方渡す！
+	// 5. Bloomに「色」と「マスク」を両方渡す
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
-	
-	// 5-2. Bloomの最終結果のSRV番号をもらう
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
-	// エディタマネージャーに「これが最終的なゲーム画面のSRVだよ！」と教えてあげる
+
+	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
 
-
-	// 6. メイン画面（バックバッファ）への直接描画！
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxCommon->GetBackBufferRtvHandle();
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dxCommon->GetDsvHandle();
-	commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-
-	// 7. 最終的な結果を画面にドーン！と描く
-	PipelineManager::GetInstance()->SetPostEffectPipeline(commandList, PostEffectType::None); // シェーダーはエフェクトなしのやつを使う
-	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, finalSrv); // Bloomの結果をSRVとしてセット
-	commandList->DrawInstanced(3, 1, 0, 0); // 巨大な三角形を描いて全画面にテクスチャを貼る方式なので、頂点数は3でOK！
+	// 6. 最終結果をバックバッファへ書き出す（RTV リセット込み）
+	//    エディタアクティブ時はRTVのセットのみ行い描画はスキップする
+	PostEffect::GetInstance()->FinalBlit(commandList, finalSrv, EditorManager::GetInstance()->IsActive());
 
 
 
@@ -540,7 +531,8 @@ GamePlayScene::GamePlayScene(){}
 GamePlayScene::~GamePlayScene(){}
 // 終了
 void GamePlayScene::Finalize(){
-	
+	// エディタが保持している外部ポインタをリセット（ダングリングポインタ防止）
+	EditorManager::GetInstance()->ResetSceneReferences();
 
 	object3ds_.clear();
 	GPUParticleManager::GetInstance()->Finalize();

@@ -3,24 +3,20 @@
 #include "Engine/Scene/IScene.h"
 #include "Engine/Math/Matrix4x4.h"
 #include "Engine/graphics/TextureManager.h"
-#include "Animation.h"
-#include "InstancedGroup.h"
 #include "engine/3d/animation/Animation.h"
 #include "engine/3d/animation/CustomAnimation.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
-#include "engine/3d/animation/CustomAnimation.h"
 #include "engine/particle/GPUParticleEmitter.h"
-
-#include "engine/utils/EditorManager.h"
-
+#include "engine/utils/EditorManager.h"  // EngineMode のために必要
+#include "InstancedGroup.h"
 #include "Skybox.h"
+#include "HitEffect.h"
 
 // --- 標準ライブラリ ---
 #include <vector>
 #include <memory>
 #include <unordered_map>
 #include <string>
-#include "HitEffect.h" 
 #include <list>
 
 // 前方宣言
@@ -30,7 +26,7 @@ class Sprite;
 class Obj3d;
 class DirectXCommon;
 class Input;
-class RenderTexture; 
+class RenderTexture;
 class PostEffect;
 class Player;
 

@@ -51,7 +51,14 @@ public:
     // エディタがアクティブかどうか
     bool IsActive() const{ return isEditorActive_; }
 
+	// シーンから SkinnedObj3d を登録する。シーン終了時は必ず nullptr を渡してリセットすること
 	void SetTargetSkinnedObj(SkinnedObj3d* obj){ targetSkinnedObj_ = obj; }
+
+	// シーン切り替え時に外部参照をまとめてリセットする（ダングリングポインタ防止）
+	void ResetSceneReferences(){
+		targetSkinnedObj_ = nullptr;
+		gameViewSrvIndex_ = 0;
+	}
 
     EngineMode GetMode() const{ return currentMode_; }
 

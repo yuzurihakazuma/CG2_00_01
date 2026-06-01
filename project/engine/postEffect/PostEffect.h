@@ -51,7 +51,12 @@ public:
 	void PostDrawScene(ID3D12GraphicsCommandList* commandList);
 
 	// ポストエフェクトの描画（巨大な三角形を描く）
-	void Draw(ID3D12GraphicsCommandList* commandList);
+	// drawToScreen=false にするとエフェクト処理だけ行い、バックバッファへの最終描画はスキップする
+	void Draw(ID3D12GraphicsCommandList* commandList, bool drawToScreen = true);
+
+	// 最終結果をバックバッファに書き出す（RTVのリセット込み）
+	// editorActive=true のときは RTV だけセットして描画コマンドはスキップする
+	void FinalBlit(ID3D12GraphicsCommandList* commandList, uint32_t finalSrv, bool editorActive = false);
 
 	// ウィンドウサイズが変わったときの処理（画用紙のサイズも変える）
 	void OnResize(uint32_t width, uint32_t height);

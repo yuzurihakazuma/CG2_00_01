@@ -1,6 +1,7 @@
 #include "EditorManager.h"
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
+#include "externals/imgui/imgui_internal.h"
 #endif
 #include "engine/base/Input.h"
 #include "engine/base/DirectXCommon.h"
@@ -75,27 +76,48 @@ void EditorManager::Update(){
     ImGui::PopStyleVar(3);
     ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    // imgui.ini にレイアウトが保存されていない時のみ初期レイアウトを構築する
+    // DockBuilderGetNode が nullptr を返す = 保存データなし = 初期化が必要
+    if ( ImGui::DockBuilderGetNode(dockspace_id) == nullptr ) {
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+
+        // 左ペイン(25%) → 中央 → 右ペイン(30%) → 中央下(25%) に分割
+        ImGuiID dock_center = dockspace_id;
+        ImGuiID dock_left   = ImGui::DockBuilderSplitNode(dock_center, ImGuiDir_Left,  0.25f, nullptr, &dock_center);
+        ImGuiID dock_right  = ImGui::DockBuilderSplitNode(dock_center, ImGuiDir_Right, 0.30f, nullptr, &dock_center);
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_center, ImGuiDir_Down,  0.25f, nullptr, &dock_center);
+
+        // 各ウィンドウを対応するペインに割り当て
+        ImGui::DockBuilderDockWindow("Game View",                dock_center);
+        ImGui::DockBuilderDockWindow("コントロール (Play / Stop)", dock_left);
+        ImGui::DockBuilderDockWindow("パフォーマンスモニター",       dock_right);
+        ImGui::DockBuilderDockWindow("レベルエディタ",              dock_left);
+        ImGui::DockBuilderDockWindow("パーティクルエディタ",         dock_bottom);
+
+        ImGui::DockBuilderFinish(dockspace_id);
+    }
+
     ImGui::End();
 
-#ifdef USE_IMGUI
+    // コントロールウィンドウ
     ImGui::Begin("コントロール (Play / Stop)");
 
     if ( currentMode_ == EngineMode::Edit ) {
-        // エディットモード時の表示
         ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "状態：エディットモード (停止中)");
         if ( ImGui::Button("▶ プレイ開始 (Play)", ImVec2(150, 40)) ) {
-            currentMode_ = EngineMode::Play; // モードを切り替え！
+            currentMode_ = EngineMode::Play;
         }
     } else {
-        // プレイモード時の表示
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "状態：プレイモード (実行中)");
         if ( ImGui::Button("■ 停止 (Stop)", ImVec2(150, 40)) ) {
-            currentMode_ = EngineMode::Edit; // モードを切り替え！
+            currentMode_ = EngineMode::Edit;
         }
     }
 
     ImGui::End();
-#endif
 
     // 2. メインメニューバー
     if ( ImGui::BeginMainMenuBar() ) {
@@ -107,7 +129,11 @@ void EditorManager::Update(){
             ImGui::EndMenu();
         }
         if ( ImGui::BeginMenu("ウィンドウ (Window)") ) {
-            if ( ImGui::MenuItem("レイアウトをリセット (※再起動後に反映)") ) {}
+            if ( ImGui::MenuItem("レイアウトをリセット") ) {
+                // ノードを削除することで次フレームの GetNode チェックが nullptr になり再構築される
+                ImGuiID id = ImGui::GetID("MyDockSpace");
+                ImGui::DockBuilderRemoveNode(id);
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("シーン (Scene)")) {

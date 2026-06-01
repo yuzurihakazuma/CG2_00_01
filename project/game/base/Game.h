@@ -7,11 +7,11 @@ class SceneFactory;
 // ゲームクラス
 class Game : public Framework{
 public:
-	// オーバーライド 
+	// オーバーライド
 	void Initialize() override;
 	void Finalize() override;
 	void Update() override;
-	void Draw() override;
+	void DrawScene() override; // Framework::Draw() から呼ばれるシーン固有の描画
 
 
 public: // コンストラクタ・デストラクタ

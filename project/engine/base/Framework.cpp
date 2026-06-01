@@ -3,7 +3,7 @@
 #include "engine/base/WindowProc.h"
 #include "engine/base/DirectXCommon.h"
 #include "engine/base/Input.h"
-#include "engine/audio/AudioManager.h" 
+#include "engine/audio/AudioManager.h"
 #include "engine/graphics/SrvManager.h"
 #include "engine/graphics/ResourceFactory.h"
 #include "engine/utils/ImGuiManager.h"
@@ -81,9 +81,11 @@ void Framework::Initialize(){
 		WindowProc::GetInstance()->GetClientHeight()
 	);
 
-	// シーンマネージャー初期化
+	// テキストマネージャー初期化
 	TextManager::GetInstance()->Initialize();
 
+	// エディタマネージャー初期化（エンジン全体で1回だけ行う）
+	EditorManager::GetInstance()->Initialize();
 }
 
 void Framework::Finalize(){
@@ -122,26 +124,43 @@ void Framework::Finalize(){
 }
 
 void Framework::Update(){
-	// 基盤更新
+	// ウィンドウ・入力の基盤更新
 	WindowProc::GetInstance()->Update();
-	// 入力更新
 	Input::GetInstance()->Update();
 
-	// シーン更新
+	// リサイズ対応
 	if ( WindowProc::GetInstance()->IsResized() ) {
 		DirectXCommon::GetInstance()->OnResize();
-		uint32_t w = static_cast< uint32_t >( WindowProc::GetInstance()->GetClientWidth() );
-		uint32_t h = static_cast< uint32_t >( WindowProc::GetInstance()->GetClientHeight() );
+		uint32_t w = static_cast<uint32_t>(WindowProc::GetInstance()->GetClientWidth());
+		uint32_t h = static_cast<uint32_t>(WindowProc::GetInstance()->GetClientHeight());
 		PostEffect::GetInstance()->OnResize(w, h);
-
 		WindowProc::GetInstance()->ClearResizeFlag();
 	}
-
 
 	// ウィンドウが閉じられたら終了フラグを立てる
 	if ( WindowProc::GetInstance()->GetIsClosed() ) {
 		endRequest_ = true;
 	}
+
+	// ImGui フレーム開始（Update の末尾で行い、シーンの Update より前に確保する）
+	EditorManager::GetInstance()->Begin();
+}
+
+void Framework::Draw(){
+	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
+
+	// 描画前処理
+	dxCommon->PreDraw();
+	SrvManager::GetInstance()->PreDraw();
+
+	// シーン固有の描画（継承先で実装）
+	DrawScene();
+
+	// ImGui 描画コマンド発行
+	EditorManager::GetInstance()->End();
+
+	// 描画後処理
+	dxCommon->PostDraw();
 }
 
 void Framework::Run(){

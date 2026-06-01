@@ -28,7 +28,13 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 
-    io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\meiryo.ttc", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
+    // OversampleH/V を 1 に下げることでフォントアトラスのテクスチャサイズを大幅に削減できる
+    // デフォルト(3,1)だと日本語17000文字分で 4096x4096 になるが、1,1 なら約 1/3 以下に収まる
+    ImFontConfig fontConfig;
+    fontConfig.OversampleH = 1;
+    fontConfig.OversampleV = 1;
+    fontConfig.PixelSnapH = true;
+    io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\meiryo.ttc", 18.0f, &fontConfig, io.Fonts->GetGlyphRangesJapanese());
 
     ImGui::StyleColorsDark();
 
