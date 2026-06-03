@@ -9,6 +9,10 @@
 #include "engine/particle/GPUParticleEmitter.h"
 #include "engine/utils/EditorManager.h"  // EngineMode のために必要
 #include "InstancedGroup.h"
+
+#include "engine/rail/SplineRail.h"
+#include "game/player/Player.h"
+
 #include "Skybox.h"
 #include "HitEffect.h"
 
@@ -114,5 +118,8 @@ private: // メンバ変数
 
 	// 円柱オーラ用のUVスクロールタイマー
 	float auraCylinderScroll_ = 0.0f;
+
+	std::unique_ptr<Player> player_ = nullptr;
+	std::vector<SplineRail> splineRails_; // スプラインレール本体
 
 };

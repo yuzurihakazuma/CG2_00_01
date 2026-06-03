@@ -6,18 +6,17 @@
 #include <memory>
 #include <string>
 
+#include "engine/rail/SplineRail.h"
+
 class Obj3d;
 class Camera;
-
 
 // マップエディタ専用クラス
 class LevelEditor{
 public:
 
     LevelEditor();
-
-	~LevelEditor();
-
+    ~LevelEditor();
 
     // 初期化
     void Initialize();
@@ -28,14 +27,14 @@ public:
 
     // マップの読み込み＆生成
     void LoadAndCreateMap(const std::string& fileName);
-	// カメラのセット
+    // カメラのセット
     void SetCamera(const Camera* camera);
 
-	// デバッグ用UIの描画
+    // デバッグ用UIの描画
     void DrawDebugUI();
 
 private:
-	// カメラは所有しない参照（描画のときに使う）
+    // カメラは所有しない参照（描画のときに使う）
     const Camera* camera_ = nullptr;
 
     LevelData levelData_; // 現在のマップデータ
@@ -45,6 +44,14 @@ private:
     std::string saveFileName_ = "map01.json"; // ファイル名
     bool snapToGrid_ = true;
 
-	//bool isEditorActive = true; // エディタのアクティブ状態
+    // すべての路線の球体とパスポイントを2次元配列で保持する
+    std::vector<std::vector<std::unique_ptr<Obj3d>>> railSpheresAll_;
+    std::vector<std::vector<std::unique_ptr<Obj3d>>> pathPointsAll_;
+
+    int selectedRailNode_ = -1;
+    int currentEditRailIndex_ = 0; // 現在編集しているレールの番号
+
+    // レール表示用のオブジェクトを一括で作り直す関数
+    void RebuildRailPoints();
 
 };

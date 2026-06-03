@@ -20,6 +20,10 @@ struct LevelData{
     // オブジェクト配置型レベルデータ
     std::vector<LevelObjectData> objects;
 
+	// レール型レベルデータ
+    std::vector<std::vector<Vector3>> railLines;
+
+
     // 必要ならタイル情報も残してOK
     int width = 10;
     int height = 10;

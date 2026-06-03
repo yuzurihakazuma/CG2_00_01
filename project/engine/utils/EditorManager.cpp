@@ -148,6 +148,34 @@ void EditorManager::Update(){
             }
             ImGui::EndMenu();
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if ( currentMode_ == EngineMode::Edit ) {
+            // エディットモード時の表示（緑色）
+            ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), " [ Edit Mode ] ");
+
+            // 背景色を少し緑っぽくして目立たせる
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+            if ( ImGui::Button(" ▶ Play ") ) {
+                currentMode_ = EngineMode::Play;
+            }
+            ImGui::PopStyleColor();
+
+        } else {
+            // プレイモード時の表示（赤色）
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), " [ Play Mode ] ");
+
+            // 背景色を赤っぽくして目立たせる
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            if ( ImGui::Button(" ■ Stop ") ) {
+                currentMode_ = EngineMode::Edit;
+            }
+            ImGui::PopStyleColor();
+        }
+
         ImGui::EndMainMenuBar();
     }
 
