@@ -3,7 +3,11 @@
     "allow": [
       "Bash(git merge *)",
       "Bash(grep -v \"==========\\\\|//.*======\")",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(sed -n '305,320p' project/game/scene/GamePlayScene.cpp)",
+      "Bash(sed -n '338,352p' project/game/scene/GamePlayScene.cpp)",
+      "Bash(sed -n '467,492p' project/game/scene/GamePlayScene.cpp)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\('line',i,':',l\\) for i,l in enumerate\\(d.get\\('railLines',[]\\)\\)]\")"
     ]
   }
 }

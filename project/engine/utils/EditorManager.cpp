@@ -356,6 +356,15 @@ void EditorManager::SetCamera(const Camera* camera){
     }
 }
 
+// レール編集データの公開（levelEditor_ へ委譲）
+int EditorManager::GetRailEditVersion() const{
+    return levelEditor_ ? levelEditor_->GetRailVersion() : 0;
+}
+const std::vector<std::vector<Vector3>>& EditorManager::GetEditorRailLines() const{
+    static const std::vector<std::vector<Vector3>> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailLines() : kEmpty;
+}
+
 
 void EditorManager::End(){
 #ifdef USE_IMGUI

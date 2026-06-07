@@ -29,6 +29,24 @@ public:
     // ④ 逆に、tから距離を求める関数もあると便利（必要に応じて）
     float GetDistanceFromT(float t) const;
 
+    // ============================================================
+    // 【推奨API】距離(s)ベースの公開関数。利用側は t を意識せず、これだけ使えばよい。
+    //   - 内部の曲線パラメータ t は隠蔽し、すべて「レール上を進んだ距離(m)」で扱う
+    //   - これにより等速移動・端点の安定・乗り換えがシンプルになる
+    // ============================================================
+
+    // 距離 s における座標を返す（s は 0〜GetLength() にクランプ）
+    Vector3 GetPositionByDistance(float distance) const;
+
+    // 距離 s における進行方向（単位ベクトル）を返す。距離空間で前後サンプルするため端でも安定
+    Vector3 GetTangentByDistance(float distance) const;
+
+    // レール全長(m)
+    float GetLength() const { return totalLength_; }
+
+    // 指定ワールド座標に最も近いレール上の距離 s を返す（スナップ／分岐検出用）
+    float GetClosestDistance(const Vector3& worldPos) const;
+
     // ⑤ 終端の接続情報（インデックスで管理・距離チェック不要）
     int  frontConnIndex = -1;    // front端の接続先レール番号 (-1=なし)
     bool frontConnToFront = true;  // true=接続先のfront, false=back

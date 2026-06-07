@@ -122,4 +122,14 @@ private: // メンバ変数
 	std::unique_ptr<Player> player_ = nullptr;
 	std::vector<SplineRail> splineRails_; // スプラインレール本体
 
+	// --- レール経路の可視化（プレイヤーが通る曲線を線で表示）---
+	std::vector<std::unique_ptr<Obj3d>> railMarkers_;
+	bool showRailMarkers_ = true;
+	// splineRails_ を距離サンプルして線マーカーを作り直す
+	void BuildRailMarkers();
+
+	// --- エディタのレール編集をゲーム側に同期する（緑線・プレイヤーを一本化）---
+	int  lastRailVersion_ = -1;     // 直近に同期したエディタの編集世代
+	void SyncRailsFromEditor();     // エディタの最新レールから splineRails_ を作り直す
+
 };

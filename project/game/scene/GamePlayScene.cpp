@@ -2,6 +2,9 @@
 // --- ゲーム固有のファイル ---
 #include "TitleScene.h"
 
+#include <cmath>
+#include <algorithm>
+
 // --- エンジン側のファイル ---
 #include "Engine/Utils/ImGuiManager.h"
 #include "Engine/Audio/AudioManager.h"
@@ -303,22 +306,97 @@ void GamePlayScene::Initialize(){
 	player_->Initialize();
 
 
-	// 1. JSONからマップデータを読み込む
-	LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
+	// レール経路の可視化用：細い線セグメント用の立方体モデルと、単色化用の白テクスチャ
+	ModelManager::GetInstance()->CreateCubeModel("railLineCube", 1.0f);
+	textures_["white"] = TextureManager::GetInstance()->Load("resources/block/white1x1.png");
 
-	// 2. 読み込んだ複数のレールの座標を、SplineRailにセットする
-	splineRails_.clear();
-	for ( const auto& line : mapData.railLines ) {
-		SplineRail newRail;
-		newRail.nodes = line;
-		newRail.BuildDistanceTable();
-		splineRails_.push_back(newRail);
-	}
-	BuildRailConnections(splineRails_); // ★接続情報を計算
+	// レールはエディタ(LevelEditor)が読み込み・保持している最新データから構築する。
+	// （エディタ編集・緑線・プレイヤーを同じデータに一本化）
+	SyncRailsFromEditor();
 
 }
 
+// エディタ(LevelEditor)が保持する最新のレール節点から splineRails_ を作り直す。
+// これでエディタ編集・緑線・プレイヤーが常に同じデータを使う（ズレ解消）。
+void GamePlayScene::SyncRailsFromEditor(){
+	const auto& lines = EditorManager::GetInstance()->GetEditorRailLines();
+
+	splineRails_.clear();
+	for ( const auto& line : lines ) {
+		SplineRail rail;
+		rail.nodes = line;
+		rail.BuildDistanceTable();
+		splineRails_.push_back(rail);
+	}
+	BuildRailConnections(splineRails_); // 接続・分岐を再計算
+	BuildRailMarkers();                 // 緑線を作り直す
+	lastRailVersion_ = EditorManager::GetInstance()->GetRailEditVersion();
+}
+
+// splineRails_ を距離で細かくサンプルし、隣り合う点を「細いバー」で繋いで
+// 連続した線として経路を可視化する（モンスターボール球より見やすい）
+void GamePlayScene::BuildRailMarkers(){
+	railMarkers_.clear();
+
+	Model* segModel = ModelManager::GetInstance()->FindModel("railLineCube");
+	if ( segModel == nullptr ) { return; }
+
+	// 単色化用の白テクスチャ（あれば使う）
+	uint32_t whiteTex = 0;
+	auto itWhite = textures_.find("white");
+	if ( itWhite != textures_.end() ) { whiteTex = itWhite->second.srvIndex; }
+
+	const float spacing   = 0.5f;   // サンプル間隔（小さいほど曲線が滑らか＝バー数増）
+	const float thickness = 0.08f;  // 線の太さ(m)
+	const Vector4 lineColor = { 0.2f, 1.0f, 0.35f, 1.0f }; // 見やすい明るい緑
+
+	for ( const auto& rail : splineRails_ ) {
+		float len = rail.GetLength();
+		if ( len <= 0.0f || rail.nodes.size() < 2 ) { continue; }
+
+		Vector3 prev = rail.GetPositionByDistance(0.0f);
+
+		for ( float s = spacing; s <= len + 0.001f; s += spacing ) {
+			float ss = ( s > len ) ? len : s;
+			Vector3 cur = rail.GetPositionByDistance(ss);
+
+			// prev→cur を結ぶ細いバーを1本置く
+			Vector3 d = { cur.x - prev.x, cur.y - prev.y, cur.z - prev.z };
+			float segLen = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+			if ( segLen > 1e-4f ) {
+				Vector3 dir = { d.x / segLen, d.y / segLen, d.z / segLen };
+				// 立方体のローカル+Z軸を dir に向ける Euler角（yaw→pitch）
+				float yaw   = std::atan2(dir.x, dir.z);
+				float dyC   = std::clamp(dir.y, -1.0f, 1.0f);
+				float pitch = -std::asin(dyC);
+
+				auto box = std::make_unique<Obj3d>();
+				box->Initialize(segModel);
+				box->SetCamera(camera_.get());
+				box->SetScale({ thickness, thickness, segLen }); // Z方向にだけ伸ばす＝バー
+				box->SetTranslation({ ( prev.x + cur.x ) * 0.5f, ( prev.y + cur.y ) * 0.5f, ( prev.z + cur.z ) * 0.5f });
+				box->SetRotation({ pitch, yaw, 0.0f });
+				if ( box->GetModel() ) {
+					if ( whiteTex != 0 ) { box->GetModel()->SetTexture(whiteTex); } // 単色化
+					box->GetModel()->GetMaterial()->color = lineColor;
+					box->GetModel()->GetMaterial()->enableLighting = 0; // フラットに塗る
+				}
+				box->Update();
+				railMarkers_.push_back(std::move(box));
+			}
+			prev = cur;
+		}
+	}
+}
+
 void GamePlayScene::Update(){
+
+	// ========================================================
+	// ▼ レールのライブ同期：エディタでレールを編集したら、緑線とプレイヤー用データを即作り直す
+	// ========================================================
+	if ( EditorManager::GetInstance()->GetRailEditVersion() != lastRailVersion_ ) {
+		SyncRailsFromEditor();
+	}
 
 	// ========================================================
 	// ▼ 0. 常に実行する処理（カメラの更新）
@@ -336,16 +414,8 @@ void GamePlayScene::Update(){
 	// もし「エディット(停止)」から「プレイ(再生)」に切り替わった瞬間なら、リセット処理を行う
 	if ( prevMode_ == EngineMode::Edit && currentMode == EngineMode::Play ) {
 
-		// ★追加：最新のマップデータをJSONから読み込み直す（保存したてのデータを反映）
-		LevelData mapData = LevelManager::GetInstance()->Load("resources/map/map01.json");
-		splineRails_.clear();
-		for ( const auto& line : mapData.railLines ) {
-			SplineRail newRail;
-			newRail.nodes = line;
-			newRail.BuildDistanceTable();
-			splineRails_.push_back(newRail);
-		}
-		BuildRailConnections(splineRails_); // ★接続情報を計算
+		// 最新のエディタレールで確定（保存不要・編集中の形でそのまま遊べる）
+		SyncRailsFromEditor();
 
 		// ② プレイヤーをスタート地点に戻す
 		if ( player_ ) { player_->Initialize(); }
@@ -410,6 +480,9 @@ void GamePlayScene::Update(){
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 	if ( testObj_ ){ testObj_->Update(); }
 
+	// レール可視化マーカーも毎フレーム更新（カメラ移動に追従。Updateしないと生成時のカメラで固定化される）
+	for ( auto& marker : railMarkers_ ) { marker->Update(); }
+
 	if ( auraObj_ ) {
 		auraUvScrollOffset_ += 1.0f * ( 1.0f / 60.0f );
 		if ( auraUvScrollOffset_ > 1.0f ) { auraUvScrollOffset_ -= 1.0f; }
@@ -469,6 +542,11 @@ void GamePlayScene::Draw(){
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
+
+	// レール経路の可視化マーカー（プレイヤーが通る道筋）
+	if ( showRailMarkers_ ) {
+		for ( auto& marker : railMarkers_ ) { marker->Draw(); }
+	}
 
 	EditorManager::GetInstance()->Draw();
 
@@ -549,6 +627,13 @@ void GamePlayScene::DrawDebugUI(){
 
 
 	TextManager::GetInstance()->DrawDebugUI();
+
+	// レール経路の可視化トグル
+	ImGui::Begin("レール表示 (Rail Debug)");
+	ImGui::Checkbox("レール経路を表示", &showRailMarkers_);
+	ImGui::Text("マーカー数: %d", static_cast<int>(railMarkers_.size()));
+	if ( ImGui::Button("マーカー再構築") ) { BuildRailMarkers(); }
+	ImGui::End();
 
 #endif
 

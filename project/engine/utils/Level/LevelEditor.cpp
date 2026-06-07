@@ -49,28 +49,11 @@ void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 
 // ★追加：すべての路線の球体を描画用にセットアップする
 void LevelEditor::RebuildRailPoints(){
+	// レールの可視化(緑線)はゲーム側(GamePlayScene)が担当するので、
+	// ここでは赤い球の生成はやめ、編集の世代番号だけを進めて変化を通知する。
 	railSpheresAll_.clear();
 	pathPointsAll_.clear();
-
-	Model* sphereModel = ModelManager::GetInstance()->FindModel("sphere");
-	if ( !sphereModel ) return;
-
-	for ( size_t i = 0; i < levelData_.railLines.size(); ++i ) {
-		std::vector<std::unique_ptr<Obj3d>> lineSpheres;
-		for ( const auto& pos : levelData_.railLines[i] ) {
-			auto sp = std::make_unique<Obj3d>();
-			sp->Initialize(sphereModel);
-			sp->SetCamera(camera_);
-			sp->SetScale({ 0.5f, 0.5f, 0.5f });
-			sp->SetTranslation(pos);
-			sp->Update();
-			lineSpheres.push_back(std::move(sp));
-		}
-		railSpheresAll_.push_back(std::move(lineSpheres));
-
-		// パスポイント用（Updateで中身を生成する）
-		pathPointsAll_.push_back(std::vector<std::unique_ptr<Obj3d>>());
-	}
+	++railVersion_;
 }
 
 
@@ -86,76 +69,23 @@ void LevelEditor::Update(){
 		if ( input->Pushkey(DIK_RIGHT) ) { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].x += moveStep; }
 		if ( input->Pushkey(DIK_O) )     { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].y += moveStep; }
 		if ( input->Pushkey(DIK_U) )     { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].y -= moveStep; }
+
+		// 矢印/O/Uでノードを動かしている間は編集とみなして世代番号を進める（緑線がライブ追従する）
+		if ( input->Pushkey(DIK_UP) || input->Pushkey(DIK_DOWN) || input->Pushkey(DIK_LEFT) ||
+			 input->Pushkey(DIK_RIGHT) || input->Pushkey(DIK_O) || input->Pushkey(DIK_U) ) {
+			++railVersion_;
+		}
 	}
 
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 
-	Model* sphereModel = ModelManager::GetInstance()->FindModel("sphere");
-
-	// ★すべての路線の球体と軌道を更新
-	for ( size_t i = 0; i < levelData_.railLines.size(); ++i ) {
-		// 1. ノード球体の位置を最新の座標に合わせる
-		if ( railSpheresAll_.size() > i && railSpheresAll_[i].size() == levelData_.railLines[i].size() ) {
-			for ( size_t j = 0; j < railSpheresAll_[i].size(); ++j ) {
-				railSpheresAll_[i][j]->SetTranslation(levelData_.railLines[i][j]);
-
-				// 現在編集中の路線の選択中ノードは少し大きく表示！
-				if ( i == currentEditRailIndex_ && j == selectedRailNode_ ) {
-					railSpheresAll_[i][j]->SetScale({ 0.8f, 0.8f, 0.8f });
-				} else {
-					railSpheresAll_[i][j]->SetScale({ 0.4f, 0.4f, 0.4f });
-				}
-				railSpheresAll_[i][j]->Update();
-			}
-		}
-
-		// 2. 軌道(見えないレール)を計算して細かい点を配置
-		SplineRail previewRail;
-		for ( const auto& pos : levelData_.railLines[i] ) {
-			previewRail.nodes.push_back(pos);
-		}
-
-		if ( previewRail.nodes.size() >= 2 && pathPointsAll_.size() > i ) {
-			float maxT = static_cast< float >( previewRail.nodes.size() - 1 );
-			int requiredPoints = static_cast< int >( maxT * 10.0f );
-
-			// 足りない分だけ追加
-			while ( pathPointsAll_[i].size() < requiredPoints && sphereModel ) {
-				auto point = std::make_unique<Obj3d>();
-				point->Initialize(sphereModel);
-				point->SetCamera(camera_);
-				point->SetScale({ 0.1f, 0.1f, 0.1f });
-				pathPointsAll_[i].push_back(std::move(point));
-			}
-
-			// 座標更新
-			float step = maxT / ( requiredPoints - 1 );
-			for ( int j = 0; j < requiredPoints; ++j ) {
-				float t = j * step;
-				pathPointsAll_[i][j]->SetTranslation(previewRail.EvaluatePosition(t));
-				pathPointsAll_[i][j]->Update();
-			}
-
-			// 余分な点は画面外へ隠す
-			for ( size_t j = requiredPoints; j < pathPointsAll_[i].size(); ++j ) {
-				pathPointsAll_[i][j]->SetTranslation({ 0.0f, -9999.0f, 0.0f });
-				pathPointsAll_[i][j]->Update();
-			}
-		}
-	}
+	// ※レールの可視化(緑線)はゲーム側(GamePlayScene)が GetRailLines() を参照して描画する。
+	//   ここで赤い球やパス点は生成・更新しない。
 }
 
 void LevelEditor::Draw(){
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
-
-	// すべての路線の球体を描画
-	for ( auto& lineSpheres : railSpheresAll_ ) {
-		for ( auto& sphere : lineSpheres ) { sphere->Draw(); }
-	}
-	// すべての軌道を描画
-	for ( auto& pathPoints : pathPointsAll_ ) {
-		for ( auto& point : pathPoints ) { point->Draw(); }
-	}
+	// レールの可視化（緑線）はゲーム側(GamePlayScene)が描画するため、ここでは何も描かない
 }
 
 
@@ -356,6 +286,68 @@ void LevelEditor::DrawDebugUI(){
 	}
 	ImGui::Separator();
 
+	// --- 形を整えるツール（ワンクリックで 直線 / カーブ）---
+	{
+		auto& line = levelData_.railLines[currentEditRailIndex_];
+		static float curveAmount = 4.0f;
+		static int   curveAxis   = 1; // 0=X(横), 1=Y(上), 2=Z(奥)
+
+		ImGui::Text("形を整える:");
+
+		// 直線：両端を結ぶ直線上に、中間ノードを等間隔で並べ直す
+		if ( ImGui::Button("直線にする") ) {
+			if ( line.size() >= 2 ) {
+				Vector3 a = line.front();
+				Vector3 b = line.back();
+				int n = static_cast< int >( line.size() );
+				for ( int k = 1; k < n - 1; ++k ) {
+					float t = static_cast< float >( k ) / static_cast< float >( n - 1 );
+					line[k] = { a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t };
+				}
+				RebuildRailPoints();
+			}
+		}
+		ImGui::SameLine();
+
+		// カーブ：直線基準に対して中央が最大の弧(sin)を加える
+		if ( ImGui::Button("カーブにする") ) {
+			// 2ノードしか無い時は中間ノードを補完して曲げられるようにする
+			if ( line.size() == 2 ) {
+				Vector3 a = line.front();
+				Vector3 b = line.back();
+				std::vector<Vector3> filled;
+				for ( int k = 0; k < 5; ++k ) {
+					float t = static_cast< float >( k ) / 4.0f;
+					filled.push_back({ a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t });
+				}
+				line = filled;
+			}
+			if ( line.size() >= 3 ) {
+				Vector3 a = line.front();
+				Vector3 b = line.back();
+				int n = static_cast< int >( line.size() );
+				for ( int k = 1; k < n - 1; ++k ) {
+					float t = static_cast< float >( k ) / static_cast< float >( n - 1 );
+					Vector3 base = { a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t };
+					float bump = std::sin(t * 3.14159265f) * curveAmount; // 中央が最大、両端0
+					if ( curveAxis == 0 )      base.x += bump;
+					else if ( curveAxis == 1 ) base.y += bump;
+					else                       base.z += bump;
+					line[k] = base;
+				}
+				RebuildRailPoints();
+			}
+		}
+
+		ImGui::PushItemWidth(140.0f);
+		ImGui::SliderFloat("カーブの強さ", &curveAmount, -10.0f, 10.0f);
+		const char* axisNames[] = { "X (横)", "Y (上)", "Z (奥)" };
+		ImGui::Combo("カーブの向き", &curveAxis, axisNames, 3);
+		ImGui::PopItemWidth();
+		ImGui::TextDisabled("※カーブは中間ノードを曲げます。保存→Playでゲームに反映");
+		ImGui::Separator();
+	}
+
 	ImGui::BeginChild("RailNodeList", ImVec2(0, 300), true);
 	for ( size_t i = 0; i < levelData_.railLines[currentEditRailIndex_].size(); ++i ) {
 		ImGui::PushID(static_cast< int >(i));
@@ -366,7 +358,9 @@ void LevelEditor::DrawDebugUI(){
 		}
 		ImGui::SameLine();
 		ImGui::PushItemWidth(150.0f);
-		ImGui::DragFloat3(( "##" + label ).c_str(), &levelData_.railLines[currentEditRailIndex_][i].x, 0.5f);
+		if ( ImGui::DragFloat3(( "##" + label ).c_str(), &levelData_.railLines[currentEditRailIndex_][i].x, 0.5f) ) {
+			++railVersion_; // 数値編集でも緑線をライブ更新
+		}
 		ImGui::PopItemWidth();
 		ImGui::SameLine();
 

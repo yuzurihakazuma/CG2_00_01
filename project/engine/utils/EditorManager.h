@@ -1,5 +1,7 @@
 #pragma once
-#include <memory>  
+#include <memory>
+#include <vector>
+#include "engine/math/struct.h" // Vector3
 
 class LevelEditor;
 class Camera;
@@ -57,6 +59,12 @@ public:
 
 	// ギズモ／インスペクタで操作する対象オブジェクトを登録する（シーンから渡す）
 	void SetGizmoTarget(Obj3d* obj){ gizmoTarget_ = obj; }
+
+	// --- レール編集データの公開（ゲーム側が同じレールを使うため）---
+	// 編集の世代番号。ノード移動/追加/削除/直線/カーブ/読込のたびに増える
+	int GetRailEditVersion() const;
+	// 現在エディタが保持しているレールの節点リスト
+	const std::vector<std::vector<Vector3>>& GetEditorRailLines() const;
 
 	// シーン切り替え時に外部参照をまとめてリセットする（ダングリングポインタ防止）
 	void ResetSceneReferences(){

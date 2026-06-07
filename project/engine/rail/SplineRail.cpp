@@ -19,22 +19,31 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
     int p1_index = static_cast< int >( t );
     float localT = t - p1_index;
 
-    // 4点（p0, p1, p2, p3）のインデックスを計算
-    int p0_index = p1_index - 1;
-    int p2_index = p1_index + 1;
-    int p3_index = p1_index + 2;
-
-    // 配列の範囲外にアクセスしないようにクランプ（安全装置）
+    // 中央2点(p1,p2)のインデックスを安全にクランプ
     int maxIndex = static_cast< int >( nodes.size() - 1 );
-    if ( p0_index < 0 ) p0_index = 0;
+    if ( p1_index < 0 ) p1_index = 0;
     if ( p1_index > maxIndex ) p1_index = maxIndex;
+    int p2_index = p1_index + 1;
     if ( p2_index > maxIndex ) p2_index = maxIndex;
-    if ( p3_index > maxIndex ) p3_index = maxIndex;
 
-    Vector3 p0 = nodes[p0_index];
     Vector3 p1 = nodes[p1_index];
     Vector3 p2 = nodes[p2_index];
-    Vector3 p3 = nodes[p3_index];
+
+    // 端の制御点(p0,p3)は配列外なら「鏡映(reflection)」で補う。
+    // 従来は端を同じ点にクランプしていたため端の接線が劣化し、向きがカクついた。
+    // p0 = p1 を p2 の反対側へ折り返す / p3 = p2 を p1 の反対側へ折り返す
+    Vector3 p0;
+    if ( p1_index - 1 >= 0 ) {
+        p0 = nodes[p1_index - 1];
+    } else {
+        p0 = { 2.0f * p1.x - p2.x, 2.0f * p1.y - p2.y, 2.0f * p1.z - p2.z };
+    }
+    Vector3 p3;
+    if ( p1_index + 2 <= maxIndex ) {
+        p3 = nodes[p1_index + 2];
+    } else {
+        p3 = { 2.0f * p2.x - p1.x, 2.0f * p2.y - p1.y, 2.0f * p2.z - p1.z };
+    }
 
     // Catmull-Rom スプラインの公式を使って曲線を計算
     Vector3 result;
@@ -57,8 +66,10 @@ void SplineRail::BuildDistanceTable(){
     float maxT = static_cast< float >( nodes.size() - 1 );
 
     // 1つの区間を何分割して距離を測るか（精度）
-    const int resolution = 20;
+    // 大きいほど弧長(=等速移動)が正確になる。曲がりの強いレールでもブレにくくする
+    const int resolution = 40;
     int totalSamples = static_cast< int >( maxT * resolution );
+    if ( totalSamples < 1 ) totalSamples = 1;
 
     Vector3 prevPos = EvaluatePosition(0.0f);
     distanceTable_.push_back(0.0f);
@@ -84,16 +95,16 @@ float SplineRail::GetTFromDistance(float targetDistance) const{
     if ( targetDistance <= 0.0f ) return 0.0f;
     if ( targetDistance >= totalLength_ ) return tTable_.back();
 
-    // テーブルの中から目的の距離を挟む2点を探す
-    for ( size_t i = 0; i < distanceTable_.size() - 1; ++i ) {
-        if ( distanceTable_[i] <= targetDistance && targetDistance <= distanceTable_[i + 1] ) {
-            // 2点間を線形補間（Lerp）して正確な t を割り出す
-            float segmentDist = distanceTable_[i + 1] - distanceTable_[i];
-            float ratio = ( targetDistance - distanceTable_[i] ) / segmentDist;
-            return tTable_[i] + ( tTable_[i + 1] - tTable_[i] ) * ratio;
-        }
-    }
-    return tTable_.back();
+    // 二分探索：targetDistance 以上になる最初の位置を探す（テーブルは昇順）
+    auto it = std::lower_bound(distanceTable_.begin(), distanceTable_.end(), targetDistance);
+    size_t hi = static_cast< size_t >( it - distanceTable_.begin() );
+    if ( hi == 0 ) return tTable_.front();
+    size_t lo = hi - 1;
+
+    // 挟んだ2点を線形補間して正確な t を割り出す
+    float segmentDist = distanceTable_[hi] - distanceTable_[lo];
+    float ratio = ( segmentDist > 0.0f ) ? ( targetDistance - distanceTable_[lo] ) / segmentDist : 0.0f;
+    return tTable_[lo] + ( tTable_[hi] - tTable_[lo] ) * ratio;
 }
 
 Vector3 SplineRail::EvaluateTangent(float t) const{
@@ -122,17 +133,60 @@ Vector3 SplineRail::EvaluateTangent(float t) const{
     return tangent;
 }
 
+// ============================================================
+// 距離(s)ベースの公開API実装
+// ============================================================
+
+// 距離 s における座標（内部で t に変換）
+Vector3 SplineRail::GetPositionByDistance(float distance) const{
+    if ( distance < 0.0f ) distance = 0.0f;
+    if ( distance > totalLength_ ) distance = totalLength_;
+    return EvaluatePosition(GetTFromDistance(distance));
+}
+
+// 距離 s における進行方向（距離空間で前後をサンプルするので端でも反転しない）
+Vector3 SplineRail::GetTangentByDistance(float distance) const{
+    const float ds = 0.1f; // 前後 10cm を見て向きを求める
+    float s1 = distance - ds;
+    float s2 = distance + ds;
+    if ( s1 < 0.0f ) s1 = 0.0f;
+    if ( s2 > totalLength_ ) s2 = totalLength_;
+    if ( s2 - s1 < 1e-5f ) return { 0.0f, 0.0f, 1.0f };
+
+    Vector3 a = GetPositionByDistance(s1);
+    Vector3 b = GetPositionByDistance(s2);
+    Vector3 dir = { b.x - a.x, b.y - a.y, b.z - a.z };
+    float len = Length(dir);
+    if ( len > 0.0f ) { dir.x /= len; dir.y /= len; dir.z /= len; } else { dir = { 0.0f, 0.0f, 1.0f }; }
+    return dir;
+}
+
+// 指定ワールド座標に最も近いレール上の距離 s（スナップ／分岐検出用）
+float SplineRail::GetClosestDistance(const Vector3& worldPos) const{
+    if ( distanceTable_.empty() ) return 0.0f;
+    float bestDistSq = 1e30f;
+    float bestS = 0.0f;
+    for ( size_t i = 0; i < distanceTable_.size(); ++i ) {
+        Vector3 p = EvaluatePosition(tTable_[i]);
+        float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
+        float d2 = dx * dx + dy * dy + dz * dz;
+        if ( d2 < bestDistSq ) { bestDistSq = d2; bestS = distanceTable_[i]; }
+    }
+    return bestS;
+}
+
 float SplineRail::GetDistanceFromT(float t) const{
     if ( tTable_.empty() ) return 0.0f;
     if ( t <= 0.0f ) return 0.0f;
     if ( t >= tTable_.back() ) return totalLength_;
 
-    for ( size_t i = 0; i < tTable_.size() - 1; ++i ){
-        if ( tTable_[i] <= t && t <= tTable_[i + 1] ){
-            float segT = tTable_[i + 1] - tTable_[i];
-            float ratio = ( segT > 0.0f ) ? ( t - tTable_[i] ) / segT : 0.0f;
-            return distanceTable_[i] + ( distanceTable_[i + 1] - distanceTable_[i] ) * ratio;
-        }
-    }
-    return totalLength_;
+    // 二分探索：t 以上になる最初の位置を探す
+    auto it = std::lower_bound(tTable_.begin(), tTable_.end(), t);
+    size_t hi = static_cast< size_t >( it - tTable_.begin() );
+    if ( hi == 0 ) return distanceTable_.front();
+    size_t lo = hi - 1;
+
+    float segT = tTable_[hi] - tTable_[lo];
+    float ratio = ( segT > 0.0f ) ? ( t - tTable_[lo] ) / segT : 0.0f;
+    return distanceTable_[lo] + ( distanceTable_[hi] - distanceTable_[lo] ) * ratio;
 }

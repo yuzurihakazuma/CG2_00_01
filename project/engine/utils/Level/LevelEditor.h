@@ -33,9 +33,16 @@ public:
     // デバッグ用UIの描画
     void DrawDebugUI();
 
+    // --- レール編集データの公開（ゲーム側が同じレールを参照するため）---
+    int GetRailVersion() const { return railVersion_; }
+    const std::vector<std::vector<Vector3>>& GetRailLines() const { return levelData_.railLines; }
+
 private:
     // カメラは所有しない参照（描画のときに使う）
     const Camera* camera_ = nullptr;
+
+    // レール編集の世代番号（編集のたびに増やし、ゲーム側が変化を検知する）
+    int railVersion_ = 0;
 
     LevelData levelData_; // 現在のマップデータ
     std::vector<std::unique_ptr<Obj3d>> object3ds_; // 配置された3Dオブジェクト
