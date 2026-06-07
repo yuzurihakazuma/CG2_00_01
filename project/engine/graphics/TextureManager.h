@@ -68,6 +68,12 @@ public:
         ID3D12GraphicsCommandList* commandList
     );
 
+    // -------------------- 短縮版（commandList を内部取得） --------------------
+    // 例: textures_["x"] = TextureManager::GetInstance()->Load("resources/x.png");
+    // commandList を毎回渡す必要がなくなる（内部で DirectXCommon から取得）
+    TextureData Load(const std::string& filePath);
+    TextureData LoadCube(const std::string& filePath);
+
 
     // -------------------- GPU テクスチャリソース生成 --------------------
 

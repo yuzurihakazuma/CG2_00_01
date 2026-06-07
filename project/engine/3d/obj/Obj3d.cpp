@@ -42,6 +42,13 @@ std::unique_ptr<Obj3d> Obj3d::Create(const std::string& modelName, const Vector3
 	obj3d->SetRotation(rotate);
 	obj3d->SetScale(scale);
 
+	// 4-2. 既定（アクティブ）カメラが登録されていれば自動でバインド
+	//      （シーンで SetDefaultCamera を1回呼べば、毎回 SetCamera する必要がなくなる。
+	//        個別に SetCamera すれば従来どおり上書き可能）
+	if ( const Camera* defaultCamera = Obj3dCommon::GetInstance()->GetDefaultCamera() ) {
+		obj3d->SetCamera(defaultCamera);
+	}
+
 	// 5. そのまま返す（moveされるので所有権が移ります）
 	return obj3d;
 }

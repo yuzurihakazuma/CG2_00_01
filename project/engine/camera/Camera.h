@@ -2,6 +2,7 @@
 // --- 標準・外部ライブラリ ---
 #include <wrl/client.h>
 #include <d3d12.h>
+#include <memory>
 // --- エンジン側のファイル ---
 #include "engine/math/Matrix4x4.h"
 #include "engine/math/struct.h"
@@ -23,6 +24,10 @@ public:
 
 	// コンストラクタ
 	Camera(int windowWidth, int windowHeight, DirectXCommon* dxcmmon);
+
+	// 簡易生成：ウィンドウサイズと DirectXCommon を自動取得して生成する
+	// 例: camera_ = Camera::Create();
+	static std::unique_ptr<Camera> Create();
 
 	// カメラ更新
 	void Update();

@@ -95,6 +95,14 @@ DirectX::ScratchImage TextureManager::LoadTexture(const std::string& filePath){
 
 	return std::move(image);
 }
+// 短縮版：commandList を内部（DirectXCommon）から取得して読み込む
+TextureData TextureManager::Load(const std::string& filePath){
+	return LoadTextureAndCreateSRV(filePath, dxCommon_->GetCommandList());
+}
+TextureData TextureManager::LoadCube(const std::string& filePath){
+	return LoadTextureAndCreateSRVCube(filePath, dxCommon_->GetCommandList());
+}
+
  [[nodiscard]]
 TextureData TextureManager::LoadTextureAndCreateSRV(const std::string& filePath,ID3D12GraphicsCommandList* commandList){
 	// すでにロード済みならそれを返す

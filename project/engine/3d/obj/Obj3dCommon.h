@@ -8,6 +8,7 @@
 
 // 前方宣言
 class DirectXCommon;
+class Camera;
 
 
 // 3Dオブジェクト共通クラス
@@ -72,6 +73,11 @@ public:
 	void SetEnvironmentTexture(uint32_t srvIndex){ environmentTextureSrvIndex_ = srvIndex; }
 	uint32_t GetEnvironmentTextureSrvIndex() const{ return environmentTextureSrvIndex_; }
 
+	// 既定（アクティブ）カメラ。これを設定しておくと Obj3d::Create() が自動でカメラを適用する
+	// （オブジェクトごとに SetCamera を呼ぶ手間が省ける。個別に SetCamera すれば上書き可）
+	void SetDefaultCamera(const Camera* camera){ defaultCamera_ = camera; }
+	const Camera* GetDefaultCamera() const{ return defaultCamera_; }
+
 
 	/// <summary>
 	/// 初期化
@@ -112,5 +118,8 @@ private:
 	SpotLight* spotLightData_ = nullptr;
 
 	uint32_t environmentTextureSrvIndex_ = 0;
+
+	// 既定（アクティブ）カメラ（所有しない）
+	const Camera* defaultCamera_ = nullptr;
 };
 
