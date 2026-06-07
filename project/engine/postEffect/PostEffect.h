@@ -21,7 +21,33 @@ enum class PostEffectType {
 	RadialBlur,     // 放射状ブラー
 	Outline,        // アウトライン
 	RandomNoise,    // ランダムノイズ
+	ColorTint,        // 全面カラーティント（死亡フラッシュ等）
+	MaskedDistortion, // 指定円周囲の熱波歪み
+	MaskedGlow,       // 指定円周囲のスポットライト
+	MaskedSepia,      // 指定エリアのセピア
 	Count           // 種類の数
+};
+
+// ポストエフェクト共通の定数バッファ (b0) ／ HLSL の PostEffectParams と一致させる
+struct PostEffectParams {
+	float time = 0.0f;       // 経過時間（ノイズ・歪みアニメ等）
+	float param0 = 0.0f;     // 汎用パラメータ（ColorTint の alpha など）
+	float colorR = 1.0f;     // ティント色 R
+	float colorG = 1.0f;     // ティント色 G
+	float colorB = 1.0f;     // ティント色 B
+	float padding[3] = { 0.0f, 0.0f, 0.0f };
+};
+
+// マスク系ポストエフェクト用の定数バッファ (b1) ／ HLSL の MaskParams と一致させる
+struct PostEffectMaskParams {
+	float slot0X = 0.0f;       // スロット0（例：ボス）スクリーンUV X
+	float slot0Y = 0.0f;       // スロット0 スクリーンUV Y
+	float slot0Radius = 0.0f;  // スロット0 半径
+	float slot0Pad = 0.0f;     // 予備（用途はシェーダー依存）
+	float slot1X = 0.0f;       // スロット1（例：プレイヤー）スクリーンUV X
+	float slot1Y = 0.0f;       // スロット1 スクリーンUV Y
+	float slot1Radius = 0.0f;  // スロット1 半径
+	float aspectRatio = 1.0f;  // アスペクト比（正円補正）
 };
 
 
@@ -74,8 +100,25 @@ public:
 	// 外から時間を進めるための関数
 	void AddTime(float addValue) {
 		time_ += addValue;
-		if (timeData_) {
-			*timeData_ = time_;
+		if (paramData_) {
+			paramData_->time = time_;
+		}
+	}
+
+	// 全面カラーティント（ColorTint）のパラメータ設定。alpha=0で無効、1で全面塗り
+	void SetColorTint(float alpha, float r, float g, float b) {
+		if (paramData_) {
+			paramData_->param0 = alpha;
+			paramData_->colorR = r;
+			paramData_->colorG = g;
+			paramData_->colorB = b;
+		}
+	}
+
+	// マスク系エフェクト（MaskedDistortion / MaskedGlow / MaskedSepia）のパラメータ設定
+	void SetMaskParams(const PostEffectMaskParams& params) {
+		if (maskData_) {
+			*maskData_ = params;
 		}
 	}
 
@@ -136,11 +179,15 @@ private:
 	// Enumの要素数(Count)の分だけ bool の配列を作る
 	bool activeEffects_[static_cast<int>(PostEffectType::Count)] = { false };
 
-	// 時間経過で変化するエフェクトのための時間管理
+	// ポストエフェクト共通定数バッファ (b0)。先頭が time なので既存の時間参照シェーダーとも互換
 	Microsoft::WRL::ComPtr<ID3D12Resource> timeResource_;
-	float* timeData_ = nullptr;
+	PostEffectParams* paramData_ = nullptr;
 	float time_ = 0.0f;
 	float timeSpeed_ = 0.05f;
+
+	// マスク系エフェクト用定数バッファ (b1)
+	Microsoft::WRL::ComPtr<ID3D12Resource> maskResource_;
+	PostEffectMaskParams* maskData_ = nullptr;
 
 	DirectXCommon* dxCommon_ = nullptr;
 
