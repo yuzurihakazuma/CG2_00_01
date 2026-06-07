@@ -98,6 +98,7 @@ void Obj3dCommon::Initialize(DirectXCommon* dxCommon){
 		// 最初のライトだけ強度を1、それ以外は0にしておく
 		directionalLightData_->lights[i].intensity = ( i == 0 ) ? 1.0f : 0.0f;
 	}
+	
 
 	// 点光源のバッファ作成
 	pointLightResource_ = dxCommon_->GetResourceFactory()->CreateBufferResource(sizeof(PointLight));
