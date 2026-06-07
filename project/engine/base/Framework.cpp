@@ -3,6 +3,7 @@
 #include "engine/base/WindowProc.h"
 #include "engine/base/DirectXCommon.h"
 #include "engine/base/Input.h"
+#include "engine/base/TimeManager.h"
 #include "engine/audio/AudioManager.h"
 #include "engine/graphics/SrvManager.h"
 #include "engine/graphics/ResourceFactory.h"
@@ -18,6 +19,7 @@
 #include "engine/postEffect/PostEffect.h"
 #include "engine/utils/EditorManager.h"
 #include "engine/utils/TextManager.h"
+#include "engine/utils/RenderStats.h"
 
 
 void Framework::Initialize(){
@@ -124,6 +126,9 @@ void Framework::Finalize(){
 }
 
 void Framework::Update(){
+	// フレーム先頭で時間を更新（全システムが同じデルタタイムを参照できるように）
+	Time::GetInstance()->Update();
+
 	// ウィンドウ・入力の基盤更新
 	WindowProc::GetInstance()->Update();
 	Input::GetInstance()->Update();
@@ -148,6 +153,9 @@ void Framework::Update(){
 
 void Framework::Draw(){
 	DirectXCommon* dxCommon = DirectXCommon::GetInstance();
+
+	// このフレームの描画統計をリセット（各 Draw() で加算される）
+	RenderStats::GetInstance()->BeginFrame();
 
 	// 描画前処理
 	dxCommon->PreDraw();

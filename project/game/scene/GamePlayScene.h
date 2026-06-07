@@ -8,7 +8,6 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleEmitter.h"
 #include "engine/utils/EditorManager.h"  // EngineMode のために必要
-#include "InstancedGroup.h"
 #include "Skybox.h"
 #include "HitEffect.h"
 
@@ -57,11 +56,7 @@ private: // メンバ変数
 	// デバッグカメラ
 	std::unique_ptr<DebugCamera> debugCamera_ = nullptr;
 
-	// 3Dオブジェクト
-	std::vector<std::unique_ptr<Obj3d>> object3ds_;
-
 	// スプライト
-	std::vector<std::unique_ptr<Sprite>> sprites_;
 	std::unique_ptr<Sprite> sprite_ = nullptr;
 
 	Vector2 spritePos_ = { 100.0f, 100.0f };
@@ -86,9 +81,6 @@ private: // メンバ変数
 	float dissolveThreshold_ = 0.0f; // ディゾルブエフェクトの進行度（0.0で通常、1.0で完全に消える）
 	
 	Animation testAnimation_;
-	// ブロックの一括描画用グループ
-	std::unique_ptr<InstancedGroup> blockGroup_ = nullptr;
-	std::vector<std::unique_ptr<Obj3d>> blocks_;
 
 	std::unique_ptr<SkinnedObj3d> skinnedObj_ = nullptr;
 
@@ -105,9 +97,6 @@ private: // メンバ変数
 
 	// UVスクロール用のタイマー変数
 	float auraUvScrollOffset_ = 0.0f;
-	
-
-	EngineMode prevMode_ = EngineMode::Edit;
 
 	// 一旦新しく作る円柱オーラ用オブジェクト
 	std::unique_ptr<Obj3d> auraCylinderObj_ = nullptr;

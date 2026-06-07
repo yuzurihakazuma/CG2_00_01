@@ -1,11 +1,12 @@
 #pragma once
 #include <memory>  
 
-class LevelEditor;      
-class Camera;  
+class LevelEditor;
+class Camera;
 class GPUParticleEditor;
 class GPUParticleEmitter;
 class SkinnedObj3d;
+class Obj3d;
 
 
 enum class EngineMode{
@@ -54,9 +55,14 @@ public:
 	// シーンから SkinnedObj3d を登録する。シーン終了時は必ず nullptr を渡してリセットすること
 	void SetTargetSkinnedObj(SkinnedObj3d* obj){ targetSkinnedObj_ = obj; }
 
+	// ギズモ／インスペクタで操作する対象オブジェクトを登録する（シーンから渡す）
+	void SetGizmoTarget(Obj3d* obj){ gizmoTarget_ = obj; }
+
 	// シーン切り替え時に外部参照をまとめてリセットする（ダングリングポインタ防止）
 	void ResetSceneReferences(){
 		targetSkinnedObj_ = nullptr;
+		gizmoTarget_ = nullptr;
+		editorCamera_ = nullptr;
 		gameViewSrvIndex_ = 0;
 	}
 
@@ -88,6 +94,12 @@ private:
     std::unique_ptr<GPUParticleEditor> gpuParticleEditor_ = nullptr;
 
     SkinnedObj3d* targetSkinnedObj_ = nullptr;
+
+    // ギズモ／インスペクタ用
+    Obj3d* gizmoTarget_ = nullptr;       // 操作対象（所有しない）
+    const Camera* editorCamera_ = nullptr; // ギズモ計算に使うカメラ（所有しない）
+    int gizmoOperation_ = 7;             // ImGuizmo::TRANSLATE(=7) を既定に
+    int gizmoMode_ = 1;                  // ImGuizmo::WORLD(=1)
 
     EngineMode currentMode_ = EngineMode::Edit;
 };

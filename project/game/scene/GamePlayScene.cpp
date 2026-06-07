@@ -19,6 +19,7 @@
 #include "Engine/3D/Obj/Obj3dCommon.h"
 #include "Engine/Base/DirectXCommon.h"
 #include "Engine/Base/WindowProc.h"
+#include "Engine/Base/TimeManager.h"
 #include "engine/math/VectorMath.h"
 #include "engine/collision/Collision.h"
 #include "engine/graphics/RenderTexture.h"
@@ -125,6 +126,9 @@ void GamePlayScene::Initialize(){
 		//testObj_->PlayAnimation(&testAnimation_);
 
 		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
+
+		// エディタのギズモ／インスペクタの操作対象として登録
+		EditorManager::GetInstance()->SetGizmoTarget(testObj_.get());
 	}
 
 	// ★1. Ringモデルの生成
@@ -197,15 +201,8 @@ void GamePlayScene::Initialize(){
 	EditorManager::GetInstance()->SetCamera(camera_.get());
 
 	sprite_ = Sprite::Create(textures_["uvChecker"].srvIndex, spritePos_);
-	
 
-	
-	//blockGroup_ = std::make_unique<InstancedGroup>();
-	//blockGroup_->Initialize("block", 10000); // 最大1万個まで対応！
-	//blockGroup_->SetNoiseTexture(textures_["noise0"].srvIndex);
-
-	
-	  // GPUパーティクル初期化 (テクスチャを指定する)
+	// GPUパーティクル初期化 (テクスチャを指定する)
 	GPUParticleManager::GetInstance()->Initialize(
 		dxCommon, SrvManager::GetInstance(), "resources/uvChecker.png");
 
@@ -241,7 +238,7 @@ void GamePlayScene::Update(){
 
 	Input* input = Input::GetInstance();
 
-	// 1. スペースキーなどでエフェクトを発生させる
+	// 1. スペースキーでエフェクト発生＋BGM再生（1か所に統合）
 	if (input->Triggerkey(DIK_SPACE)) {
 		// 新しいエフェクトを生成
 		auto newEffect = std::make_unique<HitEffect>();
@@ -256,6 +253,9 @@ void GamePlayScene::Update(){
 
 		// リストに追加して、あとは任せる！
 		hitEffects_.push_back(std::move(newEffect));
+
+		// BGM再生 (シングルトン)
+		AudioManager::GetInstance()->PlayWave(bgmFile_);
 	}
 
 	// 2. リストに載っている全エフェクトを更新
@@ -270,8 +270,8 @@ void GamePlayScene::Update(){
 
 	// ★ 新しい円柱オーラの更新処理
 	if ( auraCylinderObj_ ) {
-		// スクロール速度の計算（1秒間で1周するペース）
-		auraCylinderScroll_ += 1.0f * ( 1.0f / 60.0f );
+		// スクロール速度の計算（1秒間で1周するペース。デルタタイム基準）
+		auraCylinderScroll_ += Time::GetInstance()->GetDeltaTime();
 		if ( auraCylinderScroll_ > 1.0f ) {
 			auraCylinderScroll_ -= 1.0f;
 		}
@@ -287,10 +287,6 @@ void GamePlayScene::Update(){
 	}
 
 
-	// BGM再生 (シングルトン)
-	if ( input->Triggerkey(DIK_SPACE) ) {
-		AudioManager::GetInstance()->PlayWave(bgmFile_);
-	}
 	// タイトルシーンへ移動
 	if ( input->Triggerkey(DIK_T) ) {
 		SceneManager::GetInstance()->ChangeScene(std::make_unique<TitleScene>());
@@ -304,8 +300,8 @@ void GamePlayScene::Update(){
 
 
 	if ( auraObj_ ) {
-		// 1. スクロール値を毎フレーム少しずつ増やす
-		float scrollSpeed = 1.0f * ( 1.0f / 60.0f ); // 1秒間に1.0スクロールする速さ
+		// 1. スクロール値を毎フレーム少しずつ増やす（デルタタイム基準）
+		float scrollSpeed = Time::GetInstance()->GetDeltaTime(); // 1秒間に1.0スクロールする速さ
 		auraUvScrollOffset_ += scrollSpeed;
 
 		// 1.0を超えたら0に戻す（オーバーフロー防止）
@@ -329,20 +325,15 @@ void GamePlayScene::Update(){
 		auraObj_->Update();
 	}
 
-	// 全オブジェクト更新
-	for ( auto& obj : object3ds_ ) {
-		obj->Update();
-		
-	}
+	// テストオブジェクト更新
 	if ( testObj_ ){
 		testObj_->Update();
 	}
-	
 
 	if (skinnedObj_) {
 		// 再生するだけ（編集UIなし）
 		if (skinnedAnimTrack_.duration > 0.0f) {
-			skinnedAnimTime_ += 1.0f / 60.0f;
+			skinnedAnimTime_ += Time::GetInstance()->GetDeltaTime();
 			if (skinnedAnimTime_ > skinnedAnimTrack_.duration) {
 				skinnedAnimTime_ = 0.0f;
 			}
@@ -361,25 +352,12 @@ void GamePlayScene::Update(){
 
 	PostEffect::GetInstance()->Update();
 
-	
-	for (auto& block : blocks_) {
-		block->Update();
-	}
-
 	if ( input->Triggerkey(DIK_G) ){
-		// GPUパーティクル更新
-		GPUParticleManager::GetInstance()->Update(1.0f / 60.0f, camera_.get());
-
+		// GPUパーティクル更新（デルタタイム基準）
+		GPUParticleManager::GetInstance()->Update(Time::GetInstance()->GetDeltaTime(), camera_.get());
 	}
-	
 
-	emitter_.Update(1.0f / 60.0f);
-
-	//// InstancedGroup に「最新のデータをお願い！」と渡すだけ
-	//if (blockGroup_) {
-	//	blockGroup_->Update(blocks_);
-	//}
-
+	emitter_.Update(Time::GetInstance()->GetDeltaTime());
 }
 
 void GamePlayScene::Draw(){
@@ -397,7 +375,6 @@ void GamePlayScene::Draw(){
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 
 	// 1. 先に「不透明」なものを全部描き切る！！！
-	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 
@@ -419,11 +396,6 @@ void GamePlayScene::Draw(){
 	if ( auraObj_ ) {
 		auraObj_->Draw();
 	}
-
-	// --- インスタンシングの3D描画 ---
-	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
-
-
 
 	for ( auto& effect : hitEffects_ ) {
 		effect->Draw();
@@ -534,7 +506,6 @@ void GamePlayScene::Finalize(){
 	// エディタが保持している外部ポインタをリセット（ダングリングポインタ防止）
 	EditorManager::GetInstance()->ResetSceneReferences();
 
-	object3ds_.clear();
 	GPUParticleManager::GetInstance()->Finalize();
 
 	textures_.clear();
