@@ -11,6 +11,8 @@
 #include "engine/camera/Camera.h"
 #include "engine/math/Matrix4x4.h"
 #include "engine/base/DirectXCommon.h"
+#include "engine/base/TimeManager.h"
+#include "engine/utils/RenderStats.h"
 #include "engine/graphics/ResourceFactory.h"
 #include "engine/graphics/SrvManager.h"
 #include "Animation.h" 
@@ -100,8 +102,8 @@ void Obj3d::Update(){
 	// ワールド行列の計算 (SRT)
 	Matrix4x4 worldMatrix = MakeAffine(transform.scale, transform.rotate, transform.translate);
 	if ( currentAnimation_ && !currentAnimation_->nodeAnimations.empty() ) {
-		// 1. 時間を進める (60FPS固定として、毎フレーム 1/60秒 進める)
-		animationTime_ += 1.0f / 60.0f;
+		// 1. 時間を進める（デルタタイム基準。ポーズ中(timeScale=0)は止まる）
+		animationTime_ += Time::GetInstance()->GetDeltaTime();
 
 		// 2. アニメーションをループさせる (全体の尺で割った余りを出す)
 		animationTime_ = std::fmod(animationTime_, currentAnimation_->duration);
@@ -186,6 +188,9 @@ void Obj3d::Update(){
 }
 
 void Obj3d::Draw(){
+
+	// 描画統計に1回計上
+	RenderStats::GetInstance()->AddDrawCall();
 
 	// コマンドリスト取得
 	ID3D12GraphicsCommandList* commandList =

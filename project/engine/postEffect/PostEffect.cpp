@@ -37,10 +37,15 @@ void PostEffect::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uin
 	// ※背景は絶対に「真っ黒（フラグ0）」でクリアするため、Vector4{0,0,0,0}等を設定するように内部で調整するか、RenderTexture側で黒クリアになるようにします
 	maskTexture_->Initialize(dxCommon, srvManager, width, height);
 	
-	// 1枚目を「エフェクト前」、2枚目を「エフェクト後」としてわかりやすく変数に入れる
-	timeResource_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(float));
-	timeResource_->Map(0, nullptr, reinterpret_cast<void**>(&timeData_));
-	*timeData_ = 0.0f;
+	// ポストエフェクト共通定数バッファ (b0)。先頭 time は従来通り、後続にティント等のパラメータを持つ
+	timeResource_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(PostEffectParams));
+	timeResource_->Map(0, nullptr, reinterpret_cast<void**>(&paramData_));
+	*paramData_ = PostEffectParams{};
+
+	// マスク系エフェクト用定数バッファ (b1)。既定はゼロ（無効）
+	maskResource_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(PostEffectMaskParams));
+	maskResource_->Map(0, nullptr, reinterpret_cast<void**>(&maskData_));
+	*maskData_ = PostEffectMaskParams{};
 
 	Bloom::GetInstance()->Initialize(dxCommon, SrvManager::GetInstance(), width, height);
 	Bloom::GetInstance()->Load("resources/bloom.json");
@@ -50,8 +55,8 @@ void PostEffect::Initialize(DirectXCommon* dxCommon, SrvManager* srvManager, uin
 void PostEffect::Update() {
 	if (isActive_) {
 		time_ += timeSpeed_; // 自分の持っているスピード分だけ進める
-		if (timeData_) {
-			*timeData_ = time_;
+		if (paramData_) {
+			paramData_->time = time_;
 		}
 	}
 }
@@ -71,7 +76,10 @@ void PostEffect::Finalize() {
 	if (timeResource_) {
 		timeResource_.Reset();
 	}
-	
+	if (maskResource_) {
+		maskResource_.Reset();
+	}
+
 	Bloom::GetInstance()->Finalize();
 
 	if ( maskTexture_ ) { maskTexture_.reset(); }
@@ -236,8 +244,10 @@ void PostEffect::ApplyEffect(
 	// 3. 読み込み元の絵（前までの結果）をセット
 	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(0, renderTextures_[src]->GetSrvIndex());
 
-	// 4. 特殊なパラメータ渡し（ノイズの時間など）
+	// 4. 特殊なパラメータ渡し（ノイズの時間・ティント色など b0）
 	commandList->SetGraphicsRootConstantBufferView(1, timeResource_->GetGPUVirtualAddress());
+	// 4-2. マスク系エフェクト用パラメータ (b1)
+	commandList->SetGraphicsRootConstantBufferView(2, maskResource_->GetGPUVirtualAddress());
 
 	// 5. 描画！
 	commandList->DrawInstanced(3, 1, 0, 0);
@@ -292,7 +302,11 @@ void PostEffect::DrawDebugUI(){
 			"綺麗にぼかす (Gaussian Filter)",
 			"アウトライン・輪郭抽出 (Outline)",
 			"放射状ブラー (Radial Blur)",
-			"ノイズ・砂嵐 (Random Noise)"
+			"ノイズ・砂嵐 (Random Noise)",
+			"カラーティント (Color Tint)",
+			"マスク歪み (Masked Distortion)",
+			"マスクグロー (Masked Glow)",
+			"マスクセピア (Masked Sepia)"
 		};
 		// --- ポストエフェクトのON/OFF設定 ---
 		if ( ImGui::CollapsingHeader("ポストエフェクト設定 (Post Effect)", ImGuiTreeNodeFlags_DefaultOpen) ) {

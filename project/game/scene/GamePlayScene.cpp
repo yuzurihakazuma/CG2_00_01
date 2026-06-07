@@ -200,6 +200,9 @@ void GamePlayScene::Initialize(){
 		testObj_->SetDissolveThreshold(0.0f);
 
 		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
+
+		// エディタのギズモ／インスペクタの操作対象として登録（master_engineの改善を取り込み）
+		EditorManager::GetInstance()->SetGizmoTarget(testObj_.get());
 	}
 
 	// ★1. Ringモデルの生成

@@ -10,6 +10,8 @@
 #include "engine/math/Matrix4x4.h"
 #include "engine/math/QuaternionMath.h"
 #include "engine/base/DirectXCommon.h"
+#include "engine/base/TimeManager.h"
+#include "engine/utils/RenderStats.h"
 #include "engine/graphics/ResourceFactory.h"
 #include "engine/graphics/SrvManager.h"
 #include "engine/graphics/PipelineManager.h"
@@ -81,8 +83,8 @@ void SkinnedObj3d::Initialize(
 void SkinnedObj3d::Update(){
 
 	if ( !isPause_ ) {
-		// --- アニメーション時間を進める ---
-		animationTime_ += 1.0f / 60.0f;
+		// --- アニメーション時間を進める（デルタタイム基準）---
+		animationTime_ += Time::GetInstance()->GetDeltaTime();
 		if ( isLoop_ ) {
 			animationTime_ = std::fmod(animationTime_, animation_.duration);
 		} else {
@@ -135,6 +137,9 @@ void SkinnedObj3d::Update(){
 // 描画
 // --------------------------------------------------
 void SkinnedObj3d::Draw(){
+	// 描画統計に1回計上
+	RenderStats::GetInstance()->AddDrawCall();
+
 	ID3D12GraphicsCommandList* commandList = obj3dCommon_->GetDxCommon()->GetCommandList();
 	// SkinnedObj3d::Draw() の先頭付近
 	assert(skinCluster_.srvIndex != 0 && "SkinCluster SRV index is invalid!");

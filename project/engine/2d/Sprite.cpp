@@ -10,6 +10,7 @@
 // --- エンジン内部ヘッダー ---
 #include "Engine/2D/SpriteCommon.h"
 #include "Engine/Base/DirectXCommon.h"
+#include "engine/utils/RenderStats.h"
 #include "Engine/Math/Matrix4x4.h"
 #include "Engine/Graphics/SrvManager.h"
 #include "Engine/Graphics/TextureManager.h"
@@ -127,6 +128,9 @@ void Sprite::Update(){
 }
 
 void Sprite::Draw(){
+
+	// 描画統計に1回計上
+	RenderStats::GetInstance()->AddDrawCall();
 
 	assert(spriteCommon_);
 	auto* dxCommon = spriteCommon_->GetDxCommon();
