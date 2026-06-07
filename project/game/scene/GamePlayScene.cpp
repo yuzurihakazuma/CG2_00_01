@@ -67,18 +67,18 @@ void GamePlayScene::Initialize(){
 	// パーティクルグループ作成 (シングルトン)
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
 
-	// テクスチャ読み込み
-	textures_["uvChecker"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/uvChecker.png", commandList);
-	textures_["monsterBall"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/monsterBall.png", commandList);
-	textures_["fence"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/fence.png", commandList);
-	textures_["circle"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/circle.png", commandList);
-	textures_["circle2"] = TextureManager::GetInstance()->LoadTextureAndCreateSRV("resources/circle2.png", commandList);
-	textures_["noise0"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/noise0.png", commandList) };
-	textures_["noise1"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/noise1.png", commandList) };
-	textures_["gradationLine"] = { TextureManager::GetInstance()->LoadTextureAndCreateSRV("Resources/gradationLine.png", commandList) };
-	
+	// テクスチャ読み込み（短縮版 Load：commandList を渡さなくてよい）
+	TextureManager* tex = TextureManager::GetInstance();
+	textures_["uvChecker"] = tex->Load("resources/uvChecker.png");
+	textures_["monsterBall"] = tex->Load("resources/monsterBall.png");
+	textures_["fence"] = tex->Load("resources/fence.png");
+	textures_["circle"] = tex->Load("resources/circle.png");
+	textures_["circle2"] = tex->Load("resources/circle2.png");
+	textures_["noise0"] = tex->Load("Resources/noise0.png");
+	textures_["noise1"] = tex->Load("Resources/noise1.png");
+	textures_["gradationLine"] = tex->Load("Resources/gradationLine.png");
 
-	textures_["skybox"] = TextureManager::GetInstance()->LoadTextureAndCreateSRVCube("resources/StandardCubeMap.dds", commandList);
+	textures_["skybox"] = tex->LoadCube("resources/StandardCubeMap.dds");
 
 	Obj3dCommon::GetInstance()->SetEnvironmentTexture(textures_["skybox"].srvIndex);
 
@@ -100,8 +100,11 @@ void GamePlayScene::Initialize(){
 	skinnedAnimTrack_.LoadFromJson("resources/human_anim.json");
 
 	// カメラ生成
-	camera_ = std::make_unique<Camera>(windowProc->GetClientWidth(), windowProc->GetClientHeight(), dxCommon);
+	camera_ = Camera::Create(); // ウィンドウサイズ等は内部で自動取得
 	camera_->SetTranslation({ 0.0f, 2.0f, -15.0f });
+
+	// このカメラを既定（アクティブ）カメラに設定 → 以降の Obj3d::Create は自動でこのカメラを使う
+	Obj3dCommon::GetInstance()->SetDefaultCamera(camera_.get());
 
 	
 	// デバッグカメラ生成
@@ -116,7 +119,6 @@ void GamePlayScene::Initialize(){
 
 		testObj_->SetPipelineType(PipelineType::Object3D_CullNone);
 
-		testObj_->SetCamera(camera_.get());
 		testObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
 
 		// ノイズ画像と初期の閾値(0.0)をセット
@@ -137,7 +139,6 @@ void GamePlayScene::Initialize(){
 	// ★2. 画像のリングを単体として出す
 	auraObj_ = Obj3d::Create("auraRing");
 	if ( auraObj_ ) {
-		auraObj_->SetCamera(camera_.get());
 
 		// テクスチャをセット
 		auraObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
@@ -162,7 +163,6 @@ void GamePlayScene::Initialize(){
 
 	auraCylinderObj_ = Obj3d::Create("auraCylinderModel");
 	if ( auraCylinderObj_ ) {
-		auraCylinderObj_->SetCamera(camera_.get());
 
 		// ⭕️ 画像は .png のままでOK！
 		auraCylinderObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
@@ -184,7 +184,6 @@ void GamePlayScene::Initialize(){
 	
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex); // スキニングも
-	skinnedObj_->SetCamera(camera_.get());
 	skinnedObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
 	skinnedObj_->SetScale({ 1.0f, 1.0f, 1.0f });
 	skinnedObj_->SetRotation({ 0.0f, 3.14159f, 0.0f });

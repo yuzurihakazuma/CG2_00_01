@@ -114,20 +114,35 @@ void EditorManager::Update(){
 
     ImGui::End();
 
-    // コントロールウィンドウ
+    // コントロールウィンドウ（実行制御をここに集約：モード切替＋時間制御）
     ImGui::Begin("コントロール (Play / Stop)");
 
+    Time* time = Time::GetInstance();
     if ( currentMode_ == EngineMode::Edit ) {
-        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "状態：エディットモード (停止中)");
+        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "状態：エディットモード (編集中)");
         if ( ImGui::Button("▶ プレイ開始 (Play)", ImVec2(150, 40)) ) {
             currentMode_ = EngineMode::Play;
+            time->SetTimeScale(1.0f); // Playで時間を動かす
         }
     } else {
         ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "状態：プレイモード (実行中)");
         if ( ImGui::Button("■ 停止 (Stop)", ImVec2(150, 40)) ) {
             currentMode_ = EngineMode::Edit;
+            time->SetTimeScale(0.0f); // Stopで時間を止める
         }
     }
+
+    // 時間制御（ポーズ／スロー／倍速）も同じウィンドウに集約
+    ImGui::Separator();
+    float timeScale = time->GetTimeScale();
+    if ( ImGui::SliderFloat("タイムスケール", &timeScale, 0.0f, 2.0f, "%.2fx") ) {
+        time->SetTimeScale(timeScale);
+    }
+    if ( ImGui::Button(time->IsPaused() ? "再開 (Resume)" : "一時停止 (Pause)") ) {
+        time->SetTimeScale(time->IsPaused() ? 1.0f : 0.0f);
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("等速 (1.0x)") ) { time->SetTimeScale(1.0f); }
 
     ImGui::End();
 
@@ -277,21 +292,10 @@ void EditorManager::Update(){
     // --- 描画統計（前フレームの集計値）---
     ImGui::Separator();
     ImGui::Text("ドローコール数 : %u", RenderStats::GetInstance()->GetDrawCalls());
-
-    // --- 時間コントロール（Timeシステム：ポーズ／スロー／倍速）---
-    ImGui::Separator();
-    Time* time = Time::GetInstance();
-    float timeScale = time->GetTimeScale();
     ImGui::Text("時間 (Time) : 経過 %.1f s / フレーム %llu",
-        time->GetTotalTime(), ( unsigned long long ) time->GetFrameCount());
-    if ( ImGui::SliderFloat("タイムスケール", &timeScale, 0.0f, 2.0f, "%.2fx") ) {
-        time->SetTimeScale(timeScale);
-    }
-    if ( ImGui::Button(time->IsPaused() ? "再開 (Resume)" : "一時停止 (Pause)") ) {
-        time->SetTimeScale(time->IsPaused() ? 1.0f : 0.0f);
-    }
-    ImGui::SameLine();
-    if ( ImGui::Button("等速に戻す (1.0x)") ) { time->SetTimeScale(1.0f); }
+        Time::GetInstance()->GetTotalTime(),
+        ( unsigned long long ) Time::GetInstance()->GetFrameCount());
+    // ※ 一時停止／スロー等の操作は「コントロール (Play / Stop)」ウィンドウに集約
 
     ImGui::Separator();
     float totalCpuTime = cpuUpdateTimeMs_ + cpuDrawTimeMs_;

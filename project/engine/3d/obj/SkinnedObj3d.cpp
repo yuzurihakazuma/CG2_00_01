@@ -34,6 +34,11 @@ std::unique_ptr<SkinnedObj3d> SkinnedObj3d::Create(
 
 	auto obj = std::make_unique<SkinnedObj3d>();
 	obj->Initialize(model, directoryPath, animFilename);
+
+	// 既定（アクティブ）カメラが登録されていれば自動でバインド（個別 SetCamera で上書き可）
+	if ( const Camera* defaultCamera = Obj3dCommon::GetInstance()->GetDefaultCamera() ) {
+		obj->SetCamera(defaultCamera);
+	}
 	return obj;
 }
 

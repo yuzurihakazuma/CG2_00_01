@@ -11,6 +11,15 @@
 #endif
 using namespace MatrixMath;
 
+// 簡易生成：ウィンドウサイズと DirectXCommon を自動取得して生成
+std::unique_ptr<Camera> Camera::Create(){
+	WindowProc* window = WindowProc::GetInstance();
+	return std::make_unique<Camera>(
+		window->GetClientWidth(),
+		window->GetClientHeight(),
+		DirectXCommon::GetInstance());
+}
+
 
 void Camera::DrawDebugUI(){
 #ifdef USE_IMGUI
