@@ -111,5 +111,7 @@ private:
     int gizmoOperation_ = 7;             // ImGuizmo::TRANSLATE(=7) を既定に
     int gizmoMode_ = 1;                  // ImGuizmo::WORLD(=1)
 
+    bool railFreehandStroking_ = false;  // フリーハンドで描画ストローク中か
+
     EngineMode currentMode_ = EngineMode::Edit;
 };

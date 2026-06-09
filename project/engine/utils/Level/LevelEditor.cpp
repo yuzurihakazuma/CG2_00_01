@@ -14,6 +14,19 @@
 LevelEditor::LevelEditor() = default;
 LevelEditor::~LevelEditor() = default;
 
+// railLines（ノード列）の一致判定（Vector3 に operator== が無いので手動）
+static bool RailLinesEqual(const std::vector<std::vector<Vector3>>& a,
+                           const std::vector<std::vector<Vector3>>& b){
+	if ( a.size() != b.size() ) return false;
+	for ( size_t i = 0; i < a.size(); ++i ) {
+		if ( a[i].size() != b[i].size() ) return false;
+		for ( size_t j = 0; j < a[i].size(); ++j ) {
+			if ( a[i][j].x != b[i][j].x || a[i][j].y != b[i][j].y || a[i][j].z != b[i][j].z ) return false;
+		}
+	}
+	return true;
+}
+
 
 void LevelEditor::Initialize(){
 	LoadAndCreateMap("resources/map/map01.json");
@@ -72,7 +85,7 @@ void LevelEditor::SetRailNodePos(int idx, const Vector3& p){
 	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
 	auto& line = levelData_.railLines[currentEditRailIndex_];
 	if ( idx < 0 || idx >= ( int ) line.size() ) return;
-	line[idx] = p;
+	line[idx] = ApplyNodeSnap(p); // 他レールの端点が近ければ吸着
 	++railVersion_; // 緑線・ゲーム側へライブ反映
 }
 float LevelEditor::SnapValue(float v) const{
@@ -80,26 +93,35 @@ float LevelEditor::SnapValue(float v) const{
 	return std::round(v / railGridSize_) * railGridSize_;
 }
 
-void LevelEditor::AppendRailNodeAt(const Vector3& p){
-	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
-	auto& line = levelData_.railLines[currentEditRailIndex_];
+// 直角ロック＋グリッド＋ノード吸着を適用した「実際に置かれる位置」を返す（プレビューと共用）
+Vector3 LevelEditor::ComputePlacement(const Vector3& raw) const{
+	Vector3 pos = raw;
 
-	Vector3 pos = p;
-
-	// 直角モード：前ノードから X か Z のどちらか（差が大きい軸）だけ動かす
-	if ( railAxisLock_ && !line.empty() ) {
-		const Vector3& prev = line.back();
-		float dx = pos.x - prev.x;
-		float dz = pos.z - prev.z;
-		if ( std::abs(dx) >= std::abs(dz) ) pos.z = prev.z; // X方向に固定
-		else                                pos.x = prev.x; // Z方向に固定
+	if ( currentEditRailIndex_ >= 0 && currentEditRailIndex_ < ( int ) levelData_.railLines.size() ) {
+		const auto& line = levelData_.railLines[currentEditRailIndex_];
+		// 直角モード：前ノードから X か Z のどちらか（差が大きい軸）だけ動かす
+		if ( railAxisLock_ && !line.empty() ) {
+			const Vector3& prev = line.back();
+			float dx = pos.x - prev.x;
+			float dz = pos.z - prev.z;
+			if ( std::abs(dx) >= std::abs(dz) ) pos.z = prev.z; // X方向に固定
+			else                                pos.x = prev.x; // Z方向に固定
+		}
 	}
 
 	// グリッド吸着（X,Z。Y は配置高さのまま）
 	pos.x = SnapValue(pos.x);
 	pos.z = SnapValue(pos.z);
 
-	line.push_back(pos);
+	pos = ApplyNodeSnap(pos); // 他レールの端点が近ければ吸着（接続をピッタリ）
+	return pos;
+}
+
+void LevelEditor::AppendRailNodeAt(const Vector3& p){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
+	auto& line = levelData_.railLines[currentEditRailIndex_];
+
+	line.push_back(ComputePlacement(p));
 	selectedRailNode_ = ( int ) line.size() - 1; // 追加した点を選択状態に
 	++railVersion_;
 }
@@ -117,9 +139,109 @@ void LevelEditor::AppendRailNodeRelative(float dx, float dy, float dz){
 	pos.y = SnapValue(pos.y);
 	pos.z = SnapValue(pos.z);
 
+	pos = ApplyNodeSnap(pos); // 他レールの端点が近ければ吸着
+
 	line.push_back(pos);
 	selectedRailNode_ = ( int ) line.size() - 1;
 	++railVersion_;
+}
+
+// 他レールの近い端点へ吸着（無ければ p をそのまま返す）
+Vector3 LevelEditor::ApplyNodeSnap(const Vector3& p) const{
+	if ( !railNodeSnap_ ) return p;
+	float bestSq = railNodeSnapRadius_ * railNodeSnapRadius_;
+	Vector3 best = p;
+	bool found = false;
+	for ( int r = 0; r < ( int ) levelData_.railLines.size(); ++r ) {
+		if ( r == currentEditRailIndex_ ) continue; // 自分のレール内には吸着しない（潰れ防止）
+		for ( const auto& n : levelData_.railLines[r] ) {
+			float dx = n.x - p.x, dy = n.y - p.y, dz = n.z - p.z;
+			float d2 = dx * dx + dy * dy + dz * dz;
+			if ( d2 < bestSq ) { bestSq = d2; best = n; found = true; }
+		}
+	}
+	return found ? best : p;
+}
+
+// afterIndex の直後にノードを挿入
+void LevelEditor::InsertRailNode(int afterIndex, const Vector3& p){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
+	auto& line = levelData_.railLines[currentEditRailIndex_];
+	int insertAt = afterIndex + 1;
+	if ( insertAt < 0 ) insertAt = 0;
+	if ( insertAt > ( int ) line.size() ) insertAt = ( int ) line.size();
+	line.insert(line.begin() + insertAt, p);
+	selectedRailNode_ = insertAt;
+	++railVersion_;
+}
+
+// 指定ノードを削除
+void LevelEditor::DeleteRailNode(int idx){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
+	auto& line = levelData_.railLines[currentEditRailIndex_];
+	if ( idx < 0 || idx >= ( int ) line.size() ) return;
+	line.erase(line.begin() + idx);
+	selectedRailNode_ = -1;
+	++railVersion_;
+}
+
+// ============================================================
+// Undo / Redo
+// ============================================================
+void LevelEditor::RestoreSnapshot(const RailSnapshot& s){
+	levelData_.railLines = s.lines;
+	levelData_.railTypes = s.types;
+	if ( currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) {
+		currentEditRailIndex_ = ( int ) levelData_.railLines.size() - 1;
+	}
+	if ( currentEditRailIndex_ < 0 ) currentEditRailIndex_ = 0;
+	selectedRailNode_ = -1;
+	committed_.lines = levelData_.railLines; // 復元直後を基準に
+	committed_.types = levelData_.railTypes;
+	++railVersion_;
+}
+
+// マウス非操作の瞬間に、前回チェックポイントとの差分があれば履歴へ積む
+void LevelEditor::CommitIfStable(){
+	Input* input = Input::GetInstance();
+	// ドラッグ中(左/右ボタン押下中)はまだ確定させない（一連の操作を1ステップにまとめる）
+	if ( input->PushMouseButton(0) || input->PushMouseButton(1) ) return;
+
+	if ( !committedInit_ ) {
+		committed_.lines = levelData_.railLines;
+		committed_.types = levelData_.railTypes;
+		committedInit_ = true;
+		return;
+	}
+
+	// 変化していなければ何もしない
+	if ( RailLinesEqual(committed_.lines, levelData_.railLines) && committed_.types == levelData_.railTypes ) return;
+
+	// 直前の安定状態を undo へ積み、現在を新しいチェックポイントに
+	undoStack_.push_back(committed_);
+	if ( undoStack_.size() > 100 ) undoStack_.erase(undoStack_.begin());
+	redoStack_.clear();
+	committed_.lines = levelData_.railLines;
+	committed_.types = levelData_.railTypes;
+}
+
+void LevelEditor::Undo(){
+	if ( undoStack_.empty() ) return;
+	// 現在をredoへ
+	RailSnapshot cur; cur.lines = levelData_.railLines; cur.types = levelData_.railTypes;
+	redoStack_.push_back(cur);
+	RailSnapshot prev = undoStack_.back();
+	undoStack_.pop_back();
+	RestoreSnapshot(prev);
+}
+
+void LevelEditor::Redo(){
+	if ( redoStack_.empty() ) return;
+	RailSnapshot cur; cur.lines = levelData_.railLines; cur.types = levelData_.railTypes;
+	undoStack_.push_back(cur);
+	RailSnapshot next = redoStack_.back();
+	redoStack_.pop_back();
+	RestoreSnapshot(next);
 }
 
 
@@ -157,6 +279,15 @@ void LevelEditor::Draw(){
 
 void LevelEditor::DrawDebugUI(){
 #ifdef USE_IMGUI
+	// Undo/Redo：マウス非操作の瞬間に自動チェックポイント＋ Ctrl+Z / Ctrl+Y
+	CommitIfStable();
+	{
+		Input* in = Input::GetInstance();
+		bool ctrl = in->Pushkey(DIK_LCONTROL) || in->Pushkey(DIK_RCONTROL);
+		if ( ctrl && in->Triggerkey(DIK_Z) ) Undo();
+		if ( ctrl && in->Triggerkey(DIK_Y) ) Redo();
+	}
+
 	// =========================================================
 	//  1. Main Menu ウィンドウ（ファイル操作・追加）
 	// =========================================================
@@ -394,7 +525,17 @@ void LevelEditor::DrawDebugUI(){
 	ImGui::SetNextItemWidth(90.0f);
 	ImGui::DragFloat("間隔(m)", &railGridSize_, 0.05f, 0.1f, 10.0f);
 	ImGui::Checkbox("直角モード（X/Z軸に固定）", &railAxisLock_);
-	ImGui::TextDisabled("Game View: 球ノードをクリック→ギズモで移動 / 地面クリックで追加");
+	ImGui::Checkbox("ノード吸着（他レール端点へ）", &railNodeSnap_);
+	ImGui::SameLine();
+	ImGui::Checkbox("フリーハンド", &railFreehand_);
+
+	// Undo / Redo
+	if ( ImGui::Button("元に戻す (Ctrl+Z)") ) { Undo(); }
+	ImGui::SameLine();
+	if ( ImGui::Button("やり直す (Ctrl+Y)") ) { Redo(); }
+
+	ImGui::TextDisabled("Game View: ノードをクリック→ギズモ移動 / 右クリック→削除");
+	ImGui::TextDisabled("線の上をクリック→途中に挿入 / 地面クリック→末尾追加");
 
 	// 方向ボタンで1マスずつ伸ばす（確実に直角・正確サイズ）
 	ImGui::Text("方向ボタンで伸ばす:");

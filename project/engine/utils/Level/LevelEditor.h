@@ -44,6 +44,7 @@ public:
     bool GetRailNodePos(int idx, Vector3& out) const;     // ノード座標を取得
     void SetRailNodePos(int idx, const Vector3& p);       // ノードを移動（世代更新）
     void AppendRailNodeAt(const Vector3& p);              // 末尾にノード追加（世代更新・選択）
+    Vector3 ComputePlacement(const Vector3& raw) const;  // 直角ロック＋グリッド＋ノード吸着を適用した着地点（プレビュー用）
     int  GetSelectedRailNode() const { return selectedRailNode_; }
     void SetSelectedRailNode(int idx) { selectedRailNode_ = idx; }
     bool  IsRailDrawMode() const { return railDrawMode_; } // 地面クリックで追加するモードか
@@ -52,6 +53,21 @@ public:
     float GetRailGridSize() const { return railGridSize_; }   // グリッド間隔(m)
     // 前のノードから相対(dx,dy,dz)に新ノードを追加（方向ボタン用・スナップ適用）
     void AppendRailNodeRelative(float dx, float dy, float dz);
+
+    // ノードの挿入・削除（マウス編集）
+    void InsertRailNode(int afterIndex, const Vector3& p); // afterIndex の直後に挿入
+    void DeleteRailNode(int idx);                          // 指定ノードを削除
+
+    // 既存ノードへのスナップ
+    bool    IsNodeSnap() const { return railNodeSnap_; }
+    Vector3 ApplyNodeSnap(const Vector3& p) const;         // 他レールの近い端点へ吸着（無ければそのまま）
+
+    // フリーハンド（ドラッグで一筆書き）
+    bool IsFreehand() const { return railFreehand_; }
+
+    // Undo / Redo
+    void Undo();
+    void Redo();
 
 private:
     // カメラは所有しない参照（描画のときに使う）
@@ -83,8 +99,25 @@ private:
     float railGridSize_ = 1.0f;    // グリッド間隔(m)
     bool  railAxisLock_ = true;    // 直角モード：新ノードを前ノードから X or Z 軸のみに固定
 
+    // 既存ノードへのスナップ・フリーハンド
+    bool  railNodeSnap_       = true; // 他レールの端点へ吸着
+    float railNodeSnapRadius_ = 0.7f; // 吸着半径(m)
+    bool  railFreehand_       = false; // ドラッグで一筆書き
+
     // 値をグリッドに丸める（railSnap_ がOFFならそのまま）
     float SnapValue(float v) const;
+
+    // --- Undo/Redo（操作が落ち着いたら自動でチェックポイントを作る方式）---
+    struct RailSnapshot {
+        std::vector<std::vector<Vector3>> lines;
+        std::vector<int> types;
+    };
+    std::vector<RailSnapshot> undoStack_;
+    std::vector<RailSnapshot> redoStack_;
+    RailSnapshot committed_;        // 直近の安定状態（チェックポイント）
+    bool committedInit_ = false;
+    void CommitIfStable();          // マウス非操作時に変化を検知して履歴へ積む
+    void RestoreSnapshot(const RailSnapshot& s); // 状態を復元
 
     // レール表示用のオブジェクトを一括で作り直す関数
     void RebuildRailPoints();
