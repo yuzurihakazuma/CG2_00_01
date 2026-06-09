@@ -34,6 +34,14 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     j["railLines"] = linesArray;
 
+    // 各レールのタイプ（-1=自動 / 0=横 / 1=縦）。railLines と数を合わせて保存
+    json typesArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        int t = ( i < levelData.railTypes.size() ) ? levelData.railTypes[i] : -1;
+        typesArray.push_back(t);
+    }
+    j["railTypes"] = typesArray;
+
     j["objects"] = objectsArray;
 
     // ファイルに書き込み
@@ -111,10 +119,20 @@ LevelData LevelManager::Load(const std::string& fileName){
         levelData.railLines.push_back(line);
     }
 
+    // レールのタイプを読み込む（-1=自動 / 0=横 / 1=縦）
+    if ( j.contains("railTypes") && j["railTypes"].is_array() ) {
+        for ( const auto& t : j["railTypes"] ) {
+            levelData.railTypes.push_back(t.get<int>());
+        }
+    }
+
     // 万が一レールが1本もない場合は、空のレールを1つ追加しておく
     if ( levelData.railLines.empty() ) {
         levelData.railLines.push_back(std::vector<Vector3>());
     }
+
+    // タイプ配列を railLines と同じ数に整える（足りない分は -1=自動）
+    levelData.railTypes.resize(levelData.railLines.size(), -1);
 
     return levelData;
 }

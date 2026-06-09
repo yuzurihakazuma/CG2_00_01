@@ -2,7 +2,7 @@
 #include <cmath>
 #include <algorithm>
 
-// --- ベクトルの長さを求める補助関数（ご自身のエンジンに合わせて修正してください） ---
+// --- ベクトルの長さを求める補助関数 ---
 inline float Length(const Vector3& v){
     return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
@@ -52,6 +52,14 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
     result.z = 0.5f * ( ( 2.0f * p1.z ) + ( -p0.z + p2.z ) * localT + ( 2.0f * p0.z - 5.0f * p1.z + 4.0f * p2.z - p3.z ) * ( localT * localT ) + ( -p0.z + 3.0f * p1.z - 3.0f * p2.z + p3.z ) * ( localT * localT * localT ) );
 
     return result;
+}
+
+// front→back の主軸からタイプを自動判定する
+void SplineRail::AutoDetectType(){
+    if ( nodes.size() < 2 ) { type = RailType::Horizontal; return; }
+    float dx = nodes.back().x - nodes.front().x;
+    float dz = nodes.back().z - nodes.front().z;
+    type = ( std::abs(dx) >= std::abs(dz) ) ? RailType::Horizontal : RailType::Vertical;
 }
 
 // ① レールの長さを計測してテーブルを作る

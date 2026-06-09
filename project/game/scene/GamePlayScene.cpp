@@ -44,8 +44,12 @@ using namespace VectorMath;
 using namespace MatrixMath;
 
 // レール間の接続情報をロード時に1回だけ計算する
+//   端点(front/back)同士が近いレールを「連結」とみなす。
+//   ・最初に見つかった順ではなく「最も近い端点」を選ぶ（交差点で誤接続しない）
+//   ・連結した端点は中点へ"溶接"してノードを一致させる
+//     → 隙間(例:0.7m)があっても乗り継ぎ時にワープせず、横→縦→横を A/D だけで
+//       連続して滑らかに通過できる
 static void BuildRailConnections(std::vector<SplineRail>& rails){
-	// --- 終端接続のリセット ---
 	for ( auto& r : rails ){
 		r.frontConnIndex = -1;
 		r.backConnIndex  = -1;
@@ -57,62 +61,80 @@ static void BuildRailConnections(std::vector<SplineRail>& rails){
 		return std::sqrt(dx * dx + dy * dy + dz * dz);
 		};
 
-	// --- 終端接続（既存） ---
+	// 端点接続とみなす最大距離(m)。手置きノードの隙間を許容する。
+	//   ・大きすぎると、近くを通るだけの無関係なレールまで連結してしまう
+	//   ・小さすぎると、繋げたいレールが行き止まりになる
+	const float kConnThreshold = 1.0f;
+
+	// --- フェーズ1：最も近い端点同士で連結関係を決める ---
 	for ( int i = 0; i < ( int ) rails.size(); ++i ){
+		if ( rails[i].nodes.size() < 2 ) continue;
+		const Vector3& iFront = rails[i].nodes.front();
+		const Vector3& iBack  = rails[i].nodes.back();
+
+		float bestFront = kConnThreshold; // ここまでより近い端点が来たら更新
+		float bestBack  = kConnThreshold;
+
 		for ( int j = 0; j < ( int ) rails.size(); ++j ){
 			if ( i == j ) continue;
-			const Vector3& iFront = rails[i].nodes.front();
-			const Vector3& iBack  = rails[i].nodes.back();
+			if ( rails[j].nodes.size() < 2 ) continue;
 			const Vector3& jFront = rails[j].nodes.front();
 			const Vector3& jBack  = rails[j].nodes.back();
 
-			if ( rails[i].frontConnIndex < 0 ){
-				if ( endDist(iFront, jFront) < 0.1f ){ rails[i].frontConnIndex = j; rails[i].frontConnToFront = true; } else if ( endDist(iFront, jBack) < 0.1f ){ rails[i].frontConnIndex = j; rails[i].frontConnToFront = false; }
+			// front端を、相手の front/back のうち最も近い方へ
+			float ff = endDist(iFront, jFront);
+			float fb = endDist(iFront, jBack);
+			if ( ff < bestFront ){ bestFront = ff; rails[i].frontConnIndex = j; rails[i].frontConnToFront = true; }
+			if ( fb < bestFront ){ bestFront = fb; rails[i].frontConnIndex = j; rails[i].frontConnToFront = false; }
+
+			// back端を、相手の front/back のうち最も近い方へ
+			float bf = endDist(iBack, jFront);
+			float bb = endDist(iBack, jBack);
+			if ( bf < bestBack ){ bestBack = bf; rails[i].backConnIndex = j; rails[i].backConnToFront = true; }
+			if ( bb < bestBack ){ bestBack = bb; rails[i].backConnIndex = j; rails[i].backConnToFront = false; }
+		}
+	}
+
+	// --- フェーズ2：連結端点を中点へ溶接（隙間を物理的に詰める） ---
+	// 元の端点位置をスナップショットしてから計算するので、両側を独立に処理しても
+	// 必ず同じ中点に集まり、ピッタリ一致する（乗り継ぎ時のポップが消える）。
+	struct Ends { Vector3 f, b; bool valid; };
+	std::vector<Ends> orig(rails.size());
+	for ( int i = 0; i < ( int ) rails.size(); ++i ){
+		if ( rails[i].nodes.size() < 2 ){ orig[i].valid = false; continue; }
+		orig[i].f = rails[i].nodes.front();
+		orig[i].b = rails[i].nodes.back();
+		orig[i].valid = true;
+	}
+	auto mid = [](const Vector3& a, const Vector3& b) -> Vector3{
+		return { ( a.x + b.x ) * 0.5f, ( a.y + b.y ) * 0.5f, ( a.z + b.z ) * 0.5f };
+		};
+
+	bool moved = false;
+	for ( int i = 0; i < ( int ) rails.size(); ++i ){
+		if ( !orig[i].valid ) continue;
+
+		if ( rails[i].frontConnIndex >= 0 ){
+			int j = rails[i].frontConnIndex;
+			if ( orig[j].valid ){
+				Vector3 partner = rails[i].frontConnToFront ? orig[j].f : orig[j].b;
+				rails[i].nodes.front() = mid(orig[i].f, partner);
+				moved = true;
 			}
-			if ( rails[i].backConnIndex < 0 ){
-				if ( endDist(iBack, jFront) < 0.1f ){ rails[i].backConnIndex = j; rails[i].backConnToFront = true; } else if ( endDist(iBack, jBack) < 0.1f ){ rails[i].backConnIndex = j; rails[i].backConnToFront = false; }
+		}
+		if ( rails[i].backConnIndex >= 0 ){
+			int j = rails[i].backConnIndex;
+			if ( orig[j].valid ){
+				Vector3 partner = rails[i].backConnToFront ? orig[j].f : orig[j].b;
+				rails[i].nodes.back() = mid(orig[i].b, partner);
+				moved = true;
 			}
 		}
 	}
 
-	// --- 途中分岐点の計算 ---
-	// XY平面で branchXYThreshold 以内かつ Z方向に branchZMinDiff 以上離れたノード同士を分岐点として登録
-	const float branchXYThreshold = 1.5f;
-	const float branchZMinDiff    = 0.5f;
-
-	for ( int i = 0; i < ( int ) rails.size(); ++i ){
-		for ( size_t ni = 0; ni < rails[i].nodes.size(); ++ni ){
-			// 乗り継ぎ元の末尾ノードはスキップ（terminalFiredでカバー済み）
-			if ( ni == rails[i].nodes.size() - 1 ) continue;
-
-			const Vector3& nodeI = rails[i].nodes[ni];
-
-			for ( int j = 0; j < ( int ) rails.size(); ++j ){
-				if ( j == i ) continue;
-
-				for ( size_t nj = 0; nj < rails[j].nodes.size(); ++nj ){
-					// 乗り換え先の末尾ノードはtotalLength_に飛ぶのでスキップ
-					if ( nj == rails[j].nodes.size() - 1 ) continue;
-
-					const Vector3& nodeJ = rails[j].nodes[nj];
-
-					float dx = nodeI.x - nodeJ.x;
-					float dy = nodeI.y - nodeJ.y;
-					float xyDist = std::sqrt(dx * dx + dy * dy);
-					if ( xyDist >= branchXYThreshold ) continue;
-
-					float zDiff = nodeJ.z - nodeI.z;
-					if ( std::abs(zDiff) < branchZMinDiff ) continue;
-
-					SplineRail::BranchPoint bp;
-					bp.distance   = rails[i].GetDistanceFromT(static_cast< float >( ni ));
-					bp.targetRail = j;
-					bp.targetDist = rails[j].GetDistanceFromT(static_cast< float >( nj ));
-					bp.zSign      = ( zDiff > 0.0f ) ? 1 : -1;
-					rails[i].branchPoints.push_back(bp);
-				}
-			}
-		}
+	// --- フェーズ3：ノードを動かしたので距離テーブルを作り直す ---
+	if ( moved ){
+		for ( auto& r : rails ){ r.BuildDistanceTable(); }
 	}
 }
 
@@ -320,6 +342,7 @@ void GamePlayScene::Initialize(){
 // これでエディタ編集・緑線・プレイヤーが常に同じデータを使う（ズレ解消）。
 void GamePlayScene::SyncRailsFromEditor(){
 	const auto& lines = EditorManager::GetInstance()->GetEditorRailLines();
+	const auto& types = EditorManager::GetInstance()->GetEditorRailTypes();
 
 	splineRails_.clear();
 	for ( const auto& line : lines ) {
@@ -328,7 +351,16 @@ void GamePlayScene::SyncRailsFromEditor(){
 		rail.BuildDistanceTable();
 		splineRails_.push_back(rail);
 	}
-	BuildRailConnections(splineRails_); // 接続・分岐を再計算
+	BuildRailConnections(splineRails_); // 接続・分岐を再計算（溶接含む）
+
+	// タイプ割当：railTypes が 0/1 ならそれを使い、-1(自動)や未設定は主軸で自動判定
+	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
+		int t = ( i < types.size() ) ? types[i] : -1;
+		if ( t == 0 )      splineRails_[i].type = SplineRail::RailType::Horizontal;
+		else if ( t == 1 ) splineRails_[i].type = SplineRail::RailType::Vertical;
+		else               splineRails_[i].AutoDetectType();
+	}
+
 	BuildRailMarkers();                 // 緑線を作り直す
 	lastRailVersion_ = EditorManager::GetInstance()->GetRailEditVersion();
 }
@@ -633,6 +665,39 @@ void GamePlayScene::DrawDebugUI(){
 	ImGui::Checkbox("レール経路を表示", &showRailMarkers_);
 	ImGui::Text("マーカー数: %d", static_cast<int>(railMarkers_.size()));
 	if ( ImGui::Button("マーカー再構築") ) { BuildRailMarkers(); }
+
+	// --- カメラ視点プリセット（レールを編集しやすく）---
+	ImGui::Separator();
+	ImGui::TextDisabled("カメラ視点プリセット:");
+	if ( ImGui::Button("トップビュー（真上から）") && camera_ ) {
+		// レール全体のXZ範囲を求めて、真上から全体が収まる高さに置く
+		bool has = false;
+		float minx = 0, maxx = 0, miny = 0, maxy = 0, minz = 0, maxz = 0;
+		for ( const auto& rail : splineRails_ ) {
+			for ( const auto& n : rail.nodes ) {
+				if ( !has ) { minx = maxx = n.x; miny = maxy = n.y; minz = maxz = n.z; has = true; } else {
+					if ( n.x < minx ) minx = n.x; if ( n.x > maxx ) maxx = n.x;
+					if ( n.y < miny ) miny = n.y; if ( n.y > maxy ) maxy = n.y;
+					if ( n.z < minz ) minz = n.z; if ( n.z > maxz ) maxz = n.z;
+				}
+			}
+		}
+		float cx = 0, cy = 0, cz = 0, ext = 10.0f;
+		if ( has ) {
+			cx = ( minx + maxx ) * 0.5f; cy = ( miny + maxy ) * 0.5f; cz = ( minz + maxz ) * 0.5f;
+			float ex = maxx - minx, ez = maxz - minz;
+			ext = ( ex > ez ) ? ex : ez;
+		}
+		float dist = ext * 1.5f + 8.0f; // 全体が画面に収まる高さ（足りなければホイールでズーム）
+		camera_->SetTranslation({ cx, cy + dist, cz });
+		camera_->SetRotation({ 1.5707964f, 0.0f, 0.0f }); // pitch 90°=真下を向く（X=右, Z=上）
+	}
+	ImGui::SameLine();
+	if ( ImGui::Button("斜め視点に戻す") && camera_ ) {
+		camera_->SetTranslation({ 0.0f, 6.0f, -15.0f });
+		camera_->SetRotation({ 0.30f, 0.0f, 0.0f });
+	}
+	ImGui::TextDisabled("※デバッグカメラONなら右ドラッグで自由に回せます");
 	ImGui::End();
 
 #endif

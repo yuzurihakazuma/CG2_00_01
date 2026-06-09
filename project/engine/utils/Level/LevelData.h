@@ -23,6 +23,10 @@ struct LevelData{
 	// レール型レベルデータ
     std::vector<std::vector<Vector3>> railLines;
 
+    // 各レールのタイプ（railLines と同じ並び・同じ要素数を維持する）
+    //   -1 = 自動判定 / 0 = 横(A/D移動) / 1 = 縦(W/S移動)
+    std::vector<int> railTypes;
+
 
     // 必要ならタイル情報も残してOK
     int width = 10;

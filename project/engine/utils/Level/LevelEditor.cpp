@@ -56,6 +56,72 @@ void LevelEditor::RebuildRailPoints(){
 	++railVersion_;
 }
 
+// --- マウス編集サポート ---
+int LevelEditor::GetCurrentRailNodeCount() const{
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return 0;
+	return ( int ) levelData_.railLines[currentEditRailIndex_].size();
+}
+bool LevelEditor::GetRailNodePos(int idx, Vector3& out) const{
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return false;
+	const auto& line = levelData_.railLines[currentEditRailIndex_];
+	if ( idx < 0 || idx >= ( int ) line.size() ) return false;
+	out = line[idx];
+	return true;
+}
+void LevelEditor::SetRailNodePos(int idx, const Vector3& p){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
+	auto& line = levelData_.railLines[currentEditRailIndex_];
+	if ( idx < 0 || idx >= ( int ) line.size() ) return;
+	line[idx] = p;
+	++railVersion_; // 緑線・ゲーム側へライブ反映
+}
+float LevelEditor::SnapValue(float v) const{
+	if ( !railSnap_ || railGridSize_ <= 0.0f ) return v;
+	return std::round(v / railGridSize_) * railGridSize_;
+}
+
+void LevelEditor::AppendRailNodeAt(const Vector3& p){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
+	auto& line = levelData_.railLines[currentEditRailIndex_];
+
+	Vector3 pos = p;
+
+	// 直角モード：前ノードから X か Z のどちらか（差が大きい軸）だけ動かす
+	if ( railAxisLock_ && !line.empty() ) {
+		const Vector3& prev = line.back();
+		float dx = pos.x - prev.x;
+		float dz = pos.z - prev.z;
+		if ( std::abs(dx) >= std::abs(dz) ) pos.z = prev.z; // X方向に固定
+		else                                pos.x = prev.x; // Z方向に固定
+	}
+
+	// グリッド吸着（X,Z。Y は配置高さのまま）
+	pos.x = SnapValue(pos.x);
+	pos.z = SnapValue(pos.z);
+
+	line.push_back(pos);
+	selectedRailNode_ = ( int ) line.size() - 1; // 追加した点を選択状態に
+	++railVersion_;
+}
+
+// 方向ボタン用：前ノード（無ければ配置高さの原点）から相対移動して追加
+void LevelEditor::AppendRailNodeRelative(float dx, float dy, float dz){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) levelData_.railLines.size() ) return;
+	auto& line = levelData_.railLines[currentEditRailIndex_];
+
+	Vector3 base = line.empty() ? Vector3{ 0.0f, railDrawHeight_, 0.0f } : line.back();
+	Vector3 pos = { base.x + dx, base.y + dy, base.z + dz };
+
+	// デルタは既に軸方向・グリッド倍数なので吸着は保険程度
+	pos.x = SnapValue(pos.x);
+	pos.y = SnapValue(pos.y);
+	pos.z = SnapValue(pos.z);
+
+	line.push_back(pos);
+	selectedRailNode_ = ( int ) line.size() - 1;
+	++railVersion_;
+}
+
 
 void LevelEditor::Update(){
 
@@ -246,6 +312,11 @@ void LevelEditor::DrawDebugUI(){
 	// =========================================================
 	ImGui::Begin("レールエディタ");
 
+	// railTypes を railLines と必ず同数に保つ（-1=自動）
+	if ( levelData_.railTypes.size() != levelData_.railLines.size() ) {
+		levelData_.railTypes.resize(levelData_.railLines.size(), -1);
+	}
+
 	ImGui::Text("編集する路線を選択:");
 	for ( int i = 0; i < levelData_.railLines.size(); ++i ) {
 		std::string btnLabel = "路線 " + std::to_string(i);
@@ -267,6 +338,34 @@ void LevelEditor::DrawDebugUI(){
 	}
 	ImGui::Separator();
 
+	// --- このレールの「移動操作タイプ」（横=A/D移動 / 縦=W/S移動）---
+	if ( currentEditRailIndex_ >= 0 && currentEditRailIndex_ < ( int ) levelData_.railLines.size() ) {
+		int& t = levelData_.railTypes[currentEditRailIndex_];
+
+		// 自動判定の結果（表示用）：front→back の主軸 |X|>=|Z| なら横
+		const auto& nodes = levelData_.railLines[currentEditRailIndex_];
+		int autoType = 0; // 0=横 / 1=縦
+		if ( nodes.size() >= 2 ) {
+			float dx = nodes.back().x - nodes.front().x; if ( dx < 0 ) dx = -dx;
+			float dz = nodes.back().z - nodes.front().z; if ( dz < 0 ) dz = -dz;
+			autoType = ( dx >= dz ) ? 0 : 1;
+		}
+
+		const char* label =
+			( t == 0 ) ? "タイプ: 横 (A/D移動) [固定]" :
+			( t == 1 ) ? "タイプ: 縦 (W/S移動) [固定]" :
+			( autoType == 0 ? "タイプ: 自動 → 横 (A/D移動)" : "タイプ: 自動 → 縦 (W/S移動)" );
+
+		ImGui::Text("移動操作タイプ:");
+		if ( ImGui::Button(label) ) {
+			t = ( t == -1 ) ? 0 : ( t == 0 ? 1 : -1 ); // 自動→横→縦→自動 と循環
+			++railVersion_;                            // ゲーム側へ即反映
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("(押すと 自動→横→縦)");
+		ImGui::Separator();
+	}
+
 	if ( ImGui::Button("新しい路線(分岐)を追加") ) {
 		levelData_.railLines.push_back(std::vector<Vector3>());
 		currentEditRailIndex_ = static_cast< int >( levelData_.railLines.size() - 1 );
@@ -284,6 +383,32 @@ void LevelEditor::DrawDebugUI(){
 		levelData_.railLines[currentEditRailIndex_].push_back(newPos);
 		RebuildRailPoints(); // 変更したので再構築
 	}
+
+	// --- マウスでレールを引く ---
+	ImGui::Checkbox("マウス追加モード（地面クリックで末尾に追加）", &railDrawMode_);
+	ImGui::DragFloat("追加する高さ Y", &railDrawHeight_, 0.05f);
+
+	// グリッド・直角設定（マウスもボタンも共通で使う）
+	ImGui::Checkbox("グリッド吸着", &railSnap_);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(90.0f);
+	ImGui::DragFloat("間隔(m)", &railGridSize_, 0.05f, 0.1f, 10.0f);
+	ImGui::Checkbox("直角モード（X/Z軸に固定）", &railAxisLock_);
+	ImGui::TextDisabled("Game View: 球ノードをクリック→ギズモで移動 / 地面クリックで追加");
+
+	// 方向ボタンで1マスずつ伸ばす（確実に直角・正確サイズ）
+	ImGui::Text("方向ボタンで伸ばす:");
+	static int railStep = 1;
+	ImGui::SetNextItemWidth(110.0f);
+	ImGui::InputInt("マス数", &railStep);
+	if ( railStep < 1 ) railStep = 1;
+	const float d = railGridSize_ * static_cast< float >( railStep );
+	if ( ImGui::Button(" 左 -X ") ) { AppendRailNodeRelative(-d, 0.0f, 0.0f); RebuildRailPoints(); } ImGui::SameLine();
+	if ( ImGui::Button(" 右 +X ") ) { AppendRailNodeRelative(+d, 0.0f, 0.0f); RebuildRailPoints(); }
+	if ( ImGui::Button("手前 -Z") ) { AppendRailNodeRelative(0.0f, 0.0f, -d); RebuildRailPoints(); } ImGui::SameLine();
+	if ( ImGui::Button(" 奥 +Z ") ) { AppendRailNodeRelative(0.0f, 0.0f, +d); RebuildRailPoints(); }
+	if ( ImGui::Button(" 下 -Y ") ) { AppendRailNodeRelative(0.0f, -d, 0.0f); RebuildRailPoints(); } ImGui::SameLine();
+	if ( ImGui::Button(" 上 +Y ") ) { AppendRailNodeRelative(0.0f, +d, 0.0f); RebuildRailPoints(); }
 	ImGui::Separator();
 
 	// --- 形を整えるツール（ワンクリックで 直線 / カーブ）---

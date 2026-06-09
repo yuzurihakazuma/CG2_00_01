@@ -17,6 +17,7 @@
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/camera/Camera.h"
 #include "engine/math/Matrix4x4.h"
+#include <cmath>
 #ifdef USE_IMGUI
 #include "externals/ImGuizmo/ImGuizmo.h"
 #endif
@@ -224,29 +225,118 @@ void EditorManager::Update(){
         SrvManager::GetInstance()->GetGPUDescriptorHandle(srvIndex);
     ImGui::Image(( ImTextureID ) ( uintptr_t ) textureHandle.ptr, sceneSize);
 
-    // --- ImGuizmo：Game View 上で対象オブジェクトをドラッグ操作 ---
-    if ( gizmoTarget_ && editorCamera_ ) {
+    // 直前の Image の画面矩形とホバー状態（マウス↔ワールド変換に使う）
+    const ImVec2 imgMin       = ImGui::GetItemRectMin();
+    const ImVec2 imgSize      = ImGui::GetItemRectSize();
+    const bool   imageHovered = ImGui::IsItemHovered();
+
+    if ( editorCamera_ ) {
         ImGuizmo::SetOrthographic(false);
         ImGuizmo::SetDrawlist();
-        ImVec2 imgMin = ImGui::GetItemRectMin();   // 直前の Image の矩形
-        ImVec2 imgSize = ImGui::GetItemRectSize();
         ImGuizmo::SetRect(imgMin.x, imgMin.y, imgSize.x, imgSize.y);
 
         Matrix4x4 view = editorCamera_->GetViewMatrix();
         Matrix4x4 proj = editorCamera_->GetProjectionMatrix();
-        Matrix4x4 world = MatrixMath::MakeAffine(
-            gizmoTarget_->GetScale(), gizmoTarget_->GetRotation(), gizmoTarget_->GetTranslation());
 
-        ImGuizmo::Manipulate(&view.m[0][0], &proj.m[0][0],
-            ( ImGuizmo::OPERATION ) gizmoOperation_, ( ImGuizmo::MODE ) gizmoMode_, &world.m[0][0]);
+        // レール編集（ノードのギズモ／クリック追加）は Edit モード時のみ
+        const bool railEditMode = ( currentMode_ == EngineMode::Edit );
 
-        if ( ImGuizmo::IsUsing() ) {
-            float t[3], r[3], s[3];
-            ImGuizmo::DecomposeMatrixToComponents(&world.m[0][0], t, r, s);
-            const float deg2rad = 3.14159265358979323846f / 180.0f;
-            gizmoTarget_->SetTranslation({ t[0], t[1], t[2] });
-            gizmoTarget_->SetScale({ s[0], s[1], s[2] });
-            gizmoTarget_->SetRotation({ r[0] * deg2rad, r[1] * deg2rad, r[2] * deg2rad });
+        // --- (A) レールノードが選択されていればギズモで移動（最優先）---
+        bool railNodeGizmo = false;
+        if ( railEditMode && levelEditor_ ) {
+            int sel = levelEditor_->GetSelectedRailNode();
+            if ( sel >= 0 && sel < levelEditor_->GetCurrentRailNodeCount() ) {
+                Vector3 p;
+                if ( levelEditor_->GetRailNodePos(sel, p) ) {
+                    railNodeGizmo = true;
+                    Matrix4x4 world = MatrixMath::MakeAffine({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, p);
+                    // グリッド吸着（ドラッグ結果がグリッドに揃う）
+                    float snap[3] = { 0.0f, 0.0f, 0.0f };
+                    float* snapPtr = nullptr;
+                    if ( levelEditor_->IsRailSnap() ) {
+                        float g = levelEditor_->GetRailGridSize();
+                        snap[0] = snap[1] = snap[2] = g;
+                        snapPtr = snap;
+                    }
+                    ImGuizmo::Manipulate(&view.m[0][0], &proj.m[0][0],
+                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &world.m[0][0], nullptr, snapPtr);
+                    if ( ImGuizmo::IsUsing() ) {
+                        float t[3], r[3], s[3];
+                        ImGuizmo::DecomposeMatrixToComponents(&world.m[0][0], t, r, s);
+                        levelEditor_->SetRailNodePos(sel, { t[0], t[1], t[2] });
+                    }
+                }
+            }
+        }
+
+        // --- (B) 対象オブジェクトのギズモ（レールノードを編集していない時だけ）---
+        if ( !railNodeGizmo && gizmoTarget_ ) {
+            Matrix4x4 world = MatrixMath::MakeAffine(
+                gizmoTarget_->GetScale(), gizmoTarget_->GetRotation(), gizmoTarget_->GetTranslation());
+
+            ImGuizmo::Manipulate(&view.m[0][0], &proj.m[0][0],
+                ( ImGuizmo::OPERATION ) gizmoOperation_, ( ImGuizmo::MODE ) gizmoMode_, &world.m[0][0]);
+
+            if ( ImGuizmo::IsUsing() ) {
+                float t[3], r[3], s[3];
+                ImGuizmo::DecomposeMatrixToComponents(&world.m[0][0], t, r, s);
+                const float deg2rad = 3.14159265358979323846f / 180.0f;
+                gizmoTarget_->SetTranslation({ t[0], t[1], t[2] });
+                gizmoTarget_->SetScale({ s[0], s[1], s[2] });
+                gizmoTarget_->SetRotation({ r[0] * deg2rad, r[1] * deg2rad, r[2] * deg2rad });
+            }
+        }
+
+        // --- (C) クリック：ノード選択 or 地面に追加（ギズモ操作中は無視）---
+        if ( railEditMode && levelEditor_ && imageHovered && ImGui::IsMouseClicked(0)
+             && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing() ) {
+
+            Matrix4x4 vp = editorCamera_->GetViewProjectionMatrix();
+            ImVec2 mouse = ImGui::GetMousePos();
+
+            // (C-1) 現在レールの各ノードを画面投影し、マウスに最も近いノードを探す
+            int   pickIdx  = -1;
+            float pickBest = 14.0f; // 選択とみなすピクセル半径
+            int   count = levelEditor_->GetCurrentRailNodeCount();
+            for ( int i = 0; i < count; ++i ) {
+                Vector3 p;
+                if ( !levelEditor_->GetRailNodePos(i, p) ) continue;
+                // クリップ w を見てカメラ後方のノードは除外
+                float cw = p.x * vp.m[0][3] + p.y * vp.m[1][3] + p.z * vp.m[2][3] + vp.m[3][3];
+                if ( cw <= 0.0001f ) continue;
+                float cx = p.x * vp.m[0][0] + p.y * vp.m[1][0] + p.z * vp.m[2][0] + vp.m[3][0];
+                float cy = p.x * vp.m[0][1] + p.y * vp.m[1][1] + p.z * vp.m[2][1] + vp.m[3][1];
+                float sx = imgMin.x + ( cx / cw * 0.5f + 0.5f ) * imgSize.x;
+                float sy = imgMin.y + ( 1.0f - ( cy / cw * 0.5f + 0.5f ) ) * imgSize.y;
+                float dpix = std::sqrt(( sx - mouse.x ) * ( sx - mouse.x ) + ( sy - mouse.y ) * ( sy - mouse.y ));
+                if ( dpix < pickBest ) { pickBest = dpix; pickIdx = i; }
+            }
+
+            if ( pickIdx >= 0 ) {
+                // ノードを選択（次フレームからギズモが出る）
+                levelEditor_->SetSelectedRailNode(pickIdx);
+            } else if ( levelEditor_->IsRailDrawMode() ) {
+                // (C-2) 地面(Y=高さ)へレイを当て、その点を末尾に追加
+                float mx = ( mouse.x - imgMin.x ) / imgSize.x;
+                float my = ( mouse.y - imgMin.y ) / imgSize.y;
+                float ndcx = mx * 2.0f - 1.0f;
+                float ndcy = 1.0f - my * 2.0f;
+                Matrix4x4 invVP = MatrixMath::Inverse(vp);
+                Vector3 nearW = MatrixMath::Transforms({ ndcx, ndcy, 0.0f }, invVP);
+                Vector3 farW  = MatrixMath::Transforms({ ndcx, ndcy, 1.0f }, invVP);
+                Vector3 dir = { farW.x - nearW.x, farW.y - nearW.y, farW.z - nearW.z };
+                float h = levelEditor_->GetRailDrawHeight();
+                if ( std::abs(dir.y) > 1e-6f ) {
+                    float tt = ( h - nearW.y ) / dir.y;
+                    if ( tt > 0.0f ) {
+                        Vector3 hit = { nearW.x + dir.x * tt, h, nearW.z + dir.z * tt };
+                        levelEditor_->AppendRailNodeAt(hit);
+                    }
+                }
+            } else {
+                // 何もない所をクリック → 選択解除
+                levelEditor_->SetSelectedRailNode(-1);
+            }
         }
     }
 
@@ -363,6 +453,10 @@ int EditorManager::GetRailEditVersion() const{
 const std::vector<std::vector<Vector3>>& EditorManager::GetEditorRailLines() const{
     static const std::vector<std::vector<Vector3>> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailLines() : kEmpty;
+}
+const std::vector<int>& EditorManager::GetEditorRailTypes() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailTypes() : kEmpty;
 }
 
 

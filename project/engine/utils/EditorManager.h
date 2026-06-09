@@ -65,6 +65,8 @@ public:
 	int GetRailEditVersion() const;
 	// 現在エディタが保持しているレールの節点リスト
 	const std::vector<std::vector<Vector3>>& GetEditorRailLines() const;
+	// 各レールのタイプ（-1=自動 / 0=横 / 1=縦）。railLines と同じ並び
+	const std::vector<int>& GetEditorRailTypes() const;
 
 	// シーン切り替え時に外部参照をまとめてリセットする（ダングリングポインタ防止）
 	void ResetSceneReferences(){

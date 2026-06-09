@@ -6,6 +6,18 @@ class SplineRail{
 public:
     std::vector<Vector3> nodes;
 
+    // ============================================================
+    // レールのタイプ：このレール上での移動操作キーを決める
+    //   Horizontal(横) … A/D で移動、W/S で縦レールへ乗り換え
+    //   Vertical(縦)   … W/S で移動、A/D で横レールへ乗り換え
+    // タイプはレール固定（毎フレーム接線から判定しないので操作がブレない）
+    // ============================================================
+    enum class RailType { Horizontal, Vertical };
+    RailType type = RailType::Horizontal;
+
+    // front→back ベクトルの主軸からタイプを自動判定（|X|>=|Z|→横／それ以外→縦）
+    void AutoDetectType();
+
     // --- ここから等速移動用の追加コード ---
 
     // 距離の計測テーブル
