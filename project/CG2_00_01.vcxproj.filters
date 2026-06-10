@@ -204,6 +204,9 @@
     <ClCompile Include="engine\utils\Level\LevelEditor.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="engine\utils\Level\BlenderImporter.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="game\player\Player.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -436,6 +439,9 @@
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="engine\utils\Level\LevelEditor.h">
+      <Filter>ソース ファイル\ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\utils\Level\BlenderImporter.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\player\Player.h">

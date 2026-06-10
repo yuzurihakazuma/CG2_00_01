@@ -1,0 +1,11 @@
+{
+    "additive": false,
+    "autoImportOnStartup": false,
+    "cameraCorrection": true,
+    "convertAxes": true,
+    "folder": "resources/blender",
+    "hotReload": true,
+    "importScale": 1.0,
+    "lastImportedPath": "",
+    "rotationInDegrees": false
+}

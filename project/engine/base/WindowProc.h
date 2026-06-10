@@ -2,6 +2,8 @@
 // --- 標準ライブラリ ---
 #include <wtypes.h>
 #include <cstdint>
+#include <string>
+#include <vector>
 class WindowProc{
 public:
 
@@ -28,6 +30,15 @@ public:
 
 	/// <summary> ウィンドウサイズ変更フラグのクリア </summary>
 	void ClearResizeFlag(){ isResized_ = false; }
+
+	/// <summary>
+	/// エクスプローラーからD&Dされたファイルのパス一覧を取り出す（取り出すと空になる）
+	/// </summary>
+	std::vector<std::string> PopDroppedFiles(){
+		std::vector<std::string> result = std::move(droppedFiles_);
+		droppedFiles_.clear();
+		return result;
+	}
 
 
 	// -------------------- Getter 系 --------------------
@@ -85,5 +96,8 @@ private:
 	HWND hwnd_ = nullptr;          // ウィンドウハンドル
 	static inline bool isClosed_ = false;  // ウィンドウが閉じられたかどうか
 	static inline bool isResized_ = false; // ウィンドウサイズが変更されたかどうか
+
+	// エクスプローラーからD&Dされたファイルのパス（WndProcで積む→PopDroppedFilesで消費）
+	static inline std::vector<std::string> droppedFiles_;
 };
 

@@ -31,12 +31,33 @@ public:
 	// カメラのセット
     void SetCamera(const Camera* camera);
 
+    // Blenderインポータ等の外部から変換済みデータを受け取って反映する
+    //   additive: true=既存マップに追記 / false=置き換え
+    void ApplyImportedData(const LevelData& data, bool additive);
+
 	// デバッグ用UIの描画
     void DrawDebugUI();
 
+    // resources/ を走査してモデルアセット一覧を更新する
+    void ScanAssets();
+
 private:
+    // アセットブラウザ用：resources/ から見つけたモデル1件分
+    struct AssetEntry{
+        std::string name;     // モデル名（FindModel/LoadModel に渡すキー＝ファイル名から拡張子を除いたもの）
+        std::string dir;      // ディレクトリ（LoadModel 用）
+        std::string file;     // ファイル名（LoadModel 用）
+        std::string display;  // 表示用（resources からの相対パス）
+    };
+
+    // モデルが未ロードならアセット一覧から探してロードする
+    bool EnsureAssetLoaded(const std::string& name);
+
 	// カメラは所有しない参照（描画のときに使う）
     const Camera* camera_ = nullptr;
+
+    // アセットブラウザ（実フォルダ走査の結果）
+    std::vector<AssetEntry> assetList_;
 
     LevelData levelData_; // 現在のマップデータ
     std::vector<std::unique_ptr<Obj3d>> object3ds_; // 配置された3Dオブジェクト

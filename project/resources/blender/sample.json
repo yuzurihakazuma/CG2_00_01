@@ -1,0 +1,46 @@
+{
+    "name": "blender_sample",
+    "objects": [
+        {
+            "type": "MESH",
+            "name": "Cube",
+            "file_name": "block",
+            "transform": {
+                "translation": [0.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0],
+                "scaling": [1.0, 1.0, 1.0]
+            },
+            "children": [
+                {
+                    "type": "MESH",
+                    "name": "Cube.001",
+                    "file_name": "block",
+                    "transform": {
+                        "translation": [3.0, 0.0, 0.0],
+                        "rotation": [0.0, 0.0, 0.0],
+                        "scaling": [1.0, 1.0, 1.0]
+                    }
+                }
+            ]
+        },
+        {
+            "type": "MESH",
+            "name": "Cube.002",
+            "file_name": "block",
+            "transform": {
+                "translation": [-3.0, 2.0, 1.0],
+                "rotation": [0.0, 0.0, 0.7854],
+                "scaling": [1.0, 1.0, 2.0]
+            }
+        },
+        {
+            "type": "CAMERA",
+            "name": "Camera",
+            "transform": {
+                "translation": [0.0, -10.0, 5.0],
+                "rotation": [1.2, 0.0, 0.0],
+                "scaling": [1.0, 1.0, 1.0]
+            }
+        }
+    ]
+}

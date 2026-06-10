@@ -6,12 +6,14 @@
 #include "engine/base/Input.h"
 #include "engine/base/DirectXCommon.h"
 #include "engine/base/TimeManager.h"
+#include "engine/base/WindowProc.h"
 #include "engine/utils/ImGuiManager.h"
 #include "engine/utils/RenderStats.h"
 #include "engine/postEffect/PostEffect.h"
 #include "engine/graphics/SrvManager.h"
 #include "engine/scene/SceneManager.h"
 #include "engine/utils/Level/LevelEditor.h"
+#include "engine/utils/Level/BlenderImporter.h"
 #include "engine/particle/GPUParticleEditor.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/3d/obj/Obj3d.h"
@@ -36,6 +38,10 @@ void EditorManager::Initialize(){
     levelEditor_ = std::make_unique<LevelEditor>();
     levelEditor_->Initialize();
 
+    // Blenderシーンインポータ（インポート結果は levelEditor_ に反映される）
+    blenderImporter_ = std::make_unique<BlenderImporter>();
+    blenderImporter_->Initialize(levelEditor_.get());
+
     gpuParticleEditor_ = std::make_unique<GPUParticleEditor>();
 }
 
@@ -55,6 +61,16 @@ void EditorManager::Update(){
     Input* input = Input::GetInstance();
     if ( input->Triggerkey(DIK_F1) ) {
         isEditorActive_ = !isEditorActive_;
+    }
+
+    // エクスプローラーからD&Dされたファイルを取り込む（エディタ非表示でも受け付ける）
+    {
+        std::vector<std::string> dropped = WindowProc::GetInstance()->PopDroppedFiles();
+        if ( !dropped.empty() && blenderImporter_ ) {
+            for ( const auto& file : dropped ) {
+                blenderImporter_->HandleDroppedFile(file);
+            }
+        }
     }
 
     // LevelEditor の更新は常に行う（エディタ非表示でも3Dオブジェクトは動く）
@@ -107,6 +123,7 @@ void EditorManager::Update(){
         ImGui::DockBuilderDockWindow("パフォーマンスモニター",       dock_right);
         ImGui::DockBuilderDockWindow("インスペクター (Transform)",   dock_right);
         ImGui::DockBuilderDockWindow("レベルエディタ",              dock_left);
+        ImGui::DockBuilderDockWindow("Blenderインポート (Blender)",  dock_left);
         ImGui::DockBuilderDockWindow("パーティクルエディタ",         dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
@@ -235,6 +252,11 @@ void EditorManager::Update(){
         levelEditor_->DrawDebugUI();
     }
 
+    // 6.5 Blenderインポータ（パネル描画＋ホットリロード監視）
+    if ( blenderImporter_ ) {
+        blenderImporter_->DrawDebugUI();
+    }
+
     if ( gpuParticleEditor_ ) {
         gpuParticleEditor_->DrawDebugUI();
     }
@@ -337,6 +359,7 @@ void EditorManager::End(){
 }
 
 void EditorManager::Finalize(){
+    blenderImporter_.reset();
     levelEditor_.reset();
     gpuParticleEditor_.reset();
 }

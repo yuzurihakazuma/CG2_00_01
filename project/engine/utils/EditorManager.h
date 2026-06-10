@@ -2,6 +2,7 @@
 #include <memory>  
 
 class LevelEditor;
+class BlenderImporter;
 class Camera;
 class GPUParticleEditor;
 class GPUParticleEmitter;
@@ -68,6 +69,9 @@ public:
 
     EngineMode GetMode() const{ return currentMode_; }
 
+    // Blenderインポータの取得（シーン側がカメラ適用要求を受け取るのに使う）
+    BlenderImporter* GetBlenderImporter() const{ return blenderImporter_.get(); }
+
 private:
 
     // シングルトンなので外部からの生成・コピーを禁止
@@ -81,6 +85,9 @@ private:
 
 	// レベルエディタ（SceneManagerから渡してもらう）
     std::unique_ptr<LevelEditor> levelEditor_ = nullptr;
+
+    // Blenderシーンインポータ（levelEditor_ に反映する）
+    std::unique_ptr<BlenderImporter> blenderImporter_ = nullptr;
 
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;
