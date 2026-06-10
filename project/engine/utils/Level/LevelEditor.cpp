@@ -2,6 +2,9 @@
 
 /// --- 標準ライブラリ ---
 #include <cmath>
+#include <cctype>
+#include <filesystem>
+#include <algorithm>
 
 // --- エンジン側のファイル ---
 #include "LevelManager.h"
@@ -29,9 +32,52 @@ static bool RailLinesEqual(const std::vector<std::vector<Vector3>>& a,
 
 
 void LevelEditor::Initialize(){
+	// アセットブラウザ用に resources/ を走査
+	ScanAssets();
+
+	// 最初は空の状態でスタートするか、デフォルトのマップを読み込む
 	LoadAndCreateMap("resources/map/map01.json");
 }
 
+// resources/ を再帰走査して .obj / .gltf をアセット一覧に登録する
+void LevelEditor::ScanAssets(){
+	assetList_.clear();
+
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	const fs::path root("resources");
+	if ( !fs::exists(root, ec) ) return;
+
+	for ( const auto& entry : fs::recursive_directory_iterator(root, ec) ) {
+		if ( !entry.is_regular_file() ) continue;
+		std::string ext = entry.path().extension().string();
+		std::transform(ext.begin(), ext.end(), ext.begin(),
+			[](unsigned char c){ return ( char ) std::tolower(c); });
+		if ( ext != ".obj" && ext != ".gltf" ) continue;
+
+		AssetEntry asset;
+		asset.name = entry.path().stem().string();
+		asset.dir = entry.path().parent_path().generic_string();
+		asset.file = entry.path().filename().string();
+		asset.display = fs::relative(entry.path(), root, ec).generic_string();
+		assetList_.push_back(asset);
+	}
+	std::sort(assetList_.begin(), assetList_.end(),
+		[](const AssetEntry& a, const AssetEntry& b){ return a.display < b.display; });
+}
+
+// モデルが未ロードならアセット一覧から探してロードする
+bool LevelEditor::EnsureAssetLoaded(const std::string& name){
+	if ( ModelManager::GetInstance()->FindModel(name) ) return true;
+	for ( const auto& asset : assetList_ ) {
+		if ( asset.name == name ) {
+			ModelManager::GetInstance()->LoadModel(asset.name, asset.dir, asset.file);
+			return ModelManager::GetInstance()->FindModel(name) != nullptr;
+		}
+	}
+	return false;
+}
+// マップの読み込みと生成
 void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 	object3ds_.clear();
 	levelData_ = LevelManager::GetInstance()->Load(fileName);
@@ -245,6 +291,33 @@ void LevelEditor::Redo(){
 }
 
 
+// Blenderインポータ等の外部から変換済みデータを受け取って反映する
+void LevelEditor::ApplyImportedData(const LevelData& data, bool additive){
+	if ( !additive ) {
+		levelData_.objects.clear();
+		object3ds_.clear();
+		selectedObjectIndex_ = -1;
+	}
+	if ( !data.name.empty() ) { levelData_.name = data.name; }
+
+	for ( const auto& objData : data.objects ) {
+		levelData_.objects.push_back(objData);
+
+		Model* model = ModelManager::GetInstance()->FindModel(objData.type);
+		// モデルが見つからない場合は球で代替表示（データは objData.type のまま保持）
+		if ( !model ) { model = ModelManager::GetInstance()->FindModel("sphere"); }
+
+		std::unique_ptr<Obj3d> newObj = std::make_unique<Obj3d>();
+		newObj->Initialize(model);
+		newObj->SetCamera(camera_);
+		newObj->SetTranslation(objData.translation);
+		newObj->SetRotation(objData.rotation);
+		newObj->SetScale(objData.scale);
+		newObj->Update();
+		object3ds_.push_back(std::move(newObj));
+	}
+}
+
 void LevelEditor::Update(){
 
 	// 選択したノードの移動
@@ -308,19 +381,32 @@ void LevelEditor::DrawDebugUI(){
 		selectedObjectIndex_ = -1;
 	}
 	ImGui::Separator();
-	const char* modelNames[] = { "block", "fence", "plane", "sphere", "terrain", "animatedCube" };
+
+	// アセット一覧（resources/ 走査結果）から選んで追加
 	static int currentModelIndex = 0;
-	ImGui::Combo("モデルの種類", &currentModelIndex, modelNames, IM_ARRAYSIZE(modelNames));
-	if ( ImGui::Button("選択したモデルを追加") ) {
+	if ( currentModelIndex >= ( int ) assetList_.size() ) currentModelIndex = 0;
+	const char* previewName = assetList_.empty() ? "(なし)" : assetList_[currentModelIndex].display.c_str();
+	if ( ImGui::BeginCombo("モデルの種類", previewName) ) {
+		for ( int i = 0; i < ( int ) assetList_.size(); ++i ) {
+			if ( ImGui::Selectable(assetList_[i].display.c_str(), currentModelIndex == i) ) {
+				currentModelIndex = i;
+			}
+		}
+		ImGui::EndCombo();
+	}
+
+	if ( ImGui::Button("選択したモデルを追加") && !assetList_.empty() ) {
 		LevelObjectData newObj;
-		newObj.type = modelNames[currentModelIndex];
+		newObj.type = assetList_[currentModelIndex].name;
 		newObj.translation = { 0.0f, 0.0f, 0.0f };
 		newObj.rotation = { 0.0f, 0.0f, 0.0f };
 		newObj.scale = { 1.0f, 1.0f, 1.0f };
-		levelData_.objects.push_back(newObj);
 
+		EnsureAssetLoaded(newObj.type); // 未ロードならこのタイミングで自動ロード
 		Model* model = ModelManager::GetInstance()->FindModel(newObj.type);
 		if ( model != nullptr ) {
+			// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
+			levelData_.objects.push_back(newObj);
 			std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
 			obj->Initialize(model);
 			obj->SetCamera(camera_);
@@ -350,10 +436,12 @@ void LevelEditor::DrawDebugUI(){
 			newObj.translation = { 0.0f, 0.0f, 0.0f };
 			newObj.rotation = { 0.0f, 0.0f, 0.0f };
 			newObj.scale = { 1.0f, 1.0f, 1.0f };
-			levelData_.objects.push_back(newObj);
 
+			EnsureAssetLoaded(newObj.type); // 未ロードならこのタイミングで自動ロード
 			Model* model = ModelManager::GetInstance()->FindModel(newObj.type);
 			if ( model != nullptr ) {
+				// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
+				levelData_.objects.push_back(newObj);
 				std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
 				obj->Initialize(model);
 				obj->SetCamera(camera_);
@@ -425,17 +513,34 @@ void LevelEditor::DrawDebugUI(){
 	//  4. アセットブラウザ ウィンドウ（ドラッグ元）
 	// =========================================================
 	ImGui::Begin("アセットブラウザ (Assets)");
-	ImGui::Text("【 3Dモデル 】");
+
+	ImGui::Text("【 3Dモデル 】 %d 件", ( int ) assetList_.size());
+	ImGui::SameLine();
+	if ( ImGui::Button("再スキャン") ) { ScanAssets(); }
+	ImGui::TextDisabled("resources/ 内の .obj / .gltf を自動列挙");
 	ImGui::Separator();
-	const char* assetModels[] = { "block", "fence", "plane", "sphere", "terrain", "animatedCube" };
-	for ( int i = 0; i < IM_ARRAYSIZE(assetModels); ++i ) {
-		ImGui::Selectable(assetModels[i]);
+
+	// resources/ 走査で見つけたモデルをドラッグ＆ドロップ元として表示
+	for ( int i = 0; i < ( int ) assetList_.size(); ++i ) {
+		const AssetEntry& asset = assetList_[i];
+
+		// リスト表示（同名モデルも区別できるよう相対パスで表示）
+		ImGui::Selectable(asset.display.c_str());
+
 		if ( ImGui::BeginDragDropSource(ImGuiDragDropFlags_None) ) {
-			ImGui::SetDragDropPayload("DND_MODEL", assetModels[i], strlen(assetModels[i]) + 1);
-			ImGui::Text("モデルを配置: %s", assetModels[i]);
+			// "DND_MODEL" というラベルで、モデルの名前を荷物として送る
+			ImGui::SetDragDropPayload("DND_MODEL", asset.name.c_str(), asset.name.size() + 1);
+
+			// ドラッグ中にマウスカーソルにくっついて表示される文字
+			ImGui::Text("モデルを配置: %s", asset.name.c_str());
+
 			ImGui::EndDragDropSource();
 		}
 	}
+	if ( assetList_.empty() ) {
+		ImGui::TextDisabled("(モデルが見つかりません)");
+	}
+
 	ImGui::End();
 
 	// =========================================================

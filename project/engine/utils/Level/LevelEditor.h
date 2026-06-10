@@ -33,6 +33,13 @@ public:
     // デバッグ用UIの描画
     void DrawDebugUI();
 
+    // Blenderインポータ等の外部から変換済みデータを受け取って反映する
+    //   additive: true=既存マップに追記 / false=置き換え
+    void ApplyImportedData(const LevelData& data, bool additive);
+
+    // resources/ を走査してモデルアセット一覧を更新する
+    void ScanAssets();
+
     // --- レール編集データの公開（ゲーム側が同じレールを参照するため）---
     int GetRailVersion() const { return railVersion_; }
     const std::vector<std::vector<Vector3>>& GetRailLines() const { return levelData_.railLines; }
@@ -70,8 +77,22 @@ public:
     void Redo();
 
 private:
+    // アセットブラウザ用：resources/ から見つけたモデル1件分
+    struct AssetEntry{
+        std::string name;     // モデル名（FindModel/LoadModel に渡すキー＝ファイル名から拡張子を除いたもの）
+        std::string dir;      // ディレクトリ（LoadModel 用）
+        std::string file;     // ファイル名（LoadModel 用）
+        std::string display;  // 表示用（resources からの相対パス）
+    };
+
+    // モデルが未ロードならアセット一覧から探してロードする
+    bool EnsureAssetLoaded(const std::string& name);
+
     // カメラは所有しない参照（描画のときに使う）
     const Camera* camera_ = nullptr;
+
+    // アセットブラウザ（実フォルダ走査の結果）
+    std::vector<AssetEntry> assetList_;
 
     // レール編集の世代番号（編集のたびに増やし、ゲーム側が変化を検知する）
     int railVersion_ = 0;

@@ -31,6 +31,7 @@
 #include "Bloom.h"
 #include "engine/3d/model/Model.h"
 #include "engine/utils/EditorManager.h"
+#include "engine/utils/Level/BlenderImporter.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
@@ -428,6 +429,15 @@ void GamePlayScene::Update(){
 	// ========================================================
 	if ( EditorManager::GetInstance()->GetRailEditVersion() != lastRailVersion_ ) {
 		SyncRailsFromEditor();
+	}
+
+	// Blenderインポータからの「カメラに適用」要求を反映
+	if ( BlenderImporter* importer = EditorManager::GetInstance()->GetBlenderImporter() ) {
+		Vector3 blCamPos, blCamRot;
+		if ( importer->ConsumeCameraRequest(blCamPos, blCamRot) ) {
+			camera_->SetTranslation(blCamPos);
+			camera_->SetRotation(blCamRot);
+		}
 	}
 
 	// ========================================================

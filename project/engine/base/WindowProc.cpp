@@ -1,6 +1,7 @@
 #include "WindowProc.h"
 // --- 標準ライブラリ・外部ライブラリ ---
 #include <Windows.h>
+#include <shellapi.h> // D&D受付 (DragAcceptFiles / DragQueryFile)
 
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -9,6 +10,7 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "shell32.lib")
 
 
 WindowProc* WindowProc::GetInstance(){
@@ -29,6 +31,9 @@ void WindowProc::Initialize(){
 	CreateMainWindow();
 	// メインウィンドウの表示
 	ShowMainWindow();
+
+	// エクスプローラーからのファイルD&Dを受け付ける
+	DragAcceptFiles(hwnd_, TRUE);
 
 	timeBeginPeriod(1); // タイマーの分解能を1msに設定
 
@@ -138,6 +143,23 @@ LRESULT WindowProc::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam){
 
 		isResized_ = true; // ウィンドウサイズ変更フラグを立てる
 		break;
+
+	case WM_DROPFILES: {
+		// エクスプローラーからファイルがドロップされた
+		HDROP hDrop = ( HDROP ) wparam;
+		UINT count = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
+		for ( UINT i = 0; i < count; ++i ) {
+			wchar_t widePath[MAX_PATH] = {};
+			if ( DragQueryFileW(hDrop, i, widePath, MAX_PATH) ) {
+				// ワイド文字 → マルチバイト（std::ifstream等に渡せる形式）に変換
+				char path[MAX_PATH * 2] = {};
+				WideCharToMultiByte(CP_ACP, 0, widePath, -1, path, sizeof(path), nullptr, nullptr);
+				droppedFiles_.push_back(path);
+			}
+		}
+		DragFinish(hDrop);
+		return 0;
+	}
 
 	}
 	// デフォルトのウィンドウプロシージャを呼び出す
