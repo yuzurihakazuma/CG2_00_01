@@ -400,6 +400,8 @@ void PipelineManager::CreatePostEffectPipeline(){
 	}
 }
 
+
+// 
 // ルートシグネチャの生成 スキニングメッシュ用
 void PipelineManager::CreateSkinningObject3DRootSignature(){
 	RootSignatureBuilder builder;
