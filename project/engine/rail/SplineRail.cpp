@@ -13,7 +13,9 @@ inline float Length(const Vector3& v){
 // ========================================================
 Vector3 SplineRail::EvaluatePosition(float t) const{
     if ( nodes.empty() ) return { 0.0f, 0.0f, 0.0f };
-    if ( nodes.size() == 1 ) return nodes[0];
+    if ( nodes.size() == 1 ) {
+        return { nodes[0].x + animOffset.x, nodes[0].y + animOffset.y, nodes[0].z + animOffset.z };
+    }
 
     // tの整数部分(インデックス)と小数部分(ローカルt)を分ける
     int p1_index = static_cast< int >( t );
@@ -32,15 +34,20 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
     // 端の制御点(p0,p3)は配列外なら「鏡映(reflection)」で補う。
     // 従来は端を同じ点にクランプしていたため端の接線が劣化し、向きがカクついた。
     // p0 = p1 を p2 の反対側へ折り返す / p3 = p2 を p1 の反対側へ折り返す
+    // ループ（front==backに溶接済み）の場合は反対側のノードを使い、継ぎ目も滑らかな円にする
     Vector3 p0;
     if ( p1_index - 1 >= 0 ) {
         p0 = nodes[p1_index - 1];
+    } else if ( isLoop && maxIndex >= 2 ) {
+        p0 = nodes[maxIndex - 1]; // 末尾の1つ手前（front==back なので物理的に手前のノード）
     } else {
         p0 = { 2.0f * p1.x - p2.x, 2.0f * p1.y - p2.y, 2.0f * p1.z - p2.z };
     }
     Vector3 p3;
     if ( p1_index + 2 <= maxIndex ) {
         p3 = nodes[p1_index + 2];
+    } else if ( isLoop && maxIndex >= 2 ) {
+        p3 = nodes[1];            // 先頭の次（front==back なので物理的に次のノード）
     } else {
         p3 = { 2.0f * p2.x - p1.x, 2.0f * p2.y - p1.y, 2.0f * p2.z - p1.z };
     }
@@ -51,15 +58,24 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
     result.y = 0.5f * ( ( 2.0f * p1.y ) + ( -p0.y + p2.y ) * localT + ( 2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y ) * ( localT * localT ) + ( -p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y ) * ( localT * localT * localT ) );
     result.z = 0.5f * ( ( 2.0f * p1.z ) + ( -p0.z + p2.z ) * localT + ( 2.0f * p0.z - 5.0f * p1.z + 4.0f * p2.z - p3.z ) * ( localT * localT ) + ( -p0.z + 3.0f * p1.z - 3.0f * p2.z + p3.z ) * ( localT * localT * localT ) );
 
+    // 動くレール：現在のアニメオフセットを加算（剛体移動なので距離テーブルは不変）
+    result.x += animOffset.x;
+    result.y += animOffset.y;
+    result.z += animOffset.z;
+
     return result;
 }
 
 // front→back の主軸からタイプを自動判定する
+//   斜めのレールは「横」扱いを優先する。縦と判定されるには Z の伸びが X の
+//   1.5倍以上必要（少し奥に向けただけで操作キーが W/S に切り替わるのを防ぐ）。
+//   ※どうしても縦にしたい/横にしたい時はエディタの 横/縦 ボタンで手動指定できる
 void SplineRail::AutoDetectType(){
     if ( nodes.size() < 2 ) { type = RailType::Horizontal; return; }
     float dx = nodes.back().x - nodes.front().x;
     float dz = nodes.back().z - nodes.front().z;
-    type = ( std::abs(dx) >= std::abs(dz) ) ? RailType::Horizontal : RailType::Vertical;
+    const float kVerticalBias = 1.5f; // 縦判定に必要な Z/X 比
+    type = ( std::abs(dz) > std::abs(dx) * kVerticalBias ) ? RailType::Vertical : RailType::Horizontal;
 }
 
 // ① レールの長さを計測してテーブルを作る
@@ -157,6 +173,22 @@ Vector3 SplineRail::GetTangentByDistance(float distance) const{
     const float ds = 0.1f; // 前後 10cm を見て向きを求める
     float s1 = distance - ds;
     float s2 = distance + ds;
+
+    if ( isLoop && totalLength_ > ds * 4.0f ) {
+        // ループは継ぎ目をまたいでラップしてサンプル（シームでも向きが滑らか）
+        auto wrap = [&](float s) -> float{
+            while ( s < 0.0f )          s += totalLength_;
+            while ( s > totalLength_ )  s -= totalLength_;
+            return s;
+            };
+        Vector3 a = GetPositionByDistance(wrap(s1));
+        Vector3 b = GetPositionByDistance(wrap(s2));
+        Vector3 dir = { b.x - a.x, b.y - a.y, b.z - a.z };
+        float len = Length(dir);
+        if ( len > 0.0f ) { dir.x /= len; dir.y /= len; dir.z /= len; } else { dir = { 0.0f, 0.0f, 1.0f }; }
+        return dir;
+    }
+
     if ( s1 < 0.0f ) s1 = 0.0f;
     if ( s2 > totalLength_ ) s2 = totalLength_;
     if ( s2 - s1 < 1e-5f ) return { 0.0f, 0.0f, 1.0f };

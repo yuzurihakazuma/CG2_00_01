@@ -128,6 +128,13 @@ private: // メンバ変数
 	// splineRails_ を距離サンプルして線マーカーを作り直す
 	void BuildRailMarkers();
 
+	// --- 動くレール（ムービングプラットフォーム）---
+	float railAnimTime_ = 0.0f;            // 動くレール用の経過時間
+	std::vector<int>     railMarkerRail_;  // 各マーカーが属するレール番号（railMarkers_と同じ並び）
+	std::vector<Vector3> railMarkerBase_;  // 各マーカーの基準位置（オフセット0の位置）
+	void UpdateRailMotion(float dt);       // animOffset を進めてマーカーを追従させる
+	void UpdateRailMarkerPositions();      // マーカー位置 = 基準位置 + animOffset
+
 	// --- エディタのレール編集をゲーム側に同期する（緑線・プレイヤーを一本化）---
 	int  lastRailVersion_ = -1;     // 直近に同期したエディタの編集世代
 	void SyncRailsFromEditor();     // エディタの最新レールから splineRails_ を作り直す

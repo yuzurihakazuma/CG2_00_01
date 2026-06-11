@@ -22,6 +22,7 @@
 #include "Engine/3D/Obj/Obj3dCommon.h"
 #include "Engine/Base/DirectXCommon.h"
 #include "Engine/Base/WindowProc.h"
+#include "Engine/Base/TimeManager.h"
 #include "engine/math/VectorMath.h"
 #include "engine/collision/Collision.h"
 #include "engine/graphics/RenderTexture.h"
@@ -61,14 +62,35 @@ static void BuildRailConnections(std::vector<SplineRail>& rails){
 		float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
 		return std::sqrt(dx * dx + dy * dy + dz * dz);
 		};
+	auto midPoint = [](const Vector3& a, const Vector3& b) -> Vector3{
+		return { ( a.x + b.x ) * 0.5f, ( a.y + b.y ) * 0.5f, ( a.z + b.z ) * 0.5f };
+		};
 
-	// 端点接続とみなす最大距離(m)。手置きノードの隙間を許容する。
-	//   ・大きすぎると、近くを通るだけの無関係なレールまで連結してしまう
-	//   ・小さすぎると、繋げたいレールが行き止まりになる
-	const float kConnThreshold = 1.0f;
+	// 端点接続とみなす最大距離(m)。
+	// エディタのノード吸着半径(0.7m)と同じ値にしてある：吸着で置いたノードは
+	// ピッタリ一致しているので、実行時の溶接でノードが動かず「座標ズレ」が出ない。
+	// （吸着せず微妙に離れたノードだけが溶接で動く）
+	const float kConnThreshold = 0.7f;
+
+	// --- フェーズ0：ループ（円状レール）の検出 ---
+	// 自分の front と back が近ければ「閉じたレール」。両端を同じ点に溶接して
+	// isLoop を立てる（プレイヤーは距離をラップして A/D でくるくる回れる）。
+	for ( auto& r : rails ){
+		r.isLoop = false;
+		if ( r.nodes.size() >= 3 ){
+			if ( endDist(r.nodes.front(), r.nodes.back()) < kConnThreshold ){
+				Vector3 m = midPoint(r.nodes.front(), r.nodes.back());
+				r.nodes.front() = m;
+				r.nodes.back()  = m;
+				r.isLoop = true;
+				r.BuildDistanceTable(); // ノードを動かしたので距離テーブルを作り直す
+			}
+		}
+	}
 
 	// --- フェーズ1：最も近い端点同士で連結関係を決める ---
 	for ( int i = 0; i < ( int ) rails.size(); ++i ){
+		if ( rails[i].isLoop ) continue; // ループは端が無いので連結対象外
 		if ( rails[i].nodes.size() < 2 ) continue;
 		const Vector3& iFront = rails[i].nodes.front();
 		const Vector3& iBack  = rails[i].nodes.back();
@@ -342,8 +364,9 @@ void GamePlayScene::Initialize(){
 // エディタ(LevelEditor)が保持する最新のレール節点から splineRails_ を作り直す。
 // これでエディタ編集・緑線・プレイヤーが常に同じデータを使う（ズレ解消）。
 void GamePlayScene::SyncRailsFromEditor(){
-	const auto& lines = EditorManager::GetInstance()->GetEditorRailLines();
-	const auto& types = EditorManager::GetInstance()->GetEditorRailTypes();
+	const auto& lines   = EditorManager::GetInstance()->GetEditorRailLines();
+	const auto& types   = EditorManager::GetInstance()->GetEditorRailTypes();
+	const auto& motions = EditorManager::GetInstance()->GetEditorRailMotions();
 
 	splineRails_.clear();
 	for ( const auto& line : lines ) {
@@ -352,7 +375,7 @@ void GamePlayScene::SyncRailsFromEditor(){
 		rail.BuildDistanceTable();
 		splineRails_.push_back(rail);
 	}
-	BuildRailConnections(splineRails_); // 接続・分岐を再計算（溶接含む）
+	BuildRailConnections(splineRails_); // 接続・分岐・ループを再計算（溶接含む）
 
 	// タイプ割当：railTypes が 0/1 ならそれを使い、-1(自動)や未設定は主軸で自動判定
 	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
@@ -362,14 +385,53 @@ void GamePlayScene::SyncRailsFromEditor(){
 		else               splineRails_[i].AutoDetectType();
 	}
 
+	// 動き割当（x,y,z=振幅 / w=周期）
+	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
+		if ( i < motions.size() ) {
+			splineRails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
+			splineRails_[i].motionPeriod = ( motions[i].w > 0.1f ) ? motions[i].w : 0.1f;
+		}
+		splineRails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
+	}
+	railAnimTime_ = 0.0f;
+
 	BuildRailMarkers();                 // 緑線を作り直す
 	lastRailVersion_ = EditorManager::GetInstance()->GetRailEditVersion();
+}
+
+// 動くレールの時間を進めて animOffset を更新し、緑線マーカーも追従させる
+void GamePlayScene::UpdateRailMotion(float dt){
+	railAnimTime_ += dt;
+
+	bool anyMotion = false;
+	for ( auto& rail : splineRails_ ) {
+		if ( !rail.HasMotion() ) continue;
+		anyMotion = true;
+		float period = ( rail.motionPeriod > 0.1f ) ? rail.motionPeriod : 0.1f;
+		float phase = std::sin(railAnimTime_ * 2.0f * 3.14159265f / period);
+		rail.animOffset = { rail.motionAmp.x * phase, rail.motionAmp.y * phase, rail.motionAmp.z * phase };
+	}
+	if ( anyMotion ) { UpdateRailMarkerPositions(); }
+}
+
+// マーカー位置 = 基準位置 + そのレールの animOffset
+void GamePlayScene::UpdateRailMarkerPositions(){
+	for ( size_t k = 0; k < railMarkers_.size(); ++k ) {
+		if ( k >= railMarkerRail_.size() || k >= railMarkerBase_.size() ) break;
+		int ri = railMarkerRail_[k];
+		if ( ri < 0 || ri >= ( int ) splineRails_.size() ) continue;
+		const Vector3& off  = splineRails_[ri].animOffset;
+		const Vector3& base = railMarkerBase_[k];
+		railMarkers_[k]->SetTranslation({ base.x + off.x, base.y + off.y, base.z + off.z });
+	}
 }
 
 // splineRails_ を距離で細かくサンプルし、隣り合う点を「細いバー」で繋いで
 // 連続した線として経路を可視化する（モンスターボール球より見やすい）
 void GamePlayScene::BuildRailMarkers(){
 	railMarkers_.clear();
+	railMarkerRail_.clear();
+	railMarkerBase_.clear();
 
 	Model* segModel = ModelManager::GetInstance()->FindModel("railLineCube");
 	if ( segModel == nullptr ) { return; }
@@ -383,7 +445,8 @@ void GamePlayScene::BuildRailMarkers(){
 	const float thickness = 0.08f;  // 線の太さ(m)
 	const Vector4 lineColor = { 0.2f, 1.0f, 0.35f, 1.0f }; // 見やすい明るい緑
 
-	for ( const auto& rail : splineRails_ ) {
+	for ( int railIdx = 0; railIdx < ( int ) splineRails_.size(); ++railIdx ) {
+		const SplineRail& rail = splineRails_[railIdx];
 		float len = rail.GetLength();
 		if ( len <= 0.0f || rail.nodes.size() < 2 ) { continue; }
 
@@ -407,7 +470,8 @@ void GamePlayScene::BuildRailMarkers(){
 				box->Initialize(segModel);
 				box->SetCamera(camera_.get());
 				box->SetScale({ thickness, thickness, segLen }); // Z方向にだけ伸ばす＝バー
-				box->SetTranslation({ ( prev.x + cur.x ) * 0.5f, ( prev.y + cur.y ) * 0.5f, ( prev.z + cur.z ) * 0.5f });
+				Vector3 markerPos = { ( prev.x + cur.x ) * 0.5f, ( prev.y + cur.y ) * 0.5f, ( prev.z + cur.z ) * 0.5f };
+				box->SetTranslation(markerPos);
 				box->SetRotation({ pitch, yaw, 0.0f });
 				if ( box->GetModel() ) {
 					if ( whiteTex != 0 ) { box->GetModel()->SetTexture(whiteTex); } // 単色化
@@ -416,6 +480,11 @@ void GamePlayScene::BuildRailMarkers(){
 				}
 				box->Update();
 				railMarkers_.push_back(std::move(box));
+				// 動くレール用：所属レールと基準位置（オフセット0換算）を記録
+				railMarkerRail_.push_back(railIdx);
+				railMarkerBase_.push_back({ markerPos.x - rail.animOffset.x,
+				                            markerPos.y - rail.animOffset.y,
+				                            markerPos.z - rail.animOffset.z });
 			}
 			prev = cur;
 		}
@@ -465,6 +534,12 @@ void GamePlayScene::Update(){
 		// ③ エフェクトなども綺麗に消す
 		hitEffects_.clear();
 	}
+	// プレイ → エディットに戻った瞬間：動くレールを基準位置に戻す（編集と表示を一致させる）
+	if ( prevMode_ == EngineMode::Play && currentMode == EngineMode::Edit ) {
+		railAnimTime_ = 0.0f;
+		for ( auto& r : splineRails_ ) { r.animOffset = { 0.0f, 0.0f, 0.0f }; }
+		UpdateRailMarkerPositions();
+	}
 	prevMode_ = currentMode; // 現在のモードを記憶して次に備える
 
 
@@ -472,6 +547,9 @@ void GamePlayScene::Update(){
 	// ▼ 2. プレイモード中（時間が動いている時）だけ実行する処理
 	// ========================================================
 	if ( currentMode == EngineMode::Play ) {
+
+		// 動くレールの更新（プレイヤーより先に。レール位置→プレイヤー位置の順で整合）
+		UpdateRailMotion(Time::GetInstance()->GetDeltaTime());
 
 		// プレイヤーのレール移動計算
 		if ( player_ ) {
@@ -670,8 +748,9 @@ void GamePlayScene::DrawDebugUI(){
 
 	TextManager::GetInstance()->DrawDebugUI();
 
-	// レール経路の可視化トグル
-	ImGui::Begin("レール表示 (Rail Debug)");
+	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
+	ImGui::Begin("インスペクター (詳細設定)");
+	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
 	ImGui::Checkbox("レール経路を表示", &showRailMarkers_);
 	ImGui::Text("マーカー数: %d", static_cast<int>(railMarkers_.size()));
 	if ( ImGui::Button("マーカー再構築") ) { BuildRailMarkers(); }
@@ -708,6 +787,7 @@ void GamePlayScene::DrawDebugUI(){
 		camera_->SetRotation({ 0.30f, 0.0f, 0.0f });
 	}
 	ImGui::TextDisabled("※デバッグカメラONなら右ドラッグで自由に回せます");
+	} // CollapsingHeader: レール表示・カメラ視点
 	ImGui::End();
 
 #endif

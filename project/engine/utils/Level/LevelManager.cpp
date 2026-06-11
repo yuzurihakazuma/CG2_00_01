@@ -22,7 +22,7 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         objectsArray.push_back(jsonObj);
     }
 
-    // レールノードのリストも同様に配列に変換する（★複数レール対応）
+    // レールノードのリストも同様に配列に変換する（複数レール対応）
     json linesArray = json::array();
     for ( const auto& line : levelData.railLines ) {
         json railArray = json::array();
@@ -41,6 +41,14 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         typesArray.push_back(t);
     }
     j["railTypes"] = typesArray;
+
+    // 各レールの動き [振幅x, 振幅y, 振幅z, 周期]。railLines と数を合わせて保存
+    json motionsArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        Vector4 m = ( i < levelData.railMotions.size() ) ? levelData.railMotions[i] : Vector4 { 0.0f, 0.0f, 0.0f, 2.0f };
+        motionsArray.push_back({ m.x, m.y, m.z, m.w });
+    }
+    j["railMotions"] = motionsArray;
 
     j["objects"] = objectsArray;
 
@@ -126,13 +134,25 @@ LevelData LevelManager::Load(const std::string& fileName){
         }
     }
 
+    // レールの動きを読み込む [振幅x, 振幅y, 振幅z, 周期]
+    if ( j.contains("railMotions") && j["railMotions"].is_array() ) {
+        for ( const auto& m : j["railMotions"] ) {
+            Vector4 motion { 0.0f, 0.0f, 0.0f, 2.0f };
+            if ( m.is_array() && m.size() >= 4 ) {
+                motion.x = m[0]; motion.y = m[1]; motion.z = m[2]; motion.w = m[3];
+            }
+            levelData.railMotions.push_back(motion);
+        }
+    }
+
     // 万が一レールが1本もない場合は、空のレールを1つ追加しておく
     if ( levelData.railLines.empty() ) {
         levelData.railLines.push_back(std::vector<Vector3>());
     }
 
-    // タイプ配列を railLines と同じ数に整える（足りない分は -1=自動）
+    // タイプ・動き配列を railLines と同じ数に整える（足りない分はデフォルト）
     levelData.railTypes.resize(levelData.railLines.size(), -1);
+    levelData.railMotions.resize(levelData.railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
 
     return levelData;
 }

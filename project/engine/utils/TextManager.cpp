@@ -132,7 +132,9 @@ void TextManager::Draw(){
 
 void TextManager::DrawDebugUI(){
 #ifdef USE_IMGUI
-	ImGui::Begin("Text Manager (JSON)");
+	// 共有の「詳細設定」ウィンドウに折りたたみで合流（ウィンドウを増やさない）
+	ImGui::Begin("インスペクター (詳細設定)");
+	if ( ImGui::CollapsingHeader("テキスト (Text Manager)") ) {
 
 	// 1. 新しいテキストの追加
 	ImGui::Text("【新しいテキストの追加】");
@@ -194,6 +196,7 @@ void TextManager::DrawDebugUI(){
 		Load();
 	}
 
+	} // CollapsingHeader: テキスト
 	ImGui::End();
 #endif
 }

@@ -27,6 +27,10 @@ struct LevelData{
     //   -1 = 自動判定 / 0 = 横(A/D移動) / 1 = 縦(W/S移動)
     std::vector<int> railTypes;
 
+    // 各レールの動き（railLines と同じ並び・同じ要素数を維持する）
+    //   x,y,z = sin波の振幅(m)（全て0なら動かない） / w = 周期(秒)
+    std::vector<Vector4> railMotions;
+
 
     // 必要ならタイル情報も残してOK
     int width = 10;

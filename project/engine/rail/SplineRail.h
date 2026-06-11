@@ -15,6 +15,13 @@ public:
     enum class RailType { Horizontal, Vertical };
     RailType type = RailType::Horizontal;
 
+    // ============================================================
+    // ループ（円状レール）：front と back が同じ位置に溶接された閉じたレール。
+    //   BuildRailConnections で自動検出される。
+    //   ループ中は距離が周回でラップし、端が無いので A/D(W/S) で回り続けられる。
+    // ============================================================
+    bool isLoop = false;
+
     // front→back ベクトルの主軸からタイプを自動判定（|X|>=|Z|→横／それ以外→縦）
     void AutoDetectType();
 
@@ -64,6 +71,21 @@ public:
     bool frontConnToFront = true;  // true=接続先のfront, false=back
     int  backConnIndex = -1;    // back端の接続先レール番号
     bool backConnToFront = true;
+
+    // ============================================================
+    // ⑦ 動くレール（ムービングプラットフォーム）
+    //   motionAmp が非ゼロなら、時間に応じて sin 波でレール全体が平行移動する。
+    //   形は変わらない剛体移動なので、距離テーブル・全長はそのまま使える。
+    //   プレイヤーはレール上の距離から位置を毎フレーム計算するので自動で追従する。
+    // ============================================================
+    Vector3 motionAmp { 0.0f, 0.0f, 0.0f };   // 振幅(m)：各軸 ±この量だけ往復する
+    float   motionPeriod = 2.0f;              // 1往復にかかる秒数
+    Vector3 animOffset { 0.0f, 0.0f, 0.0f };  // 現在のオフセット（ゲーム側が毎フレーム更新）
+
+    // 動きが設定されているか
+    bool HasMotion() const {
+        return motionAmp.x != 0.0f || motionAmp.y != 0.0f || motionAmp.z != 0.0f;
+    }
 
     // ⑥ 途中分岐情報（BuildRailConnections でロード時に1回だけ計算）
     struct BranchPoint {

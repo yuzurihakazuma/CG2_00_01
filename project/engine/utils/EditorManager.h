@@ -68,6 +68,8 @@ public:
 	const std::vector<std::vector<Vector3>>& GetEditorRailLines() const;
 	// 各レールのタイプ（-1=自動 / 0=横 / 1=縦）。railLines と同じ並び
 	const std::vector<int>& GetEditorRailTypes() const;
+	// 各レールの動き（x,y,z=振幅 / w=周期）。railLines と同じ並び
+	const std::vector<Vector4>& GetEditorRailMotions() const;
 
 	// シーン切り替え時に外部参照をまとめてリセットする（ダングリングポインタ防止）
 	void ResetSceneReferences(){
@@ -119,6 +121,13 @@ private:
     int gizmoMode_ = 1;                  // ImGuizmo::WORLD(=1)
 
     bool railFreehandStroking_ = false;  // フリーハンドで描画ストローク中か
+
+    // レール編集：矩形選択／まとめて移動用
+    bool  railRubberActive_ = false;            // 矩形選択ドラッグ中か
+    float railRubberStartX_ = 0.0f;             // 矩形選択の開始位置（スクリーン座標）
+    float railRubberStartY_ = 0.0f;
+    Vector3 railSelPivot_ { 0.0f, 0.0f, 0.0f }; // 選択ギズモのピボット（ドラッグ中は保持）
+    bool  railSelDragging_ = false;             // ギズモで選択群を移動中か
 
     EngineMode currentMode_ = EngineMode::Edit;
 };

@@ -44,6 +44,8 @@ public:
     int GetRailVersion() const { return railVersion_; }
     const std::vector<std::vector<Vector3>>& GetRailLines() const { return levelData_.railLines; }
     const std::vector<int>& GetRailTypes() const { return levelData_.railTypes; }
+    // 各レールの動き（x,y,z=振幅 / w=周期）。railLines と同じ並び
+    const std::vector<Vector4>& GetRailMotions() const { return levelData_.railMotions; }
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const { return currentEditRailIndex_; }
@@ -76,7 +78,31 @@ public:
     void Undo();
     void Redo();
 
+    // ============================================================
+    // 複数選択（路線まるごと移動・矩形選択でまとめて動かす）
+    //   ・線をクリック → SelectWholeRail で路線の全ノードを選択
+    //   ・矩形ドラッグ → AddToSelection で囲んだノードを選択（レール跨ぎ可）
+    //   ・ギズモは GetSelectionCenter をピボットに TranslateSelection で平行移動
+    // ============================================================
+    struct NodeRef { int rail; int node; };
+    const std::vector<NodeRef>& GetMultiSelection() const { return multiSelection_; }
+    void ClearMultiSelection(){ multiSelection_.clear(); }
+    void AddToSelection(int rail, int node);
+    void SelectSingleNode(int rail, int node);     // 1ノード選択（編集対象の路線も切替）
+    void SelectWholeRail(int railIdx);             // 路線の全ノードを選択（まとめて移動用）
+    Vector3 GetSelectionCenter() const;            // 選択ノード群の中心（ギズモのピボット）
+    void TranslateSelection(const Vector3& delta); // 選択ノード群を平行移動（世代更新）
+    void SetCurrentRail(int idx);                  // 編集対象の路線を切り替え
+
+    // 全レール横断アクセス（Game View のピッキング・表示用）
+    int  GetRailCount() const { return ( int ) levelData_.railLines.size(); }
+    int  GetNodeCountOf(int rail) const;
+    bool GetNodePosOf(int rail, int node, Vector3& out) const;
+
 private:
+    // 複数選択中のノード（rail番号＋ノード番号の組）
+    std::vector<NodeRef> multiSelection_;
+
     // アセットブラウザ用：resources/ から見つけたモデル1件分
     struct AssetEntry{
         std::string name;     // モデル名（FindModel/LoadModel に渡すキー＝ファイル名から拡張子を除いたもの）

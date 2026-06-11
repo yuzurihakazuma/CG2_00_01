@@ -79,10 +79,6 @@ void EditorManager::Update(){
         levelEditor_->Update();
     }
 
-    if ( targetSkinnedObj_ ) {
-        targetSkinnedObj_->DrawDebugUI();
-    }
-
     if ( !isEditorActive_ ) { return; }
 
     // 1. 全画面の透明なドッキング土台
@@ -119,13 +115,18 @@ void EditorManager::Update(){
         ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dock_center, ImGuiDir_Down,  0.25f, nullptr, &dock_center);
 
         // 各ウィンドウを対応するペインに割り当て
-        ImGui::DockBuilderDockWindow("Game View",                dock_center);
-        ImGui::DockBuilderDockWindow("コントロール (Play / Stop)", dock_left);
-        ImGui::DockBuilderDockWindow("パフォーマンスモニター",       dock_right);
+        // 4ゾーン構成（同じゾーンに入れたウィンドウはタブとしてまとまる）
+        //   中央: ゲーム画面 / 左: シーン操作系 / 右: 設定・情報系 / 下: ツール系
+        ImGui::DockBuilderDockWindow("Game View",                  dock_center);
+        ImGui::DockBuilderDockWindow("コントロール (Play / Stop)",   dock_left);
+        ImGui::DockBuilderDockWindow("ヒエラルキー (配置リスト)",     dock_left);
+        ImGui::DockBuilderDockWindow("アセットブラウザ (Assets)",    dock_left);
+        ImGui::DockBuilderDockWindow("インスペクター (詳細設定)",     dock_right);
         ImGui::DockBuilderDockWindow("インスペクター (Transform)",   dock_right);
-        ImGui::DockBuilderDockWindow("レベルエディタ",              dock_left);
-        ImGui::DockBuilderDockWindow("Blenderインポート (Blender)",  dock_left);
-        ImGui::DockBuilderDockWindow("パーティクルエディタ",         dock_bottom);
+        ImGui::DockBuilderDockWindow("パフォーマンスモニター",        dock_right);
+        ImGui::DockBuilderDockWindow("レールエディタ",               dock_bottom);
+        ImGui::DockBuilderDockWindow("Blenderインポート (Blender)",  dock_bottom);
+        ImGui::DockBuilderDockWindow("GPU Particle Editor",         dock_bottom);
 
         ImGui::DockBuilderFinish(dockspace_id);
     }
@@ -258,31 +259,51 @@ void EditorManager::Update(){
         // レール編集（ノードのギズモ／クリック追加）は Edit モード時のみ
         const bool railEditMode = ( currentMode_ == EngineMode::Edit );
 
-        // --- (A) レールノードが選択されていればギズモで移動（最優先）---
+        // --- (A) レール選択ギズモ：選択ノード群（1個〜路線全体〜複数レール）をまとめて移動 ---
         bool railNodeGizmo = false;
         if ( railEditMode && levelEditor_ ) {
-            int sel = levelEditor_->GetSelectedRailNode();
-            if ( sel >= 0 && sel < levelEditor_->GetCurrentRailNodeCount() ) {
-                Vector3 p;
-                if ( levelEditor_->GetRailNodePos(sel, p) ) {
-                    railNodeGizmo = true;
-                    Matrix4x4 world = MatrixMath::MakeAffine({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, p);
-                    // グリッド吸着（ドラッグ結果がグリッドに揃う）
-                    float snap[3] = { 0.0f, 0.0f, 0.0f };
-                    float* snapPtr = nullptr;
-                    if ( levelEditor_->IsRailSnap() ) {
-                        float g = levelEditor_->GetRailGridSize();
-                        snap[0] = snap[1] = snap[2] = g;
-                        snapPtr = snap;
-                    }
-                    ImGuizmo::Manipulate(&view.m[0][0], &proj.m[0][0],
-                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &world.m[0][0], nullptr, snapPtr);
-                    if ( ImGuizmo::IsUsing() ) {
-                        float t[3], r[3], s[3];
-                        ImGuizmo::DecomposeMatrixToComponents(&world.m[0][0], t, r, s);
-                        levelEditor_->SetRailNodePos(sel, { t[0], t[1], t[2] });
-                    }
+            const auto& sel = levelEditor_->GetMultiSelection();
+            if ( !sel.empty() ) {
+                railNodeGizmo = true;
+
+                // ドラッグしていない間は毎フレーム選択中心をピボットに取り直す。
+                // ドラッグ中はピボットを保持し、移動量（差分）だけを全ノードへ配る。
+                if ( !railSelDragging_ ) { railSelPivot_ = levelEditor_->GetSelectionCenter(); }
+
+                Matrix4x4 world = MatrixMath::MakeAffine({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, railSelPivot_);
+
+                // グリッド吸着（ドラッグ結果がグリッドに揃う）
+                float snap[3] = { 0.0f, 0.0f, 0.0f };
+                float* snapPtr = nullptr;
+                if ( levelEditor_->IsRailSnap() ) {
+                    float g = levelEditor_->GetRailGridSize();
+                    snap[0] = snap[1] = snap[2] = g;
+                    snapPtr = snap;
                 }
+                ImGuizmo::Manipulate(&view.m[0][0], &proj.m[0][0],
+                    ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &world.m[0][0], nullptr, snapPtr);
+
+                if ( ImGuizmo::IsUsing() ) {
+                    railSelDragging_ = true;
+                    float t[3], r[3], s[3];
+                    ImGuizmo::DecomposeMatrixToComponents(&world.m[0][0], t, r, s);
+                    Vector3 np = { t[0], t[1], t[2] };
+                    Vector3 delta = { np.x - railSelPivot_.x, np.y - railSelPivot_.y, np.z - railSelPivot_.z };
+                    if ( delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f ) {
+                        if ( sel.size() == 1 ) {
+                            // 1ノードだけなら従来どおり（他レール端点へのノード吸着も効く）
+                            levelEditor_->SetRailNodePos(sel[0].node, np);
+                        } else {
+                            // 複数ノード：形を保ったまま平行移動
+                            levelEditor_->TranslateSelection(delta);
+                        }
+                    }
+                    railSelPivot_ = np;
+                } else {
+                    railSelDragging_ = false;
+                }
+            } else {
+                railSelDragging_ = false;
             }
         }
 
@@ -338,51 +359,107 @@ void EditorManager::Update(){
                 return true;
                 };
 
-            const int count = levelEditor_->GetCurrentRailNodeCount();
-
-            // --- マウス下のノード / 線分を求める ---
-            int hoverIdx = -1; float hoverBest = 12.0f;
-            int segIdx = -1;   float segBest = 10.0f; Vector3 segPoint{};
+            // --- マウス下のノード / 線分を「全レール」から探す ---
+            //   ノードクリック＝そのノードを選択／線クリック＝路線まるごと選択
+            int hoverRail = -1, hoverIdx = -1; float hoverBest = 12.0f;
+            int segRail = -1,   segIdx = -1;   float segBest = 10.0f; Vector3 segPoint {};
+            const int railCount = levelEditor_->GetRailCount();
             if ( imageHovered ) {
-                for ( int i = 0; i < count; ++i ) {
-                    Vector3 p; if ( !levelEditor_->GetRailNodePos(i, p) ) continue;
-                    ImVec2 s; if ( !project(p, s) ) continue;
-                    float d = std::sqrt(( s.x - mouse.x ) * ( s.x - mouse.x ) + ( s.y - mouse.y ) * ( s.y - mouse.y ));
-                    if ( d < hoverBest ) { hoverBest = d; hoverIdx = i; }
-                }
-                for ( int i = 0; i + 1 < count; ++i ) {
-                    Vector3 a, b;
-                    if ( !levelEditor_->GetRailNodePos(i, a) || !levelEditor_->GetRailNodePos(i + 1, b) ) continue;
-                    ImVec2 sa, sb; if ( !project(a, sa) || !project(b, sb) ) continue;
-                    float vx = sb.x - sa.x, vy = sb.y - sa.y;
-                    float len2 = vx * vx + vy * vy;
-                    float t = ( len2 > 1e-6f ) ? ( ( mouse.x - sa.x ) * vx + ( mouse.y - sa.y ) * vy ) / len2 : 0.0f;
-                    if ( t < 0.0f ) t = 0.0f; if ( t > 1.0f ) t = 1.0f;
-                    float cxp = sa.x + vx * t, cyp = sa.y + vy * t;
-                    float d = std::sqrt(( cxp - mouse.x ) * ( cxp - mouse.x ) + ( cyp - mouse.y ) * ( cyp - mouse.y ));
-                    if ( d < segBest ) {
-                        segBest = d; segIdx = i;
-                        segPoint = { a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t };
+                for ( int rr = 0; rr < railCount; ++rr ) {
+                    const int nodeCount = levelEditor_->GetNodeCountOf(rr);
+                    for ( int i = 0; i < nodeCount; ++i ) {
+                        Vector3 p; if ( !levelEditor_->GetNodePosOf(rr, i, p) ) continue;
+                        ImVec2 s; if ( !project(p, s) ) continue;
+                        float d = std::sqrt(( s.x - mouse.x ) * ( s.x - mouse.x ) + ( s.y - mouse.y ) * ( s.y - mouse.y ));
+                        if ( d < hoverBest ) { hoverBest = d; hoverRail = rr; hoverIdx = i; }
+                    }
+                    for ( int i = 0; i + 1 < nodeCount; ++i ) {
+                        Vector3 a, b;
+                        if ( !levelEditor_->GetNodePosOf(rr, i, a) || !levelEditor_->GetNodePosOf(rr, i + 1, b) ) continue;
+                        ImVec2 sa, sb; if ( !project(a, sa) || !project(b, sb) ) continue;
+                        float vx = sb.x - sa.x, vy = sb.y - sa.y;
+                        float len2 = vx * vx + vy * vy;
+                        float t = ( len2 > 1e-6f ) ? ( ( mouse.x - sa.x ) * vx + ( mouse.y - sa.y ) * vy ) / len2 : 0.0f;
+                        if ( t < 0.0f ) t = 0.0f; if ( t > 1.0f ) t = 1.0f;
+                        float cxp = sa.x + vx * t, cyp = sa.y + vy * t;
+                        float d = std::sqrt(( cxp - mouse.x ) * ( cxp - mouse.x ) + ( cyp - mouse.y ) * ( cyp - mouse.y ));
+                        if ( d < segBest ) {
+                            segBest = d; segRail = rr; segIdx = i;
+                            segPoint = { a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t };
+                        }
                     }
                 }
             }
 
-            // --- 左クリック ---
-            if ( imageHovered && ImGui::IsMouseClicked(0) && !gizmoActive ) {
+            const bool ctrlHeld  = ImGui::GetIO().KeyCtrl;
+            const bool shiftHeld = ImGui::GetIO().KeyShift;
+
+            // --- 左クリック（押した瞬間）---
+            if ( imageHovered && ImGui::IsMouseClicked(0) && !gizmoActive && !railRubberActive_ ) {
                 if ( hoverIdx >= 0 ) {
-                    levelEditor_->SetSelectedRailNode(hoverIdx);            // ノード選択→ギズモ
+                    if ( shiftHeld ) {
+                        levelEditor_->AddToSelection(hoverRail, hoverIdx);     // Shift+クリック＝追加選択
+                    } else {
+                        levelEditor_->SelectSingleNode(hoverRail, hoverIdx);   // ノード単体を選択
+                    }
                 } else if ( levelEditor_->IsFreehand() && levelEditor_->IsRailDrawMode() ) {
-                    railFreehandStroking_ = true;                          // 一筆書き開始
+                    railFreehandStroking_ = true;                              // 一筆書き開始
                 } else if ( segIdx >= 0 ) {
-                    levelEditor_->InsertRailNode(segIdx, segPoint);        // 線の途中に挿入
+                    if ( ctrlHeld ) {
+                        // Ctrl+線クリック → その位置にノードを挿入（誤挿入防止のため修飾キー必須に）
+                        levelEditor_->SetCurrentRail(segRail);
+                        levelEditor_->InsertRailNode(segIdx, segPoint);
+                    } else {
+                        // 線クリック → 路線まるごと選択（ギズモでレール全体を移動できる）
+                        levelEditor_->SelectWholeRail(segRail);
+                    }
                 } else if ( levelEditor_->IsRailDrawMode() ) {
                     Vector3 g; if ( groundAt(mouse, g) ) levelEditor_->AppendRailNodeAt(g); // 末尾に追加
                 } else {
-                    levelEditor_->SetSelectedRailNode(-1);                 // 選択解除
+                    // 何もない所 → 矩形選択を開始（動かさず離せばクリック扱い＝選択解除）
+                    railRubberActive_ = true;
+                    railRubberStartX_ = mouse.x;
+                    railRubberStartY_ = mouse.y;
                 }
             }
+
+            // --- 矩形選択：ドラッグ中は枠を描き、離した時に囲んだノードをまとめて選択 ---
+            if ( railRubberActive_ ) {
+                float x0 = std::min(railRubberStartX_, mouse.x), x1 = std::max(railRubberStartX_, mouse.x);
+                float y0 = std::min(railRubberStartY_, mouse.y), y1 = std::max(railRubberStartY_, mouse.y);
+                ImDrawList* rdl = ImGui::GetWindowDrawList();
+                rdl->AddRectFilled({ x0, y0 }, { x1, y1 }, IM_COL32(90, 180, 255, 40));
+                rdl->AddRect({ x0, y0 }, { x1, y1 }, IM_COL32(90, 180, 255, 200), 0.0f, 0, 1.5f);
+
+                if ( !ImGui::IsMouseDown(0) ) {
+                    railRubberActive_ = false;
+                    if ( ( x1 - x0 ) + ( y1 - y0 ) > 8.0f ) {
+                        // 囲んだノードを全レールから選択（Shift中は既存の選択に追加）
+                        if ( !shiftHeld ) { levelEditor_->ClearMultiSelection(); }
+                        int firstRail = -1;
+                        for ( int rr = 0; rr < railCount; ++rr ) {
+                            const int nodeCount = levelEditor_->GetNodeCountOf(rr);
+                            for ( int i = 0; i < nodeCount; ++i ) {
+                                Vector3 p; if ( !levelEditor_->GetNodePosOf(rr, i, p) ) continue;
+                                ImVec2 s; if ( !project(p, s) ) continue;
+                                if ( s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1 ) {
+                                    levelEditor_->AddToSelection(rr, i);
+                                    if ( firstRail < 0 ) firstRail = rr;
+                                }
+                            }
+                        }
+                        if ( firstRail >= 0 ) { levelEditor_->SetCurrentRail(firstRail); }
+                    } else {
+                        // ほぼ動かさずに離した＝ただのクリック → 選択解除
+                        levelEditor_->ClearMultiSelection();
+                        levelEditor_->SetSelectedRailNode(-1);
+                    }
+                }
+            }
+
             // --- 右クリック：ノード削除 ---
             if ( imageHovered && ImGui::IsMouseClicked(1) && !gizmoActive && hoverIdx >= 0 ) {
+                levelEditor_->SetCurrentRail(hoverRail);
                 levelEditor_->DeleteRailNode(hoverIdx);
             }
 
@@ -401,18 +478,30 @@ void EditorManager::Update(){
 
             // ===== (D) 視覚フィードバック（ImGui描画で重畳）=====
             ImDrawList* dl = ImGui::GetWindowDrawList();
-            int selIdx = levelEditor_->GetSelectedRailNode();
-            for ( int i = 0; i < count; ++i ) {
-                Vector3 p; if ( !levelEditor_->GetRailNodePos(i, p) ) continue;
-                ImVec2 s; if ( !project(p, s) ) continue;
-                dl->AddCircleFilled(s, 3.5f, IM_COL32(80, 220, 120, 255)); // 通常ノード
+            const int curRail = levelEditor_->GetCurrentRailIndex();
+
+            // 全レールのノードを描画（編集中の路線＝明るい緑、他＝控えめな色）
+            for ( int rr = 0; rr < railCount; ++rr ) {
+                const bool isCur = ( rr == curRail );
+                const ImU32 col = isCur ? IM_COL32(80, 220, 120, 255) : IM_COL32(150, 175, 160, 170);
+                const int nodeCount = levelEditor_->GetNodeCountOf(rr);
+                for ( int i = 0; i < nodeCount; ++i ) {
+                    Vector3 p; if ( !levelEditor_->GetNodePosOf(rr, i, p) ) continue;
+                    ImVec2 s; if ( !project(p, s) ) continue;
+                    dl->AddCircleFilled(s, isCur ? 3.5f : 3.0f, col);
+                }
             }
+            // 選択中のノード群（オレンジの輪）
+            for ( const auto& rsel : levelEditor_->GetMultiSelection() ) {
+                Vector3 p; ImVec2 s;
+                if ( levelEditor_->GetNodePosOf(rsel.rail, rsel.node, p) && project(p, s) ) {
+                    dl->AddCircle(s, 8.0f, IM_COL32(255, 140, 40, 255), 0, 2.5f);
+                }
+            }
+            // ホバー中のノード（黄色の輪）
             { Vector3 p; ImVec2 s;
-              if ( hoverIdx >= 0 && levelEditor_->GetRailNodePos(hoverIdx, p) && project(p, s) )
-                  dl->AddCircle(s, 8.0f, IM_COL32(255, 235, 80, 255), 0, 2.0f); }   // ホバー強調
-            { Vector3 p; ImVec2 s;
-              if ( selIdx >= 0 && levelEditor_->GetRailNodePos(selIdx, p) && project(p, s) )
-                  dl->AddCircle(s, 9.0f, IM_COL32(255, 140, 40, 255), 0, 2.5f); }    // 選択強調
+              if ( hoverIdx >= 0 && levelEditor_->GetNodePosOf(hoverRail, hoverIdx, p) && project(p, s) )
+                  dl->AddCircle(s, 9.5f, IM_COL32(255, 235, 80, 255), 0, 2.0f); }
             // 配置ゴースト（マウス追加モードで、ノード/線分に当たっていない時）
             if ( imageHovered && levelEditor_->IsRailDrawMode() && !gizmoActive && hoverIdx < 0 && segIdx < 0 ) {
                 Vector3 g;
@@ -433,6 +522,12 @@ void EditorManager::Update(){
 
     // 4. 全シーン共通のUI
     PostEffect::GetInstance()->DrawDebugUI();
+
+    // スキニングUI（「詳細設定」へ合流するウィンドウは必ずドックスペースより後に Begin する。
+    //  先に Begin するとそのウィンドウだけドッキングできなくなる）
+    if ( targetSkinnedObj_ ) {
+        targetSkinnedObj_->DrawDebugUI();
+    }
 
     // 5. 現在のシーン固有のUI
     SceneManager::GetInstance()->DrawCurrentSceneDebugUI();
@@ -551,6 +646,10 @@ const std::vector<std::vector<Vector3>>& EditorManager::GetEditorRailLines() con
 const std::vector<int>& EditorManager::GetEditorRailTypes() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailTypes() : kEmpty;
+}
+const std::vector<Vector4>& EditorManager::GetEditorRailMotions() const{
+    static const std::vector<Vector4> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailMotions() : kEmpty;
 }
 
 

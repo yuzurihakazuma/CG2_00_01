@@ -18,10 +18,13 @@ using namespace VectorMath;
 //     進まず、プレイヤーが乗り換えキーを押した時だけ移る（行くか選べる）。
 // =====================================================================
 
-// 横レール=世界X / 縦レール=世界Z に沿った「進む向きの符号」を返すヘルパ。
-//   moveInput(±1) を入れると、ds（距離の増分符号）が返る。
-//   接線のその軸成分の符号に合わせるので、レールのノード順に依存しない。
-static float MoveAlongSign(const SplineRail& rail, float currentDistance, float moveInput);
+// 端に接続が無い時に「飛び出して落ちる」か。
+//   true  … 端を越えると空中へ（穴に落ちる／ジャンプで飛び越えられる）
+//   false … 端で停止する（崖なしの安全仕様）
+static constexpr bool kFallOffEdges = true;
+
+// ここより下に落ちたらスタートへリスポーン
+static constexpr float kKillY = -10.0f;
 
 void Player::Initialize(){
     position_ = { 0.0f, 0.0f, 0.0f };
@@ -31,11 +34,16 @@ void Player::Initialize(){
     currentDistance_  = 0.0f;
     currentRailIndex_ = 0;
     moveSign_         = 1;
+    dsSign_           = 0.0f;
+    prevMoveInput_    = 0.0f;
     switchCooldown_   = 0.0f;
 
     heightOffset_ = 0.0f;
     jumpVelocity_ = 0.0f;
     isGrounded_   = true;
+
+    inAir_       = false;
+    airVelocity_ = { 0.0f, 0.0f, 0.0f };
 }
 
 void Player::Update(const std::vector<SplineRail>& allRails){
@@ -44,6 +52,14 @@ void Player::Update(const std::vector<SplineRail>& allRails){
 
     const float dt = Time::GetInstance()->GetDeltaTime(); // フレームレート非依存
     Input* input = Input::GetInstance();
+
+    // =================================================================
+    // 0. 空中状態（レール外）：自由落下しながら着地できるレールを探す
+    // =================================================================
+    if ( inAir_ ) {
+        UpdateAir(allRails, dt);
+        return;
+    }
 
     if ( switchCooldown_ > 0.0f ) { switchCooldown_ -= dt; }
 
@@ -69,17 +85,44 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     }
 
     // =================================================================
-    // 2. 今のレールをワールド方向に沿って進める
-    //    （横レール:D=世界+X / 縦レール:W=世界+Z。ノード順に依存しない）
+    // 2. 今のレールを進める（進行方向の記憶つき）
+    //    キーを「押した瞬間」だけワールド方向(横=X/縦=Z)から進行符号を決め、
+    //    押しっぱなしの間は符号を保持する。
+    //    → 円状レールの頂点・急カーブで接線の軸成分が反転しても止まらない/逆走しない
     // =================================================================
-    currentDistance_ += MoveAlongSign(cur, currentDistance_, moveInput) * moveSpeed_ * dt;
+    if ( moveInput != 0.0f ) {
+        bool freshPress = ( prevMoveInput_ == 0.0f ) || ( moveInput * prevMoveInput_ < 0.0f );
+        if ( freshPress || dsSign_ == 0.0f ) {
+            Vector3 tan = cur.GetTangentByDistance(currentDistance_);
+            float axisComp = curHorizontal ? tan.x : tan.z;
+            if ( std::abs(axisComp) > 0.05f ) {
+                // 接線の軸成分の向きに合わせる（D=世界+X / W=世界+Z）
+                dsSign_ = moveInput * ( ( axisComp >= 0.0f ) ? 1.0f : -1.0f );
+            } else {
+                // 接線がほぼ直交（円の頂点など）→ とりあえず押した向きへ
+                dsSign_ = moveInput;
+            }
+        }
+        currentDistance_ += dsSign_ * moveSpeed_ * dt;
+    } else {
+        dsSign_ = 0.0f; // 離したら次に押した時に向きを決め直す
+    }
+    prevMoveInput_ = moveInput;
 
     // =================================================================
     // 3. 終端：同じタイプの連結レールへは地続きで持ち越し。
-    //    違うタイプ／接続なしは端で停止（自動で別タイプへ突っ込まない）。
+    //    ループ（円状）は距離をラップして回り続ける。
+    //    接続なしの端は「空中へ飛び出す」（穴に落ちる／ジャンプで飛び越える）。
     // =================================================================
     bool transitioned = false;
-    if ( switchCooldown_ <= 0.0f ) {
+    if ( cur.isLoop ) {
+        // ループ：端が無い。距離を周回でラップ → A/D(W/S) でくるくる回れる
+        const float len = cur.GetLength();
+        if ( len > 0.0f ) {
+            while ( currentDistance_ > len )  currentDistance_ -= len;
+            while ( currentDistance_ < 0.0f ) currentDistance_ += len;
+        }
+    } else if ( switchCooldown_ <= 0.0f ) {
         const float len = cur.GetLength();
 
         auto tryContinue = [&](int connIdx, bool enterFront, float over) -> bool{
@@ -89,15 +132,42 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             currentRailIndex_ = connIdx;
             currentDistance_  = enterFront ? over : ( newLen - over );
             currentDistance_  = std::clamp(currentDistance_, 0.0f, newLen);
+            // 持ち越し後も同じ物理方向へ進み続けるよう、進行符号を引き継ぐ
+            dsSign_ = enterFront ? 1.0f : -1.0f;
             return true;
             };
 
+        // 接続の無い端を越えた → 勢いのまま空中へ飛び出す
+        auto detachToAir = [&](float edgeS){
+            Vector3 edgePos = cur.GetPositionByDistance(edgeS);
+            Vector3 tan = cur.GetTangentByDistance(edgeS);
+            inAir_ = true;
+            position_ = { edgePos.x, edgePos.y + heightOffset_, edgePos.z };
+            airVelocity_ = { tan.x * dsSign_ * moveSpeed_, jumpVelocity_, tan.z * dsSign_ * moveSpeed_ };
+            heightOffset_ = 0.0f;
+            jumpVelocity_ = 0.0f;
+            isGrounded_   = false;
+            currentDistance_ = edgeS;
+            };
+
         if ( currentDistance_ > len ) {
-            if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) transitioned = true;
-            else currentDistance_ = len;   // 端で停止
+            if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) {
+                transitioned = true;
+            } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
+                detachToAir(len);
+                return; // 以降はレール上の処理なのでスキップ
+            } else {
+                currentDistance_ = len;   // 端で停止
+            }
         } else if ( currentDistance_ < 0.0f ) {
-            if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) transitioned = true;
-            else currentDistance_ = 0.0f;  // 端で停止
+            if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) {
+                transitioned = true;
+            } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
+                detachToAir(0.0f);
+                return; // 以降はレール上の処理なのでスキップ
+            } else {
+                currentDistance_ = 0.0f;  // 端で停止
+            }
         }
     } else {
         // クールダウン中は端でクランプ（乗り換え直後のワープ防止）
@@ -111,7 +181,10 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     //    横レール上の W/S → 近くの縦レールへ／縦レール上の A/D → 近くの横レールへ
     // =================================================================
     if ( switchInput != 0 && switchCooldown_ <= 0.0f && !transitioned ) {
-        const float kReach  = 4.0f;  // 乗り換え先の最寄り点までの最大3D距離
+        // 乗り換えは「ジャンクション（接続点）のすぐそば」でしか発動しない。
+        // 範囲を狭くすることで、横レール上では実質 A/D だけ・縦レール上では W/S だけが
+        // 効き、交差点に立った時だけ乗り換えキーが意味を持つ（誤爆しない）。
+        const float kReach  = 1.2f;  // 乗り換え先の最寄り点までの最大3D距離（狭いほど誤爆しない）
         const float kMinOff = 0.3f;  // 押した方向にこれ以上伸びているレールであること
         const bool  wantHorizontalTarget = !curHorizontal; // 縦に乗ってたら横へ／横なら縦へ
 
@@ -157,14 +230,20 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             currentDistance_ = std::clamp(bestDist, margin, bl - margin);
             switchCooldown_  = 0.25f;
             transitioned     = true;
+            dsSign_          = 0.0f; // 新しいレールでは次の入力で進行方向を決め直す
         }
     }
 
     // =================================================================
-    // 5. 最終的な距離をクランプ
+    // 5. 最終的な距離をクランプ（ループはラップ）
     // =================================================================
     const SplineRail& rail = allRails[currentRailIndex_];
-    currentDistance_ = std::clamp(currentDistance_, 0.0f, rail.GetLength());
+    if ( rail.isLoop && rail.GetLength() > 0.0f ) {
+        while ( currentDistance_ > rail.GetLength() ) currentDistance_ -= rail.GetLength();
+        while ( currentDistance_ < 0.0f )             currentDistance_ += rail.GetLength();
+    } else {
+        currentDistance_ = std::clamp(currentDistance_, 0.0f, rail.GetLength());
+    }
 
     // =================================================================
     // 6. ジャンプ（m / m/s / m/s^2 で物理計算 → フレームレート非依存）
@@ -188,34 +267,71 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     basePos.y += heightOffset_;
     position_ = basePos;
 
-    // 向き：最終レールのタイプに対応する移動キーで、進行方向(ワールド)へ向ける。
-    // 乗り換え直後にレールタイプが変わっても正しい向きになるよう、ここで取り直す。
-    const bool finalHorizontal = ( rail.type == SplineRail::RailType::Horizontal );
-    float facingMove = 0.0f;
-    if ( finalHorizontal ) {
-        if ( input->Pushkey(DIK_D) ) facingMove += 1.0f;
-        if ( input->Pushkey(DIK_A) ) facingMove -= 1.0f;
-    } else {
-        if ( input->Pushkey(DIK_W) ) facingMove += 1.0f;
-        if ( input->Pushkey(DIK_S) ) facingMove -= 1.0f;
-    }
+    // 向き：実際に進んでいる方向（接線 × 進行符号）へ向ける。
+    // dsSign_ ベースなので円状レールの途中でも進行方向と一致してブレない。
     Vector3 tangent = rail.GetTangentByDistance(currentDistance_);
-    if ( Length(tangent) > 0.001f && facingMove != 0.0f ) {
-        float axisComp = finalHorizontal ? tangent.x : tangent.z;
-        float along    = facingMove * ( ( axisComp >= 0.0f ) ? 1.0f : -1.0f ); // ワールド進行の符号
-        Vector3 vel = { tangent.x * along, tangent.y * along, tangent.z * along };
+    if ( Length(tangent) > 0.001f && dsSign_ != 0.0f ) {
+        Vector3 vel = { tangent.x * dsSign_, tangent.y * dsSign_, tangent.z * dsSign_ };
         rotation_.y = std::atan2(vel.x, vel.z);
         rotation_.x = 0.0f;
         rotation_.z = 0.0f;
     }
 }
 
-// 横レール=世界X / 縦レール=世界Z に沿って進む向きの符号を返す
-static float MoveAlongSign(const SplineRail& rail, float currentDistance, float moveInput){
-    if ( moveInput == 0.0f ) return 0.0f;
-    const bool horizontal = ( rail.type == SplineRail::RailType::Horizontal );
-    Vector3 tan = rail.GetTangentByDistance(currentDistance);
-    float axisComp = horizontal ? tan.x : tan.z;
-    float dir = ( axisComp >= 0.0f ) ? 1.0f : -1.0f; // +s でその軸が増える向き
-    return moveInput * dir;
+// =====================================================================
+//  空中状態：レールから離れて自由落下。
+//   ・下降中に下へレールがあれば着地して復帰
+//   ・kKillY より下に落ちたらスタートへリスポーン
+// =====================================================================
+void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
+    // 重力で自由落下
+    airVelocity_.y -= gravity_ * dt;
+    position_.x += airVelocity_.x * dt;
+    position_.y += airVelocity_.y * dt;
+    position_.z += airVelocity_.z * dt;
+
+    // 進行方向を向く
+    float horizSpeed = std::sqrt(airVelocity_.x * airVelocity_.x + airVelocity_.z * airVelocity_.z);
+    if ( horizSpeed > 0.1f ) {
+        rotation_.y = std::atan2(airVelocity_.x, airVelocity_.z);
+        rotation_.x = 0.0f;
+        rotation_.z = 0.0f;
+    }
+
+    // 下降中だけ着地判定（上昇中にレールへ吸い付かないように）
+    if ( airVelocity_.y <= 0.0f ) {
+        const float kLandXZ = 0.8f; // 水平にこの距離以内なら乗れる
+        const float kLandY  = 0.5f; // レール面からこの高さの範囲で接地とみなす
+
+        for ( int i = 0; i < ( int ) allRails.size(); ++i ) {
+            const SplineRail& r = allRails[i];
+            if ( r.nodes.size() < 2 ) continue;
+
+            float cd = r.GetClosestDistance(position_);
+            Vector3 cp = r.GetPositionByDistance(cd);
+
+            float dx = cp.x - position_.x, dz = cp.z - position_.z;
+            if ( std::sqrt(dx * dx + dz * dz) > kLandXZ ) continue;
+
+            float above = position_.y - cp.y; // レール面からどれだけ上か
+            if ( above < -0.2f || above > kLandY ) continue;
+
+            // 着地！レール移動に復帰
+            inAir_ = false;
+            currentRailIndex_ = i;
+            currentDistance_  = cd;
+            heightOffset_ = 0.0f;
+            jumpVelocity_ = 0.0f;
+            isGrounded_   = true;
+            airVelocity_  = { 0.0f, 0.0f, 0.0f };
+            dsSign_       = 0.0f;  // 次の入力で進行方向を決め直す
+            switchCooldown_ = 0.1f;
+            return;
+        }
+    }
+
+    // 落下死 → スタートへリスポーン
+    if ( position_.y < kKillY ) {
+        Initialize();
+    }
 }
