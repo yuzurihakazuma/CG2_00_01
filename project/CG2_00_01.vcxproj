@@ -168,6 +168,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClCompile Include="engine\postEffect\Bloom.cpp" />
     <ClCompile Include="engine\3d\animation\Animation.cpp" />
     <ClCompile Include="engine\collision\Collision.cpp" />
+    <ClCompile Include="engine\collision\CollisionManager.cpp" />
     <ClCompile Include="engine\3d\model\Model.cpp" />
     <ClCompile Include="engine\3d\model\ModelCommon.cpp" />
     <ClCompile Include="engine\3d\model\ModelManager.cpp" />
@@ -190,6 +191,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClCompile Include="engine\utils\CrashDumper.cpp" />
     <ClCompile Include="engine\utils\ImGuiManager.cpp" />
     <ClCompile Include="engine\utils\LogManager.cpp" />
+    <ClCompile Include="engine\utils\GlobalVariables.cpp" />
     <ClCompile Include="externals\imgui\imgui.cpp" />
     <ClCompile Include="externals\imgui\imgui_demo.cpp" />
     <ClCompile Include="externals\imgui\imgui_draw.cpp" />
@@ -212,6 +214,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClCompile Include="engine\math\VectorMath.cpp" />
     <ClCompile Include="engine\graphics\RootSignatureBuilder.cpp" />
     <ClCompile Include="engine\graphics\RenderTexture.cpp" />
+    <ClCompile Include="engine\graphics\DebugDraw.cpp" />
     <ClCompile Include="engine\graphics\GraphicsPipelineBuilder.cpp" />
     <ClCompile Include="engine\postEffect\PostEffect.cpp" />
     <ClCompile Include="engine\utils\Level\LevelManager.cpp" />
@@ -277,6 +280,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="engine\camera\Camera.h" />
     <ClInclude Include="engine\camera\DebugCamera.h" />
     <ClInclude Include="engine\collision\Collider.h" />
+    <ClInclude Include="engine\collision\CollisionManager.h" />
     <ClInclude Include="engine\graphics\PipelineManager.h" />
     <ClInclude Include="engine\graphics\PipelineType.h" />
     <ClInclude Include="engine\graphics\ResourceFactory.h" />
@@ -295,6 +299,10 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="engine\utils\CrashDumper.h" />
     <ClInclude Include="engine\utils\ImGuiManager.h" />
     <ClInclude Include="engine\utils\LogManager.h" />
+    <ClInclude Include="engine\utils\GlobalVariables.h" />
+    <ClInclude Include="engine\utils\Easing.h" />
+    <ClInclude Include="engine\utils\Random.h" />
+    <ClInclude Include="engine\utils\Tween.h" />
     <ClInclude Include="externals\imgui\imconfig.h" />
     <ClInclude Include="externals\imgui\imgui.h" />
     <ClInclude Include="externals\imgui\imgui_impl_dx12.h" />
@@ -320,6 +328,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="engine\math\VectorMath.h" />
     <ClInclude Include="engine\graphics\RootSignatureBuilder.h" />
     <ClInclude Include="engine\graphics\RenderTexture.h" />
+    <ClInclude Include="engine\graphics\DebugDraw.h" />
     <ClInclude Include="engine\graphics\GraphicsPipelineBuilder.h" />
     <ClInclude Include="engine\postEffect\PostEffect.h" />
     <ClInclude Include="engine\utils\Level\LevelManager.h" />

@@ -4,6 +4,7 @@
 class LevelEditor;
 class BlenderImporter;
 class Camera;
+class DebugCamera;
 class GPUParticleEditor;
 class GPUParticleEmitter;
 class SkinnedObj3d;
@@ -59,11 +60,15 @@ public:
 	// ギズモ／インスペクタで操作する対象オブジェクトを登録する（シーンから渡す）
 	void SetGizmoTarget(Obj3d* obj){ gizmoTarget_ = obj; }
 
+	// メニューバーから ON/OFF するためにシーンのデバッグカメラを登録する（所有しない）
+	void SetDebugCamera(DebugCamera* dc){ debugCamera_ = dc; }
+
 	// シーン切り替え時に外部参照をまとめてリセットする（ダングリングポインタ防止）
 	void ResetSceneReferences(){
 		targetSkinnedObj_ = nullptr;
 		gizmoTarget_ = nullptr;
 		editorCamera_ = nullptr;
+		debugCamera_ = nullptr;
 		gameViewSrvIndex_ = 0;
 	}
 
@@ -105,6 +110,7 @@ private:
     // ギズモ／インスペクタ用
     Obj3d* gizmoTarget_ = nullptr;       // 操作対象（所有しない）
     const Camera* editorCamera_ = nullptr; // ギズモ計算に使うカメラ（所有しない）
+    DebugCamera* debugCamera_ = nullptr;   // シーンのデバッグカメラ（所有しない・メニューから操作）
     int gizmoOperation_ = 7;             // ImGuizmo::TRANSLATE(=7) を既定に
     int gizmoMode_ = 1;                  // ImGuizmo::WORLD(=1)
 

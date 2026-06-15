@@ -169,3 +169,53 @@ float Input::GetRightStickY() {
 	float y = static_cast<float>(joyState.Gamepad.sThumbRY) / 32768.0f;
 	return (std::abs(y) < 0.2f) ? 0.0f : y;
 }
+
+// --- ラジアル・デッドゾーン処理つきの Vector2 スティック ---
+//   生の (x,y) の長さが deadzone 未満なら 0。超えたら deadzone を差し引いて 0〜1 に再スケール。
+static Vector2 ProcessStick(float rawX, float rawY, float deadzone){
+	float mag = std::sqrt(rawX * rawX + rawY * rawY);
+	if ( mag < deadzone || mag < 1e-6f ) return { 0.0f, 0.0f };
+	float scaled = ( mag - deadzone ) / ( 1.0f - deadzone ); // 0〜1へ
+	if ( scaled > 1.0f ) scaled = 1.0f;
+	float nx = rawX / mag, ny = rawY / mag;
+	return { nx * scaled, ny * scaled };
+}
+
+Vector2 Input::GetLeftStick(float deadzone){
+	if ( !isJoyConnected ) return { 0.0f, 0.0f };
+	float x = static_cast<float>(joyState.Gamepad.sThumbLX) / 32768.0f;
+	float y = static_cast<float>(joyState.Gamepad.sThumbLY) / 32768.0f;
+	return ProcessStick(x, y, deadzone);
+}
+Vector2 Input::GetRightStick(float deadzone){
+	if ( !isJoyConnected ) return { 0.0f, 0.0f };
+	float x = static_cast<float>(joyState.Gamepad.sThumbRX) / 32768.0f;
+	float y = static_cast<float>(joyState.Gamepad.sThumbRY) / 32768.0f;
+	return ProcessStick(x, y, deadzone);
+}
+
+// --- アクションマッピング ---
+void Input::BindAction(const std::string& action, BYTE keyboardKey, WORD padButton){
+	actions_[action].push_back({ keyboardKey, padButton });
+}
+void Input::ClearAction(const std::string& action){
+	actions_.erase(action);
+}
+bool Input::IsAction(const std::string& action){
+	auto it = actions_.find(action);
+	if ( it == actions_.end() ) return false;
+	for ( const auto& b : it->second ) {
+		if ( b.key != 0 && Pushkey(b.key) ) return true;
+		if ( b.pad != 0 && PushJoystickButton(b.pad) ) return true;
+	}
+	return false;
+}
+bool Input::IsActionTriggered(const std::string& action){
+	auto it = actions_.find(action);
+	if ( it == actions_.end() ) return false;
+	for ( const auto& b : it->second ) {
+		if ( b.key != 0 && Triggerkey(b.key) ) return true;
+		if ( b.pad != 0 && TriggerJoystickButton(b.pad) ) return true;
+	}
+	return false;
+}

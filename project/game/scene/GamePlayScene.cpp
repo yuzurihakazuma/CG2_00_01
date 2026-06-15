@@ -30,6 +30,7 @@
 #include "engine/3d/model/Model.h"
 #include "engine/utils/EditorManager.h"
 #include "engine/utils/Level/BlenderImporter.h"
+#include "engine/graphics/DebugDraw.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
@@ -111,6 +112,8 @@ void GamePlayScene::Initialize(){
 	// デバッグカメラ生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 	debugCamera_->Initialize();
+	// メニューバー「表示」からON/OFFできるよう登録
+	EditorManager::GetInstance()->SetDebugCamera(debugCamera_.get());
 
 	// プレイヤーオブジェクト生成
 	testObj_ = Obj3d::Create("animatedCube");
@@ -418,6 +421,13 @@ void GamePlayScene::Draw(){
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
 
+	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
+	//   Game View にも単体表示にも反映される（深度テストありで3D形状に隠れる）。
+	if ( showDebugGrid_ ) {
+		DebugDraw::GetInstance()->Grid(20.0f, 1.0f, { 0.3f, 0.3f, 0.35f, 0.5f }, 0.0f);
+	}
+	DebugDraw::GetInstance()->Render(camera_.get());
+
 	// 2. 【MRT終了】3Dの描画が終わったので、2枚のキャンバスを読み込みモードに戻す
 	PostEffect::GetInstance()->PostDrawSceneMRT(commandList);
 
@@ -440,8 +450,6 @@ void GamePlayScene::Draw(){
 	//    エディタアクティブ時はRTVのセットのみ行い描画はスキップする
 	PostEffect::GetInstance()->FinalBlit(commandList, finalSrv, EditorManager::GetInstance()->IsActive());
 
-
-
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 	if (sprite_) { sprite_->Draw(); }
@@ -461,6 +469,15 @@ void GamePlayScene::DrawDebugUI(){
 
 
 	TextManager::GetInstance()->DrawDebugUI();
+
+	// デバッグ描画（DebugDraw）の表示設定 — 共有「詳細設定」窓に合流
+	if ( ImGui::Begin("インスペクター (詳細設定)") ) {
+		if ( ImGui::CollapsingHeader("デバッグ描画 (DebugDraw)") ) {
+			ImGui::Checkbox("グリッドを表示", &showDebugGrid_);
+			ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
+		}
+	}
+	ImGui::End();
 
 	ImGui::Begin("Environment Map Control");
 

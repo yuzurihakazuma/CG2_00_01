@@ -104,4 +104,7 @@ private: // メンバ変数
 	// 円柱オーラ用のUVスクロールタイマー
 	float auraCylinderScroll_ = 0.0f;
 
+	// デバッグ描画のグリッド表示ON/OFF
+	bool showDebugGrid_ = true;
+
 };
