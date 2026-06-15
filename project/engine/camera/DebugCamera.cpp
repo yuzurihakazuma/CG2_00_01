@@ -40,65 +40,72 @@ void DebugCamera::Update(Camera* camera) {
     // Inputクラスのインスタンスを取得
     Input* input = Input::GetInstance();
 
-    // 1 = 右クリックが押されているか判定
+    // 右ドラッグ中：視点回転（先に回転を確定させてから移動方向を計算する）
     if (input->PushMouseButton(1)) {
-
-        // --- マウスによる視点回転 ---
-        // マウスの移動量を取得
         float dx = input->GetMouseMoveX();
         float dy = input->GetMouseMoveY();
-
         const float rotationSpeed = 0.003f; // 回転の感度
         rotation.y += dx * rotationSpeed;
         rotation.x += dy * rotationSpeed;
-
-        // X軸（上下）の回転を制限
-        const float limit = 1.5f; // 約85度
+        const float limit = 1.5f; // 約85度で頭打ち
         rotation.x = std::clamp(rotation.x, -limit, limit);
+    }
 
+    // 向いている角度から「前」「右」「上」の方向を求める（移動系で共通利用）
+    Matrix4x4 rotateMatrix = Multiply(MakeRotateX(rotation.x), MakeRotateY(rotation.y));
+    Vector3 forward = Transforms({ 0.0f, 0.0f, 1.0f }, rotateMatrix);
+    Vector3 right   = Transforms({ 1.0f, 0.0f, 0.0f }, rotateMatrix);
+    Vector3 up      = Transforms({ 0.0f, 1.0f, 0.0f }, rotateMatrix);
 
-        // --- キーボードによる移動操作 (右クリック中のみ) ---
-        // 向いている角度から「前」「右」「上」の方向を計算
-        Matrix4x4 rotateMatrix = Multiply(MakeRotateX(rotation.x), MakeRotateY(rotation.y));
-        Vector3 forward = Transforms({ 0.0f, 0.0f, 1.0f }, rotateMatrix);
-        Vector3 right = Transforms({ 1.0f, 0.0f, 0.0f }, rotateMatrix);
-        Vector3 up = Transforms({ 0.0f, 1.0f, 0.0f }, rotateMatrix);
+    float moveSpeed = 0.2f;
+    if (input->Pushkey(DIK_LSHIFT)) { moveSpeed *= 3.0f; } // Shiftで高速
 
-        float moveSpeed = 0.2f;
+    // WASD / Q,E で移動（右ドラッグ中のみ。視点を回しながら飛び回る用）
+    if (input->PushMouseButton(1)) {
+        if (input->Pushkey(DIK_W)) translation = Add(translation, Multiply( moveSpeed, forward));
+        if (input->Pushkey(DIK_S)) translation = Add(translation, Multiply(-moveSpeed, forward));
+        if (input->Pushkey(DIK_D)) translation = Add(translation, Multiply( moveSpeed, right));
+        if (input->Pushkey(DIK_A)) translation = Add(translation, Multiply(-moveSpeed, right));
+        if (input->Pushkey(DIK_E)) translation = Add(translation, Multiply( moveSpeed, up));
+        if (input->Pushkey(DIK_Q)) translation = Add(translation, Multiply(-moveSpeed, up));
+    }
 
-        // 左Shiftキーを押していると高速移動
-        if (input->Pushkey(DIK_LSHIFT)) {
-            moveSpeed *= 3.0f;
-        }
+    // ★ホイール：前後ズーム（ドラッグ不要でいつでも効く）
+    float wheel = input->GetMouseWheel();
+    if (wheel != 0.0f) {
+        const float zoomSpeed = 0.01f; // DirectInputのホイール量(±120単位)に対する係数
+        translation = Add(translation, Multiply(wheel * zoomSpeed, forward));
+    }
 
-        // WASD キーで移動
-        if (input->Pushkey(DIK_W)) {
-            translation = Add(translation, Multiply(moveSpeed, forward));
-
-        }
-
-        if (input->Pushkey(DIK_S)) {
-            translation = Add(translation, Multiply(-moveSpeed, forward));
-        }
-        if (input->Pushkey(DIK_D)) {
-            translation = Add(translation, Multiply(moveSpeed, right));
-        }
-        if (input->Pushkey(DIK_A)) {
-            translation = Add(translation, Multiply(-moveSpeed, right));
-        }
-
-        // E, Q キーで上下移動
-        if (input->Pushkey(DIK_E)) {
-            translation = Add(translation, Multiply(moveSpeed, up));
-        }
-        if (input->Pushkey(DIK_Q)) {
-            translation = Add(translation, Multiply(-moveSpeed, up));
-        }
+    // ★中ドラッグ：平行移動（パン）。画面の右/上方向にスライド
+    if (input->PushMouseButton(2)) {
+        float dx = input->GetMouseMoveX();
+        float dy = input->GetMouseMoveY();
+        const float panSpeed = 0.01f;
+        translation = Add(translation, Multiply(-dx * panSpeed, right)); // マウス右→視界左へ流れる
+        translation = Add(translation, Multiply( dy * panSpeed, up));    // マウス下→視界上へ流れる
     }
 
     // 更新した新しい位置と角度を本物のカメラにセット！
     camera->SetTranslation(translation);
     camera->SetRotation(rotation);
+}
+
+// 外部（メニュー等）からの ON/OFF。切替時に元カメラ姿勢を保存/復元する
+void DebugCamera::SetActive(bool active){
+    if (active == isActive_) return;
+    if (targetCamera_) {
+        if (active) {
+            // OFF→ON：元の見た目を覚えておく
+            preCameraPos_ = targetCamera_->GetTransform().translate;
+            preCameraRot_ = targetCamera_->GetTransform().rotate;
+        } else {
+            // ON→OFF：元の見た目に戻す
+            targetCamera_->SetTranslation(preCameraPos_);
+            targetCamera_->SetRotation(preCameraRot_);
+        }
+    }
+    isActive_ = active;
 }
 
 
@@ -107,31 +114,17 @@ void DebugCamera::DrawDebugUI(){
     if ( ImGui::Begin("インスペクター (詳細設定)") ) {
         if ( ImGui::CollapsingHeader("デバッグカメラ (Debug Camera)", ImGuiTreeNodeFlags_DefaultOpen) ) {
 
-            bool isPreDebugCameraActive = isActive_;
+            // ※ ON/OFF はメニューバー「表示(View)」に移動しました。
+            ImGui::Text("状態: %s", isActive_ ? "有効" : "無効");
+            ImGui::TextDisabled("ON/OFF はメニューバー「表示」から");
 
-            // チェックボックスでON/OFFを切り替え
-            ImGui::Checkbox("デバッグカメラを有効化", &isActive_);
-
-            // ターゲットとなるカメラが存在し、状態が切り替わったときの処理
-            if ( targetCamera_ ) {
-                // OFF -> ON になった瞬間（切り替え前の状態を保存）
-                if ( isActive_ && !isPreDebugCameraActive ) {
-                    preCameraPos_ = targetCamera_->GetTransform().translate;
-                    preCameraRot_ = targetCamera_->GetTransform().rotate;
-                }
-                // ON -> OFF になった瞬間（切り替え前の状態を復元）
-                if ( !isActive_ && isPreDebugCameraActive ) {
-                    targetCamera_->SetTranslation(preCameraPos_);
-                    targetCamera_->SetRotation(preCameraRot_);
-                }
-            }
-
-            // 操作方法の説明を追加（ユーザーに親切な設計）
+            // 操作方法の説明
             ImGui::TextDisabled("操作方法:");
-            ImGui::Text("  右ドラッグ : 視点回転");
-            ImGui::Text("  ホイール   : 前後移動");
-            ImGui::Text("  中ドラッグ : 平行移動");
-            ImGui::Text("  WASD       : 水行・昇降移動");
+            ImGui::Text("  右ドラッグ      : 視点回転");
+            ImGui::Text("  右ドラッグ+WASD : 飛行移動 / Q,E : 上下");
+            ImGui::Text("  ホイール        : 前後ズーム");
+            ImGui::Text("  中ドラッグ      : 平行移動（パン）");
+            ImGui::Text("  Shift           : 高速移動");
         }
     }
     ImGui::End();

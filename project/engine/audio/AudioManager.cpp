@@ -3,6 +3,8 @@
 #include <fstream>
 #include <cassert>
 #include <cstring>
+// --- エンジン側のファイル ---
+#include "engine/base/TimeManager.h"
 
 AudioManager* AudioManager::GetInstance(){
     static AudioManager instance;
@@ -26,9 +28,9 @@ void AudioManager::Initialize(){
 
 void AudioManager::Finalize(){
 	// 再生中の音声ボイスの破棄
-    playingVoices_.clear();
-    
-   
+    voices_.clear();
+
+
 	// マスターボイスの破棄
     if ( masterVoice_ ) {
         masterVoice_->DestroyVoice();
@@ -44,22 +46,161 @@ void AudioManager::Finalize(){
     CoUninitialize();
 }
 
+// 実音量 = ユーザ音量 × フェード係数 × カテゴリ音量 × マスター音量
+void AudioManager::ApplyVolume(PlayingVoice& pv){
+    float catVol = categoryVolume_[( pv.category == AudioCategory::BGM ) ? 0 : 1];
+    float v = pv.userVolume * pv.fadeMul * catVol * masterVolume_;
+    if ( v < 0.0f ) v = 0.0f;
+    if ( pv.voice ) pv.voice->SetVolume(v);
+}
+
 void AudioManager::UpdateVoices(){
-    // playingVoices_ を走査して、再生が終わったボイスを削除する
-    for ( auto it = playingVoices_.begin(); it != playingVoices_.end(); ) {
+    const float dt = Time::GetInstance()->GetUnscaledDeltaTime(); // 音はポーズに影響されない実時間で
 
-        XAUDIO2_VOICE_STATE st {};
-        ( *it )->GetState(&st);
+    for ( auto it = voices_.begin(); it != voices_.end(); ) {
+        PlayingVoice& pv = it->second;
 
-        // BuffersQueued == 0 なら、もう再生するバッファがない＝再生終了扱い
-        if ( st.BuffersQueued == 0 ) {
-            // erase で SourceVoicePtr が破棄され、DestroyVoice() が呼ばれる
-            it = playingVoices_.erase(it);
-        } else {
-            ++it;
+        // --- フェードの進行 ---
+        if ( pv.fading ) {
+            pv.fadeElapsed += dt;
+            float t = ( pv.fadeTime > 1e-6f ) ? ( pv.fadeElapsed / pv.fadeTime ) : 1.0f;
+            if ( t >= 1.0f ) { t = 1.0f; pv.fading = false; }
+            pv.fadeMul = pv.fadeFrom + ( pv.fadeTo - pv.fadeFrom ) * t;
+            ApplyVolume(pv);
+            if ( !pv.fading && pv.stopWhenFadeDone ) {
+                if ( pv.voice ) pv.voice->Stop();
+                it = voices_.erase(it); // ボイス破棄
+                continue;
+            }
         }
+
+        // --- 再生終了の掃除（ポーズ中・ループ中は消さない）---
+        if ( !pv.paused && !pv.loop && pv.voice ) {
+            XAUDIO2_VOICE_STATE st {};
+            pv.voice->GetState(&st);
+            if ( st.BuffersQueued == 0 ) {
+                it = voices_.erase(it);
+                continue;
+            }
+        }
+        ++it;
     }
 }
+
+// 内部共通：1音を生成して再生し、id を返す
+AudioHandle AudioManager::Play(const std::string& filename, bool loop, float volume, AudioCategory category){
+    assert(soundDatas_.contains(filename));
+    SoundData& soundData = soundDatas_[filename];
+
+    IXAudio2SourceVoice* rawVoice = nullptr;
+    HRESULT result = xAudio2_->CreateSourceVoice(&rawVoice, &soundData.wfex);
+    assert(SUCCEEDED(result));
+    SourceVoicePtr voice(rawVoice);
+
+    XAUDIO2_BUFFER buf {};
+    buf.pAudioData = soundData.buffer.data();
+    buf.AudioBytes = static_cast< UINT32 >( soundData.buffer.size() );
+    buf.Flags = XAUDIO2_END_OF_STREAM;
+    if ( loop ) { buf.LoopCount = XAUDIO2_LOOP_INFINITE; buf.Flags = 0; }
+
+    result = voice->SubmitSourceBuffer(&buf);
+    assert(SUCCEEDED(result));
+
+    uint32_t id = nextId_++;
+    if ( nextId_ == 0 ) nextId_ = 1; // 0(無効)は飛ばす
+
+    PlayingVoice pv;
+    pv.voice = std::move(voice);
+    pv.category = category;
+    pv.userVolume = volume;
+    pv.loop = loop;
+    pv.fadeMul = 1.0f;
+
+    // 登録してから音量適用＆再生
+    auto& stored = ( voices_[id] = std::move(pv) );
+    ApplyVolume(stored);
+    stored.voice->Start();
+
+    return AudioHandle(id);
+}
+
+void AudioManager::SetMasterVolume(float v){
+    masterVolume_ = ( v < 0.0f ) ? 0.0f : v;
+    for ( auto& [id, pv] : voices_ ) { ApplyVolume(pv); }
+}
+void AudioManager::SetCategoryVolume(AudioCategory cat, float v){
+    categoryVolume_[( cat == AudioCategory::BGM ) ? 0 : 1] = ( v < 0.0f ) ? 0.0f : v;
+    for ( auto& [id, pv] : voices_ ) { ApplyVolume(pv); }
+}
+float AudioManager::GetCategoryVolume(AudioCategory cat) const{
+    return categoryVolume_[( cat == AudioCategory::BGM ) ? 0 : 1];
+}
+
+void AudioManager::StopById(uint32_t id){
+    auto it = voices_.find(id);
+    if ( it == voices_.end() ) return;
+    if ( it->second.voice ) it->second.voice->Stop();
+    voices_.erase(it);
+}
+void AudioManager::PauseById(uint32_t id){
+    auto it = voices_.find(id);
+    if ( it == voices_.end() || !it->second.voice ) return;
+    it->second.voice->Stop();
+    it->second.paused = true;
+}
+void AudioManager::ResumeById(uint32_t id){
+    auto it = voices_.find(id);
+    if ( it == voices_.end() || !it->second.voice ) return;
+    it->second.voice->Start();
+    it->second.paused = false;
+}
+void AudioManager::SetVolumeById(uint32_t id, float volume){
+    auto it = voices_.find(id);
+    if ( it == voices_.end() ) return;
+    it->second.userVolume = ( volume < 0.0f ) ? 0.0f : volume;
+    ApplyVolume(it->second);
+}
+void AudioManager::FadeById(uint32_t id, float seconds, float targetVolume, bool stopWhenDone){
+    auto it = voices_.find(id);
+    if ( it == voices_.end() ) return;
+    PlayingVoice& pv = it->second;
+    pv.fading = true;
+    pv.fadeTime = ( seconds > 0.0f ) ? seconds : 0.0001f;
+    pv.fadeElapsed = 0.0f;
+    pv.fadeFrom = pv.fadeMul;
+    pv.fadeTo = ( targetVolume < 0.0f ) ? 0.0f : targetVolume;
+    pv.stopWhenFadeDone = stopWhenDone;
+}
+bool AudioManager::IsPlayingById(uint32_t id) const{
+    auto it = voices_.find(id);
+    if ( it == voices_.end() ) return false;
+    if ( it->second.paused ) return true;
+    if ( !it->second.voice ) return false;
+    XAUDIO2_VOICE_STATE st {};
+    it->second.voice->GetState(&st);
+    return st.BuffersQueued > 0;
+}
+void AudioManager::StopAll(){
+    for ( auto& [id, pv] : voices_ ) { if ( pv.voice ) pv.voice->Stop(); }
+    voices_.clear();
+}
+void AudioManager::StopCategory(AudioCategory category){
+    for ( auto it = voices_.begin(); it != voices_.end(); ) {
+        if ( it->second.category == category ) {
+            if ( it->second.voice ) it->second.voice->Stop();
+            it = voices_.erase(it);
+        } else { ++it; }
+    }
+}
+
+// ===== AudioHandle（AudioManager に委譲するだけ）=====
+void AudioHandle::Stop(){ if ( IsValid() ) AudioManager::GetInstance()->StopById(id_); }
+void AudioHandle::Pause(){ if ( IsValid() ) AudioManager::GetInstance()->PauseById(id_); }
+void AudioHandle::Resume(){ if ( IsValid() ) AudioManager::GetInstance()->ResumeById(id_); }
+void AudioHandle::SetVolume(float volume){ if ( IsValid() ) AudioManager::GetInstance()->SetVolumeById(id_, volume); }
+void AudioHandle::FadeOut(float seconds){ if ( IsValid() ) AudioManager::GetInstance()->FadeById(id_, seconds, 0.0f, true); }
+void AudioHandle::FadeIn(float seconds, float targetVolume){ if ( IsValid() ) AudioManager::GetInstance()->FadeById(id_, seconds, targetVolume, false); }
+bool AudioHandle::IsPlaying() const{ return IsValid() && AudioManager::GetInstance()->IsPlayingById(id_); }
 
 
 void AudioManager::LoadWave(const std::string& filename) {
@@ -76,47 +217,9 @@ void AudioManager::LoadWave(const std::string& filename) {
         soundDatas_[filename] = LoadWaveInternal(filename);
     }
 }
+// 従来互換：ハンドルを返さずに再生（内部は Play に委譲）
 void AudioManager::PlayWave(const std::string& filename, bool loop, float volume){
-    // 未読み込みならエラー（またはロードする）
-    assert(soundDatas_.contains(filename));
-    SoundData& soundData = soundDatas_[filename];
-
-	// ソースボイスの取得
-    HRESULT result;
-
-    // ソースボイス（音源）の生成
-    IXAudio2SourceVoice* rawVoice = nullptr;
-    result = xAudio2_->CreateSourceVoice(&rawVoice, &soundData.wfex);
-    assert(SUCCEEDED(result));
-
-	// スマートポインタに変換
-    SourceVoicePtr voice(rawVoice);
-
-    // 再生設定
-    XAUDIO2_BUFFER buf {};
-    buf.pAudioData = soundData.buffer.data();                
-    buf.AudioBytes = static_cast< UINT32 >( soundData.buffer.size() );
-    buf.Flags = XAUDIO2_END_OF_STREAM;
-
-    // ループ設定
-    if ( loop ) {
-        buf.LoopCount = XAUDIO2_LOOP_INFINITE; // 無限ループ
-        buf.Flags = 0;
-    }
-
-    voice->SetVolume(volume);
-
- 
-    // バッファを登録
-    result = voice->SubmitSourceBuffer(&buf);
-    assert(SUCCEEDED(result));
-
-    // 再生開始
-    result = voice->Start();
-    assert(SUCCEEDED(result));
-
-	// 再生中ボイスリストに追加
-    playingVoices_.push_back(std::move(voice));
+    Play(filename, loop, volume, AudioCategory::SE);
 }
 
 SoundData AudioManager::LoadMP3Internal(const std::string& filename) {

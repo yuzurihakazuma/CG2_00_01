@@ -15,9 +15,11 @@
 #include "engine/utils/Level/LevelEditor.h"
 #include "engine/utils/Level/BlenderImporter.h"
 #include "engine/particle/GPUParticleEditor.h"
+#include "engine/utils/GlobalVariables.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/camera/Camera.h"
+#include "engine/camera/DebugCamera.h"
 #include "engine/math/Matrix4x4.h"
 #include <cmath>
 #ifdef USE_IMGUI
@@ -190,13 +192,25 @@ void EditorManager::Update(){
         }
         if (ImGui::BeginMenu("シーン (Scene)")) {
             if (ImGui::MenuItem("タイトル (Title Scene)")) {
-                SceneManager::GetInstance()->ChangeScene("TITLE");
+                SceneManager::GetInstance()->ChangeSceneWithFade("TITLE");
             }
             if (ImGui::MenuItem("ゲームプレイ (GamePlay Scene)")) {
-                SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+                SceneManager::GetInstance()->ChangeSceneWithFade("GAMEPLAY");
             }
             if (ImGui::MenuItem("アニメーションエディタ (Animation Editor)")) {
-                SceneManager::GetInstance()->ChangeScene("ANIMATION_EDITOR");
+                SceneManager::GetInstance()->ChangeSceneWithFade("ANIMATION_EDITOR");
+            }
+            ImGui::EndMenu();
+        }
+        // 表示メニュー：デバッグカメラのON/OFF をメニューバーに集約（チェックボックス）
+        if ( ImGui::BeginMenu("表示 (View)") ) {
+            if ( debugCamera_ ) {
+                bool active = debugCamera_->IsActive();
+                if ( ImGui::Checkbox("デバッグカメラを有効化", &active) ) {
+                    debugCamera_->SetActive(active);
+                }
+            } else {
+                ImGui::TextDisabled("デバッグカメラ未登録");
             }
             ImGui::EndMenu();
         }
@@ -641,6 +655,9 @@ void EditorManager::Update(){
     if ( gpuParticleEditor_ ) {
         gpuParticleEditor_->DrawDebugUI();
     }
+
+    // 調整項目（GlobalVariables）の編集ウィンドウ
+    GlobalVariables::GetInstance()->Update();
 
     // 7.5 インスペクター（ギズモ対象オブジェクトの Transform 編集）
     ImGui::Begin("インスペクター (Transform)");

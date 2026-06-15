@@ -15,6 +15,8 @@ public:
     void DrawDebugUI();
 	// デバッグカメラがアクティブかどうか
     bool IsActive() const { return isActive_; }
+	// 外部（メニュー等）から ON/OFF する。切替時に元カメラ姿勢を保存/復元する
+    void SetActive(bool active);
 private:
 	// デバッグカメラがアクティブかどうかを管理するフラグ
     bool isActive_ = false;

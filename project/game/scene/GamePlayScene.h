@@ -139,4 +139,7 @@ private: // メンバ変数
 	int  lastRailVersion_ = -1;     // 直近に同期したエディタの編集世代
 	void SyncRailsFromEditor();     // エディタの最新レールから splineRails_ を作り直す
 
+	// デバッグ描画のグリッド表示ON/OFF
+	bool showDebugGrid_ = true;
+
 };
