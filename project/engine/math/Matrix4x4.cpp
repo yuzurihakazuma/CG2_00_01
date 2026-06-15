@@ -1,7 +1,6 @@
 #include "Matrix4x4.h"
 #include "engine/math/QuaternionMath.h"
-#include "VectorMath.h"
-
+#include "engine/math/VectorMath.h"
 #include <cmath>
 #include <cassert>
 
@@ -296,5 +295,4 @@ namespace MatrixMath {
         return result;
     }
 
-    //
 } // namespace MatrixMath
