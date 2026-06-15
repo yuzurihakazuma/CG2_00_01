@@ -10,7 +10,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\('line',i,':',l\\) for i,l in enumerate\\(d.get\\('railLines',[]\\)\\)]\")",
       "PowerShell($msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\project\\\\CG2_00_01.vcxproj\" /p:Configuration=Debug /p:Platform=x64 /t:Build /m /verbosity:minimal /nologo 2>&1 | Select-Object -Last 60)",
       "PowerShell(git -C C:\\\\Game\\\\CG2\\\\CG2_00_01 branch --show-current)",
-      "PowerShell(git -C C:\\\\Game\\\\CG2\\\\CG2_00_01 status)"
+      "PowerShell(git -C C:\\\\Game\\\\CG2\\\\CG2_00_01 status)",
+      "PowerShell($p = Get-Process -Name \"CG2_00_01\" -ErrorAction SilentlyContinue; if \\($p\\) { \"RUNNING \\(PID $\\($p.Id\\)\\)\" } else { \"NOT RUNNING\" })"
     ]
   }
 }

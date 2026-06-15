@@ -394,8 +394,60 @@ void EditorManager::Update(){
             const bool ctrlHeld  = ImGui::GetIO().KeyCtrl;
             const bool shiftHeld = ImGui::GetIO().KeyShift;
 
-            // --- 左クリック（押した瞬間）---
-            if ( imageHovered && ImGui::IsMouseClicked(0) && !gizmoActive && !railRubberActive_ ) {
+            // ===== (B) スタンプ配置：形を生成すると pending になり、マウスに追従→クリックで設置 =====
+            const bool stampPending = levelEditor_->HasPendingStamp();
+            if ( stampPending ) {
+                Vector3 g;
+                bool onGround = groundAt(mouse, g);
+
+                // ゴースト（設置される形）をマウス位置に重ねて表示
+                if ( onGround ) {
+                    ImDrawList* gdl = ImGui::GetWindowDrawList();
+                    const auto& shape = levelEditor_->GetPendingStamp();
+                    ImVec2 prevS; bool prevOk = false;
+                    for ( const auto& rel : shape ) {
+                        Vector3 wp = { g.x + rel.x, g.y + rel.y, g.z + rel.z };
+                        ImVec2 s; bool ok = project(wp, s);
+                        if ( ok ) {
+                            gdl->AddCircleFilled(s, 3.0f, IM_COL32(90, 220, 255, 230));
+                            if ( prevOk ) gdl->AddLine(prevS, s, IM_COL32(90, 220, 255, 200), 2.0f);
+                        }
+                        prevS = s; prevOk = ok;
+                    }
+                }
+                // クリックで設置 / 右クリック・Esc で中止
+                if ( imageHovered && ImGui::IsMouseClicked(0) && !gizmoActive && onGround ) {
+                    levelEditor_->PlaceStamp(g);
+                }
+                if ( ImGui::IsMouseClicked(1) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ) {
+                    levelEditor_->CancelStamp();
+                }
+            }
+
+            // ===== (C) キーボードでノード操作（Game View にマウスがある時のみ）=====
+            //   矢印=グリッド1マスXZ移動 / Q,E=上下Y / Delete=削除 / Ctrl+D=路線複製
+            if ( imageHovered && !ImGui::IsMouseDown(1) && !ImGui::GetIO().WantTextInput ) {
+                const float gs = levelEditor_->GetRailGridSize();
+                Vector3 kd { 0.0f, 0.0f, 0.0f };
+                if ( ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  true) ) kd.x -= gs;
+                if ( ImGui::IsKeyPressed(ImGuiKey_RightArrow, true) ) kd.x += gs;
+                if ( ImGui::IsKeyPressed(ImGuiKey_UpArrow,    true) ) kd.z += gs; // 奥
+                if ( ImGui::IsKeyPressed(ImGuiKey_DownArrow,  true) ) kd.z -= gs; // 手前
+                if ( ImGui::IsKeyPressed(ImGuiKey_E,          true) ) kd.y += gs; // 上
+                if ( ImGui::IsKeyPressed(ImGuiKey_Q,          true) ) kd.y -= gs; // 下
+                if ( kd.x != 0.0f || kd.y != 0.0f || kd.z != 0.0f ) {
+                    levelEditor_->TranslateSelection(kd);
+                }
+                if ( ImGui::IsKeyPressed(ImGuiKey_Delete, false) ) {
+                    levelEditor_->DeleteSelectedNodes();
+                }
+                if ( ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_D, false) ) {
+                    levelEditor_->DuplicateRail(levelEditor_->GetCurrentRailIndex());
+                }
+            }
+
+            // --- 左クリック（押した瞬間）。スタンプ配置待ちの時は通常クリックを無効化 ---
+            if ( !stampPending && imageHovered && ImGui::IsMouseClicked(0) && !gizmoActive && !railRubberActive_ ) {
                 if ( hoverIdx >= 0 ) {
                     if ( shiftHeld ) {
                         levelEditor_->AddToSelection(hoverRail, hoverIdx);     // Shift+クリック＝追加選択
@@ -480,6 +532,40 @@ void EditorManager::Update(){
             ImDrawList* dl = ImGui::GetWindowDrawList();
             const int curRail = levelEditor_->GetCurrentRailIndex();
 
+            // 全レールの線を「タイプ色」で描画（編集データから直接引くので、クリック対象＝
+            // ノードと完全に一致する。横=青(A/D移動) / 縦=橙(W/S移動) で役割が一目で分かる）。
+            for ( int rr = 0; rr < railCount; ++rr ) {
+                const bool isCur = ( rr == curRail );
+                const int  dtype = levelEditor_->GetRailDisplayType(rr);
+                ImU32 col = ( dtype == 1 )
+                    ? IM_COL32(255, 165, 70, isCur ? 235 : 150)   // 縦 = 橙
+                    : IM_COL32(90, 180, 255, isCur ? 235 : 150);  // 横 = 青
+                const int nodeCount = levelEditor_->GetNodeCountOf(rr);
+                ImVec2 prevS; bool prevOk = false;
+                for ( int i = 0; i < nodeCount; ++i ) {
+                    Vector3 p; if ( !levelEditor_->GetNodePosOf(rr, i, p) ) { prevOk = false; continue; }
+                    ImVec2 s; bool ok = project(p, s);
+                    if ( ok && prevOk ) dl->AddLine(prevS, s, col, isCur ? 2.5f : 1.5f);
+                    prevS = s; prevOk = ok;
+                }
+            }
+
+            // マウス下の路線をハイライト（クリックでどれを掴むか分かる）。
+            // ノードに乗っていればその路線、そうでなければ線の路線を光らせる。
+            int highlightRail = ( hoverIdx >= 0 ) ? hoverRail : segRail;
+            if ( highlightRail >= 0 && !stampPending ) {
+                const int nodeCount = levelEditor_->GetNodeCountOf(highlightRail);
+                ImVec2 prevS; bool prevOk = false;
+                for ( int i = 0; i < nodeCount; ++i ) {
+                    Vector3 p; if ( !levelEditor_->GetNodePosOf(highlightRail, i, p) ) { prevOk = false; continue; }
+                    ImVec2 s; bool ok = project(p, s);
+                    if ( ok && prevOk ) {
+                        dl->AddLine(prevS, s, IM_COL32(255, 240, 130, 220), 4.0f); // 太い黄色で路線全体を強調
+                    }
+                    prevS = s; prevOk = ok;
+                }
+            }
+
             // 全レールのノードを描画（編集中の路線＝明るい緑、他＝控えめな色）
             for ( int rr = 0; rr < railCount; ++rr ) {
                 const bool isCur = ( rr == curRail );
@@ -503,15 +589,25 @@ void EditorManager::Update(){
               if ( hoverIdx >= 0 && levelEditor_->GetNodePosOf(hoverRail, hoverIdx, p) && project(p, s) )
                   dl->AddCircle(s, 9.5f, IM_COL32(255, 235, 80, 255), 0, 2.0f); }
             // 配置ゴースト（マウス追加モードで、ノード/線分に当たっていない時）
-            if ( imageHovered && levelEditor_->IsRailDrawMode() && !gizmoActive && hoverIdx < 0 && segIdx < 0 ) {
+            //   ・マウス直下の地面点（生の位置）に細い十字
+            //   ・実際に置かれる位置（吸着後）に青い丸
+            //   ・両者を線で結ぶ → 「吸着でここへ動く」が一目で分かる（ズレ感の解消）
+            if ( imageHovered && levelEditor_->IsRailDrawMode() && !gizmoActive && hoverIdx < 0 && segIdx < 0 && !stampPending ) {
                 Vector3 g;
                 if ( groundAt(mouse, g) ) {
                     Vector3 place = levelEditor_->ComputePlacement(g);
-                    ImVec2 s;
-                    if ( project(place, s) ) {
-                        dl->AddCircle(s, 6.0f, IM_COL32(90, 200, 255, 230), 0, 2.0f);
-                        dl->AddLine({ s.x - 8, s.y }, { s.x + 8, s.y }, IM_COL32(90, 200, 255, 180), 1.0f);
-                        dl->AddLine({ s.x, s.y - 8 }, { s.x, s.y + 8 }, IM_COL32(90, 200, 255, 180), 1.0f);
+                    ImVec2 sRaw, sPlace;
+                    bool okRaw = project(g, sRaw);
+                    bool okPlace = project(place, sPlace);
+                    if ( okRaw ) {
+                        // マウス直下（生の地面点）＝薄い灰の十字
+                        dl->AddLine({ sRaw.x - 6, sRaw.y }, { sRaw.x + 6, sRaw.y }, IM_COL32(220, 220, 220, 150), 1.0f);
+                        dl->AddLine({ sRaw.x, sRaw.y - 6 }, { sRaw.x, sRaw.y + 6 }, IM_COL32(220, 220, 220, 150), 1.0f);
+                    }
+                    if ( okPlace ) {
+                        if ( okRaw ) dl->AddLine(sRaw, sPlace, IM_COL32(90, 200, 255, 130), 1.0f); // 吸着の移動量を可視化
+                        dl->AddCircleFilled(sPlace, 4.0f, IM_COL32(90, 200, 255, 90));
+                        dl->AddCircle(sPlace, 6.0f, IM_COL32(90, 200, 255, 240), 0, 2.0f);
                     }
                 }
             }

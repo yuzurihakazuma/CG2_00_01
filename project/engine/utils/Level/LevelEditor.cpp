@@ -278,12 +278,78 @@ int LevelEditor::GetNodeCountOf(int rail) const{
 	return ( int ) levelData_.railLines[rail].size();
 }
 
+// スタンプ（配置待ちシェイプ）を at を原点として新しい路線として設置する
+void LevelEditor::PlaceStamp(const Vector3& at){
+	if ( pendingStamp_.empty() ) return;
+
+	std::vector<Vector3> line = pendingStamp_;
+	for ( auto& n : line ) { n.x += at.x; n.y += at.y; n.z += at.z; }
+
+	levelData_.railLines.push_back(std::move(line));
+	levelData_.railTypes.push_back(-1);
+	levelData_.railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
+	SelectWholeRail(( int ) levelData_.railLines.size() - 1); // 置いた直後にギズモで微調整できる
+	RebuildRailPoints();
+
+	pendingStamp_.clear();
+}
+
+// 複数選択中のノードを一括削除
+void LevelEditor::DeleteSelectedNodes(){
+	if ( multiSelection_.empty() ) return;
+
+	// 消すたびに後ろのノード番号がズレないよう、rail降順→node降順で消す
+	std::vector<NodeRef> refs = multiSelection_;
+	std::sort(refs.begin(), refs.end(), [](const NodeRef& a, const NodeRef& b){
+		if ( a.rail != b.rail ) return a.rail > b.rail;
+		return a.node > b.node;
+		});
+
+	for ( const auto& r : refs ) {
+		if ( r.rail < 0 || r.rail >= ( int ) levelData_.railLines.size() ) continue;
+		auto& line = levelData_.railLines[r.rail];
+		if ( r.node < 0 || r.node >= ( int ) line.size() ) continue;
+		line.erase(line.begin() + r.node);
+	}
+	multiSelection_.clear();
+	selectedRailNode_ = -1;
+	++railVersion_;
+}
+
+// 路線を複製して選択（少し奥にずらしたコピー）
+void LevelEditor::DuplicateRail(int railIdx){
+	if ( railIdx < 0 || railIdx >= ( int ) levelData_.railLines.size() ) return;
+
+	std::vector<Vector3> copy = levelData_.railLines[railIdx];
+	for ( auto& n : copy ) { n.z += 2.0f; }
+	levelData_.railLines.push_back(std::move(copy));
+	levelData_.railTypes.push_back(levelData_.railTypes[railIdx]);
+	levelData_.railMotions.push_back(levelData_.railMotions[railIdx]);
+	SelectWholeRail(( int ) levelData_.railLines.size() - 1);
+	RebuildRailPoints();
+}
+
 bool LevelEditor::GetNodePosOf(int rail, int node, Vector3& out) const{
 	if ( rail < 0 || rail >= ( int ) levelData_.railLines.size() ) return false;
 	const auto& line = levelData_.railLines[rail];
 	if ( node < 0 || node >= ( int ) line.size() ) return false;
 	out = line[node];
 	return true;
+}
+
+// 表示用：横(0)/縦(1)。railTypes が -1(自動)なら front→back の主軸で判定（実装と同じ1.5バイアス）
+int LevelEditor::GetRailDisplayType(int rail) const{
+	if ( rail < 0 || rail >= ( int ) levelData_.railLines.size() ) return 0;
+	if ( rail < ( int ) levelData_.railTypes.size() ) {
+		int t = levelData_.railTypes[rail];
+		if ( t == 0 ) return 0;
+		if ( t == 1 ) return 1;
+	}
+	const auto& nodes = levelData_.railLines[rail];
+	if ( nodes.size() < 2 ) return 0;
+	float dx = std::abs(nodes.back().x - nodes.front().x);
+	float dz = std::abs(nodes.back().z - nodes.front().z);
+	return ( dz > dx * 1.5f ) ? 1 : 0;
 }
 
 // afterIndex の直後にノードを挿入
@@ -402,23 +468,8 @@ void LevelEditor::ApplyImportedData(const LevelData& data, bool additive){
 
 void LevelEditor::Update(){
 
-	// 選択したノードの移動
-	if ( selectedRailNode_ >= 0 && selectedRailNode_ < levelData_.railLines[currentEditRailIndex_].size() ) {
-		Input* input = Input::GetInstance();
-		float moveStep = 0.2f;
-		if ( input->Pushkey(DIK_UP) )    { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].z += moveStep; }
-		if ( input->Pushkey(DIK_DOWN) )  { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].z -= moveStep; }
-		if ( input->Pushkey(DIK_LEFT) )  { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].x -= moveStep; }
-		if ( input->Pushkey(DIK_RIGHT) ) { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].x += moveStep; }
-		if ( input->Pushkey(DIK_O) )     { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].y += moveStep; }
-		if ( input->Pushkey(DIK_U) )     { levelData_.railLines[currentEditRailIndex_][selectedRailNode_].y -= moveStep; }
-
-		// 矢印/O/Uでノードを動かしている間は編集とみなして世代番号を進める（緑線がライブ追従する）
-		if ( input->Pushkey(DIK_UP) || input->Pushkey(DIK_DOWN) || input->Pushkey(DIK_LEFT) ||
-			 input->Pushkey(DIK_RIGHT) || input->Pushkey(DIK_O) || input->Pushkey(DIK_U) ) {
-			++railVersion_;
-		}
-	}
+	// ※ノードのキーボード移動は EditorManager（Game View側）に移行した。
+	//   矢印キー=グリッド1マス移動 / Q,E=上下 / Delete=削除 / Ctrl+D=路線複製
 
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 
@@ -671,15 +722,9 @@ void LevelEditor::DrawDebugUI(){
 			ImGui::PopID();
 		}
 
-		// 複製：少し奥にずらしたコピーを作り、すぐ動かせるよう選択しておく
+		// 複製：少し奥にずらしたコピーを作り、すぐ動かせるよう選択しておく（Ctrl+Dと共通処理）
 		if ( duplicateRail >= 0 ) {
-			std::vector<Vector3> copy = levelData_.railLines[duplicateRail];
-			for ( auto& n : copy ) { n.z += 2.0f; }
-			levelData_.railLines.push_back(std::move(copy));
-			levelData_.railTypes.push_back(levelData_.railTypes[duplicateRail]);
-			levelData_.railMotions.push_back(levelData_.railMotions[duplicateRail]);
-			SelectWholeRail(( int ) levelData_.railLines.size() - 1);
-			RebuildRailPoints();
+			DuplicateRail(duplicateRail);
 		}
 		// 削除（最後の1本は消さない）
 		if ( deleteRail >= 0 && levelData_.railLines.size() > 1 ) {
@@ -744,6 +789,7 @@ void LevelEditor::DrawDebugUI(){
 	ImGui::TextDisabled("線クリック→路線まるごと選択(ギズモで移動) / ノードクリック→1点選択");
 	ImGui::TextDisabled("空白をドラッグ→矩形選択(まとめて移動) / Shift+クリック→追加選択");
 	ImGui::TextDisabled("Ctrl+線クリック→ノード挿入 / 右クリック→ノード削除");
+	ImGui::TextDisabled("【キーボード】矢印=1マス移動 / Q,E=下,上 / Delete=削除 / Ctrl+D=路線複製");
 
 	// --- 路線全体を移動（数値での微調整用。ふだんはギズモで動かせる）---
 	{
@@ -907,14 +953,13 @@ void LevelEditor::DrawDebugUI(){
 	// =========================================================
 	if ( ImGui::BeginTabItem("作成 (Shape)") ) {
 
-	// --- パラメータ式シェイプ生成 ---
+	// --- パラメータ式シェイプ生成（スタンプ配置：生成→マウスに追従→クリックで設置）---
 	{
 		static int   shapeType   = 0;
 		static float shapeLen    = 10.0f;
 		static int   shapeDiv    = 4;
 		static float shapeRadius = 3.0f;
 		static float shapeStepH  = 1.0f;
-		static float shapePos[3] = { 0.0f, 1.5f, 0.0f };
 
 		const char* shapeNames[] = { "直線", "L字", "円 (ループ)", "階段", "S字カーブ" };
 		ImGui::Text("形を選んでパラメータを決めて「生成」:");
@@ -939,12 +984,11 @@ void LevelEditor::DrawDebugUI(){
 		if ( shapeType == 3 ) {
 			ImGui::DragFloat("1段の高さ (m)", &shapeStepH, 0.1f, 0.1f, 10.0f);
 		}
-		ImGui::DragFloat3("生成位置 XYZ", shapePos, 0.5f);
 		ImGui::PopItemWidth();
 
-		if ( ImGui::Button("生成 (新しい路線として追加)", ImVec2(220.0f, 0.0f)) ) {
+		if ( ImGui::Button("生成 (Game Viewでクリックして設置)", ImVec2(250.0f, 0.0f)) ) {
 			std::vector<Vector3> line;
-			const Vector3 base = { shapePos[0], shapePos[1], shapePos[2] };
+			const Vector3 base = { 0.0f, 0.0f, 0.0f }; // 原点基準で作り、設置時にクリック位置へ平行移動
 			int div = ( shapeDiv < 1 ) ? 1 : shapeDiv;
 
 			switch ( shapeType ) {
@@ -995,14 +1039,18 @@ void LevelEditor::DrawDebugUI(){
 			}
 
 			if ( !line.empty() ) {
-				levelData_.railLines.push_back(std::move(line));
-				levelData_.railTypes.push_back(-1);
-				levelData_.railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
-				SelectWholeRail(( int ) levelData_.railLines.size() - 1); // 生成直後にギズモで動かせる
-				RebuildRailPoints();
+				// すぐ路線にせず「配置待ち（スタンプ）」にする → Game Viewでクリックした場所に設置
+				pendingStamp_ = std::move(line);
 			}
 		}
-		ImGui::TextDisabled("生成後はそのまま路線全体が選択済み → ギズモで好きな場所へ");
+		if ( HasPendingStamp() ) {
+			ImGui::SameLine();
+			if ( ImGui::Button("配置をやめる") ) { CancelStamp(); }
+			ImGui::TextColored(ImVec4(0.4f, 0.85f, 1.0f, 1.0f),
+				"Game Viewでクリック→設置 / 右クリックかEscで中止");
+		} else {
+			ImGui::TextDisabled("「生成」を押すと形がマウスに付いてくる → クリックで設置");
+		}
 	}
 	ImGui::Separator();
 

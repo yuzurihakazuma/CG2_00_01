@@ -98,10 +98,25 @@ public:
     int  GetRailCount() const { return ( int ) levelData_.railLines.size(); }
     int  GetNodeCountOf(int rail) const;
     bool GetNodePosOf(int rail, int node, Vector3& out) const;
+    // 表示用：このレールが横(0)か縦(1)か（railTypes が -1=自動なら主軸から判定）
+    int  GetRailDisplayType(int rail) const;
+
+    // --- シェイプのスタンプ配置（生成→マウスに追従→クリックで設置）---
+    bool HasPendingStamp() const { return !pendingStamp_.empty(); }
+    const std::vector<Vector3>& GetPendingStamp() const { return pendingStamp_; }
+    void PlaceStamp(const Vector3& at);  // at を原点としてスタンプを新しい路線として設置
+    void CancelStamp(){ pendingStamp_.clear(); }
+
+    // --- キーボード操作（EditorManager から呼ばれる）---
+    void DeleteSelectedNodes();          // 複数選択中のノードを一括削除
+    void DuplicateRail(int railIdx);     // 路線を複製して選択（Ctrl+D・リストの複製ボタン共用）
 
 private:
     // 複数選択中のノード（rail番号＋ノード番号の組）
     std::vector<NodeRef> multiSelection_;
+
+    // 配置待ちのシェイプ（原点基準の相対座標。空なら配置待ちなし）
+    std::vector<Vector3> pendingStamp_;
 
     // アセットブラウザ用：resources/ から見つけたモデル1件分
     struct AssetEntry{
@@ -144,7 +159,7 @@ private:
     // グリッド・直角設定（マウスもボタンも共通で使う）
     bool  railSnap_     = true;    // ノードをグリッドに吸着
     float railGridSize_ = 1.0f;    // グリッド間隔(m)
-    bool  railAxisLock_ = true;    // 直角モード：新ノードを前ノードから X or Z 軸のみに固定
+    bool  railAxisLock_ = false;   // 直角モード：新ノードを前ノードから X or Z 軸のみに固定（既定OFF＝クリック位置どおり）
 
     // 既存ノードへのスナップ・フリーハンド
     bool  railNodeSnap_       = true; // 他レールの端点へ吸着
