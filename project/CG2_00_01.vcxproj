@@ -219,6 +219,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClCompile Include="engine\postEffect\PostEffect.cpp" />
     <ClCompile Include="engine\utils\Level\LevelManager.cpp" />
     <ClCompile Include="engine\utils\Level\LevelEditor.cpp" />
+    <ClCompile Include="engine\utils\Level\RailEditor.cpp" />
     <ClCompile Include="engine\utils\Level\BlenderImporter.cpp" />
     <ClCompile Include="game\player\Player.cpp" />
     <ClCompile Include="engine\utils\TextManager.cpp" />
@@ -334,6 +335,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="engine\postEffect\PostEffect.h" />
     <ClInclude Include="engine\utils\Level\LevelManager.h" />
     <ClInclude Include="engine\utils\Level\LevelEditor.h" />
+    <ClInclude Include="engine\utils\Level\RailEditor.h" />
     <ClInclude Include="engine\utils\Level\BlenderImporter.h" />
     <ClInclude Include="game\player\Player.h" />
     <ClInclude Include="engine\utils\TextManager.h" />

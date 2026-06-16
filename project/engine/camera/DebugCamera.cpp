@@ -70,9 +70,10 @@ void DebugCamera::Update(Camera* camera) {
         if (input->Pushkey(DIK_Q)) translation = Add(translation, Multiply(-moveSpeed, up));
     }
 
-    // ★ホイール：前後ズーム（ドラッグ不要でいつでも効く）
+    // ★ホイール：前後ズーム（Game View にマウスが乗っている時だけ効く）。
+    //   ImGuiパネル（レールエディタ等）の上でスクロールしてもカメラは動かさない。
     float wheel = input->GetMouseWheel();
-    if (wheel != 0.0f) {
+    if (wheel != 0.0f && gameViewHovered_) {
         const float zoomSpeed = 0.01f; // DirectInputのホイール量(±120単位)に対する係数
         translation = Add(translation, Multiply(wheel * zoomSpeed, forward));
     }

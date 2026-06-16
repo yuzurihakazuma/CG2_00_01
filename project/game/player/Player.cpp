@@ -284,6 +284,37 @@ void Player::Update(const std::vector<SplineRail>& allRails){
 //   ・kKillY より下に落ちたらスタートへリスポーン
 // =====================================================================
 void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
+    Input* input = Input::GetInstance();
+
+    // ---- 空中機動（エアコントロール）----
+    // レール間をジャンプ中でも軌道を調整できるようにする。
+    //   A/D=世界±X / W/S=世界±Z（レール上の操作と同じワールド方向の意思）。
+    //   入力で水平速度を増減し、最高速度でクランプ → 隣のレールへ寄せて着地できる。
+    float ax = 0.0f, az = 0.0f;
+    if ( input->Pushkey(DIK_D) ) ax += 1.0f;
+    if ( input->Pushkey(DIK_A) ) ax -= 1.0f;
+    if ( input->Pushkey(DIK_W) ) az += 1.0f;
+    if ( input->Pushkey(DIK_S) ) az -= 1.0f;
+
+    const float kAirAccel = 28.0f;            // 空中での加速 (m/s^2)。大きいほどキビキビ操作できる
+    const float kAirMaxXZ = moveSpeed_ * 1.5f; // 空中の水平最高速度 (m/s)
+    const float kAirDrag  = 2.0f;             // 入力の無い軸を緩く減衰させる係数 (1/s)
+
+    airVelocity_.x += ax * kAirAccel * dt;
+    airVelocity_.z += az * kAirAccel * dt;
+
+    // 入力していない軸は軽く減衰させて止めやすく（オーバーシュート防止）
+    if ( ax == 0.0f ) airVelocity_.x -= airVelocity_.x * std::min(kAirDrag * dt, 1.0f);
+    if ( az == 0.0f ) airVelocity_.z -= airVelocity_.z * std::min(kAirDrag * dt, 1.0f);
+
+    // 水平速度を最高速度でクランプ（斜めでも一定以上には加速しない）
+    float hs = std::sqrt(airVelocity_.x * airVelocity_.x + airVelocity_.z * airVelocity_.z);
+    if ( hs > kAirMaxXZ && hs > 1e-4f ) {
+        float k = kAirMaxXZ / hs;
+        airVelocity_.x *= k;
+        airVelocity_.z *= k;
+    }
+
     // 重力で自由落下
     airVelocity_.y -= gravity_ * dt;
     position_.x += airVelocity_.x * dt;
@@ -300,8 +331,8 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
 
     // 下降中だけ着地判定（上昇中にレールへ吸い付かないように）
     if ( airVelocity_.y <= 0.0f ) {
-        const float kLandXZ = 0.8f; // 水平にこの距離以内なら乗れる
-        const float kLandY  = 0.5f; // レール面からこの高さの範囲で接地とみなす
+        const float kLandXZ = 1.3f; // 水平にこの距離以内なら乗れる（広めにして繋ぎやすく）
+        const float kLandY  = 0.9f; // レール面からこの高さの範囲で接地とみなす
 
         for ( int i = 0; i < ( int ) allRails.size(); ++i ) {
             const SplineRail& r = allRails[i];
@@ -314,7 +345,7 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
             if ( std::sqrt(dx * dx + dz * dz) > kLandXZ ) continue;
 
             float above = position_.y - cp.y; // レール面からどれだけ上か
-            if ( above < -0.2f || above > kLandY ) continue;
+            if ( above < -0.35f || above > kLandY ) continue;
 
             // 着地！レール移動に復帰
             inAir_ = false;
