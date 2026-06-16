@@ -11,7 +11,15 @@
       "PowerShell($msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"C:\\\\Game\\\\CG2\\\\CG2_00_01\\\\project\\\\CG2_00_01.vcxproj\" /p:Configuration=Debug /p:Platform=x64 /t:Build /m /verbosity:minimal /nologo 2>&1 | Select-Object -Last 60)",
       "PowerShell(git -C C:\\\\Game\\\\CG2\\\\CG2_00_01 branch --show-current)",
       "PowerShell(git -C C:\\\\Game\\\\CG2\\\\CG2_00_01 status)",
-      "PowerShell($p = Get-Process -Name \"CG2_00_01\" -ErrorAction SilentlyContinue; if \\($p\\) { \"RUNNING \\(PID $\\($p.Id\\)\\)\" } else { \"NOT RUNNING\" })"
+      "PowerShell($p = Get-Process -Name \"CG2_00_01\" -ErrorAction SilentlyContinue; if \\($p\\) { \"RUNNING \\(PID $\\($p.Id\\)\\)\" } else { \"NOT RUNNING\" })",
+      "Bash(git --no-pager diff HEAD -- project/engine/utils/EditorManager.cpp)",
+      "Bash(git --no-pager diff HEAD -- project/game/scene/GamePlayScene.cpp)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" project/CG2_00_01.vcxproj //p:Configuration=Debug //p:Platform=x64 //nologo //v:minimal //clp:ErrorsOnly)",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 7; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code='\\\\'' + $p.ExitCode\\) } else { Write-Output '\\\\''ALIVE after 7s — no assertion'\\\\''; Stop-Process -Id $p.Id -Force }')",
+      "Read(//c/Game/CG2/CG2_00_01/generated/outputs/x64/Debug/**)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" project/CG2_00_01.vcxproj //p:Configuration=Debug //p:Platform=x64 //nologo //v:minimal)",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 9; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 9s — no assertion'\\\\''; Stop-Process -Id $p.Id -Force }')",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 8; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 8s — stable'\\\\''; Stop-Process -Id $p.Id -Force }')"
     ]
   }
 }

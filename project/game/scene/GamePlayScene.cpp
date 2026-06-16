@@ -763,16 +763,6 @@ void GamePlayScene::DrawDebugUI(){
 	ImGui::Checkbox("レール経路を表示", &showRailMarkers_);
 	ImGui::Text("マーカー数: %d", static_cast<int>(railMarkers_.size()));
 	if ( ImGui::Button("マーカー再構築") ) { BuildRailMarkers(); }
-	// デバッグ描画（DebugDraw）の表示設定 — 共有「詳細設定」窓に合流
-	if ( ImGui::Begin("インスペクター (詳細設定)") ) {
-		if ( ImGui::CollapsingHeader("デバッグ描画 (DebugDraw)") ) {
-			ImGui::Checkbox("グリッドを表示", &showDebugGrid_);
-			ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
-		}
-	}
-	ImGui::End();
-
-	ImGui::Begin("Environment Map Control");
 
 	// --- カメラ視点プリセット（レールを編集しやすく）---
 	ImGui::Separator();
@@ -807,6 +797,12 @@ void GamePlayScene::DrawDebugUI(){
 	}
 	ImGui::TextDisabled("※デバッグカメラONなら右ドラッグで自由に回せます");
 	} // CollapsingHeader: レール表示・カメラ視点
+
+	// デバッグ描画（DebugDraw）の表示設定 — 同じ「詳細設定」窓に合流
+	if ( ImGui::CollapsingHeader("デバッグ描画 (DebugDraw)") ) {
+		ImGui::Checkbox("グリッドを表示", &showDebugGrid_);
+		ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
+	}
 	ImGui::End();
 
 #endif
