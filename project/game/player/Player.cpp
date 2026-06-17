@@ -47,13 +47,22 @@ void Player::Initialize(){
     airVelocity_ = { 0.0f, 0.0f, 0.0f };
     airLandCooldown_ = 0.0f;
     airFromRail_ = -1;
+
+    // ヨッシー風モードの状態
+    velocity_    = { 0.0f, 0.0f, 0.0f };
+    groundRail_  = -1;
+    needsSpawn_  = true;
 }
 
 void Player::Update(const std::vector<SplineRail>& allRails){
     if ( allRails.empty() ) return;
-    if ( currentRailIndex_ < 0 || currentRailIndex_ >= ( int ) allRails.size() ) return;
 
     const float dt = Time::GetInstance()->GetDeltaTime(); // フレームレート非依存
+
+    // ヨッシー風モード：重力＋自由移動。レールを「歩ける床」として扱う（試作）。
+    if ( yoshiMode_ ) { UpdateFreeMove(allRails, dt); return; }
+
+    if ( currentRailIndex_ < 0 || currentRailIndex_ >= ( int ) allRails.size() ) return;
     Input* input = Input::GetInstance();
 
     // =================================================================
@@ -434,5 +443,153 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
     // 落下死 → スタートへリスポーン
     if ( position_.y < kKillY ) {
         Initialize();
+    }
+}
+
+// =====================================================================
+//  ヨッシー風モード（案C・自由移動版）：重力＋自由移動。レールを「歩ける床」として扱う。
+//   ・A/D=世界±X / W/S=世界±Z で自由に歩く（線に拘束されず、レール同士を行き来できる）
+//   ・常に重力。足元(レール幅 kWalkWidth 以内)にレールがあれば、その上に乗る
+//   ・SPACEでジャンプ、落下中にSPACE保持で「ふんばりジャンプ」（落下を緩める）
+//   ・レールから外れたり端を踏み外せばそのまま落下、kKillY以下でリスポーン
+// =====================================================================
+void Player::UpdateFreeMove(const std::vector<SplineRail>& allRails, float dt){
+    Input* input = Input::GetInstance();
+
+    // 初回／モード切替時：最初のレールの始点へ置いて落とす
+    if ( needsSpawn_ ) {
+        Vector3 s = { 0.0f, 3.0f, 0.0f };
+        for ( const auto& r : allRails ) {
+            if ( !r.nodes.empty() ) { s = r.nodes.front(); s.y += 0.5f; break; }
+        }
+        position_   = s;
+        velocity_   = { 0.0f, 0.0f, 0.0f };
+        isGrounded_ = false;
+        groundRail_ = -1;
+        needsSpawn_ = false;
+    }
+
+    // --- 水平入力（ワールド方向。線に縛られず自由に歩ける）---
+    float ax = 0.0f, az = 0.0f;
+    if ( input->Pushkey(DIK_D) ) ax += 1.0f;
+    if ( input->Pushkey(DIK_A) ) ax -= 1.0f;
+    if ( input->Pushkey(DIK_W) ) az += 1.0f;
+    if ( input->Pushkey(DIK_S) ) az -= 1.0f;
+    float hlen = std::sqrt(ax * ax + az * az);
+    if ( hlen > 1e-4f ) { ax /= hlen; az /= hlen; } // 斜めでも速度一定
+    velocity_.x = ax * moveSpeed_;
+    velocity_.z = az * moveSpeed_;
+
+    // --- ジャンプ ---
+    if ( isGrounded_ && input->Triggerkey(DIK_SPACE) ) {
+        velocity_.y = jumpPower_;
+        isGrounded_ = false;
+    }
+
+    // --- 重力（落下中にSPACE保持で「ふんばりジャンプ」＝ふわっと落ちる）---
+    float g = gravity_;
+    if ( !isGrounded_ && velocity_.y < 0.0f && input->Pushkey(DIK_SPACE) ) {
+        g = gravity_ * 0.35f;
+    }
+    velocity_.y -= g * dt;
+    const float kMaxFall = 30.0f;
+    if ( velocity_.y < -kMaxFall ) velocity_.y = -kMaxFall;
+
+    // --- 位置を進める ---
+    position_.x += velocity_.x * dt;
+    position_.y += velocity_.y * dt;
+    position_.z += velocity_.z * dt;
+
+    // --- レールを「歩ける床」として接地判定（見えない横壁つき）---
+    //   レール中心から「横(進行に垂直)」に kWalkWidth まで歩ける。前後(レール方向)は自由なので
+    //   端まで歩けば踏み外して落下できる。横にはみ出ようとすると見えない壁で押し戻す＝横落ち防止。
+    const float kWalkWidth   = 0.7f;  // 横に歩ける幅（見えない壁までの距離）
+    const float kStepUp      = 0.35f; // 登れる段差/上り坂（天井掴み防止に小さめ）
+    const bool  wasGrounded  = isGrounded_;
+    const int   prevGround   = groundRail_;
+    const float maxAboveRail = wasGrounded ? 0.5f : 0.12f; // 接地中は坂を下って吸着/落下中は接触で着地
+
+    // レール上の点に対する「横(垂直)距離」と「前後(レール方向)はみ出し」を求める補助
+    auto railOffsets = [&]( const SplineRail& r, float& outLat, float& outLon, Vector3& outCp ){
+        float cd = r.GetClosestDistance(position_);
+        outCp = r.GetPositionByDistance(cd);
+        Vector3 tan = r.GetTangentByDistance(cd);
+        float tl = std::sqrt(tan.x * tan.x + tan.z * tan.z);
+        float tx = ( tl > 1e-4f ) ? tan.x / tl : 0.0f;
+        float tz = ( tl > 1e-4f ) ? tan.z / tl : 1.0f;
+        float ox = position_.x - outCp.x, oz = position_.z - outCp.z;
+        outLon = ox * tx + oz * tz;                 // レール方向成分
+        float latx = ox - outLon * tx, latz = oz - outLon * tz;
+        outLat = std::sqrt(latx * latx + latz * latz); // 横(垂直)距離
+        // 押し戻し方向（正規化した横ベクトル）を tx,tz から再計算できるよう、横ベクトルも返したいが
+        // ここでは latx,latz をクロージャ外で使わないため省略
+        // （壁押し戻しは呼び出し側で位置を計算する）
+        };
+
+    // 見えない横壁：直前まで乗っていたレールから横にはみ出させない（端の外なら押し戻さない＝落ちる）
+    if ( wasGrounded && prevGround >= 0 && prevGround < ( int ) allRails.size()
+         && allRails[prevGround].nodes.size() >= 2 ) {
+        const SplineRail& gr = allRails[prevGround];
+        float cd = gr.GetClosestDistance(position_);
+        Vector3 cp = gr.GetPositionByDistance(cd);
+        Vector3 tan = gr.GetTangentByDistance(cd);
+        float tl = std::sqrt(tan.x * tan.x + tan.z * tan.z);
+        float tx = ( tl > 1e-4f ) ? tan.x / tl : 0.0f;
+        float tz = ( tl > 1e-4f ) ? tan.z / tl : 1.0f;
+        float ox = position_.x - cp.x, oz = position_.z - cp.z;
+        float lon = ox * tx + oz * tz;
+        float latx = ox - lon * tx, latz = oz - lon * tz;
+        float latd = std::sqrt(latx * latx + latz * latz);
+        float len = gr.GetLength();
+        bool beyondEnd = ( cd <= 0.05f && lon < -0.1f ) || ( cd >= len - 0.05f && lon > 0.1f );
+        if ( !beyondEnd && latd > kWalkWidth ) {
+            float k = ( latd - kWalkWidth ) / latd; // はみ出た分だけ壁で押し戻す
+            position_.x -= latx * k;
+            position_.z -= latz * k;
+        }
+    }
+
+    isGrounded_ = false;
+    groundRail_ = -1;
+    float bestY = -1e30f;
+    if ( velocity_.y <= 0.0f ) { // 下降中だけ（上昇中は床に吸い付かない）
+        for ( int i = 0; i < ( int ) allRails.size(); ++i ) {
+            const SplineRail& r = allRails[i];
+            if ( r.nodes.size() < 2 ) continue;
+            float lat = 0.0f, lon = 0.0f; Vector3 cp;
+            railOffsets(r, lat, lon, cp);
+            float len = r.GetLength();
+
+            if ( lat > kWalkWidth ) continue;                  // 横にはみ出ている（壁の外）
+            if ( lon < -0.1f && lat < 0.0f ) {}                // (no-op：可読性のため)
+            // 前後にレール端を越えていたら床にしない＝端から踏み外して落下
+            float cdNow = r.GetClosestDistance(position_);
+            if ( cdNow <= 0.05f && lon < -0.1f ) continue;     // front端より外
+            if ( cdNow >= len - 0.05f && lon > 0.1f ) continue; // back端より外
+
+            float above = position_.y - cp.y;
+            if ( above > maxAboveRail ) continue;  // まだ面の上空（落下を見せる）
+            if ( above < -kStepUp )     continue;  // 面が頭上すぎ（天井は掴まない）
+
+            if ( cp.y > bestY ) { bestY = cp.y; groundRail_ = i; } // 一番高い床に乗る
+        }
+    }
+    if ( groundRail_ >= 0 ) {
+        position_.y = bestY;
+        velocity_.y = 0.0f;
+        isGrounded_ = true;
+    }
+
+    // --- 向き：移動方向へ ---
+    float hs = std::sqrt(velocity_.x * velocity_.x + velocity_.z * velocity_.z);
+    if ( hs > 0.1f ) {
+        rotation_.y = std::atan2(velocity_.x, velocity_.z);
+        rotation_.x = 0.0f;
+        rotation_.z = 0.0f;
+    }
+
+    // --- 落下死 → リスポーン ---
+    if ( position_.y < kKillY ) {
+        needsSpawn_ = true;
     }
 }

@@ -760,6 +760,14 @@ void GamePlayScene::DrawDebugUI(){
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");
 	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
+	// 移動モード切替：ヨッシー風（重力＋自由移動）↔ 従来（レール上を距離で移動）
+	if ( player_ ) {
+		bool ym = player_->IsYoshiMode();
+		if ( ImGui::Checkbox("ヨッシー風移動：重力＋自由移動（試作）", &ym) ) { player_->SetYoshiMode(ym); }
+		ImGui::TextDisabled(ym ? "A/D=X・W/S=Z で自由歩行 / SPACE=ジャンプ(長押しでふんばり) / レール=床"
+		                       : "従来：A/D・W/Sでレール上を進む（線に拘束）");
+	}
+	ImGui::Separator();
 	ImGui::Checkbox("レール経路を表示", &showRailMarkers_);
 	ImGui::Text("マーカー数: %d", static_cast<int>(railMarkers_.size()));
 	if ( ImGui::Button("マーカー再構築") ) { BuildRailMarkers(); }

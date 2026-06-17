@@ -23,6 +23,11 @@ public:
     void SetRotation(const Vector3& rot){ rotation_ = rot; }
     void SetScale(const Vector3& scale){ scale_ = scale; }
 
+    // ヨッシー風モード（重力＋自由移動でレールを「歩ける床」として扱う）の ON/OFF。
+    // 従来の「レール上を距離で動く」方式と比較できるよう切替可能にしている。
+    void SetYoshiMode(bool b){ yoshiMode_ = b; needsSpawn_ = true; }
+    bool IsYoshiMode() const{ return yoshiMode_; }
+
 private: // メンバ変数
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };
@@ -66,4 +71,13 @@ private: // メンバ変数
 
     // 空中状態の更新（自由落下・着地判定・落下死）
     void UpdateAir(const std::vector<SplineRail>& allRails, float dt);
+
+    // ---- ヨッシー風モード（重力＋自由移動。レール＝歩ける床）----
+    bool    yoshiMode_  = true;                 // 既定でヨッシー風（試作）。チェックで切替
+    bool    needsSpawn_ = true;                 // 次の更新でスタート地点へ置き直す
+    Vector3 velocity_ { 0.0f, 0.0f, 0.0f };     // ワールド速度 (m/s)
+    int     groundRail_ = -1;                   // 今立っているレール番号（-1=空中）
+
+    // ヨッシー風の更新：A/D=±X・W/S=±Z で自由移動、重力で落下、レールに乗る、ジャンプ／ふんばり
+    void UpdateFreeMove(const std::vector<SplineRail>& allRails, float dt);
 };
