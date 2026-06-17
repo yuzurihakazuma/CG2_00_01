@@ -91,6 +91,11 @@ public:
     void DeleteSelectedNodes();
     void DuplicateRail(int railIdx);
 
+    // 近いレール同士を連結する：各レールの端点が他レール「本体（途中含む）」の
+    // すぐ近くにあれば、その最近点へ端点を寄せて相手にも共有ノードを挿入する。
+    // 端点溶接（端点同士）では届かない「線の途中での合流」も繋げられる。
+    void ConnectNearbyLines();
+
 private:
     // 編集対象（所有しない）。アドレスは LevelEditor の levelData_ メンバで安定。
     LevelData* data_ = nullptr;

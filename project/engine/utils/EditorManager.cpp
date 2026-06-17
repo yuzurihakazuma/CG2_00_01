@@ -378,10 +378,24 @@ void EditorManager::Update(){
                 Vector3 farW  = MatrixMath::Transforms({ ndcx, ndcy, 1.0f }, invVP);
                 Vector3 dir = { farW.x - nearW.x, farW.y - nearW.y, farW.z - nearW.z };
                 float h = re->GetRailDrawHeight();
-                if ( std::abs(dir.y) <= 1e-6f ) return false;
+
+                // レイがほぼ水平（地平線方向）だと交点が無限遠へ飛んで Z が暴れる → 弾く。
+                // dir.y / |dir| はレイの「下向き具合」(0=水平, 1=真下)。約7°より浅ければ描かない。
+                float dirLen = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+                if ( dirLen < 1e-6f ) return false;
+                if ( std::abs(dir.y) / dirLen < 0.12f ) return false;
+
                 float tt = ( h - nearW.y ) / dir.y;
                 if ( tt <= 0.0f ) return false;
-                out = { nearW.x + dir.x * tt, h, nearW.z + dir.z * tt };
+
+                Vector3 p = { nearW.x + dir.x * tt, h, nearW.z + dir.z * tt };
+
+                // カメラから水平に遠すぎる点は描かない（地平線側の巨大な伸び＝暴れを防ぐ）
+                const float kMaxReach = 60.0f;
+                float ddx = p.x - nearW.x, ddz = p.z - nearW.z;
+                if ( std::sqrt(ddx * ddx + ddz * ddz) > kMaxReach ) return false;
+
+                out = p;
                 return true;
                 };
 

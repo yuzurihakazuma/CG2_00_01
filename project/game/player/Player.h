@@ -44,6 +44,7 @@ private: // メンバ変数
     // 軸成分が反転しても止まらず・逆走しないための仕組み。
     float dsSign_ = 0.0f;        // 現在の進行符号(±1)。0=停止中
     float prevMoveInput_ = 0.0f; // 前フレームの移動入力（押した瞬間の検出用）
+    bool  atJunction_ = false;   // 別レールへ合流した直後の停止中か（押し直すまで動かない）
 
     // 乗り換え(奥/手前スイッチ)の連打防止タイマー (秒)
     float switchCooldown_ = 0.0f;
@@ -60,6 +61,8 @@ private: // メンバ変数
     // 無ければ落下してリスポーンする
     bool    inAir_ = false;                  // レールから離れて空中にいるか
     Vector3 airVelocity_ { 0.0f, 0.0f, 0.0f }; // 空中の速度 (m/s)
+    float   airLandCooldown_ = 0.0f;         // 飛び出した直後に "元のレール" へ即着地しない猶予 (秒)
+    int     airFromRail_ = -1;               // 飛び出した元のレール番号（その猶予中だけ再着地を抑止）
 
     // 空中状態の更新（自由落下・着地判定・落下死）
     void UpdateAir(const std::vector<SplineRail>& allRails, float dt);

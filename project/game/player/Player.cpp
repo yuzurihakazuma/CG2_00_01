@@ -36,6 +36,7 @@ void Player::Initialize(){
     moveSign_         = 1;
     dsSign_           = 0.0f;
     prevMoveInput_    = 0.0f;
+    atJunction_       = false;
     switchCooldown_   = 0.0f;
 
     heightOffset_ = 0.0f;
@@ -44,6 +45,8 @@ void Player::Initialize(){
 
     inAir_       = false;
     airVelocity_ = { 0.0f, 0.0f, 0.0f };
+    airLandCooldown_ = 0.0f;
+    airFromRail_ = -1;
 }
 
 void Player::Update(const std::vector<SplineRail>& allRails){
@@ -92,20 +95,27 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     // =================================================================
     if ( moveInput != 0.0f ) {
         bool freshPress = ( prevMoveInput_ == 0.0f ) || ( moveInput * prevMoveInput_ < 0.0f );
-        if ( freshPress || dsSign_ == 0.0f ) {
-            Vector3 tan = cur.GetTangentByDistance(currentDistance_);
-            float axisComp = curHorizontal ? tan.x : tan.z;
-            if ( std::abs(axisComp) > 0.05f ) {
-                // 接線の軸成分の向きに合わせる（D=世界+X / W=世界+Z）
-                dsSign_ = moveInput * ( ( axisComp >= 0.0f ) ? 1.0f : -1.0f );
-            } else {
-                // 接線がほぼ直交（円の頂点など）→ とりあえず押した向きへ
-                dsSign_ = moveInput;
+        if ( atJunction_ && !freshPress ) {
+            // 合流直後のジャンクションで一旦停止中：キーを押し直す（離して再入力 or 逆キー）
+            // まで動かない。dsSign_ は 0 のまま＝その場で待機し、進む向きを選び直せる。
+        } else {
+            atJunction_ = false;
+            if ( freshPress || dsSign_ == 0.0f ) {
+                Vector3 tan = cur.GetTangentByDistance(currentDistance_);
+                float axisComp = curHorizontal ? tan.x : tan.z;
+                if ( std::abs(axisComp) > 0.05f ) {
+                    // 接線の軸成分の向きに合わせる（D=世界+X / W=世界+Z）
+                    dsSign_ = moveInput * ( ( axisComp >= 0.0f ) ? 1.0f : -1.0f );
+                } else {
+                    // 接線がほぼ直交（円の頂点など）→ とりあえず押した向きへ
+                    dsSign_ = moveInput;
+                }
             }
+            currentDistance_ += dsSign_ * moveSpeed_ * dt;
         }
-        currentDistance_ += dsSign_ * moveSpeed_ * dt;
     } else {
         dsSign_ = 0.0f; // 離したら次に押した時に向きを決め直す
+        atJunction_ = false;
     }
     prevMoveInput_ = moveInput;
 
@@ -148,10 +158,47 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             jumpVelocity_ = 0.0f;
             isGrounded_   = false;
             currentDistance_ = edgeS;
+            airLandCooldown_ = 0.25f;            // この間は…
+            airFromRail_     = currentRailIndex_; // …元のレールへの再着地だけ抑止（端で跳ね返らない）
+            };
+
+        // 端点溶接が無くても、端のすぐ近くに別レールの「本体（途中含む）」があれば
+        // そこへ「合流」する。合流地点では一旦止まり（ジャンクション）、進む向きは
+        // プレイヤーが入力で決める。これで線同士が近ければ落下せず繋がる。
+        //   ※地上(歩行)で端に着いた時だけ合流。ジャンプ中(空中)はそのまま飛び出す
+        //     （アクションの落下・飛び越えを潰さないため）。
+        auto tryJoinNearbyBody = [&](float edgeS) -> bool{
+            const float kJoinReach = 1.2f; // 端がこの距離以内に他レール本体があれば連結（グリッド約1マス強）
+            Vector3 edgePos = cur.GetPositionByDistance(edgeS);
+
+            int   bestRail = -1;
+            float bestDist = kJoinReach;
+            float bestCd   = 0.0f;
+            for ( int j = 0; j < ( int ) allRails.size(); ++j ) {
+                if ( j == currentRailIndex_ ) continue;
+                const SplineRail& rj = allRails[j];
+                if ( rj.nodes.size() < 2 ) continue;
+                float cd = rj.GetClosestDistance(edgePos);
+                Vector3 cp = rj.GetPositionByDistance(cd);
+                float dx = cp.x - edgePos.x, dy = cp.y - edgePos.y, dz = cp.z - edgePos.z;
+                float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if ( d < bestDist ) { bestDist = d; bestRail = j; bestCd = cd; }
+            }
+            if ( bestRail < 0 ) return false;
+
+            // 合流：その地点で停止。押し直す/別方向キーで進む向きを決める。
+            currentRailIndex_ = bestRail;
+            currentDistance_  = bestCd;
+            dsSign_         = 0.0f;
+            atJunction_     = true;
+            switchCooldown_ = 0.15f; // 合流直後の即再合流を防ぐ
+            return true;
             };
 
         if ( currentDistance_ > len ) {
             if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) {
+                transitioned = true;
+            } else if ( isGrounded_ && tryJoinNearbyBody(len) ) {   // 地上：近い別レールへ合流（停止）
                 transitioned = true;
             } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
                 detachToAir(len);
@@ -161,6 +208,8 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             }
         } else if ( currentDistance_ < 0.0f ) {
             if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) {
+                transitioned = true;
+            } else if ( isGrounded_ && tryJoinNearbyBody(0.0f) ) {  // 地上：近い別レールへ合流（停止）
                 transitioned = true;
             } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
                 detachToAir(0.0f);
@@ -184,8 +233,9 @@ void Player::Update(const std::vector<SplineRail>& allRails){
         // 乗り換えは「ジャンクション（接続点）のすぐそば」でしか発動しない。
         // 範囲を狭くすることで、横レール上では実質 A/D だけ・縦レール上では W/S だけが
         // 効き、交差点に立った時だけ乗り換えキーが意味を持つ（誤爆しない）。
-        const float kReach  = 1.2f;  // 乗り換え先の最寄り点までの最大3D距離（狭いほど誤爆しない）
-        const float kMinOff = 0.3f;  // 押した方向にこれ以上伸びているレールであること
+        const float kReach   = 0.9f;  // 乗り換え先の最寄り点までの最大3D距離（狭いほど誤爆しない）
+        const float kLateral = 0.5f;  // 進行軸(横=X/縦=Z)の横ズレ上限。真上で交差してる相手だけ拾う
+        const float kMinOff  = 0.3f;  // 押した方向にこれ以上伸びているレールであること
         const bool  wantHorizontalTarget = !curHorizontal; // 縦に乗ってたら横へ／横なら縦へ
 
         // 乗り換えの判定軸：横レール上はZ(奥/手前)、縦レール上はX(右/左)
@@ -208,6 +258,11 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             float dx = cp.x - position_.x, dy = cp.y - position_.y, dz = cp.z - position_.z;
             float dist3d = std::sqrt(dx * dx + dy * dy + dz * dz);
             if ( dist3d > kReach ) continue; // 遠いレールへは飛ばない
+
+            // 真上で交差している相手だけ拾う：進行軸(横=X/縦=Z)の横ズレが小さいこと。
+            // これで「すぐ横を平行に走る縦レール」を W/S で誤って拾わなくなる。
+            float lateral = curHorizontal ? std::abs(dx) : std::abs(dz);
+            if ( lateral > kLateral ) continue;
 
             // 押した方向に rj が伸びているか（ノードの判定軸 min/max で見る）
             float axisMin = 1e30f, axisMax = -1e30f;
@@ -315,7 +370,8 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
         airVelocity_.z *= k;
     }
 
-    // 重力で自由落下
+    // 重力で自由落下（移動前のYを覚えておく：着地はレール面を上→下に通過した瞬間に判定）
+    const float prevY = position_.y;
     airVelocity_.y -= gravity_ * dt;
     position_.x += airVelocity_.x * dt;
     position_.y += airVelocity_.y * dt;
@@ -329,28 +385,42 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
         rotation_.z = 0.0f;
     }
 
+    // 飛び出した直後の "元レール" 再着地を抑止する猶予を減らす
+    if ( airLandCooldown_ > 0.0f ) { airLandCooldown_ -= dt; }
+
     // 下降中だけ着地判定（上昇中にレールへ吸い付かないように）
     if ( airVelocity_.y <= 0.0f ) {
-        const float kLandXZ = 1.3f; // 水平にこの距離以内なら乗れる（広めにして繋ぎやすく）
-        const float kLandY  = 0.9f; // レール面からこの高さの範囲で接地とみなす
+        const float kLandXZ = 0.8f; // 水平にこの距離以内なら「レールの真上」とみなす
 
         for ( int i = 0; i < ( int ) allRails.size(); ++i ) {
+            // 飛び出した直後だけ、元のレールへの再着地を抑止（端で跳ね返らない）。
+            // 別のレールへは猶予中でも着地できる（同じ高さの渡りを取りこぼさない）。
+            if ( airLandCooldown_ > 0.0f && i == airFromRail_ ) continue;
+
             const SplineRail& r = allRails[i];
             if ( r.nodes.size() < 2 ) continue;
 
             float cd = r.GetClosestDistance(position_);
             Vector3 cp = r.GetPositionByDistance(cd);
 
+            // 水平にレールの真上にいるか
             float dx = cp.x - position_.x, dz = cp.z - position_.z;
             if ( std::sqrt(dx * dx + dz * dz) > kLandXZ ) continue;
 
-            float above = position_.y - cp.y; // レール面からどれだけ上か
-            if ( above < -0.35f || above > kLandY ) continue;
+            // 縦：レール面に「降りてきて到達した」時だけ着地する（落下を最後まで見せる）。
+            //   ・reached … レール面のすぐ近く(上0.1m〜下0.3m)に降りてきた＝自然な接地
+            //   ・crossed … 高速落下で1フレームに面を上→下へ通過してもすり抜けずに拾う
+            //   まだ上にいる間（above>0.1）は着地させない＝瞬間移動にならない。
+            float above   = position_.y - cp.y;
+            bool  reached = ( above <= 0.1f && above >= -0.3f );
+            bool  crossed = ( prevY >= cp.y && position_.y <= cp.y );
+            if ( !reached && !crossed ) continue;
 
-            // 着地！レール移動に復帰
+            // 着地：到達したレール点に合わせる（縦のズレは降りてきた分だけ＝ごく僅か）
             inAir_ = false;
             currentRailIndex_ = i;
             currentDistance_  = cd;
+            position_     = cp;
             heightOffset_ = 0.0f;
             jumpVelocity_ = 0.0f;
             isGrounded_   = true;

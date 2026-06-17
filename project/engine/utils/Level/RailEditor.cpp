@@ -302,6 +302,74 @@ void RailEditor::DuplicateRail(int railIdx){
 	RebuildRailPoints();
 }
 
+// 近いレール同士を連結する（端点 → 他レール本体の最近点へ寄せて共有ノードを挿入）。
+void RailEditor::ConnectNearbyLines(){
+	const float kReach = 1.2f;  // この距離以内なら連結（ランタイムの自動合流と同じ）
+	const float kSnapNode = 0.25f; // 最近点が既存ノードにこれだけ近ければ新ノードを足さず共有
+	auto& lines = data_->railLines;
+
+	auto dist3 = [](const Vector3& p, const Vector3& q) -> float{
+		float dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z;
+		return std::sqrt(dx * dx + dy * dy + dz * dz);
+		};
+
+	bool changed = false;
+	for ( size_t a = 0; a < lines.size(); ++a ) {
+		if ( lines[a].size() < 2 ) continue;
+		for ( int endSel = 0; endSel < 2; ++endSel ) {
+			Vector3 ep = ( endSel == 0 ) ? lines[a].front() : lines[a].back();
+
+			int   bRail = -1, bSeg = -1;
+			float bDist = kReach;
+			Vector3 bPt { 0.0f, 0.0f, 0.0f };
+
+			for ( size_t b = 0; b < lines.size(); ++b ) {
+				if ( b == a ) continue;
+				if ( lines[b].size() < 2 ) continue;
+				for ( size_t s = 0; s + 1 < lines[b].size(); ++s ) {
+					const Vector3& p0 = lines[b][s];
+					const Vector3& p1 = lines[b][s + 1];
+					Vector3 d = { p1.x - p0.x, p1.y - p0.y, p1.z - p0.z };
+					float len2 = d.x * d.x + d.y * d.y + d.z * d.z;
+					float t = ( len2 > 1e-6f )
+						? ( ( ep.x - p0.x ) * d.x + ( ep.y - p0.y ) * d.y + ( ep.z - p0.z ) * d.z ) / len2
+						: 0.0f;
+					t = std::clamp(t, 0.0f, 1.0f);
+					Vector3 cp = { p0.x + d.x * t, p0.y + d.y * t, p0.z + d.z * t };
+					float dd = dist3(cp, ep);
+					if ( dd < bDist ) { bDist = dd; bRail = ( int ) b; bSeg = ( int ) s; bPt = cp; }
+				}
+			}
+			if ( bRail < 0 ) continue;
+			if ( bDist < 1e-4f ) continue; // 既にピッタリ重なっている
+
+			// 相手レールの最近点が既存ノードに近ければそれを共有点に、なければ挿入する
+			auto& tline = lines[bRail];
+			Vector3 shared = bPt;
+			float dToS  = dist3(bPt, tline[bSeg]);
+			float dToS1 = dist3(bPt, tline[bSeg + 1]);
+			if ( dToS <= kSnapNode ) {
+				shared = tline[bSeg];
+			} else if ( dToS1 <= kSnapNode ) {
+				shared = tline[bSeg + 1];
+			} else {
+				tline.insert(tline.begin() + bSeg + 1, bPt); // 線の途中に共有ノードを足す
+			}
+
+			// 自分の端点をその共有点へ寄せる
+			if ( endSel == 0 ) lines[a].front() = shared;
+			else               lines[a].back()  = shared;
+			changed = true;
+		}
+	}
+
+	if ( changed ) {
+		multiSelection_.clear();
+		selectedRailNode_ = -1;
+		RebuildRailPoints();
+	}
+}
+
 bool RailEditor::GetNodePosOf(int rail, int node, Vector3& out) const{
 	if ( rail < 0 || rail >= ( int ) data_->railLines.size() ) return false;
 	const auto& line = data_->railLines[rail];
@@ -635,6 +703,12 @@ void RailEditor::DrawWindow(){
 		if ( any ) { RebuildRailPoints(); }
 	}
 	ImGui::TextDisabled("※繋げたい端点同士を結合し、緑線とノードのズレを無くす");
+
+	// --- 近い線を連結（端点 → 他レール本体の最近点へ。線の途中での合流もOK）---
+	if ( ImGui::Button("近い線を連結（端点を他レールの途中へ繋ぐ）") ) {
+		ConnectNearbyLines();
+	}
+	ImGui::TextDisabled("※端点が他レールの近く(約1.2m)にあれば、その線の途中に共有ノードを足して連結");
 	ImGui::Separator();
 
 	// --- 形を整えるツール（ワンクリックで 直線 / カーブ / なめらか化）---
@@ -1007,6 +1081,7 @@ void RailEditor::DrawWindow(){
 		ImGui::Checkbox("ノード吸着（他レール端点へ）", &railNodeSnap_);
 		ImGui::SameLine();
 		ImGui::Checkbox("フリーハンド", &railFreehand_);
+		ImGui::TextDisabled("※斜め視点だと奥行き(Z)がずれやすい→「斜め視点に戻す/トップビュー」推奨。\n   地平線方向の遠すぎる位置には置かないように制限済み。");
 	}
 
 	// --- 方向ボタンで1マスずつ伸ばす（確実に直角・正確サイズ）---
