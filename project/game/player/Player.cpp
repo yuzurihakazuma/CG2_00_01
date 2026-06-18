@@ -509,41 +509,35 @@ void Player::UpdateFreeMove(const std::vector<SplineRail>& allRails, float dt){
     const int   prevGround   = groundRail_;
     const float maxAboveRail = wasGrounded ? 0.5f : 0.12f; // 接地中は坂を下って吸着/落下中は接触で着地
 
-    // レール上の点に対する「横(垂直)距離」と「前後(レール方向)はみ出し」を求める補助
-    auto railOffsets = [&]( const SplineRail& r, float& outLat, float& outLon, Vector3& outCp ){
-        float cd = r.GetClosestDistance(position_);
-        outCp = r.GetPositionByDistance(cd);
+    // あるレールについて、最近点(cp)・距離(cd)・横(垂直)距離(lat)・前後成分(lon)・横ベクトル(latx,latz)を求める
+    auto railOffsets = [&]( const SplineRail& r, float& cd, Vector3& cp,
+                            float& lat, float& lon, float& latx, float& latz ){
+        cd = r.GetClosestDistance(position_);
+        cp = r.GetPositionByDistance(cd);
         Vector3 tan = r.GetTangentByDistance(cd);
         float tl = std::sqrt(tan.x * tan.x + tan.z * tan.z);
         float tx = ( tl > 1e-4f ) ? tan.x / tl : 0.0f;
         float tz = ( tl > 1e-4f ) ? tan.z / tl : 1.0f;
-        float ox = position_.x - outCp.x, oz = position_.z - outCp.z;
-        outLon = ox * tx + oz * tz;                 // レール方向成分
-        float latx = ox - outLon * tx, latz = oz - outLon * tz;
-        outLat = std::sqrt(latx * latx + latz * latz); // 横(垂直)距離
-        // 押し戻し方向（正規化した横ベクトル）を tx,tz から再計算できるよう、横ベクトルも返したいが
-        // ここでは latx,latz をクロージャ外で使わないため省略
-        // （壁押し戻しは呼び出し側で位置を計算する）
+        float ox = position_.x - cp.x, oz = position_.z - cp.z;
+        lon  = ox * tx + oz * tz;          // レール方向成分
+        latx = ox - lon * tx;
+        latz = oz - lon * tz;
+        lat  = std::sqrt(latx * latx + latz * latz); // 横(垂直)距離
+        };
+
+    // レール端より「前後」に出ているか（出ていれば床にしない＝端から踏み外して落下）
+    auto beyondEnd = [&]( float cd, float lon, float len ) -> bool{
+        return ( cd <= 0.05f && lon < -0.1f ) || ( cd >= len - 0.05f && lon > 0.1f );
         };
 
     // 見えない横壁：直前まで乗っていたレールから横にはみ出させない（端の外なら押し戻さない＝落ちる）
     if ( wasGrounded && prevGround >= 0 && prevGround < ( int ) allRails.size()
          && allRails[prevGround].nodes.size() >= 2 ) {
         const SplineRail& gr = allRails[prevGround];
-        float cd = gr.GetClosestDistance(position_);
-        Vector3 cp = gr.GetPositionByDistance(cd);
-        Vector3 tan = gr.GetTangentByDistance(cd);
-        float tl = std::sqrt(tan.x * tan.x + tan.z * tan.z);
-        float tx = ( tl > 1e-4f ) ? tan.x / tl : 0.0f;
-        float tz = ( tl > 1e-4f ) ? tan.z / tl : 1.0f;
-        float ox = position_.x - cp.x, oz = position_.z - cp.z;
-        float lon = ox * tx + oz * tz;
-        float latx = ox - lon * tx, latz = oz - lon * tz;
-        float latd = std::sqrt(latx * latx + latz * latz);
-        float len = gr.GetLength();
-        bool beyondEnd = ( cd <= 0.05f && lon < -0.1f ) || ( cd >= len - 0.05f && lon > 0.1f );
-        if ( !beyondEnd && latd > kWalkWidth ) {
-            float k = ( latd - kWalkWidth ) / latd; // はみ出た分だけ壁で押し戻す
+        float cd, lat, lon, latx, latz; Vector3 cp;
+        railOffsets(gr, cd, cp, lat, lon, latx, latz);
+        if ( !beyondEnd(cd, lon, gr.GetLength()) && lat > kWalkWidth ) {
+            float k = ( lat - kWalkWidth ) / lat; // はみ出た分だけ壁で押し戻す
             position_.x -= latx * k;
             position_.z -= latz * k;
         }
@@ -556,16 +550,11 @@ void Player::UpdateFreeMove(const std::vector<SplineRail>& allRails, float dt){
         for ( int i = 0; i < ( int ) allRails.size(); ++i ) {
             const SplineRail& r = allRails[i];
             if ( r.nodes.size() < 2 ) continue;
-            float lat = 0.0f, lon = 0.0f; Vector3 cp;
-            railOffsets(r, lat, lon, cp);
-            float len = r.GetLength();
+            float cd, lat, lon, latx, latz; Vector3 cp;
+            railOffsets(r, cd, cp, lat, lon, latx, latz);
 
-            if ( lat > kWalkWidth ) continue;                  // 横にはみ出ている（壁の外）
-            if ( lon < -0.1f && lat < 0.0f ) {}                // (no-op：可読性のため)
-            // 前後にレール端を越えていたら床にしない＝端から踏み外して落下
-            float cdNow = r.GetClosestDistance(position_);
-            if ( cdNow <= 0.05f && lon < -0.1f ) continue;     // front端より外
-            if ( cdNow >= len - 0.05f && lon > 0.1f ) continue; // back端より外
+            if ( lat > kWalkWidth ) continue;                    // 横にはみ出ている（壁の外）
+            if ( beyondEnd(cd, lon, r.GetLength()) ) continue;   // 前後に端を越えた＝端から落下
 
             float above = position_.y - cp.y;
             if ( above > maxAboveRail ) continue;  // まだ面の上空（落下を見せる）
