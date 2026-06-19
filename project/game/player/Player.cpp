@@ -454,3 +454,16 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
         Initialize();
     }
 }
+
+void Player::Bounce() {
+    // 敵を踏みつけた際に上方向へ跳ね返る処理
+    if ( inAir_ ) {
+        // 空中自由落下状態の場合：空中用のY速度を直接上向きに設定
+        airVelocity_.y = jumpPower_;
+    } else {
+        // レール移動中の場合：ジャンプ速度を上向きにし、滞空状態を開始
+        jumpVelocity_   = jumpPower_;
+        isGrounded_     = false;
+        flutterCdTimer_ = 0.6f; // ふんばり滞空用のタイマーも補充
+    }
+}

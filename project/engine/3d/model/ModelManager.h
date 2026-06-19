@@ -26,6 +26,8 @@ public:
 	void CreateRingModel(const std::string& modelName, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.2f);
 	// 円柱（チューブ型）モデルの作成
 	void CreateCylinderModel(const std::string& modelName, int subdivision = 32, float radius = 1.0f, float height = 2.0f);
+	// 3D星型モデルの作成
+	void CreateStarModel(const std::string& modelName, float outerRadius = 0.5f, float innerRadius = 0.2f, float depth = 0.15f);
 
 	// シングルストーンのインスタンスを取得
 	static ModelManager* GetInstance();

@@ -23,6 +23,12 @@ public:
     void SetRotation(const Vector3& rot){ rotation_ = rot; }
     void SetScale(const Vector3& scale){ scale_ = scale; }
 
+    // 接地状態の取得（空中判定、および踏みつけ判定に使用）
+    bool IsGrounded() const{ return isGrounded_; }
+
+    // 踏みつけ成功時にプレイヤーを上へ跳ね上がらせる
+    void Bounce();
+
 private: // メンバ変数
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };

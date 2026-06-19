@@ -353,6 +353,10 @@ void GamePlayScene::Initialize(){
 	player_ = std::make_unique<Player>();
 	player_->Initialize();
 
+	// --- エネミーエディタの初期化 ---
+	enemyEditor_ = std::make_unique<EnemyEditor>();
+	enemyEditor_->Initialize();
+
 
 	// レール経路の可視化用：細い線セグメント用の立方体モデルと、単色化用の白テクスチャ
 	ModelManager::GetInstance()->CreateCubeModel("railLineCube", 1.0f);
@@ -399,7 +403,29 @@ void GamePlayScene::SyncRailsFromEditor(){
 	railAnimTime_ = 0.0f;
 
 	BuildRailMarkers();                 // 緑線を作り直す
+	SpawnEnemies();                     // 配置テンプレートを元に敵を生成し直す
 	lastRailVersion_ = EditorManager::GetInstance()->GetRailEditVersion();
+}
+
+// エディタに配置された敵情報（テンプレート）に基づいて敵の実体を生成する
+void GamePlayScene::SpawnEnemies(){
+	enemies_.clear();
+	if ( !enemyEditor_ ) return;
+
+	const auto& spawns = enemyEditor_->GetSpawnDatas();
+	for ( const auto& spawn : spawns ) {
+		// 指定されたレール番号が有効であることを確認
+		if ( spawn.railIndex < 0 || spawn.railIndex >= ( int ) splineRails_.size() ) continue;
+		// そのレールが正しく構成されているか確認
+		if ( splineRails_[spawn.railIndex].nodes.size() < 2 ) continue;
+
+		auto enemy = std::make_unique<Enemy>();
+		enemy->Initialize(spawn.type, spawn.railIndex, spawn.distance);
+		// dt=0 で Update を呼び、レール上の初期位置を即座に確定させる
+		// （これをしないと position_ が (0,0,0) のまま原点に巨大な球が表示されてしまう）
+		enemy->Update(splineRails_, 0.0f);
+		enemies_.push_back(std::move(enemy));
+	}
 }
 
 // 動くレールの時間を進めて animOffset を更新し、緑線マーカーも追従させる
@@ -503,6 +529,13 @@ void GamePlayScene::Update(){
 		SyncRailsFromEditor();
 	}
 
+	// ========================================================
+	// ▼ 敵配置エディタで追加・削除・編集があったら敵を即リスポーンする
+	// ========================================================
+	if ( enemyEditor_ && enemyEditor_->ConsumeChanged() ) {
+		SpawnEnemies();
+	}
+
 	// Blenderインポータからの「カメラに適用」要求を反映
 	if ( BlenderImporter* importer = EditorManager::GetInstance()->GetBlenderImporter() ) {
 		Vector3 blCamPos, blCamRot;
@@ -536,6 +569,7 @@ void GamePlayScene::Update(){
 
 		// ③ エフェクトなども綺麗に消す
 		hitEffects_.clear();
+		stompEffects_.clear();
 	}
 	// プレイ → エディットに戻った瞬間：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && currentMode == EngineMode::Edit ) {
@@ -557,6 +591,47 @@ void GamePlayScene::Update(){
 		// プレイヤーのレール移動計算
 		if ( player_ ) {
 			player_->Update(splineRails_);
+		}
+
+		// 敵のレール移動（往復）
+		{
+			float dt = Time::GetInstance()->GetDeltaTime();
+			for ( auto& e : enemies_ ) { e->Update(splineRails_, dt); }
+		}
+
+		// プレイヤーと敵の当たり判定＆踏みつけ処理
+		if ( player_ ) {
+			Vector3 playerPos = player_->GetPosition();
+			float playerRadius = 0.5f; // プレイヤーの球体当たり判定半径
+
+			for ( auto& enemy : enemies_ ) {
+				// 生きている敵のみ判定を行う
+				if ( !enemy->IsAlive() ) continue;
+
+				Vector3 enemyPos = enemy->GetPosition();
+				float enemyRadius = enemy->GetRadius();
+
+				// 二点間の距離を算出
+				Vector3 diff = playerPos - enemyPos;
+				float dist = Length(diff); // using namespace VectorMath なのでグローバルで呼べる
+
+				// 球同士が接触しているか
+				if ( dist < (playerRadius + enemyRadius) ) {
+					// 踏みつけ判定の条件：
+					// 1. プレイヤーが接地していない（ジャンプ中、またはレール端からの空中落下中であること）
+					// 2. プレイヤーのY座標が敵の中心より上側であること
+					if ( !player_->IsGrounded() && playerPos.y > enemyPos.y + 0.1f ) {
+						// 踏みつけ成功！
+						enemy->Defeat();   // 敵の死亡フラグを立てて非表示・非衝突にする
+						player_->Bounce();  // プレイヤーを跳ね上がらせる
+
+						// 踏みつけた敵の位置に新しい踏みつけヒットエフェクトを生成
+						auto newStompEffect = std::make_unique<StompEffect>();
+						newStompEffect->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
+						stompEffects_.push_back(std::move(newStompEffect));
+					}
+				}
+			}
 		}
 
 		// スペースキー入力（エフェクト発生とBGM再生）
@@ -581,6 +656,8 @@ void GamePlayScene::Update(){
 		// エフェクトの更新と死んだエフェクトの削除
 		for ( auto& effect : hitEffects_ ) { effect->Update(); }
 		hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e){ return e->IsDead(); });
+		for ( auto& effect : stompEffects_ ) { effect->Update(); }
+		stompEffects_.remove_if([](const std::unique_ptr<StompEffect>& e){ return e->IsDead(); });
 	}
 
 	// ★ 円柱オーラの更新処理
@@ -665,6 +742,7 @@ void GamePlayScene::Draw(){
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
+	for ( auto& e : enemies_ ) { e->Draw(); }   // 敵
 
 	// レール経路の可視化マーカー（プレイヤーが通る道筋）
 	if ( showRailMarkers_ ) {
@@ -697,6 +775,9 @@ void GamePlayScene::Draw(){
 
 
 	for ( auto& effect : hitEffects_ ) {
+		effect->Draw();
+	}
+	for ( auto& effect : stompEffects_ ) {
 		effect->Draw();
 	}
 
@@ -804,6 +885,11 @@ void GamePlayScene::DrawDebugUI(){
 		ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
 	}
 	ImGui::End();
+
+	// 敵配置用エディタのUIウィンドウを描画
+	if ( enemyEditor_ ) {
+		enemyEditor_->DrawWindow(splineRails_);
+	}
 
 #endif
 

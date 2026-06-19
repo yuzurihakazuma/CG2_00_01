@@ -12,9 +12,12 @@
 
 #include "engine/rail/SplineRail.h"
 #include "game/player/Player.h"
+#include "game/enemy/Enemy.h"
+#include "game/enemy/EnemyEditor.h"
 
 #include "Skybox.h"
 #include "HitEffect.h"
+#include "StompEffect.h"
 
 // --- 標準ライブラリ ---
 #include <vector>
@@ -77,6 +80,7 @@ private: // メンバ変数
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource_;
 
 	std::list<std::unique_ptr<HitEffect>> hitEffects_;
+	std::list<std::unique_ptr<StompEffect>> stompEffects_;
 
 	std::string bgmFile_ = "resources/BGMDon.mp3";
 
@@ -121,6 +125,11 @@ private: // メンバ変数
 
 	std::unique_ptr<Player> player_ = nullptr;
 	std::vector<SplineRail> splineRails_; // スプラインレール本体
+
+	// --- 敵（レール上を動く。プレイヤーが踏める予定）---
+	std::vector<std::unique_ptr<Enemy>> enemies_;
+	std::unique_ptr<EnemyEditor>        enemyEditor_; // エネミーの配置テンプレートを管理するエディタ
+	void SpawnEnemies();                              // 配置テンプレートを元に敵の実体を再構築する
 
 	// --- レール経路の可視化（プレイヤーが通る曲線を線で表示）---
 	std::vector<std::unique_ptr<Obj3d>> railMarkers_;

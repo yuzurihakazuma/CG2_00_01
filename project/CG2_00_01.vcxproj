@@ -162,6 +162,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="engine\particle\HitEffect.cpp" />
+    <ClCompile Include="engine\particle\StompEffect.cpp" />
     <ClCompile Include="engine\utils\AnimationEditor.cpp" />
     <ClCompile Include="engine\3d\animation\CustomAnimation.cpp" />
     <ClCompile Include="engine\utils\EditorManager.cpp" />
@@ -222,6 +223,8 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClCompile Include="engine\utils\Level\RailEditor.cpp" />
     <ClCompile Include="engine\utils\Level\BlenderImporter.cpp" />
     <ClCompile Include="game\player\Player.cpp" />
+    <ClCompile Include="game\enemy\Enemy.cpp" />
+    <ClCompile Include="game\enemy\EnemyEditor.cpp" />
     <ClCompile Include="engine\utils\TextManager.cpp" />
     <ClCompile Include="engine\math\QuaternionMath.cpp" />
     <ClCompile Include="engine\graphics\InstancedGroup.cpp" />
@@ -265,6 +268,7 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
   <ItemGroup>
     <ClInclude Include="engine\particle\GPUParticleEmitterData.h" />
     <ClInclude Include="engine\particle\HitEffect.h" />
+    <ClInclude Include="engine\particle\StompEffect.h" />
     <ClInclude Include="engine\utils\AnimationEditor.h" />
     <ClInclude Include="engine\3d\animation\CustomAnimation.h" />
     <ClInclude Include="engine\3d\obj\IAnimatable.h" />
@@ -338,6 +342,8 @@ copy /Y "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\dxil.dll" "
     <ClInclude Include="engine\utils\Level\RailEditor.h" />
     <ClInclude Include="engine\utils\Level\BlenderImporter.h" />
     <ClInclude Include="game\player\Player.h" />
+    <ClInclude Include="game\enemy\Enemy.h" />
+    <ClInclude Include="game\enemy\EnemyEditor.h" />
     <ClInclude Include="engine\utils\TextManager.h" />
     <ClInclude Include="engine\math\QuaternionMath.h" />
     <ClInclude Include="engine\graphics\InstancedGroup.h" />
