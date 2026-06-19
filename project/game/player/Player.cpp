@@ -42,6 +42,7 @@ void Player::Initialize(){
     heightOffset_ = 0.0f;
     jumpVelocity_ = 0.0f;
     isGrounded_   = true;
+    flutterCdTimer_ = 0.0f;
 
     inAir_       = false;
     airVelocity_ = { 0.0f, 0.0f, 0.0f };
@@ -301,18 +302,35 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     }
 
     // =================================================================
-    // 6. ジャンプ（m / m/s / m/s^2 で物理計算 → フレームレート非依存）
+    // 6. ジャンプ＋ふんばり（なめらか版）
+    //    ・SPACEでジャンプ。空中でSPACEを長押しすると、重力がぐっと弱まって
+    //      なめらかにふわっと滞空＋ほんの少し上昇する（羽ばたかず連続的）。
+    //    ・滞空できる時間に上限があり、使い切る／離すと通常落下へ戻る。
     // =================================================================
+    const float kFloatTime   = 0.6f;  // ふんばりで滞空できる最大時間（秒）
+    const float kFloatTarget = 1.2f;  // 滞空中になめらかに近づく上向き速度（ゆっくり上昇）
+    const float kFloatEase   = 6.0f;  // 目標へ近づく速さ（小さいほどなめらか）
+
     if ( isGrounded_ && input->Triggerkey(DIK_SPACE) ) {
-        jumpVelocity_ = jumpPower_;
-        isGrounded_   = false;
+        jumpVelocity_   = jumpPower_;
+        isGrounded_     = false;
+        flutterCdTimer_ = kFloatTime; // 滞空budgetを補充
     }
-    jumpVelocity_ -= gravity_ * dt;
+
+    // 空中でSPACE長押し中は「弱い重力＋ゆるい上昇」へなめらかに移行（ふわっと浮く）。それ以外は通常重力。
+    if ( !isGrounded_ && input->Pushkey(DIK_SPACE) && flutterCdTimer_ > 0.0f && jumpVelocity_ < kFloatTarget ) {
+        jumpVelocity_  += ( kFloatTarget - jumpVelocity_ ) * std::min(kFloatEase * dt, 1.0f);
+        flutterCdTimer_ -= dt;
+    } else {
+        jumpVelocity_ -= gravity_ * dt;
+    }
+
     heightOffset_ += jumpVelocity_ * dt;
     if ( heightOffset_ <= 0.0f ) {
-        heightOffset_ = 0.0f;
-        jumpVelocity_ = 0.0f;
-        isGrounded_   = true;
+        heightOffset_   = 0.0f;
+        jumpVelocity_   = 0.0f;
+        isGrounded_     = true;
+        flutterCdTimer_ = 0.0f;
     }
 
     // =================================================================

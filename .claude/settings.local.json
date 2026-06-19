@@ -24,7 +24,8 @@
       "Bash(cd /c/Game/CG2/CG2_00_01 && grep -nE 'レールエディタ|CommitIfStable|Triggerkey\\\\\\(DIK_Y\\\\\\)|ヒエラルキー|アセットブラウザ \\\\\\(Assets\\\\\\)|インスペクター \\\\\\(詳細設定\\\\\\)|レール編集 UI|DrawDebugUI\\\\\\(\\\\\\)' project/engine/utils/Level/LevelEditor.cpp | head -40)",
       "Bash(cp LevelEditor.cpp LevelEditor.cpp.bak)",
       "Bash(sed -i -e '21,59d' -e '126,134d' -e '137,468d' -e '515,522d' -e '709,1252d' -e '1261,1263d' LevelEditor.cpp)",
-      "Bash(cd /c/Game/CG2/CG2_00_01 && grep -rnE '\\\\->GetRailLines\\\\\\(|\\\\->GetRailVersion\\\\\\(|\\\\->GetRailTypes\\\\\\(|\\\\->GetRailMotions\\\\\\(|GetEditorRailLines|GetRailEditVersion' project/game project/engine --include=*.cpp --include=*.h | grep -vE 'RailEditor\\\\.\\(cpp|h\\)|EditorManager')"
+      "Bash(cd /c/Game/CG2/CG2_00_01 && grep -rnE '\\\\->GetRailLines\\\\\\(|\\\\->GetRailVersion\\\\\\(|\\\\->GetRailTypes\\\\\\(|\\\\->GetRailMotions\\\\\\(|GetEditorRailLines|GetRailEditVersion' project/game project/engine --include=*.cpp --include=*.h | grep -vE 'RailEditor\\\\.\\(cpp|h\\)|EditorManager')",
+      "Bash(powershell -NoProfile -Command \"Get-Process CG2_00_01 -ErrorAction SilentlyContinue | Stop-Process -Force\")"
     ]
   }
 }
