@@ -27,7 +27,19 @@
       "Bash(cd /c/Game/CG2/CG2_00_01 && grep -rnE '\\\\->GetRailLines\\\\\\(|\\\\->GetRailVersion\\\\\\(|\\\\->GetRailTypes\\\\\\(|\\\\->GetRailMotions\\\\\\(|GetEditorRailLines|GetRailEditVersion' project/game project/engine --include=*.cpp --include=*.h | grep -vE 'RailEditor\\\\.\\(cpp|h\\)|EditorManager')",
       "Bash(powershell -NoProfile -Command \"Get-Process CG2_00_01 -ErrorAction SilentlyContinue | Stop-Process -Force\")",
       "Bash(grep -c 'enemies' project/resources/map/map01.json)",
-      "Bash(ls project/resources/map/)"
+      "Bash(ls project/resources/map/)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" project/CG2_00_01.vcxproj //p:Configuration=Release //p:Platform=x64 //nologo //v:minimal //clp:ErrorsOnly)",
+      "Bash(grep -c 'enemies' generated/outputs/x64/Release/resources/map/map01.json)",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 9; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 9s — stable \\(Play mode start\\)'\\\\''; Stop-Process -Id $p.Id -Force }')",
+      "Bash(powershell -NoProfile -Command \"Get-Item 'generated\\\\outputs\\\\x64\\\\Debug\\\\resources' | Select-Object Name, LinkType, Target; Get-Item 'generated\\\\outputs\\\\x64\\\\Release\\\\resources' | Select-Object Name, LinkType, Target\")",
+      "Bash(cp -rf project/resources/shaders/* generated/outputs/x64/Release/resources/shaders/)",
+      "Bash(cp -rf project/resources/shaders/* generated/outputs/x64/Debug/resources/shaders/)",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 9; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 9s — Release starts \\(Play mode\\)'\\\\''; Stop-Process -Id $p.Id -Force }')",
+      "Bash(cp -rf project/resources/* generated/outputs/x64/Release/resources/)",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 10; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 10s — Release starts OK'\\\\''; Stop-Process -Id $p.Id -Force }')",
+      "Bash(grep -nE '^exit 0$|exit 0</Command>' project/CG2_00_01.vcxproj)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" project/CG2_00_01.vcxproj //p:Configuration=Release //p:Platform=x64 //nologo //v:minimal)",
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 10; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 10s — Release OK'\\\\''; Stop-Process -Id $p.Id -Force }')"
     ]
   }
 }

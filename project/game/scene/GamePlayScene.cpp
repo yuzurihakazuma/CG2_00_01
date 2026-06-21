@@ -603,11 +603,15 @@ void GamePlayScene::Update(){
 		if ( mlv != lastMapLoadVersion_ ) {
 			lastMapLoadVersion_ = mlv;
 			const auto& saved = EditorManager::GetInstance()->GetEditorEnemyData();
-			std::vector<EnemySpawnData> datas;
-			for ( const auto& e : saved ) {
-				datas.push_back({ static_cast<EnemyType>( e.type ), e.railIndex, e.distance });
+			// マップに敵データがある時だけ復元する。無い時は今の配置（既定のテスト敵）を保持し、
+			// リリースでも最低1体は敵が出るようにする。
+			if ( !saved.empty() ) {
+				std::vector<EnemySpawnData> datas;
+				for ( const auto& e : saved ) {
+					datas.push_back({ static_cast<EnemyType>( e.type ), e.railIndex, e.distance });
+				}
+				enemyEditor_->SetSpawnDatas(datas); // changed_ が立つ → 下で SpawnEnemies される
 			}
-			enemyEditor_->SetSpawnDatas(datas); // changed_ が立つ → 下で SpawnEnemies される
 		}
 	}
 

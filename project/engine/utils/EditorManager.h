@@ -141,5 +141,11 @@ private:
     Vector3 railSelPivot_ { 0.0f, 0.0f, 0.0f }; // 選択ギズモのピボット（ドラッグ中は保持）
     bool  railSelDragging_ = false;             // ギズモで選択群を移動中か
 
+    // エディタ有り(USE_IMGUI)＝編集モードから開始。リリース＝エディタが無いので
+    // いきなりプレイモードで開始し、プレイヤーが動けて敵も出る状態にする。
+#ifdef USE_IMGUI
     EngineMode currentMode_ = EngineMode::Edit;
+#else
+    EngineMode currentMode_ = EngineMode::Play;
+#endif
 };
