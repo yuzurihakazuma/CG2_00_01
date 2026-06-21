@@ -791,6 +791,18 @@ const std::vector<Vector4>& EditorManager::GetEditorRailMotions() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailMotions() : kEmpty;
 }
 
+// 敵の配置データ（マップ保存に乗せる）を levelEditor_ へ委譲
+void EditorManager::SetEditorEnemyData(const std::vector<LevelEnemyData>& e){
+    if ( levelEditor_ ) levelEditor_->SetEnemyData(e);
+}
+const std::vector<LevelEnemyData>& EditorManager::GetEditorEnemyData() const{
+    static const std::vector<LevelEnemyData> kEmpty;
+    return levelEditor_ ? levelEditor_->GetEnemyData() : kEmpty;
+}
+int EditorManager::GetMapLoadVersion() const{
+    return levelEditor_ ? levelEditor_->GetMapLoadVersion() : 0;
+}
+
 
 void EditorManager::End(){
 #ifdef USE_IMGUI

@@ -90,6 +90,8 @@ void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 
 	// レール編集の選択・履歴をリセット（空なら1本用意する）
 	railEditor_->OnMapChanged();
+
+	++mapLoadVersion_; // シーンが敵を読み直す合図
 }
 
 // Blenderインポータ等の外部から変換済みデータを受け取って反映する

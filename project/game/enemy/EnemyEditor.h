@@ -28,6 +28,13 @@ public:
     // 配置情報の取得
     const std::vector<EnemySpawnData>& GetSpawnDatas() const { return spawnDatas_; }
 
+    // 配置情報の差し替え（マップ読込時に外部データで上書きする）
+    void SetSpawnDatas(const std::vector<EnemySpawnData>& datas) {
+        spawnDatas_ = datas;
+        selectedEntry_ = -1;
+        changed_ = true; // シーン側がリスポーンするよう変更フラグを立てる
+    }
+
     // 配置データに変更があったかどうか（取得するとフラグはリセットされる）
     bool ConsumeChanged() { bool c = changed_; changed_ = false; return c; }
 

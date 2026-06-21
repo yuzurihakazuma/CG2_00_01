@@ -596,9 +596,31 @@ void GamePlayScene::Update(){
 	}
 
 	// ========================================================
-	// ▼ 敵配置エディタで追加・削除・編集があったら敵を即リスポーンする
+	// ▼ マップが読み込まれたら、保存済みの敵配置をエディタへ復元する
+	// ========================================================
+	if ( enemyEditor_ ) {
+		int mlv = EditorManager::GetInstance()->GetMapLoadVersion();
+		if ( mlv != lastMapLoadVersion_ ) {
+			lastMapLoadVersion_ = mlv;
+			const auto& saved = EditorManager::GetInstance()->GetEditorEnemyData();
+			std::vector<EnemySpawnData> datas;
+			for ( const auto& e : saved ) {
+				datas.push_back({ static_cast<EnemyType>( e.type ), e.railIndex, e.distance });
+			}
+			enemyEditor_->SetSpawnDatas(datas); // changed_ が立つ → 下で SpawnEnemies される
+		}
+	}
+
+	// ========================================================
+	// ▼ 敵配置エディタで追加・削除・編集があったら敵を即リスポーン＆保存用データへ反映
 	// ========================================================
 	if ( enemyEditor_ && enemyEditor_->ConsumeChanged() ) {
+		// マップ保存に乗せるため LevelData(エディタ側) に同期する
+		std::vector<LevelEnemyData> save;
+		for ( const auto& s : enemyEditor_->GetSpawnDatas() ) {
+			save.push_back({ static_cast<int>( s.type ), s.railIndex, s.distance });
+		}
+		EditorManager::GetInstance()->SetEditorEnemyData(save);
 		SpawnEnemies();
 	}
 

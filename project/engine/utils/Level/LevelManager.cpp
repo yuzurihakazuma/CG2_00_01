@@ -50,6 +50,17 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     j["railMotions"] = motionsArray;
 
+    // 敵の配置 [type, railIndex, distance]
+    json enemiesArray = json::array();
+    for ( const auto& e : levelData.enemies ) {
+        json je;
+        je["type"]      = e.type;
+        je["railIndex"] = e.railIndex;
+        je["distance"]  = e.distance;
+        enemiesArray.push_back(je);
+    }
+    j["enemies"] = enemiesArray;
+
     j["objects"] = objectsArray;
 
     // ファイルに書き込み
@@ -142,6 +153,17 @@ LevelData LevelManager::Load(const std::string& fileName){
                 motion.x = m[0]; motion.y = m[1]; motion.z = m[2]; motion.w = m[3];
             }
             levelData.railMotions.push_back(motion);
+        }
+    }
+
+    // 敵の配置を読み込む [type, railIndex, distance]
+    if ( j.contains("enemies") && j["enemies"].is_array() ) {
+        for ( const auto& je : j["enemies"] ) {
+            LevelEnemyData e;
+            e.type      = je.value("type", 0);
+            e.railIndex = je.value("railIndex", 0);
+            e.distance  = je.value("distance", 0.0f);
+            levelData.enemies.push_back(e);
         }
     }
 

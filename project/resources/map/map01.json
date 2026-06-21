@@ -1,4 +1,21 @@
 {
+    "enemies": [
+        {
+            "distance": 8.088627815246582,
+            "railIndex": 0,
+            "type": 0
+        },
+        {
+            "distance": 0.0,
+            "railIndex": 0,
+            "type": 0
+        },
+        {
+            "distance": 16.177255630493164,
+            "railIndex": 0,
+            "type": 0
+        }
+    ],
     "name": "",
     "objects": [
         {

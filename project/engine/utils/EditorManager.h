@@ -2,6 +2,7 @@
 #include <memory>
 #include <vector>
 #include "engine/math/struct.h" // Vector3
+#include "engine/utils/Level/LevelData.h" // LevelEnemyData
 
 class LevelEditor;
 class BlenderImporter;
@@ -71,6 +72,11 @@ public:
 	const std::vector<int>& GetEditorRailTypes() const;
 	// 各レールの動き（x,y,z=振幅 / w=周期）。railLines と同じ並び
 	const std::vector<Vector4>& GetEditorRailMotions() const;
+
+	// --- 敵の配置（マップと一緒に保存/読込）。シーンの EnemyEditor と同期する ---
+	void SetEditorEnemyData(const std::vector<LevelEnemyData>& e); // シーン→エディタ（保存に乗せる）
+	const std::vector<LevelEnemyData>& GetEditorEnemyData() const; // エディタ→シーン（読込で復元）
+	int  GetMapLoadVersion() const;                                // 増えたら新しいマップが読まれた合図
 
 	// メニューバーから ON/OFF するためにシーンのデバッグカメラを登録する（所有しない）
 	void SetDebugCamera(DebugCamera* dc){ debugCamera_ = dc; }

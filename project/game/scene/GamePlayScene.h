@@ -130,6 +130,7 @@ private: // メンバ変数
 	std::vector<std::unique_ptr<Enemy>> enemies_;
 	std::unique_ptr<EnemyEditor>        enemyEditor_; // エネミーの配置テンプレートを管理するエディタ
 	void SpawnEnemies();                              // 配置テンプレートを元に敵の実体を再構築する
+	int  lastMapLoadVersion_ = -1;                    // マップ読込を検知して敵配置を復元するため
 
 	// --- ヒット時の手応え（踏みつけ等）：ヒットストップ＋カメラシェイク ---
 	float   hitStopTimer_  = 0.0f;              // >0 の間は時間を止める（ヒットストップ）

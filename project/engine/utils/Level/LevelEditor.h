@@ -46,6 +46,12 @@ public:
     // EditorManager が Game View のピッキングで、ゲーム側がレール参照で使う。
     RailEditor* GetRailEditor() const{ return railEditor_.get(); }
 
+    // --- 敵の配置（マップと一緒に保存/読込する）。シーンの EnemyEditor と同期する ---
+    void SetEnemyData(const std::vector<LevelEnemyData>& e){ levelData_.enemies = e; }
+    const std::vector<LevelEnemyData>& GetEnemyData() const{ return levelData_.enemies; }
+    // マップを読み込んだ回数（増えたら＝新しいマップが読み込まれた合図）
+    int GetMapLoadVersion() const{ return mapLoadVersion_; }
+
 private:
 
     // アセットブラウザ用：resources/ から見つけたモデル1件分
@@ -66,6 +72,7 @@ private:
     std::vector<AssetEntry> assetList_;
 
     LevelData levelData_; // 現在のマップデータ（レールの実データもここに置く）
+    int mapLoadVersion_ = 0; // マップ読込のたびに増やす（シーンが敵を読み直す合図）
     std::vector<std::unique_ptr<Obj3d>> object3ds_; // 配置された3Dオブジェクト
     int selectedObjectIndex_ = -1; // 選択中のオブジェクト番号
 

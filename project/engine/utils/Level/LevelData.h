@@ -13,6 +13,15 @@ struct LevelObjectData{
     Vector3 scale { 1.0f, 1.0f, 1.0f };
 };
 
+// 敵の配置1体分のデータ（マップ保存用）。
+//   type は game 側 EnemyType と対応する整数(0=Zako, 1=Strong ...)。
+//   engine が game の enum に依存しないよう、ここでは int で持つ。
+struct LevelEnemyData{
+    int   type = 0;
+    int   railIndex = 0;
+    float distance = 0.0f;
+};
+
 // マップ全体のデータ
 struct LevelData{
     std::string name;
@@ -30,6 +39,9 @@ struct LevelData{
     // 各レールの動き（railLines と同じ並び・同じ要素数を維持する）
     //   x,y,z = sin波の振幅(m)（全て0なら動かない） / w = 周期(秒)
     std::vector<Vector4> railMotions;
+
+    // 敵の配置（レール上に置く敵。マップと一緒に保存/読込する）
+    std::vector<LevelEnemyData> enemies;
 
 
     // 必要ならタイル情報も残してOK
