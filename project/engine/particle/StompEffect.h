@@ -16,7 +16,7 @@ public:
     // 発生位置、カメラ、テクスチャ、環境マップを渡して初期化
     void Initialize(const Vector3& position, Camera* camera, uint32_t textureIndex, uint32_t envMapIndex);
 
-    void Update();
+    void Update(float dt);   // dt = 経過時間(秒)。timeScale 適用済みを渡すとヒットストップで止まる
     void Draw();
 
     // 全てのエフェクトパーツが消滅したら true を返す（削除判定用）

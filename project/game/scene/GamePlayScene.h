@@ -131,6 +131,18 @@ private: // メンバ変数
 	std::unique_ptr<EnemyEditor>        enemyEditor_; // エネミーの配置テンプレートを管理するエディタ
 	void SpawnEnemies();                              // 配置テンプレートを元に敵の実体を再構築する
 
+	// --- ヒット時の手応え（踏みつけ等）：ヒットストップ＋カメラシェイク ---
+	float   hitStopTimer_  = 0.0f;              // >0 の間は時間を止める（ヒットストップ）
+	float   camShakeTimer_ = 0.0f;              // >0 の間カメラを揺らす
+	float   camShakeMag_   = 0.0f;              // 揺れの強さ (m)
+	Vector3 camPrevShake_ { 0.0f, 0.0f, 0.0f }; // 前フレームに足した揺れ（自己相殺用）
+	void TriggerHitFeel(float stopSeconds, float shakeMag); // ヒット時に呼ぶ
+
+	// --- 踏みつけ時のポストエフェクト（A:踏んだ点中心の歪みリップル / D:スポットグロー）---
+	float   fxTimer_    = 0.0f;                  // >0 の間だけ歪み＋グローを出す
+	Vector3 fxWorldPos_ { 0.0f, 0.0f, 0.0f };    // 効果の中心（踏んだ敵のワールド座標）
+	void UpdateStompPostEffect();                // 毎フレーム：中心をスクリーン投影し半径アニメ
+
 	// --- レール経路の可視化（プレイヤーが通る曲線を線で表示）---
 	std::vector<std::unique_ptr<Obj3d>> railMarkers_;
 	bool showRailMarkers_ = true;

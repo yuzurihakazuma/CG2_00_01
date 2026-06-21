@@ -251,13 +251,13 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
     }
 }
 
-void StompEffect::Update() {
+void StompEffect::Update(float dt) {
     isDead_ = true;
 
     // 1. コア球体の更新
     for (auto& core : cores_) {
         if (core.currentTime < core.lifeTime) {
-            core.currentTime += 1.0f / 60.0f;
+            core.currentTime += dt;
             isDead_ = false;
 
             float progress = core.currentTime / core.lifeTime;
@@ -279,7 +279,7 @@ void StompEffect::Update() {
     // 2. 円柱型（リング）衝撃波の更新 (上から叩きつけられて潰れながら広がるエネルギーリング、その後ディゾルブ消滅)
     for (auto& cyl : cylinders_) {
         if (cyl.currentTime < cyl.lifeTime) {
-            cyl.currentTime += 1.0f / 60.0f;
+            cyl.currentTime += dt;
             isDead_ = false;
 
             float progress = cyl.currentTime / cyl.lifeTime;
@@ -338,7 +338,7 @@ void StompEffect::Update() {
     // 2-B. 星型衝撃波リングの更新
     for (auto& star : starRings_) {
         if (star.currentTime < star.lifeTime) {
-            star.currentTime += 1.0f / 60.0f;
+            star.currentTime += dt;
             isDead_ = false;
 
             float progress = star.currentTime / star.lifeTime;
@@ -363,11 +363,11 @@ void StompEffect::Update() {
             float speed = (star.endRadius - star.startRadius) / star.lifeTime;
             // イージングをかけるため、速度は徐々に減衰
             float curSpeed = speed * (1.0f - progress) * 1.5f; // イージング感覚
-            pos += star.direction * curSpeed * (1.0f / 60.0f);
+            pos += star.direction * curSpeed * (dt);
             star.obj->SetTranslation(pos);
 
             // 自転
-            star.rotation += star.rotationSpeed * (1.0f / 60.0f);
+            star.rotation += star.rotationSpeed * (dt);
             star.obj->SetRotation(star.rotation);
 
             // スケール縮小
@@ -387,19 +387,19 @@ void StompEffect::Update() {
     // 3. ポップ3D星パーティクルの更新
     for (auto& part : popParticles_) {
         if (part.currentTime < part.lifeTime) {
-            part.currentTime += 1.0f / 60.0f;
+            part.currentTime += dt;
             isDead_ = false;
 
             // 重力
-            part.velocity.y -= 12.0f * (1.0f / 60.0f);
+            part.velocity.y -= 12.0f * (dt);
             
             // 移動
             Vector3 pos = part.obj->GetTranslation();
-            pos += part.velocity * (1.0f / 60.0f);
+            pos += part.velocity * (dt);
             part.obj->SetTranslation(pos);
 
             // 3軸自転
-            part.rotation += part.rotationSpeed * (1.0f / 60.0f);
+            part.rotation += part.rotationSpeed * (dt);
             part.obj->SetRotation(part.rotation);
 
             // 縮小
@@ -423,7 +423,7 @@ void StompEffect::Update() {
     // 4. モコモコ煙の更新
     for (auto& smoke : smokes_) {
         if (smoke.currentTime < smoke.lifeTime) {
-            smoke.currentTime += 1.0f / 60.0f;
+            smoke.currentTime += dt;
             isDead_ = false;
 
             float progress = smoke.currentTime / smoke.lifeTime;
@@ -432,11 +432,11 @@ void StompEffect::Update() {
             float curScale = smoke.baseScale * (1.0f + progress * 0.7f);
             smoke.obj->SetScale({ curScale, curScale, 1.0f });
 
-            smoke.currentRotation += smoke.rotationSpeed * (1.0f / 60.0f);
+            smoke.currentRotation += smoke.rotationSpeed * (dt);
             smoke.obj->SetRotation({ 0.0f, 0.0f, smoke.currentRotation });
 
             Vector3 pos = smoke.obj->GetTranslation();
-            pos.y += 0.8f * (1.0f / 60.0f);
+            pos.y += 0.8f * (dt);
             smoke.obj->SetTranslation(pos);
 
             float alpha = 0.55f * (1.0f - progress);

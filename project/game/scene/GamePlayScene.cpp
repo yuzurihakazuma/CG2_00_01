@@ -520,7 +520,73 @@ void GamePlayScene::BuildRailMarkers(){
 	}
 }
 
+// ヒット時の手応え：一瞬の停止（ヒットストップ）とカメラ揺れをまとめて発生させる
+void GamePlayScene::TriggerHitFeel(float stopSeconds, float shakeMag){
+	hitStopTimer_  = stopSeconds;
+	camShakeTimer_ = 0.22f;
+	camShakeMag_   = shakeMag;
+}
+
+// 踏みつけ点を中心にしたポストエフェクト（歪みリップル＋スポットグロー）を毎フレーム更新する。
+//   fxWorldPos_ をスクリーンUVへ投影し、MaskedDistortion(slot0)＝衝撃波、MaskedGlow(slot1)＝閃光を出す。
+void GamePlayScene::UpdateStompPostEffect(){
+	PostEffect* pe = PostEffect::GetInstance();
+	const PostEffectType kDist = PostEffectType::MaskedDistortion;
+	const PostEffectType kGlow = PostEffectType::MaskedGlow;
+
+	auto disableFx = [&](){
+		if ( pe->GetEffectActive(kDist) ) pe->SetEffectActive(kDist, false);
+		if ( pe->GetEffectActive(kGlow) ) pe->SetEffectActive(kGlow, false);
+		};
+
+	if ( fxTimer_ <= 0.0f ) { disableFx(); return; }
+
+	const float kDuration = 0.4f;
+	fxTimer_ -= 1.0f / 60.0f; // リアル時間で進める（ヒットストップ中も波は走る）
+	float progress = 1.0f - ( fxTimer_ / kDuration );
+	progress = std::clamp(progress, 0.0f, 1.0f);
+
+	// ワールド位置 → スクリーンUV（エディタの投影式と同じ。行ベクトル規約 v*VP）
+	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+	const Vector3& w = fxWorldPos_;
+	float cw = w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3];
+	if ( cw <= 0.0001f ) { disableFx(); return; } // カメラ後方なら出さない
+	float cx = w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0];
+	float cy = w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1];
+	float uvX = cx / cw * 0.5f + 0.5f;
+	float uvY = 1.0f - ( cy / cw * 0.5f + 0.5f );
+
+	// 半径アニメ：歪みは外へ広がる衝撃波、グローはパッと出て消えるパルス
+	float t = 1.0f - progress;
+	float easeOut = 1.0f - t * t;
+	float distRadius = 0.06f + ( 0.55f - 0.06f ) * easeOut;
+	float glowRadius = 0.45f * std::sin( progress * 3.14159265f );
+
+	// アスペクト比（正円補正）
+	float aspect = 16.0f / 9.0f;
+	if ( WindowProc* wp = WindowProc::GetInstance() ) {
+		int h = wp->GetClientHeight();
+		if ( h > 0 ) aspect = static_cast< float >( wp->GetClientWidth() ) / static_cast< float >( h );
+	}
+
+	PostEffectMaskParams mp{};
+	mp.slot0X = uvX; mp.slot0Y = uvY; mp.slot0Radius = distRadius; // 歪み(MaskedDistortion)
+	mp.slot1X = uvX; mp.slot1Y = uvY; mp.slot1Radius = glowRadius; // グロー(MaskedGlow)
+	mp.aspectRatio = aspect;
+	pe->SetMaskParams(mp);
+
+	pe->SetEffectActive(kDist, true);
+	pe->SetEffectActive(kGlow, true);
+}
+
 void GamePlayScene::Update(){
+
+	// ヒットストップ：踏みつけ等で一瞬だけ時間を止めて手応えを出す（リアルなフレームで数える）
+	if ( hitStopTimer_ > 0.0f ) {
+		hitStopTimer_ -= 1.0f / 60.0f;
+		Time::GetInstance()->SetTimeScale(0.0f);
+		if ( hitStopTimer_ <= 0.0f ) { Time::GetInstance()->SetTimeScale(1.0f); }
+	}
 
 	// ========================================================
 	// ▼ レールのライブ同期：エディタでレールを編集したら、緑線とプレイヤー用データを即作り直す
@@ -549,7 +615,26 @@ void GamePlayScene::Update(){
 	// ▼ 0. 常に実行する処理（カメラの更新）
 	// ========================================================
 	if ( debugCamera_ ) { debugCamera_->Update(camera_.get()); }
+
+	// カメラシェイク：踏みつけ等のヒット時に一瞬揺らす（Update前に位置へ上乗せ＝視点に反映）。
+	//   前フレームに足した揺れを引いてから今フレームの揺れを足すので、基準位置を汚さない。
+	{
+		Vector3 shake { 0.0f, 0.0f, 0.0f };
+		if ( camShakeTimer_ > 0.0f ) {
+			camShakeTimer_ -= 1.0f / 60.0f;
+			if ( camShakeTimer_ < 0.0f ) camShakeTimer_ = 0.0f;
+			float m = camShakeMag_ * ( camShakeTimer_ / 0.22f ); // だんだん弱まる
+			shake.x = std::sin(camShakeTimer_ * 95.0f) * m;
+			shake.y = std::cos(camShakeTimer_ * 120.0f) * m;
+		}
+		camera_->SetTranslation(camera_->GetWorldPosition() - camPrevShake_ + shake);
+		camPrevShake_ = shake;
+	}
+
 	camera_->Update();
+
+	// 踏みつけ点中心のポストエフェクト（歪み＋グロー）を更新（カメラ確定後にスクリーン投影する）
+	UpdateStompPostEffect();
 
 	Input* input = Input::GetInstance();
 
@@ -625,6 +710,13 @@ void GamePlayScene::Update(){
 						enemy->Defeat();   // 敵の死亡フラグを立てて非表示・非衝突にする
 						player_->Bounce();  // プレイヤーを跳ね上がらせる
 
+						// 手応え：一瞬停止（ヒットストップ）＋カメラ揺れで踏んだ感触を強調
+						TriggerHitFeel(0.06f, 0.28f);
+
+						// 踏んだ点を中心にポストエフェクト（歪みリップル＋スポットグロー）を起動
+						fxTimer_    = 0.4f;
+						fxWorldPos_ = enemyPos;
+
 						// 踏みつけた敵の位置に新しい踏みつけヒットエフェクトを生成
 						auto newStompEffect = std::make_unique<StompEffect>();
 						newStompEffect->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
@@ -656,7 +748,8 @@ void GamePlayScene::Update(){
 		// エフェクトの更新と死んだエフェクトの削除
 		for ( auto& effect : hitEffects_ ) { effect->Update(); }
 		hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e){ return e->IsDead(); });
-		for ( auto& effect : stompEffects_ ) { effect->Update(); }
+		// dt(timeScale適用済み)を渡す → ヒットストップ中はエフェクトも一緒に止まる
+		for ( auto& effect : stompEffects_ ) { effect->Update(Time::GetInstance()->GetDeltaTime()); }
 		stompEffects_.remove_if([](const std::unique_ptr<StompEffect>& e){ return e->IsDead(); });
 	}
 
