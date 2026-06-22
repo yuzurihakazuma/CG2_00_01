@@ -138,7 +138,11 @@ void Player::Update(const std::vector<SplineRail>& allRails){
 
         auto tryContinue = [&](int connIdx, bool enterFront, float over) -> bool{
             if ( connIdx < 0 || connIdx >= ( int ) allRails.size() ) return false;
-            if ( allRails[connIdx].type != cur.type ) return false; // 同じタイプだけ地続き
+            // connIndex で明示的に繋がっている端点は型を問わず地続きにする。
+            // 型が違うレールへ渡った場合は switchCooldown_ で即乗り換えを防ぐ。
+            if ( allRails[connIdx].type != cur.type ) {
+                switchCooldown_ = 0.25f;
+            }
             float newLen = allRails[connIdx].GetLength();
             currentRailIndex_ = connIdx;
             currentDistance_  = enterFront ? over : ( newLen - over );
@@ -161,20 +165,20 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             currentDistance_ = edgeS;
             airLandCooldown_ = 0.25f;            // この間は…
             airFromRail_     = currentRailIndex_; // …元のレールへの再着地だけ抑止（端で跳ね返らない）
+            if ( flutterCdTimer_ <= 0.0f ) flutterCdTimer_ = 0.6f; // 落下中もふんばり可能
             };
 
         // 端点溶接が無くても、端のすぐ近くに別レールの「本体（途中含む）」があれば
-        // そこへ「合流」する。合流地点では一旦止まり（ジャンクション）、進む向きは
-        // プレイヤーが入力で決める。これで線同士が近ければ落下せず繋がる。
-        //   ※地上(歩行)で端に着いた時だけ合流。ジャンプ中(空中)はそのまま飛び出す
-        //     （アクションの落下・飛び越えを潰さないため）。
+        // そこへ「合流」する。地上なら一旦停止（ジャンクション）して進む向きを選ぶ。
+        // ジャンプ中は高さを保ったままレールを乗り移り、飛び越えを防ぐ。
         auto tryJoinNearbyBody = [&](float edgeS) -> bool{
-            const float kJoinReach = 1.2f; // 端がこの距離以内に他レール本体があれば連結（グリッド約1マス強）
+            const float kJoinReach = 1.2f;
             Vector3 edgePos = cur.GetPositionByDistance(edgeS);
 
-            int   bestRail = -1;
-            float bestDist = kJoinReach;
-            float bestCd   = 0.0f;
+            int     bestRail = -1;
+            float   bestDist = kJoinReach;
+            float   bestCd   = 0.0f;
+            Vector3 bestPos  = {};
             for ( int j = 0; j < ( int ) allRails.size(); ++j ) {
                 if ( j == currentRailIndex_ ) continue;
                 const SplineRail& rj = allRails[j];
@@ -183,23 +187,33 @@ void Player::Update(const std::vector<SplineRail>& allRails){
                 Vector3 cp = rj.GetPositionByDistance(cd);
                 float dx = cp.x - edgePos.x, dy = cp.y - edgePos.y, dz = cp.z - edgePos.z;
                 float d = std::sqrt(dx * dx + dy * dy + dz * dz);
-                if ( d < bestDist ) { bestDist = d; bestRail = j; bestCd = cd; }
+                if ( d < bestDist ) { bestDist = d; bestRail = j; bestCd = cd; bestPos = cp; }
             }
             if ( bestRail < 0 ) return false;
 
-            // 合流：その地点で停止。押し直す/別方向キーで進む向きを決める。
+            // ジャンプ中：レール間の高低差を heightOffset_ に反映し、見た目の高さを維持
+            if ( !isGrounded_ ) {
+                heightOffset_ += ( edgePos.y - bestPos.y );
+                if ( heightOffset_ < 0.0f ) {
+                    heightOffset_   = 0.0f;
+                    jumpVelocity_   = 0.0f;
+                    isGrounded_     = true;
+                    flutterCdTimer_ = 0.0f;
+                }
+            }
+
             currentRailIndex_ = bestRail;
             currentDistance_  = bestCd;
             dsSign_         = 0.0f;
-            atJunction_     = true;
-            switchCooldown_ = 0.15f; // 合流直後の即再合流を防ぐ
+            atJunction_     = isGrounded_; // 地上のみジャンクション停止。空中はそのまま着地を待つ
+            switchCooldown_ = 0.15f;
             return true;
             };
 
         if ( currentDistance_ > len ) {
             if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) {
                 transitioned = true;
-            } else if ( isGrounded_ && tryJoinNearbyBody(len) ) {   // 地上：近い別レールへ合流（停止）
+            } else if ( tryJoinNearbyBody(len) ) {   // 近い別レールへ合流（地上:停止/空中:高さ維持で乗り移り）
                 transitioned = true;
             } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
                 detachToAir(len);
@@ -210,7 +224,7 @@ void Player::Update(const std::vector<SplineRail>& allRails){
         } else if ( currentDistance_ < 0.0f ) {
             if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) {
                 transitioned = true;
-            } else if ( isGrounded_ && tryJoinNearbyBody(0.0f) ) {  // 地上：近い別レールへ合流（停止）
+            } else if ( tryJoinNearbyBody(0.0f) ) {   // 近い別レールへ合流（地上:停止/空中:高さ維持で乗り移り）
                 transitioned = true;
             } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
                 detachToAir(0.0f);
@@ -388,9 +402,18 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
         airVelocity_.z *= k;
     }
 
-    // 重力で自由落下（移動前のYを覚えておく：着地はレール面を上→下に通過した瞬間に判定）
+    // ふんばり（flutter）：空中でも SPACE 長押しで滞空できる
+    const float kFloatTarget = 1.2f;
+    const float kFloatEase   = 6.0f;
+    if ( input->Pushkey(DIK_SPACE) && flutterCdTimer_ > 0.0f && airVelocity_.y < kFloatTarget ) {
+        airVelocity_.y += ( kFloatTarget - airVelocity_.y ) * std::min(kFloatEase * dt, 1.0f);
+        flutterCdTimer_ -= dt;
+    } else {
+        airVelocity_.y -= gravity_ * dt;
+    }
+
+    // 移動前のYを覚えておく：着地はレール面を上→下に通過した瞬間に判定
     const float prevY = position_.y;
-    airVelocity_.y -= gravity_ * dt;
     position_.x += airVelocity_.x * dt;
     position_.y += airVelocity_.y * dt;
     position_.z += airVelocity_.z * dt;
@@ -442,6 +465,7 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
             heightOffset_ = 0.0f;
             jumpVelocity_ = 0.0f;
             isGrounded_   = true;
+            flutterCdTimer_ = 0.0f;
             airVelocity_  = { 0.0f, 0.0f, 0.0f };
             dsSign_       = 0.0f;  // 次の入力で進行方向を決め直す
             switchCooldown_ = 0.1f;
@@ -460,6 +484,7 @@ void Player::Bounce() {
     if ( inAir_ ) {
         // 空中自由落下状態の場合：空中用のY速度を直接上向きに設定
         airVelocity_.y = jumpPower_;
+        flutterCdTimer_ = 0.6f;
     } else {
         // レール移動中の場合：ジャンプ速度を上向きにし、滞空状態を開始
         jumpVelocity_   = jumpPower_;
