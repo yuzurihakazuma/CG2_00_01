@@ -29,6 +29,7 @@ public:
     const std::vector<std::vector<Vector3>>& GetRailLines() const{ return data_->railLines; }
     const std::vector<int>& GetRailTypes() const{ return data_->railTypes; }
     const std::vector<Vector4>& GetRailMotions() const{ return data_->railMotions; }
+    const std::vector<bool>& GetRailHasGround() const{ return data_->railHasGround; }
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }

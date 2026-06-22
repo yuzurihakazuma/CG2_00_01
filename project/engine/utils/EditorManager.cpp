@@ -790,6 +790,10 @@ const std::vector<Vector4>& EditorManager::GetEditorRailMotions() const{
     static const std::vector<Vector4> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailMotions() : kEmpty;
 }
+const std::vector<bool>& EditorManager::GetEditorRailHasGround() const{
+    static const std::vector<bool> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailHasGround() : kEmpty;
+}
 
 // 敵の配置データ（マップ保存に乗せる）を levelEditor_ へ委譲
 void EditorManager::SetEditorEnemyData(const std::vector<LevelEnemyData>& e){

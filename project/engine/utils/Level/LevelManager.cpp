@@ -50,6 +50,14 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     j["railMotions"] = motionsArray;
 
+    // 各レールの地面フラグ（true=安全/false=穴あり）。railLines と数を合わせて保存
+    json groundArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        bool g = ( i < levelData.railHasGround.size() ) ? levelData.railHasGround[i] : true;
+        groundArray.push_back(g);
+    }
+    j["railHasGround"] = groundArray;
+
     // 敵の配置 [type, railIndex, distance]
     json enemiesArray = json::array();
     for ( const auto& e : levelData.enemies ) {
@@ -156,6 +164,13 @@ LevelData LevelManager::Load(const std::string& fileName){
         }
     }
 
+    // 地面フラグを読み込む（true=安全/false=穴あり。無ければデフォルト true）
+    if ( j.contains("railHasGround") && j["railHasGround"].is_array() ) {
+        for ( const auto& g : j["railHasGround"] ) {
+            levelData.railHasGround.push_back(g.get<bool>());
+        }
+    }
+
     // 敵の配置を読み込む [type, railIndex, distance]
     if ( j.contains("enemies") && j["enemies"].is_array() ) {
         for ( const auto& je : j["enemies"] ) {
@@ -172,9 +187,10 @@ LevelData LevelManager::Load(const std::string& fileName){
         levelData.railLines.push_back(std::vector<Vector3>());
     }
 
-    // タイプ・動き配列を railLines と同じ数に整える（足りない分はデフォルト）
+    // タイプ・動き・地面フラグ配列を railLines と同じ数に整える（足りない分はデフォルト）
     levelData.railTypes.resize(levelData.railLines.size(), -1);
     levelData.railMotions.resize(levelData.railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
+    levelData.railHasGround.resize(levelData.railLines.size(), true);
 
     return levelData;
 }

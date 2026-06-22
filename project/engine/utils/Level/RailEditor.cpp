@@ -76,6 +76,9 @@ void RailEditor::OnMapChanged(){
     if ( data_->railMotions.size() != data_->railLines.size() ) {
         data_->railMotions.resize(data_->railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
     }
+    if ( data_->railHasGround.size() != data_->railLines.size() ) {
+        data_->railHasGround.resize(data_->railLines.size(), true);
+    }
     initialLines_   = data_->railLines;
     initialTypes_   = data_->railTypes;
     initialMotions_ = data_->railMotions;
@@ -261,6 +264,7 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railLines.push_back(std::move(line));
 	data_->railTypes.push_back(-1);
 	data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
+	data_->railHasGround.push_back(true);
 	SelectWholeRail(( int ) data_->railLines.size() - 1); // 置いた直後にギズモで微調整できる
 	RebuildRailPoints();
 
@@ -298,6 +302,7 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railLines.push_back(std::move(copy));
 	data_->railTypes.push_back(data_->railTypes[railIdx]);
 	data_->railMotions.push_back(data_->railMotions[railIdx]);
+	data_->railHasGround.push_back(( railIdx < ( int ) data_->railHasGround.size() ) ? data_->railHasGround[railIdx] : true);
 	SelectWholeRail(( int ) data_->railLines.size() - 1);
 	RebuildRailPoints();
 }
@@ -541,9 +546,12 @@ void RailEditor::DrawWindow(){
 	if ( ImGui::BeginTabBar("RailEditorTabs") ) {
 	if ( ImGui::BeginTabItem("管理 (Rails)") ) {
 
-	// railTypes / railMotions を railLines と必ず同数に保つ
+	// railTypes / railMotions / railHasGround を railLines と必ず同数に保つ
 	if ( data_->railMotions.size() != data_->railLines.size() ) {
 		data_->railMotions.resize(data_->railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
+	}
+	if ( data_->railHasGround.size() != data_->railLines.size() ) {
+		data_->railHasGround.resize(data_->railLines.size(), true);
 	}
 	if ( data_->railTypes.size() != data_->railLines.size() ) {
 		data_->railTypes.resize(data_->railLines.size(), -1);
@@ -584,6 +592,8 @@ void RailEditor::DrawWindow(){
 			data_->railLines.erase(data_->railLines.begin() + deleteRail);
 			data_->railTypes.erase(data_->railTypes.begin() + deleteRail);
 			data_->railMotions.erase(data_->railMotions.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railHasGround.size() )
+				data_->railHasGround.erase(data_->railHasGround.begin() + deleteRail);
 			if ( currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
 				currentEditRailIndex_ = ( int ) data_->railLines.size() - 1;
 			}
@@ -630,6 +640,17 @@ void RailEditor::DrawWindow(){
 		if ( motion.w < 0.1f ) motion.w = 0.1f;
 		if ( motionChanged ) { ++railVersion_; } // ゲーム側へ即反映
 		ImGui::TextDisabled("例: 振幅(0,0,3) 周期2 → 奥行きに±3mを2秒で往復");
+		ImGui::Separator();
+
+		// --- 地面フラグ ---
+		data_->railHasGround.resize(data_->railLines.size(), true);
+		bool hg = data_->railHasGround[currentEditRailIndex_];
+		if ( ImGui::Checkbox("地面あり（端で落ちない）", &hg) ) {
+			data_->railHasGround[currentEditRailIndex_] = hg;
+			++railVersion_;
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled(hg ? "安全レール" : "穴ありレール");
 		ImGui::Separator();
 	}
 
@@ -1050,6 +1071,7 @@ void RailEditor::DrawWindow(){
 		data_->railLines.push_back(std::vector<Vector3>());
 		data_->railTypes.push_back(-1);
 		data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
+		data_->railHasGround.push_back(true);
 		currentEditRailIndex_ = ( int ) data_->railLines.size() - 1;
 		selectedRailNode_ = -1;
 		ClearMultiSelection();

@@ -40,6 +40,10 @@ struct LevelData{
     //   x,y,z = sin波の振幅(m)（全て0なら動かない） / w = 周期(秒)
     std::vector<Vector4> railMotions;
 
+    // 各レールの地面フラグ（railLines と同じ並び・同じ要素数を維持する）
+    //   true = 端で落ちない安全レール / false = 端から飛び出せるアクションレール
+    std::vector<bool> railHasGround;
+
     // 敵の配置（レール上に置く敵。マップと一緒に保存/読込する）
     std::vector<LevelEnemyData> enemies;
 

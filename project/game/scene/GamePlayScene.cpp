@@ -393,12 +393,14 @@ void GamePlayScene::SyncRailsFromEditor(){
 	}
 
 	// 動き割当（x,y,z=振幅 / w=周期）
+	const auto& grounds = EditorManager::GetInstance()->GetEditorRailHasGround();
 	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
 		if ( i < motions.size() ) {
 			splineRails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
 			splineRails_[i].motionPeriod = ( motions[i].w > 0.1f ) ? motions[i].w : 0.1f;
 		}
 		splineRails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
+		splineRails_[i].hasGround  = ( i < grounds.size() ) ? grounds[i] : true;
 	}
 	railAnimTime_ = 0.0f;
 

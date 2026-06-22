@@ -72,6 +72,8 @@ public:
 	const std::vector<int>& GetEditorRailTypes() const;
 	// 各レールの動き（x,y,z=振幅 / w=周期）。railLines と同じ並び
 	const std::vector<Vector4>& GetEditorRailMotions() const;
+	// 各レールの地面フラグ（true=安全/false=穴あり）。railLines と同じ並び
+	const std::vector<bool>& GetEditorRailHasGround() const;
 
 	// --- 敵の配置（マップと一緒に保存/読込）。シーンの EnemyEditor と同期する ---
 	void SetEditorEnemyData(const std::vector<LevelEnemyData>& e); // シーン→エディタ（保存に乗せる）

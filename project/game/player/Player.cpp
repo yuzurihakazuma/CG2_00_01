@@ -213,24 +213,34 @@ void Player::Update(const std::vector<SplineRail>& allRails){
         if ( currentDistance_ > len ) {
             if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) {
                 transitioned = true;
-            } else if ( tryJoinNearbyBody(len) ) {   // 近い別レールへ合流（地上:停止/空中:高さ維持で乗り移り）
+            } else if ( tryJoinNearbyBody(len) ) {
                 transitioned = true;
-            } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
-                detachToAir(len);
-                return; // 以降はレール上の処理なのでスキップ
+            } else if ( !cur.hasGround && kFallOffEdges && dsSign_ != 0.0f ) {
+                // 地面なしレール：端を越えたら空中へ飛び出す
+                // ただし接続済み端点でジャンプ中はクランプ（飛び越え防止）
+                if ( !isGrounded_ && cur.backConnIndex >= 0 ) {
+                    currentDistance_ = len;
+                } else {
+                    detachToAir(len);
+                    return;
+                }
             } else {
-                currentDistance_ = len;   // 端で停止
+                currentDistance_ = len; // 地面ありレール or 停止中：端でクランプ
             }
         } else if ( currentDistance_ < 0.0f ) {
             if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) {
                 transitioned = true;
-            } else if ( tryJoinNearbyBody(0.0f) ) {   // 近い別レールへ合流（地上:停止/空中:高さ維持で乗り移り）
+            } else if ( tryJoinNearbyBody(0.0f) ) {
                 transitioned = true;
-            } else if ( kFallOffEdges && dsSign_ != 0.0f ) {
-                detachToAir(0.0f);
-                return; // 以降はレール上の処理なのでスキップ
+            } else if ( !cur.hasGround && kFallOffEdges && dsSign_ != 0.0f ) {
+                if ( !isGrounded_ && cur.frontConnIndex >= 0 ) {
+                    currentDistance_ = 0.0f;
+                } else {
+                    detachToAir(0.0f);
+                    return;
+                }
             } else {
-                currentDistance_ = 0.0f;  // 端で停止
+                currentDistance_ = 0.0f;
             }
         }
     } else {
@@ -373,28 +383,23 @@ void Player::Update(const std::vector<SplineRail>& allRails){
 void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
     Input* input = Input::GetInstance();
 
-    // ---- 空中機動（エアコントロール）----
-    // レール間をジャンプ中でも軌道を調整できるようにする。
-    //   A/D=世界±X / W/S=世界±Z（レール上の操作と同じワールド方向の意思）。
-    //   入力で水平速度を増減し、最高速度でクランプ → 隣のレールへ寄せて着地できる。
+    // ---- 空中の軌道修正（弱めのエアコントロール）----
+    // ミスした時にレールへ戻れる程度。自由に飛び回れるほどは強くしない。
     float ax = 0.0f, az = 0.0f;
     if ( input->Pushkey(DIK_D) ) ax += 1.0f;
     if ( input->Pushkey(DIK_A) ) ax -= 1.0f;
     if ( input->Pushkey(DIK_W) ) az += 1.0f;
     if ( input->Pushkey(DIK_S) ) az -= 1.0f;
 
-    const float kAirAccel = 28.0f;            // 空中での加速 (m/s^2)。大きいほどキビキビ操作できる
-    const float kAirMaxXZ = moveSpeed_ * 1.5f; // 空中の水平最高速度 (m/s)
-    const float kAirDrag  = 2.0f;             // 入力の無い軸を緩く減衰させる係数 (1/s)
+    const float kAirAccel = 10.0f;             // 空中での加速（控えめ＝軌道修正用）
+    const float kAirMaxXZ = moveSpeed_ * 0.8f;  // 地上より遅い
+    const float kAirDrag  = 3.0f;              // 入力がない軸は早めに減速
 
     airVelocity_.x += ax * kAirAccel * dt;
     airVelocity_.z += az * kAirAccel * dt;
-
-    // 入力していない軸は軽く減衰させて止めやすく（オーバーシュート防止）
     if ( ax == 0.0f ) airVelocity_.x -= airVelocity_.x * std::min(kAirDrag * dt, 1.0f);
     if ( az == 0.0f ) airVelocity_.z -= airVelocity_.z * std::min(kAirDrag * dt, 1.0f);
 
-    // 水平速度を最高速度でクランプ（斜めでも一定以上には加速しない）
     float hs = std::sqrt(airVelocity_.x * airVelocity_.x + airVelocity_.z * airVelocity_.z);
     if ( hs > kAirMaxXZ && hs > 1e-4f ) {
         float k = kAirMaxXZ / hs;
