@@ -215,6 +215,22 @@ float SplineRail::GetClosestDistance(const Vector3& worldPos) const{
     return bestS;
 }
 
+// 指定距離(s)が「穴」区間か：最も近いノードが穴指定なら true。
+// ノード i は t=i に対応するので、その弧長距離 GetDistanceFromT(i) と比べて最近傍を探す。
+bool SplineRail::IsHoleAtDistance(float distance) const{
+    int n = static_cast< int >( nodes.size() );
+    if ( n < 2 || nodeHole.empty() ) return false;
+    int lim = std::min(n, static_cast< int >( nodeHole.size() ));
+    int   best = -1;
+    float bestDiff = 1e30f;
+    for ( int i = 0; i < lim; ++i ) {
+        float nodeDist = GetDistanceFromT(static_cast< float >( i ));
+        float diff = std::fabs(nodeDist - distance);
+        if ( diff < bestDiff ) { bestDiff = diff; best = i; }
+    }
+    return best >= 0 && nodeHole[best] != 0;
+}
+
 float SplineRail::GetDistanceFromT(float t) const{
     if ( tTable_.empty() ) return 0.0f;
     if ( t <= 0.0f ) return 0.0f;

@@ -50,13 +50,24 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     j["railMotions"] = motionsArray;
 
-    // 各レールの地面フラグ（true=安全/false=穴あり）。railLines と数を合わせて保存
+    // 各レールの地面タイプ(0=Safe/1=Gap/2=NoGround)。railLines と数を合わせて保存
     json groundArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        bool g = ( i < levelData.railHasGround.size() ) ? levelData.railHasGround[i] : true;
+        int g = ( i < levelData.railGroundTypes.size() ) ? levelData.railGroundTypes[i] : 0;
         groundArray.push_back(g);
     }
-    j["railHasGround"] = groundArray;
+    j["railGroundTypes"] = groundArray;
+
+    // 各レールのノード単位の穴指定（外=レール / 内=ノード・1=穴）
+    json holesArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        json rh = json::array();
+        if ( i < levelData.railNodeHoles.size() ) {
+            for ( int v : levelData.railNodeHoles[i] ) rh.push_back(v);
+        }
+        holesArray.push_back(rh);
+    }
+    j["railNodeHoles"] = holesArray;
 
     // 敵の配置 [type, railIndex, distance]
     json enemiesArray = json::array();
@@ -164,10 +175,21 @@ LevelData LevelManager::Load(const std::string& fileName){
         }
     }
 
-    // 地面フラグを読み込む（true=安全/false=穴あり。無ければデフォルト true）
-    if ( j.contains("railHasGround") && j["railHasGround"].is_array() ) {
-        for ( const auto& g : j["railHasGround"] ) {
-            levelData.railHasGround.push_back(g.get<bool>());
+    // 地面タイプを読み込む（0=Safe/1=Gap/2=NoGround。無ければデフォルト0=Safe）
+    if ( j.contains("railGroundTypes") && j["railGroundTypes"].is_array() ) {
+        for ( const auto& g : j["railGroundTypes"] ) {
+            levelData.railGroundTypes.push_back(g.get<int>());
+        }
+    }
+
+    // ノード単位の穴指定を読み込む（外=レール / 内=ノード）
+    if ( j.contains("railNodeHoles") && j["railNodeHoles"].is_array() ) {
+        for ( const auto& rh : j["railNodeHoles"] ) {
+            std::vector<int> holes;
+            if ( rh.is_array() ) {
+                for ( const auto& v : rh ) holes.push_back(v.get<int>());
+            }
+            levelData.railNodeHoles.push_back(holes);
         }
     }
 
@@ -190,7 +212,12 @@ LevelData LevelManager::Load(const std::string& fileName){
     // タイプ・動き・地面フラグ配列を railLines と同じ数に整える（足りない分はデフォルト）
     levelData.railTypes.resize(levelData.railLines.size(), -1);
     levelData.railMotions.resize(levelData.railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
-    levelData.railHasGround.resize(levelData.railLines.size(), true);
+    levelData.railGroundTypes.resize(levelData.railLines.size(), 0);
+    levelData.railNodeHoles.resize(levelData.railLines.size());
+    // 各レールの穴配列をノード数に合わせる（足りない分は0=穴なし）
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        levelData.railNodeHoles[i].resize(levelData.railLines[i].size(), 0);
+    }
 
     return levelData;
 }

@@ -580,13 +580,21 @@ void EditorManager::Update(){
                 ImU32 col = ( dtype == 1 )
                     ? IM_COL32(255, 165, 70, isCur ? 235 : 150)   // 縦 = 橙
                     : IM_COL32(90, 180, 255, isCur ? 235 : 150);  // 横 = 青
+                const ImU32 holeCol = IM_COL32(255, 60, 50, isCur ? 245 : 180); // 穴 = 赤
+                const float baseW = isCur ? 2.5f : 1.5f;
                 const int nodeCount = re->GetNodeCountOf(rr);
-                ImVec2 prevS; bool prevOk = false;
-                for ( int i = 0; i < nodeCount; ++i ) {
-                    Vector3 p; if ( !re->GetNodePosOf(rr, i, p) ) { prevOk = false; continue; }
-                    ImVec2 s; bool ok = project(p, s);
-                    if ( ok && prevOk ) dl->AddLine(prevS, s, col, isCur ? 2.5f : 1.5f);
-                    prevS = s; prevOk = ok;
+                // 各区間を中点で2分割し、「近い側のノードが穴か」で半分ずつ色を変える。
+                // → 穴ノード1個なら、その周り（前後の半区間）だけが赤くなり分かりやすい。
+                for ( int i = 1; i < nodeCount; ++i ) {
+                    Vector3 pa, pb;
+                    if ( !re->GetNodePosOf(rr, i - 1, pa) || !re->GetNodePosOf(rr, i, pb) ) continue;
+                    ImVec2 sa, sb;
+                    if ( !project(pa, sa) || !project(pb, sb) ) continue;
+                    ImVec2 mid = { ( sa.x + sb.x ) * 0.5f, ( sa.y + sb.y ) * 0.5f };
+                    bool holeA = re->IsNodeHole(rr, i - 1);
+                    bool holeB = re->IsNodeHole(rr, i);
+                    dl->AddLine(sa, mid, holeA ? holeCol : col, baseW + ( holeA ? 1.5f : 0.0f ));
+                    dl->AddLine(mid, sb, holeB ? holeCol : col, baseW + ( holeB ? 1.5f : 0.0f ));
                 }
             }
 
@@ -606,7 +614,7 @@ void EditorManager::Update(){
                 }
             }
 
-            // 全レールのノードを描画（編集中の路線＝明るい緑、他＝控えめな色）
+            // 全レールのノードを描画（編集中の路線＝明るい緑、他＝控えめな色、穴＝赤）
             for ( int rr = 0; rr < railCount; ++rr ) {
                 const bool isCur = ( rr == curRail );
                 const ImU32 col = isCur ? IM_COL32(80, 220, 120, 255) : IM_COL32(150, 175, 160, 170);
@@ -614,7 +622,9 @@ void EditorManager::Update(){
                 for ( int i = 0; i < nodeCount; ++i ) {
                     Vector3 p; if ( !re->GetNodePosOf(rr, i, p) ) continue;
                     ImVec2 s; if ( !project(p, s) ) continue;
-                    dl->AddCircleFilled(s, isCur ? 3.5f : 3.0f, col);
+                    bool hole = re->IsNodeHole(rr, i);
+                    dl->AddCircleFilled(s, hole ? 5.0f : ( isCur ? 3.5f : 3.0f ),
+                        hole ? IM_COL32(255, 60, 50, 255) : col);
                 }
             }
             // 選択中のノード群（オレンジの輪）
@@ -790,9 +800,13 @@ const std::vector<Vector4>& EditorManager::GetEditorRailMotions() const{
     static const std::vector<Vector4> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailMotions() : kEmpty;
 }
-const std::vector<bool>& EditorManager::GetEditorRailHasGround() const{
-    static const std::vector<bool> kEmpty;
-    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailHasGround() : kEmpty;
+const std::vector<int>& EditorManager::GetEditorRailGroundTypes() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGroundTypes() : kEmpty;
+}
+const std::vector<std::vector<int>>& EditorManager::GetEditorRailNodeHoles() const{
+    static const std::vector<std::vector<int>> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailNodeHoles() : kEmpty;
 }
 
 // 敵の配置データ（マップ保存に乗せる）を levelEditor_ へ委譲

@@ -26,6 +26,13 @@ static constexpr bool kFallOffEdges = true;
 // ここより下に落ちたらスタートへリスポーン
 static constexpr float kKillY = -10.0f;
 
+// 水平(x,z)を単位ベクトル化（長さ0なら0ベクトル）。空中の進行方向の記録に使う
+static Vector3 HorizDir(float x, float z){
+    float len = std::sqrt(x * x + z * z);
+    if ( len < 1e-4f ) return { 0.0f, 0.0f, 0.0f };
+    return { x / len, 0.0f, z / len };
+}
+
 void Player::Initialize(){
     position_ = { 0.0f, 0.0f, 0.0f };
     rotation_ = { 0.0f, 0.0f, 0.0f };
@@ -48,6 +55,7 @@ void Player::Initialize(){
     airVelocity_ = { 0.0f, 0.0f, 0.0f };
     airLandCooldown_ = 0.0f;
     airFromRail_ = -1;
+    airDir_      = { 0.0f, 0.0f, 0.0f };
 }
 
 void Player::Update(const std::vector<SplineRail>& allRails){
@@ -69,6 +77,39 @@ void Player::Update(const std::vector<SplineRail>& allRails){
 
     const SplineRail& cur = allRails[currentRailIndex_];
     if ( cur.nodes.size() < 2 ) return;
+
+    // 指定距離が「穴」か？（ノード穴 / 支えのない NoGround レール）。
+    //   穴の上はレールに地面が無い → 接地できず落下する。
+    //   ※プレイヤーはレールから離れず、レール上を距離で進みつつ高さ(heightOffset_)だけ落ちる。
+    //     これで「進行方向にレールへ沿って動く」を保ったまま穴で落下できる。
+    auto overHoleAt = [&](float s) -> bool{
+        // 乗り換え後も正しく判定するため、常に「今の」レールを見る
+        const SplineRail& rr = allRails[currentRailIndex_];
+        if ( rr.IsHoleAtDistance(s) ) return true;
+        if ( rr.groundType == SplineRail::GroundType::NoGround ) {
+            // 足元に別の地面レールがあれば支えられる（交差点など）
+            Vector3 fp = rr.GetPositionByDistance(s);
+            for ( int i = 0; i < ( int ) allRails.size(); ++i ) {
+                if ( i == currentRailIndex_ ) continue;
+                const SplineRail& r = allRails[i];
+                if ( r.groundType == SplineRail::GroundType::NoGround || r.nodes.size() < 2 ) continue;
+                float cd = r.GetClosestDistance(fp);
+                Vector3 cp = r.GetPositionByDistance(cd);
+                float dx = cp.x - fp.x, dz = cp.z - fp.z;
+                if ( std::sqrt(dx * dx + dz * dz) < 1.0f && std::abs(cp.y - fp.y) < 0.8f ) return false;
+            }
+            return true; // NoGround で支えなし
+        }
+        return false;
+        };
+
+    // 接地中に穴の上へ来たら、その場から落下開始（レールには乗ったまま高さだけ落ちる）。
+    if ( isGrounded_ && overHoleAt(currentDistance_) ) {
+        isGrounded_   = false;
+        jumpVelocity_ = 0.0f;                                  // 静かに落ち始める
+        if ( flutterCdTimer_ <= 0.0f ) flutterCdTimer_ = 0.6f; // 落下中もふんばりで粘れる
+    }
+
     const bool curHorizontal = ( cur.type == SplineRail::RailType::Horizontal );
 
     // =================================================================
@@ -159,6 +200,7 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             inAir_ = true;
             position_ = { edgePos.x, edgePos.y + heightOffset_, edgePos.z };
             airVelocity_ = { tan.x * dsSign_ * moveSpeed_, jumpVelocity_, tan.z * dsSign_ * moveSpeed_ };
+            airDir_ = HorizDir(tan.x * dsSign_, tan.z * dsSign_);
             heightOffset_ = 0.0f;
             jumpVelocity_ = 0.0f;
             isGrounded_   = false;
@@ -183,6 +225,7 @@ void Player::Update(const std::vector<SplineRail>& allRails){
                 if ( j == currentRailIndex_ ) continue;
                 const SplineRail& rj = allRails[j];
                 if ( rj.nodes.size() < 2 ) continue;
+                if ( rj.groundType == SplineRail::GroundType::NoGround ) continue; // 地面なしには合流しない
                 float cd = rj.GetClosestDistance(edgePos);
                 Vector3 cp = rj.GetPositionByDistance(cd);
                 float dx = cp.x - edgePos.x, dy = cp.y - edgePos.y, dz = cp.z - edgePos.z;
@@ -210,13 +253,22 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             return true;
             };
 
+        // 接続先が NoGround（穴）か？ → そこへは乗らず、空中へ飛び出して飛び越える
+        auto connIsNoGround = [&](int connIdx) -> bool{
+            return connIdx >= 0 && connIdx < ( int ) allRails.size()
+                && allRails[connIdx].groundType == SplineRail::GroundType::NoGround;
+            };
+
         if ( currentDistance_ > len ) {
-            if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) {
+            if ( connIsNoGround(cur.backConnIndex) && dsSign_ != 0.0f ) {
+                detachToAir(len);   // 穴へ飛び出す（ジャンプ中＝飛び越え／地上＝落下）
+                return;
+            } else if ( tryContinue(cur.backConnIndex, cur.backConnToFront, currentDistance_ - len) ) {
                 transitioned = true;
             } else if ( tryJoinNearbyBody(len) ) {
                 transitioned = true;
-            } else if ( !cur.hasGround && kFallOffEdges && dsSign_ != 0.0f ) {
-                // 地面なしレール：端を越えたら空中へ飛び出す
+            } else if ( cur.groundType == SplineRail::GroundType::Gap && kFallOffEdges && dsSign_ != 0.0f ) {
+                // Gap レール：端を越えたら空中へ飛び出す
                 // ただし接続済み端点でジャンプ中はクランプ（飛び越え防止）
                 if ( !isGrounded_ && cur.backConnIndex >= 0 ) {
                     currentDistance_ = len;
@@ -224,21 +276,32 @@ void Player::Update(const std::vector<SplineRail>& allRails){
                     detachToAir(len);
                     return;
                 }
+            } else if ( !isGrounded_ && dsSign_ != 0.0f ) {
+                // Safe レールの未接続な端でも、ジャンプ中なら飛び出して次レールへ飛び移れる
+                // （連結していなくても空中状態の着地走査で次のレールに乗れる）
+                detachToAir(len);
+                return;
             } else {
-                currentDistance_ = len; // 地面ありレール or 停止中：端でクランプ
+                currentDistance_ = len; // 地上 or 停止中：端でクランプ（歩いて落ちない）
             }
         } else if ( currentDistance_ < 0.0f ) {
-            if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) {
+            if ( connIsNoGround(cur.frontConnIndex) && dsSign_ != 0.0f ) {
+                detachToAir(0.0f);
+                return;
+            } else if ( tryContinue(cur.frontConnIndex, cur.frontConnToFront, -currentDistance_) ) {
                 transitioned = true;
             } else if ( tryJoinNearbyBody(0.0f) ) {
                 transitioned = true;
-            } else if ( !cur.hasGround && kFallOffEdges && dsSign_ != 0.0f ) {
+            } else if ( cur.groundType == SplineRail::GroundType::Gap && kFallOffEdges && dsSign_ != 0.0f ) {
                 if ( !isGrounded_ && cur.frontConnIndex >= 0 ) {
                     currentDistance_ = 0.0f;
                 } else {
                     detachToAir(0.0f);
                     return;
                 }
+            } else if ( !isGrounded_ && dsSign_ != 0.0f ) {
+                detachToAir(0.0f);
+                return;
             } else {
                 currentDistance_ = 0.0f;
             }
@@ -263,8 +326,13 @@ void Player::Update(const std::vector<SplineRail>& allRails){
         const float kMinOff  = 0.3f;  // 押した方向にこれ以上伸びているレールであること
         const bool  wantHorizontalTarget = !curHorizontal; // 縦に乗ってたら横へ／横なら縦へ
 
+        // 空中でも乗り換えできるよう、判定にはレール表面の足元位置(高さオフセット無し)を使う。
+        //   position_ は heightOffset_ を含むため、ジャンプ/落下中は相手レールとのY差で
+        //   距離(kReach)に引っかかり乗り換えできなかった。footPos なら地上と同条件になる。
+        Vector3 footPos = cur.GetPositionByDistance(currentDistance_);
+
         // 乗り換えの判定軸：横レール上はZ(奥/手前)、縦レール上はX(右/左)
-        const float myAxis = curHorizontal ? position_.z : position_.x;
+        const float myAxis = curHorizontal ? footPos.z : footPos.x;
 
         int   bestRail  = -1;
         float bestDist  = 0.0f;
@@ -277,10 +345,10 @@ void Player::Update(const std::vector<SplineRail>& allRails){
             bool jHorizontal = ( rj.type == SplineRail::RailType::Horizontal );
             if ( jHorizontal != wantHorizontalTarget ) continue; // 反対タイプのみ
 
-            // 相手レール上で今のプレイヤーに最も近い点
-            float cd = rj.GetClosestDistance(position_);
+            // 相手レール上で今のプレイヤー(足元)に最も近い点
+            float cd = rj.GetClosestDistance(footPos);
             Vector3 cp = rj.GetPositionByDistance(cd);
-            float dx = cp.x - position_.x, dy = cp.y - position_.y, dz = cp.z - position_.z;
+            float dx = cp.x - footPos.x, dy = cp.y - footPos.y, dz = cp.z - footPos.z;
             float dist3d = std::sqrt(dx * dx + dy * dy + dz * dz);
             if ( dist3d > kReach ) continue; // 遠いレールへは飛ばない
 
@@ -303,11 +371,18 @@ void Player::Update(const std::vector<SplineRail>& allRails){
         }
 
         if ( bestRail >= 0 ) {
+            float oldFootY = footPos.y; // 乗り換え前のレール面の高さ
             currentRailIndex_ = bestRail;
             // 端ちょうどに着地しないよう少し内側へ
             float bl = allRails[bestRail].GetLength();
             float margin = std::min(0.15f, bl * 0.25f);
             currentDistance_ = std::clamp(bestDist, margin, bl - margin);
+            // 空中で乗り換えた時は、見た目のワールドYが飛ばないよう heightOffset_ を補正
+            //   （新レール面 + heightOffset_ ＝ 旧の見た目の高さ を保つ）。地上ならそのまま。
+            if ( !isGrounded_ ) {
+                float newFootY = allRails[bestRail].GetPositionByDistance(currentDistance_).y;
+                heightOffset_ += oldFootY - newFootY;
+            }
             switchCooldown_  = 0.25f;
             transitioned     = true;
             dsSign_          = 0.0f; // 新しいレールでは次の入力で進行方向を決め直す
@@ -350,11 +425,20 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     }
 
     heightOffset_ += jumpVelocity_ * dt;
+    // 着地：高さが0以下に降りてきた時。ただし
+    //   ・穴の上では着地しない（地面が無いのでそのまま落下を続ける＝穴に落ちる）
+    //   ・深く落ちすぎ(< -kLandBand)は「穴に落ちた」とみなし着地させない（横移動でワープ復帰しない）
+    const float kLandBand = 0.6f; // この範囲内で降りてきたら地面に着地
     if ( heightOffset_ <= 0.0f ) {
-        heightOffset_   = 0.0f;
-        jumpVelocity_   = 0.0f;
-        isGrounded_     = true;
-        flutterCdTimer_ = 0.0f;
+        bool overHole = overHoleAt(currentDistance_);
+        if ( !overHole && heightOffset_ >= -kLandBand ) {
+            // 地面あり＆降りてきた → 着地
+            heightOffset_   = 0.0f;
+            jumpVelocity_   = 0.0f;
+            isGrounded_     = true;
+            flutterCdTimer_ = 0.0f;
+        }
+        // 穴の上 or 深く落下中：着地せず heightOffset_ は負へ進む（レール下に落ちていく）
     }
 
     // =================================================================
@@ -363,6 +447,9 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     Vector3 basePos = rail.GetPositionByDistance(currentDistance_);
     basePos.y += heightOffset_;
     position_ = basePos;
+
+    // 穴に落ちて規定の高さより下まで落ちたらスタートへリスポーン
+    if ( position_.y < kKillY ) { Initialize(); return; }
 
     // 向き：実際に進んでいる方向（接線 × 進行符号）へ向ける。
     // dsSign_ ベースなので円状レールの途中でも進行方向と一致してブレない。
@@ -383,28 +470,50 @@ void Player::Update(const std::vector<SplineRail>& allRails){
 void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
     Input* input = Input::GetInstance();
 
-    // ---- 空中の軌道修正（弱めのエアコントロール）----
-    // ミスした時にレールへ戻れる程度。自由に飛び回れるほどは強くしない。
-    float ax = 0.0f, az = 0.0f;
-    if ( input->Pushkey(DIK_D) ) ax += 1.0f;
-    if ( input->Pushkey(DIK_A) ) ax -= 1.0f;
-    if ( input->Pushkey(DIK_W) ) az += 1.0f;
-    if ( input->Pushkey(DIK_S) ) az -= 1.0f;
+    // ---- 空中の軌道修正（前後は主操作・左右は弱い復帰ナッジ）----
+    //   ワールド入力(D=+X / A=-X / W=+Z / S=-Z)を「進行方向(前後)」と「横」に分解。
+    //   前後はしっかり効き、横は弱め＋入力を離すと真っ直ぐに戻る（自由飛行にはならない）。
+    //   真下落下(airDir_=0)の時だけは弱い全方向操作で復帰を狙える。
+    {
+        float ax = 0.0f, az = 0.0f;
+        if ( input->Pushkey(DIK_D) ) ax += 1.0f;
+        if ( input->Pushkey(DIK_A) ) ax -= 1.0f;
+        if ( input->Pushkey(DIK_W) ) az += 1.0f;
+        if ( input->Pushkey(DIK_S) ) az -= 1.0f;
 
-    const float kAirAccel = 10.0f;             // 空中での加速（控えめ＝軌道修正用）
-    const float kAirMaxXZ = moveSpeed_ * 0.8f;  // 地上より遅い
-    const float kAirDrag  = 3.0f;              // 入力がない軸は早めに減速
+        const float kAccelFwd = 12.0f;            // 前後（進行方向）の加速：主操作
+        const float kAccelLat = 5.0f;             // 左右（横）の加速：弱い復帰ナッジ
+        const float kMaxFwd   = moveSpeed_ * 0.9f; // 前後の最高速度
+        const float kMaxLat   = moveSpeed_ * 0.5f; // 横の最高速度（小さめ）
+        const float kLatDrag  = 4.0f;             // 横入力が無い時に真っ直ぐへ戻る減衰
 
-    airVelocity_.x += ax * kAirAccel * dt;
-    airVelocity_.z += az * kAirAccel * dt;
-    if ( ax == 0.0f ) airVelocity_.x -= airVelocity_.x * std::min(kAirDrag * dt, 1.0f);
-    if ( az == 0.0f ) airVelocity_.z -= airVelocity_.z * std::min(kAirDrag * dt, 1.0f);
+        if ( Length(airDir_) > 1e-4f ) {
+            // 進行方向に垂直な単位ベクトル（横方向）
+            Vector3 perp = { airDir_.z, 0.0f, -airDir_.x };
+            float along   = ax * airDir_.x + az * airDir_.z; // 前後入力
+            float lateral = ax * perp.x   + az * perp.z;     // 横入力
 
-    float hs = std::sqrt(airVelocity_.x * airVelocity_.x + airVelocity_.z * airVelocity_.z);
-    if ( hs > kAirMaxXZ && hs > 1e-4f ) {
-        float k = kAirMaxXZ / hs;
-        airVelocity_.x *= k;
-        airVelocity_.z *= k;
+            // 加速（前後は強め／横は弱め）
+            airVelocity_.x += ( airDir_.x * along * kAccelFwd + perp.x * lateral * kAccelLat ) * dt;
+            airVelocity_.z += ( airDir_.z * along * kAccelFwd + perp.z * lateral * kAccelLat ) * dt;
+
+            // 速度を前後成分・横成分に分解してそれぞれクランプ
+            float sAlong = airVelocity_.x * airDir_.x + airVelocity_.z * airDir_.z;
+            float sLat   = airVelocity_.x * perp.x   + airVelocity_.z * perp.z;
+            sAlong = std::clamp(sAlong, -kMaxFwd, kMaxFwd);
+            sLat   = std::clamp(sLat,   -kMaxLat, kMaxLat);
+            if ( lateral == 0.0f ) sLat -= sLat * std::min(kLatDrag * dt, 1.0f); // 横は離すと戻る
+            airVelocity_.x = airDir_.x * sAlong + perp.x * sLat;
+            airVelocity_.z = airDir_.z * sAlong + perp.z * sLat;
+        } else {
+            // 真下落下：進行方向が無いので、弱い全方向操作で復帰だけ可能
+            airVelocity_.x += ax * kAccelLat * dt;
+            airVelocity_.z += az * kAccelLat * dt;
+            if ( ax == 0.0f ) airVelocity_.x -= airVelocity_.x * std::min(kLatDrag * dt, 1.0f);
+            if ( az == 0.0f ) airVelocity_.z -= airVelocity_.z * std::min(kLatDrag * dt, 1.0f);
+            float hs = std::sqrt(airVelocity_.x * airVelocity_.x + airVelocity_.z * airVelocity_.z);
+            if ( hs > kMaxLat && hs > 1e-4f ) { float k = kMaxLat / hs; airVelocity_.x *= k; airVelocity_.z *= k; }
+        }
     }
 
     // ふんばり（flutter）：空中でも SPACE 長押しで滞空できる
@@ -445,9 +554,13 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
 
             const SplineRail& r = allRails[i];
             if ( r.nodes.size() < 2 ) continue;
+            if ( r.groundType == SplineRail::GroundType::NoGround ) continue; // 地面なしレールには着地しない
 
             float cd = r.GetClosestDistance(position_);
             Vector3 cp = r.GetPositionByDistance(cd);
+
+            // 穴区間には着地しない（飛び越え中に穴の上で着地→即落下のループを防ぐ）
+            if ( r.IsHoleAtDistance(cd) ) continue;
 
             // 水平にレールの真上にいるか
             float dx = cp.x - position_.x, dz = cp.z - position_.z;

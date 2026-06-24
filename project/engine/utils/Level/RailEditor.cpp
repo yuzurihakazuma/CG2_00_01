@@ -76,8 +76,8 @@ void RailEditor::OnMapChanged(){
     if ( data_->railMotions.size() != data_->railLines.size() ) {
         data_->railMotions.resize(data_->railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
     }
-    if ( data_->railHasGround.size() != data_->railLines.size() ) {
-        data_->railHasGround.resize(data_->railLines.size(), true);
+    if ( data_->railGroundTypes.size() != data_->railLines.size() ) {
+        data_->railGroundTypes.resize(data_->railLines.size(), 0);
     }
     initialLines_   = data_->railLines;
     initialTypes_   = data_->railTypes;
@@ -216,6 +216,36 @@ void RailEditor::SelectWholeRail(int railIdx){
 	}
 }
 
+// 選択中の全ノードの「穴」フラグをまとめて設定する
+void RailEditor::SetSelectionHole(bool hole){
+	if ( multiSelection_.empty() ) return;
+	// 穴配列を railLines と同数・各レールのノード数に整える
+	if ( data_->railNodeHoles.size() != data_->railLines.size() ) {
+		data_->railNodeHoles.resize(data_->railLines.size());
+	}
+	for ( const auto& ref : multiSelection_ ) {
+		if ( ref.rail < 0 || ref.rail >= ( int ) data_->railNodeHoles.size() ) continue;
+		auto& h = data_->railNodeHoles[ref.rail];
+		if ( ( int ) h.size() != ( int ) data_->railLines[ref.rail].size() ) {
+			h.resize(data_->railLines[ref.rail].size(), 0);
+		}
+		if ( ref.node >= 0 && ref.node < ( int ) h.size() ) {
+			h[ref.node] = hole ? 1 : 0;
+		}
+	}
+	++railVersion_; // ゲーム側へ即反映（マーカーの色も更新される）
+}
+
+// 選択ノードに穴が1つでもあるか
+bool RailEditor::SelectionHasHole() const{
+	for ( const auto& ref : multiSelection_ ) {
+		if ( ref.rail < 0 || ref.rail >= ( int ) data_->railNodeHoles.size() ) continue;
+		const auto& h = data_->railNodeHoles[ref.rail];
+		if ( ref.node >= 0 && ref.node < ( int ) h.size() && h[ref.node] != 0 ) return true;
+	}
+	return false;
+}
+
 Vector3 RailEditor::GetSelectionCenter() const{
 	Vector3 c { 0.0f, 0.0f, 0.0f };
 	int cnt = 0;
@@ -264,7 +294,8 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railLines.push_back(std::move(line));
 	data_->railTypes.push_back(-1);
 	data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
-	data_->railHasGround.push_back(true);
+	data_->railGroundTypes.push_back(0);
+	data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	SelectWholeRail(( int ) data_->railLines.size() - 1); // 置いた直後にギズモで微調整できる
 	RebuildRailPoints();
 
@@ -302,7 +333,9 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railLines.push_back(std::move(copy));
 	data_->railTypes.push_back(data_->railTypes[railIdx]);
 	data_->railMotions.push_back(data_->railMotions[railIdx]);
-	data_->railHasGround.push_back(( railIdx < ( int ) data_->railHasGround.size() ) ? data_->railHasGround[railIdx] : true);
+	data_->railGroundTypes.push_back(( railIdx < ( int ) data_->railGroundTypes.size() ) ? data_->railGroundTypes[railIdx] : 0);
+	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
+	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	SelectWholeRail(( int ) data_->railLines.size() - 1);
 	RebuildRailPoints();
 }
@@ -381,6 +414,12 @@ bool RailEditor::GetNodePosOf(int rail, int node, Vector3& out) const{
 	if ( node < 0 || node >= ( int ) line.size() ) return false;
 	out = line[node];
 	return true;
+}
+
+bool RailEditor::IsNodeHole(int rail, int node) const{
+	if ( rail < 0 || rail >= ( int ) data_->railNodeHoles.size() ) return false;
+	const auto& h = data_->railNodeHoles[rail];
+	return node >= 0 && node < ( int ) h.size() && h[node] != 0;
 }
 
 // 表示用：横(0)/縦(1)。railTypes が -1(自動)なら front→back の主軸で判定（実装と同じ1.5バイアス）
@@ -546,15 +585,18 @@ void RailEditor::DrawWindow(){
 	if ( ImGui::BeginTabBar("RailEditorTabs") ) {
 	if ( ImGui::BeginTabItem("管理 (Rails)") ) {
 
-	// railTypes / railMotions / railHasGround を railLines と必ず同数に保つ
+	// railTypes / railMotions / railGroundTypes を railLines と必ず同数に保つ
 	if ( data_->railMotions.size() != data_->railLines.size() ) {
 		data_->railMotions.resize(data_->railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
 	}
-	if ( data_->railHasGround.size() != data_->railLines.size() ) {
-		data_->railHasGround.resize(data_->railLines.size(), true);
+	if ( data_->railGroundTypes.size() != data_->railLines.size() ) {
+		data_->railGroundTypes.resize(data_->railLines.size(), 0);
 	}
 	if ( data_->railTypes.size() != data_->railLines.size() ) {
 		data_->railTypes.resize(data_->railLines.size(), -1);
+	}
+	if ( data_->railNodeHoles.size() != data_->railLines.size() ) {
+		data_->railNodeHoles.resize(data_->railLines.size());
 	}
 
 	// --- 路線リスト（クリック＝路線まるごと選択 / 複製 / 削除）---
@@ -592,8 +634,10 @@ void RailEditor::DrawWindow(){
 			data_->railLines.erase(data_->railLines.begin() + deleteRail);
 			data_->railTypes.erase(data_->railTypes.begin() + deleteRail);
 			data_->railMotions.erase(data_->railMotions.begin() + deleteRail);
-			if ( deleteRail < ( int ) data_->railHasGround.size() )
-				data_->railHasGround.erase(data_->railHasGround.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railGroundTypes.size() )
+				data_->railGroundTypes.erase(data_->railGroundTypes.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railNodeHoles.size() )
+				data_->railNodeHoles.erase(data_->railNodeHoles.begin() + deleteRail);
 			if ( currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
 				currentEditRailIndex_ = ( int ) data_->railLines.size() - 1;
 			}
@@ -642,15 +686,11 @@ void RailEditor::DrawWindow(){
 		ImGui::TextDisabled("例: 振幅(0,0,3) 周期2 → 奥行きに±3mを2秒で往復");
 		ImGui::Separator();
 
-		// --- 地面フラグ ---
-		data_->railHasGround.resize(data_->railLines.size(), true);
-		bool hg = data_->railHasGround[currentEditRailIndex_];
-		if ( ImGui::Checkbox("地面あり（端で落ちない）", &hg) ) {
-			data_->railHasGround[currentEditRailIndex_] = hg;
-			++railVersion_;
-		}
-		ImGui::SameLine();
-		ImGui::TextDisabled(hg ? "安全レール" : "穴ありレール");
+		// --- 地面タイプ ---
+		data_->railGroundTypes.resize(data_->railLines.size(), 0);
+		int& gt = data_->railGroundTypes[currentEditRailIndex_];
+		const char* groundLabels[] = { "Safe (安全)", "Gap (穴：飛び出し可)", "NoGround (地面なし：即落下)" };
+		if ( ImGui::Combo("地面タイプ", &gt, groundLabels, 3) ) { ++railVersion_; }
 		ImGui::Separator();
 	}
 
@@ -802,16 +842,55 @@ void RailEditor::DrawWindow(){
 		ImGui::Separator();
 	}
 
+	// この路線の穴配列をノード数に合わせて整える（外はDrawWindow冒頭で整える）
+	if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
+		data_->railNodeHoles[currentEditRailIndex_].resize(
+			data_->railLines[currentEditRailIndex_].size(), 0);
+	}
+
+	ImGui::TextDisabled("「穴」にチェック→そのノード付近が落下区間（ジャンプで飛び越え可）");
+
+	// --- マウス箱選択 → 穴指定（Game View でドラッグして囲んだノードに適用）---
+	{
+		int selCount = ( int ) GetMultiSelection().size();
+		ImGui::Text("マウス選択: %d ノード", selCount);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if ( ImGui::IsItemHovered() ) {
+			ImGui::SetTooltip("Game View で何もない所からドラッグ→ノードを箱選択。\nその後このボタンで選択ノードを穴/通常に切り替え。");
+		}
+		ImGui::BeginDisabled(selCount == 0);
+		if ( ImGui::Button("選択を穴にする") ) { SetSelectionHole(true); }
+		ImGui::SameLine();
+		if ( ImGui::Button("選択の穴を解除") ) { SetSelectionHole(false); }
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if ( ImGui::SmallButton("この路線を全選択") ) { SelectWholeRail(currentEditRailIndex_); }
+	}
+	ImGui::Separator();
+
 	ImGui::BeginChild("RailNodeList", ImVec2(0, 300), true);
 	for ( size_t i = 0; i < data_->railLines[currentEditRailIndex_].size(); ++i ) {
 		ImGui::PushID(static_cast< int >(i));
 		std::string label = "Node " + std::to_string(i);
 
-		if ( ImGui::Selectable(label.c_str(), selectedRailNode_ == i, ImGuiSelectableFlags_AllowOverlap, ImVec2(80, 0)) ) {
+		if ( ImGui::Selectable(label.c_str(), selectedRailNode_ == i, ImGuiSelectableFlags_AllowOverlap, ImVec2(60, 0)) ) {
 			selectedRailNode_ = static_cast< int >(i);
 		}
 		ImGui::SameLine();
-		ImGui::PushItemWidth(150.0f);
+
+		// 穴チェックボックス
+		if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size()
+			&& i < data_->railNodeHoles[currentEditRailIndex_].size() ) {
+			bool hole = ( data_->railNodeHoles[currentEditRailIndex_][i] != 0 );
+			if ( ImGui::Checkbox("穴", &hole) ) {
+				data_->railNodeHoles[currentEditRailIndex_][i] = hole ? 1 : 0;
+				++railVersion_;
+			}
+			ImGui::SameLine();
+		}
+
+		ImGui::PushItemWidth(135.0f);
 		if ( ImGui::DragFloat3(( "##" + label ).c_str(), &data_->railLines[currentEditRailIndex_][i].x, 0.5f) ) {
 			++railVersion_; // 数値編集でも緑線をライブ更新
 		}
@@ -828,6 +907,11 @@ void RailEditor::DrawWindow(){
 				newPos.z += 5.0f;
 			}
 			data_->railLines[currentEditRailIndex_].insert(data_->railLines[currentEditRailIndex_].begin() + i + 1, newPos);
+			// 穴配列も同じ位置に挿入（穴なし=0）
+			if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
+				auto& h = data_->railNodeHoles[currentEditRailIndex_];
+				if ( i + 1 <= h.size() ) h.insert(h.begin() + i + 1, 0);
+			}
 
 			RebuildRailPoints(); // 配列が変わったので一括再構築！
 			ImGui::PopID();
@@ -837,6 +921,11 @@ void RailEditor::DrawWindow(){
 		ImGui::SameLine();
 		if ( ImGui::Button("削除") ) {
 			data_->railLines[currentEditRailIndex_].erase(data_->railLines[currentEditRailIndex_].begin() + i);
+			// 穴配列も同じ位置を削除
+			if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
+				auto& h = data_->railNodeHoles[currentEditRailIndex_];
+				if ( i < h.size() ) h.erase(h.begin() + i);
+			}
 
 			RebuildRailPoints(); // 一括再構築！
 			ImGui::PopID();
@@ -1071,7 +1160,8 @@ void RailEditor::DrawWindow(){
 		data_->railLines.push_back(std::vector<Vector3>());
 		data_->railTypes.push_back(-1);
 		data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
-		data_->railHasGround.push_back(true);
+		data_->railGroundTypes.push_back(0);
+		data_->railNodeHoles.push_back(std::vector<int>());
 		currentEditRailIndex_ = ( int ) data_->railLines.size() - 1;
 		selectedRailNode_ = -1;
 		ClearMultiSelection();

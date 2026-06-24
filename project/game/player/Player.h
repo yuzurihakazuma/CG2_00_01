@@ -72,6 +72,7 @@ private: // メンバ変数
     Vector3 airVelocity_ { 0.0f, 0.0f, 0.0f }; // 空中の速度 (m/s)
     float   airLandCooldown_ = 0.0f;         // 飛び出した直後に "元のレール" へ即着地しない猶予 (秒)
     int     airFromRail_ = -1;               // 飛び出した元のレール番号（その猶予中だけ再着地を抑止）
+    Vector3 airDir_ { 0.0f, 0.0f, 0.0f };    // 空中に出た時の進行方向(水平・単位)。WASDはこの前後だけ受付
 
     // 空中状態の更新（自由落下・着地判定・落下死）
     void UpdateAir(const std::vector<SplineRail>& allRails, float dt);

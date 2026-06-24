@@ -359,7 +359,10 @@ void GamePlayScene::Initialize(){
 
 
 	// レール経路の可視化用：細い線セグメント用の立方体モデルと、単色化用の白テクスチャ
+	//   通常用(緑)と穴用(赤)で別モデルを用意する。マテリアルはモデル単位で共有されるため、
+	//   1モデルに対し1色しか持てない。穴区間だけ別色にするには別モデルが必要。
 	ModelManager::GetInstance()->CreateCubeModel("railLineCube", 1.0f);
+	ModelManager::GetInstance()->CreateCubeModel("railLineCubeHole", 1.0f);
 	textures_["white"] = TextureManager::GetInstance()->Load("resources/block/white1x1.png");
 
 	// レールはエディタ(LevelEditor)が読み込み・保持している最新データから構築する。
@@ -393,14 +396,19 @@ void GamePlayScene::SyncRailsFromEditor(){
 	}
 
 	// 動き割当（x,y,z=振幅 / w=周期）
-	const auto& grounds = EditorManager::GetInstance()->GetEditorRailHasGround();
+	const auto& grounds = EditorManager::GetInstance()->GetEditorRailGroundTypes();
+	const auto& holes   = EditorManager::GetInstance()->GetEditorRailNodeHoles();
 	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
 		if ( i < motions.size() ) {
 			splineRails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
 			splineRails_[i].motionPeriod = ( motions[i].w > 0.1f ) ? motions[i].w : 0.1f;
 		}
-		splineRails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
-		splineRails_[i].hasGround  = ( i < grounds.size() ) ? grounds[i] : true;
+		splineRails_[i].animOffset  = { 0.0f, 0.0f, 0.0f };
+		int gt = ( i < grounds.size() ) ? grounds[i] : 0;
+		splineRails_[i].groundType  = static_cast<SplineRail::GroundType>(gt);
+		// ノード単位の穴指定をコピー
+		if ( i < holes.size() ) splineRails_[i].nodeHole = holes[i];
+		else                    splineRails_[i].nodeHole.clear();
 	}
 	railAnimTime_ = 0.0f;
 
@@ -464,8 +472,10 @@ void GamePlayScene::BuildRailMarkers(){
 	railMarkerRail_.clear();
 	railMarkerBase_.clear();
 
-	Model* segModel = ModelManager::GetInstance()->FindModel("railLineCube");
+	Model* segModel  = ModelManager::GetInstance()->FindModel("railLineCube");
+	Model* holeModel = ModelManager::GetInstance()->FindModel("railLineCubeHole");
 	if ( segModel == nullptr ) { return; }
+	if ( holeModel == nullptr ) { holeModel = segModel; } // 念のためフォールバック
 
 	// 単色化用の白テクスチャ（あれば使う）
 	uint32_t whiteTex = 0;
@@ -474,7 +484,13 @@ void GamePlayScene::BuildRailMarkers(){
 
 	const float spacing   = 0.5f;   // サンプル間隔（小さいほど曲線が滑らか＝バー数増）
 	const float thickness = 0.08f;  // 線の太さ(m)
-	const Vector4 lineColor = { 0.2f, 1.0f, 0.35f, 1.0f }; // 見やすい明るい緑
+	const Vector4 lineColor = { 0.2f, 1.0f, 0.35f, 1.0f }; // 通常区間：明るい緑
+	const Vector4 holeColor = { 1.0f, 0.2f, 0.15f, 1.0f }; // 穴区間：赤
+
+	// マテリアルはモデル単位なので、色はここで「1回だけ」設定すればOK（共有でも正しい）。
+	if ( whiteTex != 0 ) { segModel->SetTexture(whiteTex); holeModel->SetTexture(whiteTex); }
+	if ( segModel->GetMaterial() )  { segModel->GetMaterial()->color = lineColor;  segModel->GetMaterial()->enableLighting = 0; }
+	if ( holeModel->GetMaterial() ) { holeModel->GetMaterial()->color = holeColor; holeModel->GetMaterial()->enableLighting = 0; }
 
 	for ( int railIdx = 0; railIdx < ( int ) splineRails_.size(); ++railIdx ) {
 		const SplineRail& rail = splineRails_[railIdx];
@@ -497,18 +513,18 @@ void GamePlayScene::BuildRailMarkers(){
 				float dyC   = std::clamp(dir.y, -1.0f, 1.0f);
 				float pitch = -std::asin(dyC);
 
+				// この区間が「穴」か判定して、緑モデル/赤モデルを選ぶ（色はモデル側で設定済み）
+				float midS = ss - spacing * 0.5f;
+				if ( midS < 0.0f ) midS = 0.0f;
+				bool isHole = rail.IsHoleAtDistance(midS);
+
 				auto box = std::make_unique<Obj3d>();
-				box->Initialize(segModel);
+				box->Initialize(isHole ? holeModel : segModel);
 				box->SetCamera(camera_.get());
 				box->SetScale({ thickness, thickness, segLen }); // Z方向にだけ伸ばす＝バー
 				Vector3 markerPos = { ( prev.x + cur.x ) * 0.5f, ( prev.y + cur.y ) * 0.5f, ( prev.z + cur.z ) * 0.5f };
 				box->SetTranslation(markerPos);
 				box->SetRotation({ pitch, yaw, 0.0f });
-				if ( box->GetModel() ) {
-					if ( whiteTex != 0 ) { box->GetModel()->SetTexture(whiteTex); } // 単色化
-					box->GetModel()->GetMaterial()->color = lineColor;
-					box->GetModel()->GetMaterial()->enableLighting = 0; // フラットに塗る
-				}
 				box->Update();
 				railMarkers_.push_back(std::move(box));
 				// 動くレール用：所属レールと基準位置（オフセット0換算）を記録

@@ -29,7 +29,8 @@ public:
     const std::vector<std::vector<Vector3>>& GetRailLines() const{ return data_->railLines; }
     const std::vector<int>& GetRailTypes() const{ return data_->railTypes; }
     const std::vector<Vector4>& GetRailMotions() const{ return data_->railMotions; }
-    const std::vector<bool>& GetRailHasGround() const{ return data_->railHasGround; }
+    const std::vector<int>& GetRailGroundTypes() const{ return data_->railGroundTypes; }
+    const std::vector<std::vector<int>>& GetRailNodeHoles() const{ return data_->railNodeHoles; }
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }
@@ -72,6 +73,10 @@ public:
     void AddToSelection(int rail, int node);
     void SelectSingleNode(int rail, int node);
     void SelectWholeRail(int railIdx);
+    // 現在の複数選択ノードの「穴」フラグをまとめて設定する（マウス箱選択→穴指定）
+    void SetSelectionHole(bool hole);
+    // 選択ノードに穴指定が1つでもあるか（ボタン表示の切替用）
+    bool SelectionHasHole() const;
     Vector3 GetSelectionCenter() const;
     void TranslateSelection(const Vector3& delta);
     void SetCurrentRail(int idx);
@@ -81,6 +86,8 @@ public:
     int  GetNodeCountOf(int rail) const;
     bool GetNodePosOf(int rail, int node, Vector3& out) const;
     int  GetRailDisplayType(int rail) const;
+    // 指定ノードが「穴」指定か（エディタの線・ノードを赤く表示するため）
+    bool IsNodeHole(int rail, int node) const;
 
     // シェイプのスタンプ配置（生成→マウスに追従→クリックで設置）
     bool HasPendingStamp() const{ return !pendingStamp_.empty(); }
