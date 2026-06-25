@@ -112,7 +112,8 @@ private: // メンバ変数
 	bool showDebugGrid_ = true;
 
 	// --- SDF 描画デモ（不要なら丸ごと削除してOK） ---
-	std::unique_ptr<SDFText>   sdfText_   = nullptr; // 文字（ガビガビにならない）
-	std::unique_ptr<SDFSprite> sdfSprite_ = nullptr; // ロゴ/アイコン（ぼやけない）
+	std::unique_ptr<SDFText>   sdfText_     = nullptr; // 文字（ガビガビにならない）
+	std::unique_ptr<SDFSprite> sdfSprite_   = nullptr; // 3D板: SDF（くっきり）
+	std::unique_ptr<SDFSprite> sdfRawPanel_ = nullptr; // 3D板: 普通テクスチャ（比較用・ぼやける）
 
 };

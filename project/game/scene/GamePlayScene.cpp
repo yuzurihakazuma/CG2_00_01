@@ -87,29 +87,7 @@ void GamePlayScene::Initialize(){
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize("resources/StandardCubeMap.dds", commandList);
 
-	// --- SDF フォント（文字がガビガビにならないデモ） ---
-	if (SDFFontManager::GetInstance()->Load(
-			"arial", "resources/sdf/arial_sdf.json", "resources/sdf/arial_sdf.png", commandList)) {
-		sdfText_ = std::make_unique<SDFText>();
-		sdfText_->Initialize(SDFFontManager::GetInstance()->Get("arial"));
-		sdfText_->SetText("SDF Font 0123 ABC");
-		sdfText_->SetPosition(60.0f, 40.0f);
-		sdfText_->SetFontSize(72.0f);                 // 大きくしてもくっきり
-		sdfText_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
-		sdfText_->SetOutlineWidth(0.18f);             // 黒フチ
-		sdfText_->SetOutlineColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-	}
-
-	// --- SDF スプライト（ロゴ/アイコンがぼやけないデモ） ---
-	if (SDFSpriteManager::GetInstance()->Load(
-			"star", "resources/sdf/star_sdf.json", "resources/sdf/star_sdf.png", commandList)) {
-		sdfSprite_ = std::make_unique<SDFSprite>();
-		sdfSprite_->Initialize(SDFSpriteManager::GetInstance()->Get("star"), "star_icon");
-		sdfSprite_->SetPosition(120.0f, 160.0f);
-		sdfSprite_->SetScale(1.4f);                   // 拡大してもエッジくっきり
-		sdfSprite_->SetOutline(0.12f, { 0.0f, 0.0f, 0.0f, 1.0f }); // 黒フチ
-		sdfSprite_->SetGlow(0.25f, { 1.0f, 0.85f, 0.2f, 1.0f });   // 金グロー
-	}
+	// SDF デモのセットアップはカメラ生成後に行う（3D配置にカメラが必要なため）
 
 
 	// ※EditorManager::Initialize() は Framework::Initialize() で呼ばれるので、ここでは不要
@@ -132,7 +110,38 @@ void GamePlayScene::Initialize(){
 	// このカメラを既定（アクティブ）カメラに設定 → 以降の Obj3d::Create は自動でこのカメラを使う
 	Obj3dCommon::GetInstance()->SetDefaultCamera(camera_.get());
 
-	
+	// ====== SDF デモ（不要なら丸ごと削除してOK） ======
+	// 画面上部にSDF文字（拡大してもガビガビにならない）
+	if (SDFFontManager::GetInstance()->Load(
+			"arial", "resources/sdf/arial_sdf.json", "resources/sdf/arial_sdf.png", commandList)) {
+		sdfText_ = std::make_unique<SDFText>();
+		sdfText_->Initialize(SDFFontManager::GetInstance()->Get("arial"));
+		sdfText_->SetText("Zoom in: Left=Normal(blur)  Right=SDF(sharp)");
+		sdfText_->SetPosition(40.0f, 28.0f);
+		sdfText_->SetFontSize(40.0f);
+		sdfText_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		sdfText_->SetOutlineWidth(0.2f);
+		sdfText_->SetOutlineColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+	}
+
+	// 左の3D板: 低解像度(64px)の普通テクスチャをそのまま大きく貼る → ガビガビ/ボヤけがはっきり出る
+	textures_["starLow"] = TextureManager::GetInstance()->Load("resources/sdf/star64.png");
+	sdfRawPanel_ = std::make_unique<SDFSprite>();
+	sdfRawPanel_->InitializeRaw(
+		textures_["starLow"].srvIndex, textures_["starLow"].width, textures_["starLow"].height);
+	sdfRawPanel_->SetTransform3D({ -4.0f, 3.5f, 5.0f }, 7.0f, camera_.get());
+
+	// 右の3D板: 同じ64px素材から作ったSDFを大きく貼る → 拡大してもエッジくっきり
+	if (SDFSpriteManager::GetInstance()->Load(
+			"star64", "resources/sdf/star64_sdf.json", "resources/sdf/star64_sdf.png", commandList)) {
+		sdfSprite_ = std::make_unique<SDFSprite>();
+		sdfSprite_->Initialize(SDFSpriteManager::GetInstance()->Get("star64"), "star64");
+		sdfSprite_->SetTransform3D({ 4.0f, 3.5f, 5.0f }, 7.0f, camera_.get());
+		sdfSprite_->SetOutline(0.0f, { 0.0f, 0.0f, 0.0f, 1.0f }); // 純粋な形比較のためフチ/グロー無し
+		sdfSprite_->SetGlow(0.0f, { 0.0f, 0.0f, 0.0f, 0.0f });
+	}
+
+
 	// デバッグカメラ生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 	debugCamera_->Initialize();
@@ -273,8 +282,9 @@ void GamePlayScene::Update(){
 	camera_->Update();
 
 	// SDF デモ更新
-	if (sdfText_)   { sdfText_->Update(); }
-	if (sdfSprite_) { sdfSprite_->Update(); }
+	if (sdfText_)     { sdfText_->Update(); }
+	if (sdfSprite_)   { sdfSprite_->Update(); }
+	if (sdfRawPanel_) { sdfRawPanel_->Update(); }
 
 	Input* input = Input::GetInstance();
 
@@ -484,8 +494,9 @@ void GamePlayScene::Draw(){
 	TextManager::GetInstance()->Draw();
 
 	// SDF 描画（独自パイプラインなので最後に。バックバッファへ最前面で乗る）
-	if (sdfSprite_) { sdfSprite_->Draw(commandList); }
-	if (sdfText_)   { sdfText_->Draw(commandList); }
+	if (sdfRawPanel_) { sdfRawPanel_->Draw(commandList); }
+	if (sdfSprite_)   { sdfSprite_->Draw(commandList); }
+	if (sdfText_)     { sdfText_->Draw(commandList); }
 	
 
 }
@@ -569,6 +580,7 @@ void GamePlayScene::Finalize(){
 	// SDF デモ後始末
 	sdfText_.reset();
 	sdfSprite_.reset();
+	sdfRawPanel_.reset();
 	SDFFontManager::GetInstance()->Finalize();
 	SDFSpriteManager::GetInstance()->Finalize();
 

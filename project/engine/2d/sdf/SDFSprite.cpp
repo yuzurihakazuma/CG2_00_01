@@ -96,21 +96,47 @@ void SDFSprite::SetGlow(float width, Vector4 color)    { glowWidth_ = width; glo
 void SDFSprite::SetEdgeBias(float bias) { edgeBias_ = bias; }
 
 void SDFSprite::RebuildGeometry() {
-    if (!info_) { indexCount_ = 0; return; }
+    if (!rawMode_ && !info_) { indexCount_ = 0; return; }
 
-    float x0 = posX_ + info_->offsetX * scale_;
-    float y0 = posY_ + info_->offsetY * scale_;
-    drawW_   = info_->width  * scale_;
-    drawH_   = info_->height * scale_;
-    float x1 = x0 + drawW_;
-    float y1 = y0 + drawH_;
+    // UV 範囲とアスペクト比をモードに応じて決める
+    float u0, v0, u1, v1, aspect;
+    if (rawMode_) {
+        u0 = 0.0f; v0 = 0.0f; u1 = 1.0f; v1 = 1.0f;
+        aspect = rawAspect_;
+    } else {
+        u0 = info_->u0; v0 = info_->v0; u1 = info_->u1; v1 = info_->v1;
+        aspect = (info_->height > 0.0f) ? (info_->width / info_->height) : 1.0f;
+    }
 
-    Vertex vertices[4] = {
-        { x0, y0, info_->u0, info_->v0 },
-        { x1, y0, info_->u1, info_->v0 },
-        { x0, y1, info_->u0, info_->v1 },
-        { x1, y1, info_->u1, info_->v1 },
-    };
+    Vertex vertices[4];
+    if (use3D_) {
+        // ワールド空間: 原点中心の板。高さ=worldScale、幅=高さ×アスペクト。
+        // 配置はワールド行列(WVP)側で行う。Y は上が +。
+        float hh = worldScale3D_ * 0.5f;
+        float hw = hh * aspect;
+        drawW_ = hw * 2.0f;
+        drawH_ = hh * 2.0f;
+        vertices[0] = { -hw, +hh, u0, v0 };
+        vertices[1] = { +hw, +hh, u1, v0 };
+        vertices[2] = { -hw, -hh, u0, v1 };
+        vertices[3] = { +hw, -hh, u1, v1 };
+    } else {
+        // スクリーン空間: 左上(posX,posY)起点。raw は offset 無しで等倍×scale。
+        float ox = rawMode_ ? 0.0f : info_->offsetX;
+        float oy = rawMode_ ? 0.0f : info_->offsetY;
+        float w  = rawMode_ ? (aspect * 100.0f) : info_->width;  // raw の基準サイズ
+        float h  = rawMode_ ? 100.0f : info_->height;
+        float x0 = posX_ + ox * scale_;
+        float y0 = posY_ + oy * scale_;
+        drawW_   = w * scale_;
+        drawH_   = h * scale_;
+        float x1 = x0 + drawW_;
+        float y1 = y0 + drawH_;
+        vertices[0] = { x0, y0, u0, v0 };
+        vertices[1] = { x1, y0, u1, v0 };
+        vertices[2] = { x0, y1, u0, v1 };
+        vertices[3] = { x1, y1, u1, v1 };
+    }
     uint32_t indices[6] = { 0, 1, 2, 1, 3, 2 };
 
     auto factory = ResourceFactory::GetInstance();
@@ -137,6 +163,16 @@ void SDFSprite::RebuildGeometry() {
 
 void SDFSprite::UpdateTransformBuffer() {
     if (!transformData_) return;
+
+    if (use3D_ && camera3D_) {
+        // WVP = ワールド(平行移動) × カメラのビュー射影
+        Matrix4x4 world = MatrixMath::MakeTranslate(worldPos3D_);
+        Matrix4x4 wvp   = MatrixMath::Multiply(world, camera3D_->GetViewProjectionMatrix());
+        std::memcpy(transformData_->mat, &wvp, sizeof(float) * 16);
+        return;
+    }
+
+    // スクリーン空間の正射影
     auto dxCommon = DirectXCommon::GetInstance();
     float W = static_cast<float>(dxCommon->GetClientWidth());
     float H = static_cast<float>(dxCommon->GetClientHeight());
@@ -170,10 +206,12 @@ void SDFSprite::Update() {
     bool keep = atlas_ && atlas_->IsKeepColor();
     paramsData_->sdfInAlpha  = keep ? 1.0f : 0.0f;
     paramsData_->useTexColor = keep ? 1.0f : 0.0f;
+    paramsData_->rawSample   = rawMode_ ? 1.0f : 0.0f;
 }
 
 void SDFSprite::Draw(ID3D12GraphicsCommandList* commandList) {
-    if (!pipelineReady_ || indexCount_ == 0 || !atlas_) return;
+    if (!pipelineReady_ || indexCount_ == 0) return;
+    if (!rawMode_ && !atlas_) return;
 
     commandList->SetGraphicsRootSignature(rootSignature_.Get());
     commandList->SetPipelineState(pipelineState_.Get());
@@ -183,7 +221,8 @@ void SDFSprite::Draw(ID3D12GraphicsCommandList* commandList) {
 
     commandList->SetGraphicsRootConstantBufferView(0, transformBuffer_->GetGPUVirtualAddress());
     commandList->SetGraphicsRootConstantBufferView(1, paramsBuffer_->GetGPUVirtualAddress());
-    SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, atlas_->GetAtlasSrvIndex());
+    uint32_t srv = rawMode_ ? rawSrv_ : atlas_->GetAtlasSrvIndex();
+    SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, srv);
 
     commandList->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
 }
