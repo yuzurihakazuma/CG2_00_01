@@ -87,6 +87,30 @@ void GamePlayScene::Initialize(){
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize("resources/StandardCubeMap.dds", commandList);
 
+	// --- SDF フォント（文字がガビガビにならないデモ） ---
+	if (SDFFontManager::GetInstance()->Load(
+			"arial", "resources/sdf/arial_sdf.json", "resources/sdf/arial_sdf.png", commandList)) {
+		sdfText_ = std::make_unique<SDFText>();
+		sdfText_->Initialize(SDFFontManager::GetInstance()->Get("arial"));
+		sdfText_->SetText("SDF Font 0123 ABC");
+		sdfText_->SetPosition(60.0f, 40.0f);
+		sdfText_->SetFontSize(72.0f);                 // 大きくしてもくっきり
+		sdfText_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		sdfText_->SetOutlineWidth(0.18f);             // 黒フチ
+		sdfText_->SetOutlineColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+	}
+
+	// --- SDF スプライト（ロゴ/アイコンがぼやけないデモ） ---
+	if (SDFSpriteManager::GetInstance()->Load(
+			"star", "resources/sdf/star_sdf.json", "resources/sdf/star_sdf.png", commandList)) {
+		sdfSprite_ = std::make_unique<SDFSprite>();
+		sdfSprite_->Initialize(SDFSpriteManager::GetInstance()->Get("star"), "star_icon");
+		sdfSprite_->SetPosition(120.0f, 160.0f);
+		sdfSprite_->SetScale(1.4f);                   // 拡大してもエッジくっきり
+		sdfSprite_->SetOutline(0.12f, { 0.0f, 0.0f, 0.0f, 1.0f }); // 黒フチ
+		sdfSprite_->SetGlow(0.25f, { 1.0f, 0.85f, 0.2f, 1.0f });   // 金グロー
+	}
+
 
 	// ※EditorManager::Initialize() は Framework::Initialize() で呼ばれるので、ここでは不要
 
@@ -247,6 +271,10 @@ void GamePlayScene::Update(){
 	}
 	// カメラ更新
 	camera_->Update();
+
+	// SDF デモ更新
+	if (sdfText_)   { sdfText_->Update(); }
+	if (sdfSprite_) { sdfSprite_->Update(); }
 
 	Input* input = Input::GetInstance();
 
@@ -454,6 +482,10 @@ void GamePlayScene::Draw(){
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 	if (sprite_) { sprite_->Draw(); }
 	TextManager::GetInstance()->Draw();
+
+	// SDF 描画（独自パイプラインなので最後に。バックバッファへ最前面で乗る）
+	if (sdfSprite_) { sdfSprite_->Draw(commandList); }
+	if (sdfText_)   { sdfText_->Draw(commandList); }
 	
 
 }
@@ -533,6 +565,12 @@ void GamePlayScene::Finalize(){
 	EditorManager::GetInstance()->ResetSceneReferences();
 
 	GPUParticleManager::GetInstance()->Finalize();
+
+	// SDF デモ後始末
+	sdfText_.reset();
+	sdfSprite_.reset();
+	SDFFontManager::GetInstance()->Finalize();
+	SDFSpriteManager::GetInstance()->Finalize();
 
 	textures_.clear();
 	depthStencilResource_.Reset();

@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 256,
+  "textureHeight": 256,
+  "keepColor": true,
+  "sprites": {
+    "star_icon": {
+      "x": 0,
+      "y": 0,
+      "width": 240,
+      "height": 230,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "offsetX": 8,
+      "offsetY": 2
+    }
+  }
+}
