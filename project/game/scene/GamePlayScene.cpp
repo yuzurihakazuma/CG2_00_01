@@ -90,8 +90,11 @@ static void BuildRailConnections(std::vector<SplineRail>& rails){
 	}
 
 	// --- フェーズ1：最も近い端点同士で連結関係を決める ---
+	// ※動くレール(HasMotion)は静的連結しない。位置が時間で変わるため固定の連結だと
+	//   継ぎ目がズレてワープする。動くレールは実行時に「今の位置」で動的にドッキングする。
 	for ( int i = 0; i < ( int ) rails.size(); ++i ){
 		if ( rails[i].isLoop ) continue; // ループは端が無いので連結対象外
+		if ( rails[i].HasMotion() ) continue; // 動くレールは静的連結しない
 		if ( rails[i].nodes.size() < 2 ) continue;
 		const Vector3& iFront = rails[i].nodes.front();
 		const Vector3& iBack  = rails[i].nodes.back();
@@ -101,6 +104,7 @@ static void BuildRailConnections(std::vector<SplineRail>& rails){
 
 		for ( int j = 0; j < ( int ) rails.size(); ++j ){
 			if ( i == j ) continue;
+			if ( rails[j].HasMotion() ) continue; // 動くレールへは静的連結しない
 			if ( rails[j].nodes.size() < 2 ) continue;
 			const Vector3& jFront = rails[j].nodes.front();
 			const Vector3& jBack  = rails[j].nodes.back();
@@ -385,7 +389,19 @@ void GamePlayScene::SyncRailsFromEditor(){
 		rail.BuildDistanceTable();
 		splineRails_.push_back(rail);
 	}
-	BuildRailConnections(splineRails_); // 接続・分岐・ループを再計算（溶接含む）
+
+	// 動きを「連結処理より先」に割り当てる。
+	//   BuildRailConnections が HasMotion() を見て「動くレールは静的連結しない」を
+	//   判定できるようにするため（動くレールは整列した時だけ動的にドッキングさせる）。
+	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
+		if ( i < motions.size() ) {
+			splineRails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
+			splineRails_[i].motionPeriod = ( motions[i].w > 0.1f ) ? motions[i].w : 0.1f;
+		}
+		splineRails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
+	}
+
+	BuildRailConnections(splineRails_); // 接続・分岐・ループを再計算（動くレールは静的連結から除外）
 
 	// タイプ割当：railTypes が 0/1 ならそれを使い、-1(自動)や未設定は主軸で自動判定
 	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
@@ -395,20 +411,18 @@ void GamePlayScene::SyncRailsFromEditor(){
 		else               splineRails_[i].AutoDetectType();
 	}
 
-	// 動き割当（x,y,z=振幅 / w=周期）
+	// 地面タイプ・穴・表示フラグを割当
 	const auto& grounds = EditorManager::GetInstance()->GetEditorRailGroundTypes();
 	const auto& holes   = EditorManager::GetInstance()->GetEditorRailNodeHoles();
+	const auto& visible = EditorManager::GetInstance()->GetEditorRailVisible();
 	for ( size_t i = 0; i < splineRails_.size(); ++i ) {
-		if ( i < motions.size() ) {
-			splineRails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
-			splineRails_[i].motionPeriod = ( motions[i].w > 0.1f ) ? motions[i].w : 0.1f;
-		}
-		splineRails_[i].animOffset  = { 0.0f, 0.0f, 0.0f };
 		int gt = ( i < grounds.size() ) ? grounds[i] : 0;
 		splineRails_[i].groundType  = static_cast<SplineRail::GroundType>(gt);
 		// ノード単位の穴指定をコピー
 		if ( i < holes.size() ) splineRails_[i].nodeHole = holes[i];
 		else                    splineRails_[i].nodeHole.clear();
+		// 表示フラグ（非表示＝連結用の見えないレール）
+		splineRails_[i].visible = ( i < visible.size() ) ? ( visible[i] != 0 ) : true;
 	}
 	railAnimTime_ = 0.0f;
 
@@ -496,6 +510,7 @@ void GamePlayScene::BuildRailMarkers(){
 		const SplineRail& rail = splineRails_[railIdx];
 		float len = rail.GetLength();
 		if ( len <= 0.0f || rail.nodes.size() < 2 ) { continue; }
+		if ( !rail.visible ) { continue; } // 非表示レール（連結用）は緑線を描かない
 
 		Vector3 prev = rail.GetPositionByDistance(0.0f);
 

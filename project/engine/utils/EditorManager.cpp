@@ -576,10 +576,14 @@ void EditorManager::Update(){
             // ノードと完全に一致する。横=青(A/D移動) / 縦=橙(W/S移動) で役割が一目で分かる）。
             for ( int rr = 0; rr < railCount; ++rr ) {
                 const bool isCur = ( rr == curRail );
+                const bool railVisible = re->IsRailVisible(rr);
                 const int  dtype = re->GetRailDisplayType(rr);
-                ImU32 col = ( dtype == 1 )
-                    ? IM_COL32(255, 165, 70, isCur ? 235 : 150)   // 縦 = 橙
-                    : IM_COL32(90, 180, 255, isCur ? 235 : 150);  // 横 = 青
+                // 非表示レール（連結用）はエディタでは淡いグレーで描く（編集できるように）
+                ImU32 col = !railVisible
+                    ? IM_COL32(170, 170, 175, isCur ? 200 : 110)
+                    : ( ( dtype == 1 )
+                        ? IM_COL32(255, 165, 70, isCur ? 235 : 150)   // 縦 = 橙
+                        : IM_COL32(90, 180, 255, isCur ? 235 : 150) ); // 横 = 青
                 const ImU32 holeCol = IM_COL32(255, 60, 50, isCur ? 245 : 180); // 穴 = 赤
                 const float baseW = isCur ? 2.5f : 1.5f;
                 const int nodeCount = re->GetNodeCountOf(rr);
@@ -593,8 +597,16 @@ void EditorManager::Update(){
                     ImVec2 mid = { ( sa.x + sb.x ) * 0.5f, ( sa.y + sb.y ) * 0.5f };
                     bool holeA = re->IsNodeHole(rr, i - 1);
                     bool holeB = re->IsNodeHole(rr, i);
-                    dl->AddLine(sa, mid, holeA ? holeCol : col, baseW + ( holeA ? 1.5f : 0.0f ));
-                    dl->AddLine(mid, sb, holeB ? holeCol : col, baseW + ( holeB ? 1.5f : 0.0f ));
+                    // 非表示レールは点線風に（中点までだけ描いて隙間を作る）
+                    if ( !railVisible ) {
+                        ImVec2 q1 = { sa.x + ( mid.x - sa.x ) * 0.6f, sa.y + ( mid.y - sa.y ) * 0.6f };
+                        ImVec2 q2 = { mid.x + ( sb.x - mid.x ) * 0.6f, mid.y + ( sb.y - mid.y ) * 0.6f };
+                        dl->AddLine(sa, q1, col, baseW);
+                        dl->AddLine(mid, q2, col, baseW);
+                    } else {
+                        dl->AddLine(sa, mid, holeA ? holeCol : col, baseW + ( holeA ? 1.5f : 0.0f ));
+                        dl->AddLine(mid, sb, holeB ? holeCol : col, baseW + ( holeB ? 1.5f : 0.0f ));
+                    }
                 }
             }
 
@@ -807,6 +819,10 @@ const std::vector<int>& EditorManager::GetEditorRailGroundTypes() const{
 const std::vector<std::vector<int>>& EditorManager::GetEditorRailNodeHoles() const{
     static const std::vector<std::vector<int>> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailNodeHoles() : kEmpty;
+}
+const std::vector<int>& EditorManager::GetEditorRailVisible() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailVisible() : kEmpty;
 }
 
 // 敵の配置データ（マップ保存に乗せる）を levelEditor_ へ委譲

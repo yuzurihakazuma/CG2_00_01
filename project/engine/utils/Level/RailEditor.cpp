@@ -295,6 +295,7 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railTypes.push_back(-1);
 	data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
 	data_->railGroundTypes.push_back(0);
+	data_->railVisible.push_back(1);
 	data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	SelectWholeRail(( int ) data_->railLines.size() - 1); // 置いた直後にギズモで微調整できる
 	RebuildRailPoints();
@@ -334,6 +335,7 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railTypes.push_back(data_->railTypes[railIdx]);
 	data_->railMotions.push_back(data_->railMotions[railIdx]);
 	data_->railGroundTypes.push_back(( railIdx < ( int ) data_->railGroundTypes.size() ) ? data_->railGroundTypes[railIdx] : 0);
+	data_->railVisible.push_back(( railIdx < ( int ) data_->railVisible.size() ) ? data_->railVisible[railIdx] : 1);
 	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
 	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	SelectWholeRail(( int ) data_->railLines.size() - 1);
@@ -420,6 +422,11 @@ bool RailEditor::IsNodeHole(int rail, int node) const{
 	if ( rail < 0 || rail >= ( int ) data_->railNodeHoles.size() ) return false;
 	const auto& h = data_->railNodeHoles[rail];
 	return node >= 0 && node < ( int ) h.size() && h[node] != 0;
+}
+
+bool RailEditor::IsRailVisible(int rail) const{
+	if ( rail < 0 || rail >= ( int ) data_->railVisible.size() ) return true; // 未設定は表示扱い
+	return data_->railVisible[rail] != 0;
 }
 
 // 表示用：横(0)/縦(1)。railTypes が -1(自動)なら front→back の主軸で判定（実装と同じ1.5バイアス）
@@ -592,6 +599,9 @@ void RailEditor::DrawWindow(){
 	if ( data_->railGroundTypes.size() != data_->railLines.size() ) {
 		data_->railGroundTypes.resize(data_->railLines.size(), 0);
 	}
+	if ( data_->railVisible.size() != data_->railLines.size() ) {
+		data_->railVisible.resize(data_->railLines.size(), 1);
+	}
 	if ( data_->railTypes.size() != data_->railLines.size() ) {
 		data_->railTypes.resize(data_->railLines.size(), -1);
 	}
@@ -636,6 +646,8 @@ void RailEditor::DrawWindow(){
 			data_->railMotions.erase(data_->railMotions.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railGroundTypes.size() )
 				data_->railGroundTypes.erase(data_->railGroundTypes.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railVisible.size() )
+				data_->railVisible.erase(data_->railVisible.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railNodeHoles.size() )
 				data_->railNodeHoles.erase(data_->railNodeHoles.begin() + deleteRail);
 			if ( currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
@@ -686,11 +698,22 @@ void RailEditor::DrawWindow(){
 		ImGui::TextDisabled("例: 振幅(0,0,3) 周期2 → 奥行きに±3mを2秒で往復");
 		ImGui::Separator();
 
-		// --- 地面タイプ ---
+		// --- 地面タイプ（落下は「穴」で指定する。NoGround は廃止）---
 		data_->railGroundTypes.resize(data_->railLines.size(), 0);
 		int& gt = data_->railGroundTypes[currentEditRailIndex_];
-		const char* groundLabels[] = { "Safe (安全)", "Gap (穴：飛び出し可)", "NoGround (地面なし：即落下)" };
-		if ( ImGui::Combo("地面タイプ", &gt, groundLabels, 3) ) { ++railVersion_; }
+		if ( gt > 1 ) gt = 0; // 旧 NoGround(2) は Safe 扱いに直す
+		const char* groundLabels[] = { "Safe (安全)", "Gap (端で落下)" };
+		if ( ImGui::Combo("地面タイプ", &gt, groundLabels, 2) ) { ++railVersion_; }
+
+		// --- 表示／非表示（連結用の見えないレール）---
+		data_->railVisible.resize(data_->railLines.size(), 1);
+		bool vis = ( data_->railVisible[currentEditRailIndex_] != 0 );
+		if ( ImGui::Checkbox("ゲームに表示する", &vis) ) {
+			data_->railVisible[currentEditRailIndex_] = vis ? 1 : 0;
+			++railVersion_;
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled(vis ? "(表示)" : "(非表示=連結用の見えないレール)");
 		ImGui::Separator();
 	}
 
@@ -850,22 +873,34 @@ void RailEditor::DrawWindow(){
 
 	ImGui::TextDisabled("「穴」にチェック→そのノード付近が落下区間（ジャンプで飛び越え可）");
 
-	// --- マウス箱選択 → 穴指定（Game View でドラッグして囲んだノードに適用）---
+	// --- 穴の一括指定 ---
 	{
+		ImGui::TextDisabled("穴＝そこに来たら落下する区間（落とし穴）。一気に指定できる↓");
+
+		// 1クリックで「この路線まるごと」穴に/解除
+		if ( ImGui::Button("この路線を全部 穴にする") ) {
+			SelectWholeRail(currentEditRailIndex_);
+			SetSelectionHole(true);
+		}
+		ImGui::SameLine();
+		if ( ImGui::Button("この路線の穴を全解除") ) {
+			SelectWholeRail(currentEditRailIndex_);
+			SetSelectionHole(false);
+		}
+
+		// マウス箱選択 → その範囲だけ穴に（部分指定）
 		int selCount = ( int ) GetMultiSelection().size();
 		ImGui::Text("マウス選択: %d ノード", selCount);
 		ImGui::SameLine();
 		ImGui::TextDisabled("(?)");
 		if ( ImGui::IsItemHovered() ) {
-			ImGui::SetTooltip("Game View で何もない所からドラッグ→ノードを箱選択。\nその後このボタンで選択ノードを穴/通常に切り替え。");
+			ImGui::SetTooltip("Game View で何もない所からドラッグ→ノードを箱選択。\nその後このボタンで選択ノードだけを穴/通常に切り替え。");
 		}
 		ImGui::BeginDisabled(selCount == 0);
 		if ( ImGui::Button("選択を穴にする") ) { SetSelectionHole(true); }
 		ImGui::SameLine();
 		if ( ImGui::Button("選択の穴を解除") ) { SetSelectionHole(false); }
 		ImGui::EndDisabled();
-		ImGui::SameLine();
-		if ( ImGui::SmallButton("この路線を全選択") ) { SelectWholeRail(currentEditRailIndex_); }
 	}
 	ImGui::Separator();
 
@@ -1161,6 +1196,7 @@ void RailEditor::DrawWindow(){
 		data_->railTypes.push_back(-1);
 		data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
 		data_->railGroundTypes.push_back(0);
+		data_->railVisible.push_back(1);
 		data_->railNodeHoles.push_back(std::vector<int>());
 		currentEditRailIndex_ = ( int ) data_->railLines.size() - 1;
 		selectedRailNode_ = -1;

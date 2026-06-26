@@ -55,6 +55,10 @@ private: // メンバ変数
     // 乗り換え(奥/手前スイッチ)の連打防止タイマー (秒)
     float switchCooldown_ = 0.0f;
 
+    // NoGround レール上で重力に引かれてレールの下り方向へ滑り落ちる速度 (m/s)
+    //   レールに乗ったまま（軌道通り）落下するための速度。
+    float railSlideVel_ = 0.0f;
+
     // ---- ジャンプ（フレームレート非依存：m, m/s, m/s^2 で扱う）----
     float heightOffset_ = 0.0f;       // レールからの浮き具合 (m)
     float jumpVelocity_ = 0.0f;       // 上下速度 (m/s)
@@ -73,6 +77,11 @@ private: // メンバ変数
     float   airLandCooldown_ = 0.0f;         // 飛び出した直後に "元のレール" へ即着地しない猶予 (秒)
     int     airFromRail_ = -1;               // 飛び出した元のレール番号（その猶予中だけ再着地を抑止）
     Vector3 airDir_ { 0.0f, 0.0f, 0.0f };    // 空中に出た時の進行方向(水平・単位)。WASDはこの前後だけ受付
+
+    // ---- 乗り移り時の見た目補間（ワープ隠し）----
+    // 別レールへドッキング/乗り換え/着地でレール座標が飛ぶと見た目が瞬間移動する。
+    // 飛んだ差分をこのオフセットに入れ、毎フレーム0へ減衰させて滑らかに繋ぐ。
+    Vector3 posSmooth_ { 0.0f, 0.0f, 0.0f };
 
     // 空中状態の更新（自由落下・着地判定・落下死）
     void UpdateAir(const std::vector<SplineRail>& allRails, float dt);

@@ -76,6 +76,8 @@ public:
 	const std::vector<int>& GetEditorRailGroundTypes() const;
 	// 各レールのノード単位の穴指定（外=レール / 内=ノード・1=穴）
 	const std::vector<std::vector<int>>& GetEditorRailNodeHoles() const;
+	// 各レールの表示フラグ（1=表示/0=非表示）。railLines と同じ並び
+	const std::vector<int>& GetEditorRailVisible() const;
 
 	// --- 敵の配置（マップと一緒に保存/読込）。シーンの EnemyEditor と同期する ---
 	void SetEditorEnemyData(const std::vector<LevelEnemyData>& e); // シーン→エディタ（保存に乗せる）

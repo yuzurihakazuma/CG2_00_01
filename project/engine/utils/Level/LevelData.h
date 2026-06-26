@@ -47,6 +47,9 @@ struct LevelData{
     // 各レールの「ノード単位の穴指定」（外= railLines と同じ並び / 内= 各レールのノードと同じ並び・1=穴）
     std::vector<std::vector<int>> railNodeHoles;
 
+    // 各レールの表示フラグ（railLines と同じ並び）。1=表示 / 0=非表示（連結用の見えないレール）
+    std::vector<int> railVisible;
+
     // 敵の配置（レール上に置く敵。マップと一緒に保存/読込する）
     std::vector<LevelEnemyData> enemies;
 
