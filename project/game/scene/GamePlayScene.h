@@ -11,6 +11,7 @@
 #include "InstancedGroup.h"
 
 #include "engine/rail/SplineRail.h"
+#include "game/rail/RailField.h"
 #include "game/player/Player.h"
 #include "game/enemy/Enemy.h"
 #include "game/enemy/EnemyEditor.h"
@@ -56,6 +57,23 @@ public:
 	GamePlayScene();
 
 	~GamePlayScene();
+
+private: // 初期化・更新の内部処理（べた書きを段階ごとに関数化したもの）
+
+	// --- Initialize の分割 ---
+	void LoadResources();      // BGM・モデル・テクスチャ・Skybox の読み込み
+	void SetupCameras();       // メインカメラ／デバッグカメラの生成・登録
+	void SetupDemoObjects();   // 装飾/デモ用オブジェクト（testObj・オーラ・スキンメッシュ）
+	void SetupGameplay();      // プレイヤー・敵エディタ・レール・各種シーン部品
+
+	// --- Update の分割 ---
+	void UpdateHitStop();              // 踏みつけ等のヒットストップ（時間停止）
+	void SyncFromEditors();            // エディタ編集（レール／敵／カメラ要求）をシーンへ反映
+	void UpdateCameraAndPostEffect();  // カメラ更新＋シェイク＋踏みつけポストエフェクト
+	void HandleModeTransition(EngineMode current); // Edit↔Play 切替時のリセット処理
+	void UpdatePlayMode();             // プレイ中のゲーム進行（レール／プレイヤー／敵／踏みつけ／エフェクト）
+	void UpdateStompCollision();       // プレイヤーと敵の当たり判定＋踏みつけ演出
+	void UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
 
 private: // メンバ変数
 
@@ -124,7 +142,11 @@ private: // メンバ変数
 	float auraCylinderScroll_ = 0.0f;
 
 	std::unique_ptr<Player> player_ = nullptr;
-	std::vector<SplineRail> splineRails_; // スプラインレール本体
+
+	// --- レール実行時管理（レール本体・緑線マーカー・動くレールを RailField に集約）---
+	RailField railField_;
+	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
+	void SyncRailsFromEditor();
 
 	// --- 敵（レール上を動く。プレイヤーが踏める予定）---
 	std::vector<std::unique_ptr<Enemy>> enemies_;
@@ -143,23 +165,6 @@ private: // メンバ変数
 	float   fxTimer_    = 0.0f;                  // >0 の間だけ歪み＋グローを出す
 	Vector3 fxWorldPos_ { 0.0f, 0.0f, 0.0f };    // 効果の中心（踏んだ敵のワールド座標）
 	void UpdateStompPostEffect();                // 毎フレーム：中心をスクリーン投影し半径アニメ
-
-	// --- レール経路の可視化（プレイヤーが通る曲線を線で表示）---
-	std::vector<std::unique_ptr<Obj3d>> railMarkers_;
-	bool showRailMarkers_ = true;
-	// splineRails_ を距離サンプルして線マーカーを作り直す
-	void BuildRailMarkers();
-
-	// --- 動くレール（ムービングプラットフォーム）---
-	float railAnimTime_ = 0.0f;            // 動くレール用の経過時間
-	std::vector<int>     railMarkerRail_;  // 各マーカーが属するレール番号（railMarkers_と同じ並び）
-	std::vector<Vector3> railMarkerBase_;  // 各マーカーの基準位置（オフセット0の位置）
-	void UpdateRailMotion(float dt);       // animOffset を進めてマーカーを追従させる
-	void UpdateRailMarkerPositions();      // マーカー位置 = 基準位置 + animOffset
-
-	// --- エディタのレール編集をゲーム側に同期する（緑線・プレイヤーを一本化）---
-	int  lastRailVersion_ = -1;     // 直近に同期したエディタの編集世代
-	void SyncRailsFromEditor();     // エディタの最新レールから splineRails_ を作り直す
 
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;

@@ -235,6 +235,7 @@ exit 0</Command>
     <ClCompile Include="engine\utils\Level\RailEditor.cpp" />
     <ClCompile Include="engine\utils\Level\BlenderImporter.cpp" />
     <ClCompile Include="game\player\Player.cpp" />
+    <ClCompile Include="game\rail\RailField.cpp" />
     <ClCompile Include="game\enemy\Enemy.cpp" />
     <ClCompile Include="game\enemy\EnemyEditor.cpp" />
     <ClCompile Include="engine\utils\TextManager.cpp" />
@@ -354,6 +355,7 @@ exit 0</Command>
     <ClInclude Include="engine\utils\Level\RailEditor.h" />
     <ClInclude Include="engine\utils\Level\BlenderImporter.h" />
     <ClInclude Include="game\player\Player.h" />
+    <ClInclude Include="game\rail\RailField.h" />
     <ClInclude Include="game\enemy\Enemy.h" />
     <ClInclude Include="game\enemy\EnemyEditor.h" />
     <ClInclude Include="engine\utils\TextManager.h" />
