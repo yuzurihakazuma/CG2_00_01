@@ -29,13 +29,7 @@ public:
     // 踏みつけ成功時にプレイヤーを上へ跳ね上がらせる
     void Bounce();
 
-    // --- 卵（ヨッシー）：敵を飲み込むと増える。後で投げる用 ---
-    int  GetEggCount() const{ return eggCount_; }   // 現在お腹に持っている卵の数
-    void GainEgg(){ ++eggCount_; }                  // 敵を1体飲み込んだら卵が1個できる
-
 private: // メンバ変数
-
-    int eggCount_ = 0; // お腹の卵の数（敵を飲み込むと増える）
 
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };

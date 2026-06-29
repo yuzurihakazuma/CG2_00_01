@@ -378,12 +378,13 @@ void GamePlayScene::UpdateCameraAndPostEffect(){
 
 // Edit↔Play の切り替わり瞬間のリセット処理。最後に prevMode_ を更新する。
 void GamePlayScene::HandleModeTransition(EngineMode current){
-	// エディット → プレイ：最新レールで確定し、プレイヤーをスタートへ、エフェクトを消す
+	// エディット → プレイ：最新レールで確定し、プレイヤーをスタートへ、エフェクト・卵を消す
 	if ( prevMode_ == EngineMode::Edit && current == EngineMode::Play ) {
 		SyncRailsFromEditor();
 		if ( player_ ) { player_->Initialize(); }
 		hitEffects_.clear();
 		stompEffects_.clear();
+		eggSystem_.Initialize();
 	}
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
@@ -407,6 +408,15 @@ void GamePlayScene::UpdatePlayMode(){
 
 	// Eキーで近くの敵を飲み込む（卵にする）
 	UpdateSwallow();
+
+	// --- ヨッシーの卵：状態更新＋投擲（実体化＝描画はまだ無し。状態だけ動く）---
+	if ( player_ ) {
+		Vector3 ppos = player_->GetPosition();
+		float yaw = player_->GetRotation().y;                   // 向いてる方向
+		Vector3 facing = { std::sin(yaw), 0.0f, std::cos(yaw) };
+		if ( input->Triggerkey(DIK_Q) ) { eggSystem_.TryThrow(ppos, facing); } // Q で投げる（Held→Flying）
+		eggSystem_.Update(ppos, facing, dt);                   // 追従・飛行・割れの更新
+	}
 
 	// スペースキー：エフェクト発生＋BGM再生
 	if ( input->Triggerkey(DIK_SPACE) ) {
@@ -484,10 +494,10 @@ void GamePlayScene::UpdateSwallow(){
 	}
 	if ( !target ) return; // 範囲内に敵がいなければ何もしない
 
-	// 飲み込む：敵を消して、卵を1個獲得
+	// 飲み込む：敵を消して、卵を1個（Held 状態で）お腹に追加
 	Vector3 enemyPos = target->GetPosition();
 	target->Defeat();
-	player_->GainEgg();
+	eggSystem_.OnSwallow(enemyPos);
 
 	// 飲み込んだ手応え＋エフェクト（踏みつけより軽め）
 	TriggerHitFeel(0.04f, 0.15f);
@@ -673,8 +683,9 @@ void GamePlayScene::DrawDebugUI(){
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");
 
-	// ヨッシー卵：今お腹にある卵の数（E で近くの敵を飲み込むと増える）
-	if ( player_ ) { ImGui::Text("卵: %d 個   (E=近くの敵を飲み込む)", player_->GetEggCount()); }
+	// ヨッシー卵：状態ごとの数（E=飲み込む / Q=投げる）。実体化(描画)は次の手順。
+	ImGui::Text("卵  保持:%d  飛行中:%d  (E=飲み込む / Q=投げる)",
+		eggSystem_.HeldCount(), eggSystem_.FlyingCount());
 
 	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
 	bool showMarkers = railField_.ShowMarkers();
