@@ -73,6 +73,7 @@ private: // 初期化・更新の内部処理（べた書きを段階ごとに�
 	void HandleModeTransition(EngineMode current); // Edit↔Play 切替時のリセット処理
 	void UpdatePlayMode();             // プレイ中のゲーム進行（レール／プレイヤー／敵／踏みつけ／エフェクト）
 	void UpdateStompCollision();       // プレイヤーと敵の当たり判定＋踏みつけ演出
+	void UpdateSwallow();              // 近くの敵を飲み込んで卵にする（ヨッシー）
 	void UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
 
 private: // メンバ変数

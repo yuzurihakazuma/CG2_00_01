@@ -405,6 +405,9 @@ void GamePlayScene::UpdatePlayMode(){
 	// 当たり判定＋踏みつけ
 	UpdateStompCollision();
 
+	// Eキーで近くの敵を飲み込む（卵にする）
+	UpdateSwallow();
+
 	// スペースキー：エフェクト発生＋BGM再生
 	if ( input->Triggerkey(DIK_SPACE) ) {
 		AudioManager::GetInstance()->PlayWave(bgmFile_);
@@ -458,6 +461,39 @@ void GamePlayScene::UpdateStompCollision(){
 			stompEffects_.push_back(std::move(newStompEffect));
 		}
 	}
+}
+
+// ヨッシーの「飲み込む」：E キーで、一番近い生きている敵を1体飲み込んで卵にする。
+//   ・敵を知っているのはシーンなので、判定はここで行う（踏みつけ判定と同じ場所）。
+//   ・飲み込んだら敵を消し、プレイヤーの卵カウントを1増やす（卵の実体化・投擲は次の手順）。
+void GamePlayScene::UpdateSwallow(){
+	if ( !player_ ) return;
+	Input* input = Input::GetInstance();
+	if ( !input->Triggerkey(DIK_E) ) return; // E を押した瞬間だけ
+
+	const float kSwallowReach = 2.0f; // この距離内の敵を飲み込める（舌の届く範囲）
+	Vector3 playerPos = player_->GetPosition();
+
+	// 一番近い生きている敵を探す
+	Enemy* target = nullptr;
+	float bestDist = kSwallowReach;
+	for ( auto& e : enemies_ ) {
+		if ( !e->IsAlive() ) continue;
+		float d = Length(playerPos - e->GetPosition());
+		if ( d < bestDist ) { bestDist = d; target = e.get(); }
+	}
+	if ( !target ) return; // 範囲内に敵がいなければ何もしない
+
+	// 飲み込む：敵を消して、卵を1個獲得
+	Vector3 enemyPos = target->GetPosition();
+	target->Defeat();
+	player_->GainEgg();
+
+	// 飲み込んだ手応え＋エフェクト（踏みつけより軽め）
+	TriggerHitFeel(0.04f, 0.15f);
+	auto fx = std::make_unique<StompEffect>();
+	fx->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
+	stompEffects_.push_back(std::move(fx));
 }
 
 // モードに関わらず毎フレーム行う描画用の更新（オーラ・各種オブジェクト・マーカー・パーティクル等）。
@@ -636,6 +672,10 @@ void GamePlayScene::DrawDebugUI(){
 
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");
+
+	// ヨッシー卵：今お腹にある卵の数（E で近くの敵を飲み込むと増える）
+	if ( player_ ) { ImGui::Text("卵: %d 個   (E=近くの敵を飲み込む)", player_->GetEggCount()); }
+
 	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
 	bool showMarkers = railField_.ShowMarkers();
 	if ( ImGui::Checkbox("レール経路を表示", &showMarkers) ) { railField_.SetShowMarkers(showMarkers); }
