@@ -23,8 +23,8 @@ public:
     //   お腹が一杯(kMaxEggs)なら追加せず false を返す。
     bool OnSwallow(const Vector3& birthPos);
 
-    // 保持中の卵を1個、前方へ投げる（Held → Flying）。投げられたら true。
-    bool TryThrow(const Vector3& playerPos, const Vector3& facing);
+    // 保持中の卵を1個、指定方向へ投げる（Held → Flying）。speed=初速。投げられたら true。
+    bool TryThrow(const Vector3& playerPos, const Vector3& dir, float speed = 12.0f);
 
     int HeldCount() const;    // 保持中の卵の数
     int FlyingCount() const;  // 飛行中の卵の数

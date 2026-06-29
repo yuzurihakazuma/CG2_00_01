@@ -60,12 +60,12 @@ void EggSystem::Draw() const{
     for ( const auto& e : eggs_ ) { e->Draw(); }
 }
 
-// 保持中の一番古い卵を前方へ投げる。
-bool EggSystem::TryThrow(const Vector3& playerPos, const Vector3& facing){
+// 保持中の一番古い卵を指定方向へ投げる。
+bool EggSystem::TryThrow(const Vector3& playerPos, const Vector3& dir, float speed){
     for ( auto& e : eggs_ ) {
         if ( !e->IsHeld() ) continue;
         e->SetPosition({ playerPos.x, playerPos.y + 0.5f, playerPos.z });
-        e->Throw(facing, 12.0f);
+        e->Throw(dir, speed);
         return true;
     }
     return false;

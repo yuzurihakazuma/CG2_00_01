@@ -543,15 +543,18 @@ void GamePlayScene::UpdateThrowAim(){
 		// Q を押し始めた＆地上＆卵を持っている → 構えに入る
 		if ( input->Pushkey(DIK_Q) && player_->IsGrounded() && eggSystem_.HeldCount() > 0 ) {
 			throwState_ = ThrowState::Aiming;
-			player_->SetMovementLocked(true);
+			// 構え中も移動・ジャンプは受け付ける（狙いは矢印キーで別操作なので競合しない）
 			// カーソルの初期位置：プレイヤーの少し前方上をスクリーン投影（無理なら画面中央）
 			float px, py;
 			Vector3 facing = { std::sin(player_->GetRotation().y), 0.0f, std::cos(player_->GetRotation().y) };
 			Vector3 ahead = { ppos.x + facing.x * 5.0f, ppos.y + 1.0f, ppos.z + facing.z * 5.0f };
 			if ( project(ahead, px, py) ) { cursorX_ = px; cursorY_ = py; }
 			else { cursorX_ = W * 0.5f; cursorY_ = H * 0.45f; }
+			// ★1f点滅対策：入場フレームのうちにカーソル位置を確定（return せず下の処理へ落ちる）
+			if ( cursorSprite_ ) { cursorSprite_->SetPosition({ cursorX_, cursorY_ }); cursorSprite_->Update(); }
+		} else {
+			return; // 構えていない時は何もしない
 		}
-		return;
 	}
 
 	// --- 構え中（Aiming）---
@@ -564,8 +567,7 @@ void GamePlayScene::UpdateThrowAim(){
 	cursorX_ = std::clamp(cursorX_, 0.0f, W);
 	cursorY_ = std::clamp(cursorY_, 0.0f, H);
 
-	// --- ロックオン対象を探す：カーソル(自由位置)に画面上で一番近い敵 ---
-	//   誘導(吸いつき)は無し。カーソルは自由に動き、敵の上に来た時だけロックする。
+	// --- ロックオン対象を探す：カーソル(自由位置)に画面上で一番近い敵（吸いつき無し）---
 	Enemy* lockEnemy = nullptr;
 	float  bestPix = 1e9f, bestEx = 0.0f, bestEy = 0.0f;
 	for ( auto& e : enemies_ ) {
@@ -575,24 +577,47 @@ void GamePlayScene::UpdateThrowAim(){
 		float dpix = std::sqrt(( ex - cursorX_ ) * ( ex - cursorX_ ) + ( ey - cursorY_ ) * ( ey - cursorY_ ));
 		if ( dpix < bestPix ) { bestPix = dpix; lockEnemy = e.get(); bestEx = ex; bestEy = ey; }
 	}
-
-	// ロック判定（ヒステリシス：付くのは近く、外れるのは遠く＝少し粘る）。
-	float lockThresh = aimLocked_ ? 120.0f : 80.0f;
+	float lockThresh = aimLocked_ ? 120.0f : 80.0f; // 粘り（付く<外れる）
 	aimLocked_ = ( lockEnemy != nullptr && bestPix < lockThresh );
 
 	Vector3 origin = { ppos.x, ppos.y + 0.5f, ppos.z };
 	Vector3 throwDir = { 0.0f, 0.0f, 1.0f };
+	float   throwSpeed = 13.0f;  // 通常の投げ速度
+	float   dispX = cursorX_, dispY = cursorY_;
+	Vector3 cursorWorld;         // 狙い線の先端（奥に追従させる）
 
-	// カーソル表示：ロック中は「敵にピタッと合わせる」（敵の画面位置へスナップ＋赤く大きく）。
-	//   自由カーソル(cursorX_/Y_)はそのままなので、外す方向へ動かせば普通に外れる。
-	float dispX = cursorX_, dispY = cursorY_;
 	if ( aimLocked_ ) {
-		dispX = bestEx; dispY = bestEy; // 敵に合わせる
-		Vector3 t = lockEnemy->GetPosition() - origin;
+		// ロック中：その敵へ。命中しやすいよう速度を上げる。カーソルは敵にピタッと合わせる。
+		dispX = bestEx; dispY = bestEy;
+		cursorWorld = lockEnemy->GetPosition();
+		Vector3 t = cursorWorld - origin;
 		float d = Length(t);
 		if ( d > 1e-4f ) throwDir = { t.x / d, t.y / d, t.z / d };
-		DebugDraw::GetInstance()->Sphere(lockEnemy->GetPosition(), lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
+		throwSpeed = 22.0f; // ★敵ロック時は速く
+		DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
+	} else {
+		// 未ロック：カーソルの画面位置を奥へアンプロジェクトした方向へ投げる（奥に投げ込める）。
+		Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
+		float ndcX = cursorX_ / W * 2.0f - 1.0f;
+		float ndcY = 1.0f - cursorY_ / H * 2.0f;
+		auto unproj = [&](float z) -> Vector3 {
+			float ow = ndcX * invVP.m[0][3] + ndcY * invVP.m[1][3] + z * invVP.m[2][3] + invVP.m[3][3];
+			return { ( ndcX * invVP.m[0][0] + ndcY * invVP.m[1][0] + z * invVP.m[2][0] + invVP.m[3][0] ) / ow,
+			         ( ndcX * invVP.m[0][1] + ndcY * invVP.m[1][1] + z * invVP.m[2][1] + invVP.m[3][1] ) / ow,
+			         ( ndcX * invVP.m[0][2] + ndcY * invVP.m[1][2] + z * invVP.m[2][2] + invVP.m[3][2] ) / ow };
+			};
+		Vector3 nearP = unproj(0.0f), farP = unproj(1.0f);
+		Vector3 ray = { farP.x - nearP.x, farP.y - nearP.y, farP.z - nearP.z };
+		float rl = Length(ray);
+		if ( rl > 1e-4f ) throwDir = { ray.x / rl, ray.y / rl, ray.z / rl };
+		// 狙い線の先端＝カーソル方向の少し奥（奥に動かすと線もそちらへ追従する）
+		cursorWorld = { origin.x + throwDir.x * 12.0f, origin.y + throwDir.y * 12.0f, origin.z + throwDir.z * 12.0f };
 	}
+
+	// 狙い線：プレイヤー → カーソルの先端（奥に合わせると線もそちらへ伸びる）
+	DebugDraw::GetInstance()->Line(origin, cursorWorld, { 1.0f, 0.9f, 0.2f, 0.9f });
+
+	// カーソル表示
 	if ( cursorSprite_ ) {
 		cursorSprite_->SetPosition({ dispX, dispY });
 		cursorSprite_->SetSize(aimLocked_ ? Vector2{ 64.0f, 64.0f } : Vector2{ 48.0f, 48.0f });
@@ -601,12 +626,18 @@ void GamePlayScene::UpdateThrowAim(){
 		cursorSprite_->Update();
 	}
 
-	// Q を離した瞬間：ロック中の敵がいる時だけ投げる（ロックオンのみ）。未ロックは投げない。
+	// Q を離した瞬間 → 投げる（ロック中=敵へ速く / 未ロック=カーソルの奥へ）。
+	//   ※「投げずにキャンセル」したい時用のコマンドは別途キーで足せる（今は常に投げる）。
 	if ( !input->Pushkey(DIK_Q) ) {
-		if ( aimLocked_ ) { eggSystem_.TryThrow(ppos, throwDir); }
+		// 投げる方向へプレイヤーの向きも合わせる（水平成分のyaw）
+		if ( std::abs(throwDir.x) > 1e-4f || std::abs(throwDir.z) > 1e-4f ) {
+			float yaw = std::atan2(throwDir.x, throwDir.z);
+			Vector3 r = player_->GetRotation();
+			player_->SetRotation({ r.x, yaw, r.z });
+		}
+		eggSystem_.TryThrow(ppos, throwDir, throwSpeed);
 		throwState_ = ThrowState::Idle;
 		aimLocked_  = false;
-		player_->SetMovementLocked(false);
 	}
 }
 
