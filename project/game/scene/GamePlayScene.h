@@ -75,6 +75,13 @@ private: // 初期化・更新の内部処理（べた書きを段階ごとに�
 	void UpdatePlayMode();             // プレイ中のゲーム進行（レール／プレイヤー／敵／踏みつけ／エフェクト）
 	void UpdateStompCollision();       // プレイヤーと敵の当たり判定＋踏みつけ演出
 	void UpdateSwallow();              // 近くの敵を飲み込んで卵にする（ヨッシー）
+	void UpdateThrowAim();             // Q長押しで構え→矢印で狙う→離して投げる
+
+	// --- 卵の投擲：構えのステート（Idle=通常 / Aiming=構え中）---
+	enum class ThrowState { Idle, Aiming };
+	ThrowState throwState_ = ThrowState::Idle;
+	float aimYaw_   = 0.0f;  // 狙いの水平角(ラジアン)
+	float aimPitch_ = 0.4f;  // 狙いの上下角(ラジアン)。+で上向き
 	void UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
 
 private: // メンバ変数

@@ -29,7 +29,12 @@ public:
     // 踏みつけ成功時にプレイヤーを上へ跳ね上がらせる
     void Bounce();
 
+    // 卵を構えている間など、移動・ジャンプを止める（その場で待機）
+    void SetMovementLocked(bool locked){ movementLocked_ = locked; }
+
 private: // メンバ変数
+
+    bool movementLocked_ = false; // true の間は移動・ジャンプ入力を無視（構え中など）
 
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };

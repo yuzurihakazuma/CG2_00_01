@@ -91,6 +91,7 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     // 1. 入力 → 2. 移動
     float moveInput = 0.0f; int switchInput = 0;
     ReadRailInput(curHorizontal, moveInput, switchInput);
+    if ( movementLocked_ ) { moveInput = 0.0f; switchInput = 0; } // 構え中はその場で待機
     MoveAlongRail(cur, curHorizontal, moveInput, dt);
 
     // 3. 終端処理（持ち越し/合流/落下/クランプ）。空中へ飛び出したら終了
@@ -370,7 +371,7 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
     const float kFloatTarget = 1.2f;  // 滞空中になめらかに近づく上向き速度
     const float kFloatEase   = 6.0f;  // 目標へ近づく速さ
 
-    if ( isGrounded_ && input->Triggerkey(DIK_SPACE) ) {
+    if ( isGrounded_ && !movementLocked_ && input->Triggerkey(DIK_SPACE) ) {
         jumpVelocity_   = jumpPower_;
         isGrounded_     = false;
         flutterCdTimer_ = kFloatTime; // 滞空budgetを補充

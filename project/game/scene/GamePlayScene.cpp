@@ -381,10 +381,11 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 	// エディット → プレイ：最新レールで確定し、プレイヤーをスタートへ、エフェクト・卵を消す
 	if ( prevMode_ == EngineMode::Edit && current == EngineMode::Play ) {
 		SyncRailsFromEditor();
-		if ( player_ ) { player_->Initialize(); }
+		if ( player_ ) { player_->Initialize(); player_->SetMovementLocked(false); }
 		hitEffects_.clear();
 		stompEffects_.clear();
 		eggSystem_.Initialize();
+		throwState_ = ThrowState::Idle;
 	}
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
@@ -409,13 +410,15 @@ void GamePlayScene::UpdatePlayMode(){
 	// Eキーで近くの敵を飲み込む（卵にする）
 	UpdateSwallow();
 
-	// --- ヨッシーの卵：状態更新＋投擲（実体化＝描画はまだ無し。状態だけ動く）---
+	// Q長押しで構え→矢印で狙う→離して投げる（構え中はプレイヤーが止まる）
+	UpdateThrowAim();
+
+	// 卵の追従・飛行・割れの更新
 	if ( player_ ) {
 		Vector3 ppos = player_->GetPosition();
-		float yaw = player_->GetRotation().y;                   // 向いてる方向
+		float yaw = player_->GetRotation().y;
 		Vector3 facing = { std::sin(yaw), 0.0f, std::cos(yaw) };
-		if ( input->Triggerkey(DIK_Q) ) { eggSystem_.TryThrow(ppos, facing); } // Q で投げる（Held→Flying）
-		eggSystem_.Update(ppos, facing, dt);                   // 追従・飛行・割れの更新
+		eggSystem_.Update(ppos, facing, dt);
 	}
 
 	// スペースキー：エフェクト発生＋BGM再生
@@ -494,16 +497,64 @@ void GamePlayScene::UpdateSwallow(){
 	}
 	if ( !target ) return; // 範囲内に敵がいなければ何もしない
 
-	// 飲み込む：敵を消して、卵を1個（Held 状態で）お腹に追加
+	// お腹が一杯なら飲み込めない（敵も食べない）
+	if ( !eggSystem_.OnSwallow(player_->GetPosition()) ) return; // プレイヤー位置から卵が生まれる
+
+	// 飲み込む：敵を消す（卵は OnSwallow で生成済み）
 	Vector3 enemyPos = target->GetPosition();
 	target->Defeat();
-	eggSystem_.OnSwallow(enemyPos);
 
 	// 飲み込んだ手応え＋エフェクト（踏みつけより軽め）
 	TriggerHitFeel(0.04f, 0.15f);
 	auto fx = std::make_unique<StompEffect>();
 	fx->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
 	stompEffects_.push_back(std::move(fx));
+}
+
+// ヨッシー風の投げ：Q を長押しで「構え」、矢印キーで狙いを動かし、離した瞬間に投げる。
+//   構え中はプレイヤーをその場で止める（移動ロック）。狙い方向は DebugDraw の線＋球で見せる。
+void GamePlayScene::UpdateThrowAim(){
+	if ( !player_ ) return;
+	Input* input = Input::GetInstance();
+	float dt = Time::GetInstance()->GetDeltaTime();
+	Vector3 ppos = player_->GetPosition();
+
+	if ( throwState_ == ThrowState::Idle ) {
+		// Q を押し始めた＆地上＆卵を持っている → 構えに入る
+		if ( input->Pushkey(DIK_Q) && player_->IsGrounded() && eggSystem_.HeldCount() > 0 ) {
+			throwState_ = ThrowState::Aiming;
+			aimYaw_   = player_->GetRotation().y; // 今向いてる方向から狙い始める
+			aimPitch_ = 0.4f;                     // 少し上向き
+			player_->SetMovementLocked(true);     // 構え中は止まる
+		}
+		return;
+	}
+
+	// --- 構え中（Aiming）---
+	// 矢印キーで狙いを動かす（上下＝ピッチ / 左右＝ヨー）
+	const float kAimSpeed = 1.6f; // rad/s
+	if ( input->Pushkey(DIK_UP) )    aimPitch_ += kAimSpeed * dt;
+	if ( input->Pushkey(DIK_DOWN) )  aimPitch_ -= kAimSpeed * dt;
+	if ( input->Pushkey(DIK_LEFT) )  aimYaw_   -= kAimSpeed * dt;
+	if ( input->Pushkey(DIK_RIGHT) ) aimYaw_   += kAimSpeed * dt;
+	aimPitch_ = std::clamp(aimPitch_, -0.5f, 1.3f); // 下げすぎ・上げすぎ防止
+
+	// 狙い方向（水平=ヨー / 上下=ピッチ）
+	float cp = std::cos(aimPitch_);
+	Vector3 aimDir = { std::sin(aimYaw_) * cp, std::sin(aimPitch_), std::cos(aimYaw_) * cp };
+
+	// 狙いの可視化：プレイヤーから aimDir 方向へ線＋先端に球（照準）
+	Vector3 origin = { ppos.x, ppos.y + 0.5f, ppos.z };
+	Vector3 tip = { origin.x + aimDir.x * 4.0f, origin.y + aimDir.y * 4.0f, origin.z + aimDir.z * 4.0f };
+	DebugDraw::GetInstance()->Line(origin, tip, { 1.0f, 0.9f, 0.2f, 1.0f });        // 黄色い狙い線
+	DebugDraw::GetInstance()->Sphere(tip, 0.25f, { 1.0f, 0.3f, 0.2f, 1.0f }, 12);   // 赤い照準
+
+	// Q を離した瞬間 → 投げる
+	if ( !input->Pushkey(DIK_Q) ) {
+		eggSystem_.TryThrow(ppos, aimDir);
+		throwState_ = ThrowState::Idle;
+		player_->SetMovementLocked(false);
+	}
 }
 
 // モードに関わらず毎フレーム行う描画用の更新（オーラ・各種オブジェクト・マーカー・パーティクル等）。
@@ -587,6 +638,7 @@ void GamePlayScene::Draw(){
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 	for ( auto& e : enemies_ ) { e->Draw(); }   // 敵
+	eggSystem_.Draw();                          // ヨッシーの卵
 
 	// レール経路の可視化マーカー（プレイヤーが通る道筋）
 	railField_.DrawMarkers();
@@ -680,12 +732,33 @@ void GamePlayScene::DrawDebugUI(){
 
 	TextManager::GetInstance()->DrawDebugUI();
 
+	// --- ヨッシーHUD（仮）：画面左上に常時表示。卵の数・状態を確認できる ---
+	{
+		ImGui::SetNextWindowPos(ImVec2(20.0f, 60.0f), ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(0.55f);
+		ImGui::Begin("ヨッシーHUD", nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+
+		ImGui::Text("たまご  %d / %d", eggSystem_.HeldCount(), EggSystem::kMaxEggs);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(飛行中:%d)", eggSystem_.FlyingCount());
+
+		if ( throwState_ == ThrowState::Aiming ) {
+			const float kRad2Deg = 57.2958f;
+			ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "▼ 構え中！ 矢印で狙う / Q を離して投げる");
+			ImGui::Text("   ヨー:%.0f°  ピッチ:%.0f°", aimYaw_ * kRad2Deg, aimPitch_ * kRad2Deg);
+		} else if ( eggSystem_.HeldCount() > 0 ) {
+			ImGui::Text("E:飲み込む   Q長押し:構える→離して投げる");
+		} else {
+			ImGui::Text("E:近くの敵を飲み込んで たまごを作る");
+		}
+		ImGui::End();
+	}
+
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");
-
-	// ヨッシー卵：状態ごとの数（E=飲み込む / Q=投げる）。実体化(描画)は次の手順。
-	ImGui::Text("卵  保持:%d  飛行中:%d  (E=飲み込む / Q=投げる)",
-		eggSystem_.HeldCount(), eggSystem_.FlyingCount());
 
 	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
 	bool showMarkers = railField_.ShowMarkers();
