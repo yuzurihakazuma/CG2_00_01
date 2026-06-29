@@ -7,9 +7,14 @@ void EggSystem::Initialize(){
     eggs_.clear();
 }
 
-// 敵を飲み込んだ → プレイヤー位置に卵が生まれる（実体つき・Held 状態）。お腹一杯なら false。
+// 敵を飲み込んだ → プレイヤー位置に卵が生まれる（実体つき・Held 状態）。
+//   お腹が一杯なら「一番古い保持卵を捨てて(割って)」から新しい卵を作る（常に飲み込める）。
 bool EggSystem::OnSwallow(const Vector3& birthPos){
-    if ( HeldCount() >= kMaxEggs ) return false; // お腹が一杯
+    if ( HeldCount() >= kMaxEggs ) {
+        for ( auto& e : eggs_ ) {        // 先頭から順＝一番古い保持卵を探して捨てる
+            if ( e->IsHeld() ) { e->Break(); break; }
+        }
+    }
 
     auto egg = std::make_unique<Egg>(birthPos);
 

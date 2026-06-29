@@ -80,8 +80,10 @@ private: // 初期化・更新の内部処理（べた書きを段階ごとに�
 	// --- 卵の投擲：構えのステート（Idle=通常 / Aiming=構え中）---
 	enum class ThrowState { Idle, Aiming };
 	ThrowState throwState_ = ThrowState::Idle;
-	float aimYaw_   = 0.0f;  // 狙いの水平角(ラジアン)
-	float aimPitch_ = 0.4f;  // 狙いの上下角(ラジアン)。+で上向き
+	float cursorX_ = 0.0f;   // 狙いカーソルの画面位置X(px)。矢印で直感的に動かす（右=右）
+	float cursorY_ = 0.0f;   // 狙いカーソルの画面位置Y(px)（上=上）
+	std::unique_ptr<Sprite> cursorSprite_; // 狙い用カーソル（構え中だけ表示）
+	bool  aimLocked_ = false;              // 敵にロックオン中か（吸いつき＋色変更）
 	void UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
 
 private: // メンバ変数

@@ -166,6 +166,10 @@ void GamePlayScene::SetupGameplay(){
 
 	// スプライト・ブロック群・GPUパーティクル
 	sprite_ = Sprite::Create(textures_["uvChecker"].srvIndex, spritePos_);
+
+	// 狙い用カーソル（構え中だけ表示。敵に重なると赤＝ロックオン）
+	cursorSprite_ = Sprite::Create(textures_["circle2"].srvIndex, { 640.0f, 360.0f });
+	cursorSprite_->SetSize({ 56.0f, 56.0f });
 	blockGroup_ = std::make_unique<InstancedGroup>();
 	blockGroup_->Initialize("block", 10000);
 	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
@@ -511,48 +515,97 @@ void GamePlayScene::UpdateSwallow(){
 	stompEffects_.push_back(std::move(fx));
 }
 
-// ヨッシー風の投げ：Q を長押しで「構え」、矢印キーで狙いを動かし、離した瞬間に投げる。
-//   構え中はプレイヤーをその場で止める（移動ロック）。狙い方向は DebugDraw の線＋球で見せる。
+// ヨッシー風の投げ：Q長押しで構え、矢印で「画面上のカーソル」を直感的に動かし、離して投げる。
+//   ・カーソルは画面座標で動く（上=上 / 右=右）。敵に近いと少し吸いつく（外せば再ロック可）。
+//   ・ロック中はその敵へ。未ロックはカーソルの先(奥)へ投げる（クラフトワールド風）。
 void GamePlayScene::UpdateThrowAim(){
 	if ( !player_ ) return;
 	Input* input = Input::GetInstance();
 	float dt = Time::GetInstance()->GetDeltaTime();
 	Vector3 ppos = player_->GetPosition();
 
+	const float W = ( float ) WindowProc::GetInstance()->GetClientWidth();
+	const float H = ( float ) WindowProc::GetInstance()->GetClientHeight();
+
+	// ワールド点 → スクリーン画素（行ベクトル v*VP）。カメラ後方なら false。
+	auto project = [&](const Vector3& w, float& px, float& py) -> bool {
+		const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
+		float cw = w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3];
+		if ( cw <= 0.0001f ) return false;
+		float sx = ( w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0] ) / cw;
+		float sy = ( w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1] ) / cw;
+		px = ( sx * 0.5f + 0.5f ) * W;
+		py = ( 1.0f - ( sy * 0.5f + 0.5f ) ) * H;
+		return true;
+		};
+
 	if ( throwState_ == ThrowState::Idle ) {
 		// Q を押し始めた＆地上＆卵を持っている → 構えに入る
 		if ( input->Pushkey(DIK_Q) && player_->IsGrounded() && eggSystem_.HeldCount() > 0 ) {
 			throwState_ = ThrowState::Aiming;
-			aimYaw_   = player_->GetRotation().y; // 今向いてる方向から狙い始める
-			aimPitch_ = 0.4f;                     // 少し上向き
-			player_->SetMovementLocked(true);     // 構え中は止まる
+			player_->SetMovementLocked(true);
+			// カーソルの初期位置：プレイヤーの少し前方上をスクリーン投影（無理なら画面中央）
+			float px, py;
+			Vector3 facing = { std::sin(player_->GetRotation().y), 0.0f, std::cos(player_->GetRotation().y) };
+			Vector3 ahead = { ppos.x + facing.x * 5.0f, ppos.y + 1.0f, ppos.z + facing.z * 5.0f };
+			if ( project(ahead, px, py) ) { cursorX_ = px; cursorY_ = py; }
+			else { cursorX_ = W * 0.5f; cursorY_ = H * 0.45f; }
 		}
 		return;
 	}
 
 	// --- 構え中（Aiming）---
-	// 矢印キーで狙いを動かす（上下＝ピッチ / 左右＝ヨー）
-	const float kAimSpeed = 1.6f; // rad/s
-	if ( input->Pushkey(DIK_UP) )    aimPitch_ += kAimSpeed * dt;
-	if ( input->Pushkey(DIK_DOWN) )  aimPitch_ -= kAimSpeed * dt;
-	if ( input->Pushkey(DIK_LEFT) )  aimYaw_   -= kAimSpeed * dt;
-	if ( input->Pushkey(DIK_RIGHT) ) aimYaw_   += kAimSpeed * dt;
-	aimPitch_ = std::clamp(aimPitch_, -0.5f, 1.3f); // 下げすぎ・上げすぎ防止
+	// 矢印キーで「画面上のカーソル」を動かす（直感的：上=上 / 右=右 / 等速）。
+	const float kCursorSpeed = 620.0f; // px/s
+	if ( input->Pushkey(DIK_UP) )    cursorY_ -= kCursorSpeed * dt;
+	if ( input->Pushkey(DIK_DOWN) )  cursorY_ += kCursorSpeed * dt;
+	if ( input->Pushkey(DIK_LEFT) )  cursorX_ -= kCursorSpeed * dt;
+	if ( input->Pushkey(DIK_RIGHT) ) cursorX_ += kCursorSpeed * dt;
+	cursorX_ = std::clamp(cursorX_, 0.0f, W);
+	cursorY_ = std::clamp(cursorY_, 0.0f, H);
 
-	// 狙い方向（水平=ヨー / 上下=ピッチ）
-	float cp = std::cos(aimPitch_);
-	Vector3 aimDir = { std::sin(aimYaw_) * cp, std::sin(aimPitch_), std::cos(aimYaw_) * cp };
+	// --- ロックオン対象を探す：カーソル(自由位置)に画面上で一番近い敵 ---
+	//   誘導(吸いつき)は無し。カーソルは自由に動き、敵の上に来た時だけロックする。
+	Enemy* lockEnemy = nullptr;
+	float  bestPix = 1e9f, bestEx = 0.0f, bestEy = 0.0f;
+	for ( auto& e : enemies_ ) {
+		if ( !e->IsAlive() ) continue;
+		float ex, ey;
+		if ( !project(e->GetPosition(), ex, ey) ) continue; // 後方は対象外
+		float dpix = std::sqrt(( ex - cursorX_ ) * ( ex - cursorX_ ) + ( ey - cursorY_ ) * ( ey - cursorY_ ));
+		if ( dpix < bestPix ) { bestPix = dpix; lockEnemy = e.get(); bestEx = ex; bestEy = ey; }
+	}
 
-	// 狙いの可視化：プレイヤーから aimDir 方向へ線＋先端に球（照準）
+	// ロック判定（ヒステリシス：付くのは近く、外れるのは遠く＝少し粘る）。
+	float lockThresh = aimLocked_ ? 120.0f : 80.0f;
+	aimLocked_ = ( lockEnemy != nullptr && bestPix < lockThresh );
+
 	Vector3 origin = { ppos.x, ppos.y + 0.5f, ppos.z };
-	Vector3 tip = { origin.x + aimDir.x * 4.0f, origin.y + aimDir.y * 4.0f, origin.z + aimDir.z * 4.0f };
-	DebugDraw::GetInstance()->Line(origin, tip, { 1.0f, 0.9f, 0.2f, 1.0f });        // 黄色い狙い線
-	DebugDraw::GetInstance()->Sphere(tip, 0.25f, { 1.0f, 0.3f, 0.2f, 1.0f }, 12);   // 赤い照準
+	Vector3 throwDir = { 0.0f, 0.0f, 1.0f };
 
-	// Q を離した瞬間 → 投げる
+	// カーソル表示：ロック中は「敵にピタッと合わせる」（敵の画面位置へスナップ＋赤く大きく）。
+	//   自由カーソル(cursorX_/Y_)はそのままなので、外す方向へ動かせば普通に外れる。
+	float dispX = cursorX_, dispY = cursorY_;
+	if ( aimLocked_ ) {
+		dispX = bestEx; dispY = bestEy; // 敵に合わせる
+		Vector3 t = lockEnemy->GetPosition() - origin;
+		float d = Length(t);
+		if ( d > 1e-4f ) throwDir = { t.x / d, t.y / d, t.z / d };
+		DebugDraw::GetInstance()->Sphere(lockEnemy->GetPosition(), lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
+	}
+	if ( cursorSprite_ ) {
+		cursorSprite_->SetPosition({ dispX, dispY });
+		cursorSprite_->SetSize(aimLocked_ ? Vector2{ 64.0f, 64.0f } : Vector2{ 48.0f, 48.0f });
+		cursorSprite_->SetColor(aimLocked_ ? Vector4{ 1.0f, 0.25f, 0.2f, 1.0f }
+		                                   : Vector4{ 1.0f, 1.0f, 1.0f, 0.85f });
+		cursorSprite_->Update();
+	}
+
+	// Q を離した瞬間：ロック中の敵がいる時だけ投げる（ロックオンのみ）。未ロックは投げない。
 	if ( !input->Pushkey(DIK_Q) ) {
-		eggSystem_.TryThrow(ppos, aimDir);
+		if ( aimLocked_ ) { eggSystem_.TryThrow(ppos, throwDir); }
 		throwState_ = ThrowState::Idle;
+		aimLocked_  = false;
 		player_->SetMovementLocked(false);
 	}
 }
@@ -716,6 +769,7 @@ void GamePlayScene::Draw(){
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 	if ( sprite_ ) { sprite_->Draw(); }
+	if ( cursorSprite_ && throwState_ == ThrowState::Aiming ) { cursorSprite_->Draw(); } // 構え中だけ狙いカーソル
 	TextManager::GetInstance()->Draw();
 
 
@@ -746,9 +800,9 @@ void GamePlayScene::DrawDebugUI(){
 		ImGui::TextDisabled("(飛行中:%d)", eggSystem_.FlyingCount());
 
 		if ( throwState_ == ThrowState::Aiming ) {
-			const float kRad2Deg = 57.2958f;
-			ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "▼ 構え中！ 矢印で狙う / Q を離して投げる");
-			ImGui::Text("   ヨー:%.0f°  ピッチ:%.0f°", aimYaw_ * kRad2Deg, aimPitch_ * kRad2Deg);
+			ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "▼ 構え中！ 矢印でカーソル移動 / Q を離す");
+			if ( aimLocked_ ) { ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.25f, 1.0f), "   ★ ロックオン！ Q を離すと命中"); }
+			else              { ImGui::TextDisabled("   敵にカーソルを重ねるとロック（重ねないと投げない）"); }
 		} else if ( eggSystem_.HeldCount() > 0 ) {
 			ImGui::Text("E:飲み込む   Q長押し:構える→離して投げる");
 		} else {
