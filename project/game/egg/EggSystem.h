@@ -41,6 +41,11 @@ public:
     //   敵を知るのはシーンなので、当たり判定の中身はシーンから渡す（割れ演出は Update が拾う）。
     void ResolveHits(const std::function<bool(const Vector3&, float)>& onHit);
 
+    // --- イベント別の演出（実体パフ。踏みつけのリングとは別物にして使い回しに見せない）---
+    void SpawnSwallowFx(const Vector3& pos); // 飲み込み：緑がふわっと上へ吸い込まれる
+    void SpawnLayFx(const Vector3& pos);     // 産卵：白＆緑がぽわっと広がる（生まれた感）
+    void SpawnHitFx(const Vector3& pos);     // 命中：黄＆オレンジが鋭く飛び散る（衝撃）
+
     int HeldCount() const;    // 保持中の卵の数
     int FlyingCount() const;  // 飛行中の卵の数
     int TotalCount() const { return ( int ) eggs_.size(); }

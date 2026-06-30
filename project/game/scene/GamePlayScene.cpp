@@ -413,13 +413,11 @@ void GamePlayScene::UpdatePlayMode(){
 		if ( e->IsSwallowing() ) { e->TickSwallow(ppos, dt); } // 縮みながらプレイヤーへ吸い込まれる
 		else { e->Update(railField_.GetRails(), dt); }
 	}
-	// 吸い込み完了 → お腹に+1して消す（口元で緑のヨッシー演出）
+	// 吸い込み完了 → お腹に+1して消す（口元で緑がふわっと＝踏みつけのリングとは別物）
 	for ( auto& e : enemies_ ) {
 		if ( e->IsConsumed() ) {
 			eggSystem_.AddToBelly();
-			auto fx = std::make_unique<StompEffect>();
-			fx->Initialize(e->GetPosition(), camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Swallow);
-			stompEffects_.push_back(std::move(fx));
+			eggSystem_.SpawnSwallowFx(e->GetPosition());
 		}
 	}
 	enemies_.erase(std::remove_if(enemies_.begin(), enemies_.end(),
@@ -442,11 +440,9 @@ void GamePlayScene::UpdatePlayMode(){
 			if ( Length(eggPos - e->GetPosition()) <= reach ) {
 				Vector3 ep = e->GetPosition();
 				e->Defeat();
-				TriggerHitFeel(0.05f, 0.2f); // 命中の手応え
-				auto fx = std::make_unique<StompEffect>();
-				fx->Initialize(ep, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::EggHit);
-				stompEffects_.push_back(std::move(fx));
-				return true; // 命中（殻の飛び散りは卵の割れ演出が出す）
+				TriggerHitFeel(0.05f, 0.2f);  // 命中の手応え
+				eggSystem_.SpawnHitFx(ep);    // 黄＆オレンジが鋭く飛び散る（踏みつけのリングとは別物）
+				return true; // 命中（殻の緑＋黄身は卵の割れ演出が別に出す）
 			}
 		}
 		return false;
@@ -545,9 +541,7 @@ void GamePlayScene::UpdateSwallow(){
 		float yaw = player_->GetRotation().y;
 		Vector3 behind = { playerPos.x - std::sin(yaw) * 0.8f, playerPos.y + 0.3f, playerPos.z - std::cos(yaw) * 0.8f };
 		if ( eggSystem_.LayEgg(behind) ) {
-			auto fx = std::make_unique<StompEffect>(); // 産まれた合図（緑のヨッシー演出）
-			fx->Initialize(behind, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Swallow);
-			stompEffects_.push_back(std::move(fx));
+			eggSystem_.SpawnLayFx(behind); // 産まれた合図（白＆緑がぽわっと）
 			TriggerHitFeel(0.03f, 0.08f);
 		}
 	}

@@ -155,6 +155,34 @@ bool EggSystem::TryThrow(const Vector3& playerPos, const Vector3& dir, float spe
     return false;
 }
 
+// 飲み込み：口元で緑の小球がふわっと上へ吸い込まれる（リング無し＝踏みつけと別物）。
+void EggSystem::SpawnSwallowFx(const Vector3& pos){
+    for ( int i = 0; i < 9; ++i ) {
+        SpawnPuff(pos, { Rand11() * 1.0f, 1.6f + Rand11() * 0.8f, Rand11() * 1.0f },
+                  { 0.4f, 1.0f, 0.5f, 1.0f }, 0.2f, 0.32f); // 緑・上向き・速め
+    }
+}
+
+// 産卵：白＆緑がぽわっと丸く広がる（生まれた感。ゆっくりめ）。
+void EggSystem::SpawnLayFx(const Vector3& pos){
+    for ( int i = 0; i < 11; ++i ) {
+        Vector4 col = ( i % 2 ) ? Vector4{ 0.5f, 1.0f, 0.6f, 1.0f }   // 緑
+                                : Vector4{ 0.95f, 1.0f, 0.95f, 1.0f }; // 白
+        SpawnPuff(pos, { Rand11() * 1.5f, 0.4f + Rand11() * 0.5f, Rand11() * 1.5f },
+                  col, 0.24f, 0.45f); // ゆっくり広がる
+    }
+}
+
+// 命中：黄＆オレンジが全方向へ鋭く飛び散る（衝撃感。速い・多い）。
+void EggSystem::SpawnHitFx(const Vector3& pos){
+    for ( int i = 0; i < 16; ++i ) {
+        Vector4 col = ( i % 2 ) ? Vector4{ 1.0f, 0.85f, 0.2f, 1.0f }  // 黄
+                                : Vector4{ 1.0f, 0.5f, 0.1f, 1.0f };  // オレンジ
+        SpawnPuff(pos, { Rand11() * 4.8f, 1.0f + Rand11() * 3.0f, Rand11() * 4.8f },
+                  col, 0.22f, 0.38f); // 鋭く速い
+    }
+}
+
 // 飛行中の卵を当たり判定にかけ、当たった卵を割る（敵側の処理は onHit 内でシーンが行う）。
 void EggSystem::ResolveHits(const std::function<bool(const Vector3&, float)>& onHit){
     for ( auto& e : eggs_ ) {
