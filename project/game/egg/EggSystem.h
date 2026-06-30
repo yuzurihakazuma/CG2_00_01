@@ -4,6 +4,8 @@
 #include <memory>
 #include <functional>
 
+class Obj3d; // トレイル煙パフ用（実体で確実に表示する）
+
 // =====================================================================
 //  EggSystem：ヨッシーの卵を管理する（飲み込みで生成 → 後ろに整列・追従 → 投擲 → 割れる）。
 //   ・各卵は自分の状態(Held/Flying/Broken)を持つ → ここは「並び順」と「全体の管理」を担当。
@@ -13,6 +15,9 @@ class EggSystem {
 public:
     static const int kMaxEggs = 6; // 同時に持てる卵の最大数（お腹の容量）
 
+    EggSystem() = default;
+    ~EggSystem(); // unique_ptr<Obj3d> を含むため cpp 側で定義
+
     void Initialize();   // 全卵をクリア（プレイ開始/リセット時）
 
     // 毎フレーム更新。保持中の卵に「後ろのスロット」を割り当てて整列・追従させ、各卵の状態を進める。
@@ -20,9 +25,14 @@ public:
     void Update(const Vector3& playerPos, const Vector3& facing, float dt);
     void Draw() const;
 
-    // 敵を飲み込んだ → プレイヤー位置から卵が生まれる（Held 状態で追加）。
-    //   お腹が一杯(kMaxEggs)なら追加せず false を返す。
-    bool OnSwallow(const Vector3& birthPos);
+    // 敵を飲み込んだ → お腹(stomach)に1匹ためる（まだ卵にはしない）。
+    //   お腹が一杯(kMaxEggs)なら古い分は増えない。
+    void AddToBelly();
+    int  BellyCount() const{ return stomach_; }
+
+    // しゃがみ等で「産む」：お腹が1以上なら1匹を卵(Held)にして birthPos に生む。産んだら true。
+    //   持っている卵が満杯なら一番古い卵を割って捨ててから生む（常に産める）。
+    bool LayEgg(const Vector3& birthPos);
 
     // 保持中の卵を1個、指定方向へ投げる（Held → Flying）。speed=初速。投げられたら true。
     bool TryThrow(const Vector3& playerPos, const Vector3& dir, float speed = 12.0f);
@@ -37,4 +47,21 @@ public:
 
 private:
     std::vector<std::unique_ptr<Egg>> eggs_;
+    int stomach_ = 0; // お腹にためた敵の数（産むと卵になる）
+
+    // --- 飛行中の卵が残す「煙パフ」---
+    //   加算パーティクルは明るい背景で見えないので、実体(Obj3d)の小球で表示する（縮んで消える）。
+    struct TrailPuff {
+        std::unique_ptr<Obj3d> obj;
+        Vector3 pos { 0.0f, 0.0f, 0.0f };
+        Vector3 vel { 0.0f, 0.0f, 0.0f };
+        float   life    = 0.0f;
+        float   maxLife = 0.4f;
+        float   baseScale = 0.3f;
+    };
+    std::vector<TrailPuff> puffs_;
+    float trailTimer_ = 0.0f; // 一定間隔でトレイルを出すためのタイマー
+
+    // パフを1個出す（pos=位置, vel=初速, color=色, scale=大きさ, life=寿命秒）
+    void SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life);
 };

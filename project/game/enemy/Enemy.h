@@ -35,8 +35,14 @@ public:
     void Draw();
 
     // --- 状態 ---
-    bool IsAlive() const{ return alive_; }
+    bool IsAlive() const{ return alive_ && !swallowing_; } // 吸い込み中は踏み・ロック対象外
     void Defeat(){ alive_ = false; }   // 踏まれた時など
+
+    // --- 飲み込み（ヨッシー）：その場から縮みながらプレイヤーへ吸い込まれる ---
+    void StartSwallow();                                  // 吸い込み開始
+    void TickSwallow(const Vector3& playerPos, float dt); // 吸い込み中の更新（縮小＋移動）
+    bool IsSwallowing() const{ return swallowing_; }
+    bool IsConsumed()  const{ return consumed_; }         // 吸い込み完了（消してお腹+1）
 
     const Vector3& GetPosition() const{ return position_; }
     float     GetRadius() const{ return radius_; }
@@ -52,6 +58,12 @@ private:
     float     dir_       = 1.0f;    // 進行方向(+1/-1)
     float     speed_     = 2.0f;    // 移動速度 (m/s)
     bool      alive_     = true;
+
+    // 飲み込みアニメ用
+    bool      swallowing_ = false;        // 吸い込み中
+    bool      consumed_   = false;        // 吸い込み完了（シーンが消してお腹を増やす）
+    float     swallowT_   = 0.0f;         // 吸い込み経過(秒)
+    Vector3   swallowStart_ { 0.0f, 0.0f, 0.0f }; // 吸い込み開始位置
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };
     Vector3 rotation_ { 0.0f, 0.0f, 0.0f };

@@ -1,24 +1,52 @@
 #include "game/egg/EggSystem.h"
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/3d/model/Model.h"
-#include "engine/particle/ParticleManager.h" // 煙・星のパーティクル
 #include <algorithm>
+#include <cstdlib>
 
-// パーティクルのグループ名（実体は GamePlayScene::LoadResources で生成・設定）。
+EggSystem::~EggSystem() = default; // unique_ptr<Obj3d> のため cpp 側で定義
+
 namespace {
-    const char* kSmokeGroup = "EggSmoke"; // 飛行中の煙トレイル
-    const char* kStarGroup  = "EggStar";  // 投げ・着弾の星（ぱっと弾ける）
+    // -1.0〜1.0 の簡易乱数（トレイルのばらつき用）
+    float Rand11(){ return ( ( float ) std::rand() / RAND_MAX ) * 2.0f - 1.0f; }
 }
 
 void EggSystem::Initialize(){
     eggs_.clear();
+    puffs_.clear();
+    stomach_    = 0;
+    trailTimer_ = 0.0f;
 }
 
-// 敵を飲み込んだ → プレイヤー位置に卵が生まれる（実体つき・Held 状態）。
-//   お腹が一杯なら「一番古い保持卵を捨てて(割って)」から新しい卵を作る（常に飲み込める）。
-bool EggSystem::OnSwallow(const Vector3& birthPos){
+// 煙パフ（実体の小球）を1個出す。縮みながら消えるので加算でなくても確実に見える。
+void EggSystem::SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life){
+    TrailPuff p;
+    p.obj = Obj3d::Create("sphere"); // 既定カメラが自動バインド
+    if ( p.obj ) {
+        p.obj->SetScale({ scale, scale, scale });
+        if ( p.obj->GetModel() && p.obj->GetModel()->GetMaterial() ) {
+            p.obj->GetModel()->GetMaterial()->color = color;
+        }
+        p.obj->SetTranslation(pos);
+        p.obj->Update();
+    }
+    p.pos = pos; p.vel = vel; p.life = life; p.maxLife = life; p.baseScale = scale;
+    puffs_.push_back(std::move(p));
+}
+
+// 敵を飲み込んだ → お腹に1匹ためる（卵にするのは LayEgg）。
+void EggSystem::AddToBelly(){
+    if ( stomach_ < kMaxEggs ) { ++stomach_; }
+}
+
+// しゃがみ等で産む：お腹を1減らして、birthPos に卵(Held)を1個生む。
+//   持っている卵が満杯なら一番古い卵を割って捨ててから生む。
+bool EggSystem::LayEgg(const Vector3& birthPos){
+    if ( stomach_ <= 0 ) return false;
+    --stomach_;
+
     if ( HeldCount() >= kMaxEggs ) {
-        for ( auto& e : eggs_ ) {        // 先頭から順＝一番古い保持卵を探して捨てる
+        for ( auto& e : eggs_ ) {        // 先頭から順＝一番古い保持卵を捨てる
             if ( e->IsHeld() ) { e->Break(); break; }
         }
     }
@@ -53,18 +81,50 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         ++held;
     }
 
-    // 各卵の状態と見た目を進める＋飛行トレイル／割れた瞬間の星
-    ParticleManager* pm = ParticleManager::GetInstance();
+    // 飛行トレイル：一定間隔で、飛んでいる卵の位置に煙パフ（白い小球）を置く。
+    trailTimer_ += dt;
+    bool emitTrail = false;
+    if ( trailTimer_ >= 0.03f ) { trailTimer_ -= 0.03f; emitTrail = true; }
+
+    // 各卵の状態と見た目を進める＋トレイル／割れた瞬間の殻飛び散り
     for ( auto& e : eggs_ ) {
-        if ( e->IsFlying() ) {
-            pm->Emit(kSmokeGroup, e->GetPosition(), 2); // 飛んでる間は煙をもくもく
+        if ( e->IsFlying() && emitTrail ) {
+            Vector3 p = e->GetPosition();
+            Vector3 jitter = { Rand11() * 0.1f, Rand11() * 0.1f, Rand11() * 0.1f };
+            SpawnPuff({ p.x + jitter.x, p.y + jitter.y, p.z + jitter.z },
+                      { Rand11() * 0.4f, 0.4f + Rand11() * 0.2f, Rand11() * 0.4f },
+                      { 0.95f, 0.97f, 1.0f, 1.0f }, 0.28f, 0.4f); // 白い煙
         }
         e->Update(dt);
-        if ( e->JustBroke() ) {
-            pm->Emit(kStarGroup, e->GetPosition(), 18); // 着弾/時間切れで星がぱっと弾ける
+        if ( e->JustBroke() ) { // 着弾／時間切れ：殻が黄＋緑に飛び散る
+            Vector3 p = e->GetPosition();
+            for ( int i = 0; i < 10; ++i ) {
+                Vector4 col = ( i % 2 ) ? Vector4{ 1.0f, 0.9f, 0.3f, 1.0f }   // 黄身
+                                        : Vector4{ 0.5f, 1.0f, 0.5f, 1.0f };  // 殻の緑
+                SpawnPuff(p, { Rand11() * 3.5f, 2.0f + Rand11() * 2.0f, Rand11() * 3.5f }, col, 0.22f, 0.4f);
+            }
             e->ClearJustBroke();
         }
     }
+
+    // 煙パフの更新（移動＋軽い重力＋縮小、寿命切れで削除）
+    for ( auto& p : puffs_ ) {
+        p.life   -= dt;
+        p.vel.y  -= 3.0f * dt;
+        p.pos.x  += p.vel.x * dt;
+        p.pos.y  += p.vel.y * dt;
+        p.pos.z  += p.vel.z * dt;
+        float r = ( p.maxLife > 0.0f ) ? ( p.life / p.maxLife ) : 0.0f;
+        if ( r < 0.0f ) r = 0.0f;
+        float s = p.baseScale * r;
+        if ( p.obj ) {
+            p.obj->SetTranslation(p.pos);
+            p.obj->SetScale({ s, s, s });
+            p.obj->Update();
+        }
+    }
+    puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(),
+        [](const TrailPuff& p){ return p.life <= 0.0f; }), puffs_.end());
 
     // 割れて消えてよくなった卵を後始末
     eggs_.erase(
@@ -75,6 +135,7 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
 
 void EggSystem::Draw() const{
     for ( const auto& e : eggs_ ) { e->Draw(); }
+    for ( const auto& p : puffs_ ) { if ( p.obj && p.life > 0.0f ) p.obj->Draw(); } // 煙パフ
 }
 
 // 保持中の一番古い卵を指定方向へ投げる。
@@ -84,7 +145,11 @@ bool EggSystem::TryThrow(const Vector3& playerPos, const Vector3& dir, float spe
         Vector3 from = { playerPos.x, playerPos.y + 0.5f, playerPos.z };
         e->SetPosition(from);
         e->Throw(dir, speed);
-        ParticleManager::GetInstance()->Emit(kStarGroup, from, 8); // 「ぽいっ」と投げる時の星
+        // 「ぽいっ」と投げる時の白い煙ひと吹き
+        for ( int i = 0; i < 6; ++i ) {
+            SpawnPuff(from, { Rand11() * 1.2f, 0.5f + Rand11() * 0.5f, Rand11() * 1.2f },
+                      { 0.95f, 0.97f, 1.0f, 1.0f }, 0.25f, 0.35f);
+        }
         return true;
     }
     return false;

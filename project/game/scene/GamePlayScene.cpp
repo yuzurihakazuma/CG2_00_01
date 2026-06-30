@@ -74,33 +74,8 @@ void GamePlayScene::LoadResources(){
 
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
-
-	// 卵のパーティクル：飛行中の煙(EggSmoke) と 投げ/着弾の星(EggStar)
-	//   ※ EggSystem がこの名前で Emit する。星は丸テクスチャを明るい黄で代用（星画像があれば差し替え可）。
-	{
-		ParticleManager* pm = ParticleManager::GetInstance();
-		pm->CreateParticleGroup("EggSmoke", "resources/circle.png");
-		ParticleSetting smoke;
-		smoke.minVelocity = { -0.03f, 0.0f,  -0.03f };
-		smoke.maxVelocity = {  0.03f, 0.05f,  0.03f };
-		smoke.startColor  = { 0.85f, 0.85f, 0.85f, 0.7f }; // 薄いグレー煙
-		smoke.gravity     = 0.0008f;                       // ほんの少し上へ
-		smoke.minLifeTime = 0.25f; smoke.maxLifeTime = 0.5f;
-		smoke.startScale  = 0.5f;  smoke.endScale    = 0.0f; // 縮んで消える
-		smoke.isBillboard = true;
-		pm->SetParticleSetting("EggSmoke", smoke);
-
-		pm->CreateParticleGroup("EggStar", "resources/circle2.png");
-		ParticleSetting star;
-		star.minVelocity = { -0.12f, -0.05f, -0.12f };
-		star.maxVelocity = {  0.12f,  0.18f,  0.12f };       // 外へ弾ける
-		star.startColor  = { 1.0f, 0.95f, 0.5f, 1.0f };      // 明るい黄（キラッ）
-		star.gravity     = -0.004f;                          // 少し落ちる
-		star.minLifeTime = 0.2f;  star.maxLifeTime = 0.45f;
-		star.startScale  = 0.45f; star.endScale    = 0.0f;
-		star.isBillboard = true;
-		pm->SetParticleSetting("EggStar", star);
-	}
+	// ※ 卵の煙／殻の飛び散りは加算パーティクルだと明るい背景で見えないため、
+	//    EggSystem 側で実体(Obj3d)の小球として描画する（StompEffect と同じ確実に見える方式）。
 
 	// テクスチャ（短縮版 Load：commandList を渡さなくてよい）
 	TextureManager* tex = TextureManager::GetInstance();
@@ -433,7 +408,22 @@ void GamePlayScene::UpdatePlayMode(){
 	// 動くレール → プレイヤー → 敵 の順で更新（位置の整合のため）
 	railField_.UpdateMotion(dt);
 	if ( player_ ) { player_->Update(railField_.GetRails()); }
-	for ( auto& e : enemies_ ) { e->Update(railField_.GetRails(), dt); }
+	Vector3 ppos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
+	for ( auto& e : enemies_ ) {
+		if ( e->IsSwallowing() ) { e->TickSwallow(ppos, dt); } // 縮みながらプレイヤーへ吸い込まれる
+		else { e->Update(railField_.GetRails(), dt); }
+	}
+	// 吸い込み完了 → お腹に+1して消す（口元で緑のヨッシー演出）
+	for ( auto& e : enemies_ ) {
+		if ( e->IsConsumed() ) {
+			eggSystem_.AddToBelly();
+			auto fx = std::make_unique<StompEffect>();
+			fx->Initialize(e->GetPosition(), camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Swallow);
+			stompEffects_.push_back(std::move(fx));
+		}
+	}
+	enemies_.erase(std::remove_if(enemies_.begin(), enemies_.end(),
+		[](const std::unique_ptr<Enemy>& e){ return e->IsConsumed(); }), enemies_.end());
 
 	// 当たり判定＋踏みつけ
 	UpdateStompCollision();
@@ -456,7 +446,7 @@ void GamePlayScene::UpdatePlayMode(){
 				auto fx = std::make_unique<StompEffect>();
 				fx->Initialize(ep, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::EggHit);
 				stompEffects_.push_back(std::move(fx));
-				return true; // 命中
+				return true; // 命中（殻の飛び散りは卵の割れ演出が出す）
 			}
 		}
 		return false;
@@ -525,39 +515,42 @@ void GamePlayScene::UpdateStompCollision(){
 	}
 }
 
-// ヨッシーの「飲み込む」：E キーで、一番近い生きている敵を1体飲み込んで卵にする。
-//   ・敵を知っているのはシーンなので、判定はここで行う（踏みつけ判定と同じ場所）。
-//   ・飲み込んだら敵を消し、プレイヤーの卵カウントを1増やす（卵の実体化・投擲は次の手順）。
+// ヨッシーの「飲み込む／産む」：
+//   ・E      … 一番近い敵の「飲み込み」を開始（敵が縮みながらプレイヤーへ吸い込まれ → お腹に入る）。
+//   ・左Ctrl … しゃがんでお腹の敵を1匹「卵」として後ろに産む（産んだ卵は投げられる）。
+//   敵を知るのはシーンなので判定はここで行う（吸い込み演出は Enemy 側、消化はUpdatePlayMode）。
 void GamePlayScene::UpdateSwallow(){
 	if ( !player_ ) return;
 	Input* input = Input::GetInstance();
-	if ( !input->Triggerkey(DIK_E) ) return; // E を押した瞬間だけ
-
-	const float kSwallowReach = 2.0f; // この距離内の敵を飲み込める（舌の届く範囲）
 	Vector3 playerPos = player_->GetPosition();
 
-	// 一番近い生きている敵を探す
-	Enemy* target = nullptr;
-	float bestDist = kSwallowReach;
-	for ( auto& e : enemies_ ) {
-		if ( !e->IsAlive() ) continue;
-		float d = Length(playerPos - e->GetPosition());
-		if ( d < bestDist ) { bestDist = d; target = e.get(); }
+	// --- E：飲み込み開始（縮小吸い込みアニメ。卵にはまだしない）---
+	if ( input->Triggerkey(DIK_E) ) {
+		const float kSwallowReach = 2.0f; // 舌の届く範囲
+		Enemy* target = nullptr;
+		float bestDist = kSwallowReach;
+		for ( auto& e : enemies_ ) {
+			if ( !e->IsAlive() ) continue;
+			float d = Length(playerPos - e->GetPosition());
+			if ( d < bestDist ) { bestDist = d; target = e.get(); }
+		}
+		if ( target ) {
+			target->StartSwallow();      // 縮みながらプレイヤーへ（完了で UpdatePlayMode がお腹+1）
+			TriggerHitFeel(0.03f, 0.1f); // 軽い手応え
+		}
 	}
-	if ( !target ) return; // 範囲内に敵がいなければ何もしない
 
-	// お腹が一杯なら飲み込めない（敵も食べない）
-	if ( !eggSystem_.OnSwallow(player_->GetPosition()) ) return; // プレイヤー位置から卵が生まれる
-
-	// 飲み込む：敵を消す（卵は OnSwallow で生成済み）
-	Vector3 enemyPos = target->GetPosition();
-	target->Defeat();
-
-	// 飲み込んだ手応え＋エフェクト（踏みつけより軽め）
-	TriggerHitFeel(0.04f, 0.15f);
-	auto fx = std::make_unique<StompEffect>();
-	fx->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Swallow);
-	stompEffects_.push_back(std::move(fx));
+	// --- 左Ctrl（しゃがみ）：お腹の敵を1匹、後ろに卵として産む ---
+	if ( input->Triggerkey(DIK_LCONTROL) ) {
+		float yaw = player_->GetRotation().y;
+		Vector3 behind = { playerPos.x - std::sin(yaw) * 0.8f, playerPos.y + 0.3f, playerPos.z - std::cos(yaw) * 0.8f };
+		if ( eggSystem_.LayEgg(behind) ) {
+			auto fx = std::make_unique<StompEffect>(); // 産まれた合図（緑のヨッシー演出）
+			fx->Initialize(behind, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Swallow);
+			stompEffects_.push_back(std::move(fx));
+			TriggerHitFeel(0.03f, 0.08f);
+		}
+	}
 }
 
 // ヨッシー風の投げ：Q長押しで構え、矢印で「画面上のカーソル」を直感的に動かし、離して投げる。
@@ -871,7 +864,7 @@ void GamePlayScene::DrawDebugUI(){
 			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
 
-		ImGui::Text("たまご  %d / %d", eggSystem_.HeldCount(), EggSystem::kMaxEggs);
+		ImGui::Text("おなか %d   たまご %d / %d", eggSystem_.BellyCount(), eggSystem_.HeldCount(), EggSystem::kMaxEggs);
 		ImGui::SameLine();
 		ImGui::TextDisabled("(飛行中:%d)", eggSystem_.FlyingCount());
 
@@ -879,10 +872,8 @@ void GamePlayScene::DrawDebugUI(){
 			ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "▼ 構え中！ 矢印でカーソル移動 / Q を離す");
 			if ( aimLocked_ ) { ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.25f, 1.0f), "   ★ ロックオン！ Q を離すと命中"); }
 			else              { ImGui::TextDisabled("   敵にカーソルを重ねるとロック（重ねないと投げない）"); }
-		} else if ( eggSystem_.HeldCount() > 0 ) {
-			ImGui::Text("E:飲み込む   Q長押し:構える→離して投げる");
 		} else {
-			ImGui::Text("E:近くの敵を飲み込んで たまごを作る");
+			ImGui::Text("E:飲み込む   左Ctrl:しゃがんで産む   Q長押し:構える→投げる");
 		}
 		ImGui::End();
 	}

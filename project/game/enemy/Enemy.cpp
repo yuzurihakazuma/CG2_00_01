@@ -46,6 +46,7 @@ void Enemy::Initialize(EnemyType type, int railIndex, float distance){
 
 void Enemy::Update(const std::vector<SplineRail>& rails, float dt){
     if ( !alive_ ) return;
+    if ( swallowing_ ) return; // 吸い込み中は TickSwallow が動かすのでレール移動はしない
     if ( railIndex_ < 0 || railIndex_ >= ( int ) rails.size() ) return;
     const SplineRail& rail = rails[railIndex_];
     if ( rail.nodes.size() < 2 ) return;
@@ -77,7 +78,47 @@ void Enemy::Update(const std::vector<SplineRail>& rails, float dt){
 }
 
 void Enemy::Draw(){
-    if ( alive_ && obj_ ) {
+    if ( alive_ && obj_ ) { // 吸い込み中も alive_ は true のまま → 縮む様子を描画する
         obj_->Draw();
+    }
+}
+
+// 飲み込み開始：今いる場所を起点に、縮みながらプレイヤーへ吸い込まれる。
+void Enemy::StartSwallow(){
+    if ( swallowing_ || !alive_ ) return;
+    swallowing_   = true;
+    swallowT_     = 0.0f;
+    swallowStart_ = position_;
+}
+
+// 吸い込み中の更新：プレイヤーの口元へ寄りながらスケールを 1→0 へ縮める。
+void Enemy::TickSwallow(const Vector3& playerPos, float dt){
+    if ( !swallowing_ ) return;
+    const float dur = 0.35f;
+    swallowT_ += dt;
+    float t = swallowT_ / dur;
+    if ( t > 1.0f ) t = 1.0f;
+
+    // 口元へ近づく（少し上）
+    Vector3 mouth = { playerPos.x, playerPos.y + 0.5f, playerPos.z };
+    position_ = {
+        swallowStart_.x + ( mouth.x - swallowStart_.x ) * t,
+        swallowStart_.y + ( mouth.y - swallowStart_.y ) * t,
+        swallowStart_.z + ( mouth.z - swallowStart_.z ) * t
+    };
+
+    float s = radius_ * ( 1.0f - t ); // どんどん小さく
+    collider_.SetCenter(position_);
+    if ( obj_ ) {
+        obj_->SetTranslation(position_);
+        obj_->SetScale({ s, s, s });
+        obj_->SetRotation(rotation_);
+        obj_->Update();
+    }
+
+    if ( t >= 1.0f ) { // 吸い込み完了
+        swallowing_ = false;
+        consumed_   = true;
+        alive_      = false;
     }
 }
