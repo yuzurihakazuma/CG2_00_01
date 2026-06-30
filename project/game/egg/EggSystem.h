@@ -2,6 +2,7 @@
 #include "game/egg/Egg.h"
 #include <vector>
 #include <memory>
+#include <functional>
 
 // =====================================================================
 //  EggSystem：ヨッシーの卵を管理する（飲み込みで生成 → 後ろに整列・追従 → 投擲 → 割れる）。
@@ -25,6 +26,10 @@ public:
 
     // 保持中の卵を1個、指定方向へ投げる（Held → Flying）。speed=初速。投げられたら true。
     bool TryThrow(const Vector3& playerPos, const Vector3& dir, float speed = 12.0f);
+
+    // 飛行中の卵それぞれを onHit(卵位置, 卵半径) で判定し、true が返ったら卵を割る。
+    //   敵を知るのはシーンなので、当たり判定の中身はシーンから渡す（割れ演出は Update が拾う）。
+    void ResolveHits(const std::function<bool(const Vector3&, float)>& onHit);
 
     int HeldCount() const;    // 保持中の卵の数
     int FlyingCount() const;  // 飛行中の卵の数

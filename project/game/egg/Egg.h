@@ -43,6 +43,10 @@ public:
     void  SetPosition(const Vector3& p) { pos_ = p; }
     float GetRadius() const { return radius_; }
 
+    // 割れた「瞬間」を1回だけ拾うためのフラグ（パーティクルを弾けさせる用）
+    bool JustBroke() const { return justBroke_; }
+    void ClearJustBroke() { justBroke_ = false; }
+
 private:
     EggState state_ = EggState::Held;
     Vector3  pos_ { 0.0f, 0.0f, 0.0f };
@@ -51,6 +55,7 @@ private:
     float    radius_ = 0.4f;
     float    flyTimer_   = 0.0f;
     float    brokenTimer_ = 0.0f;
+    bool     justBroke_   = false;         // この瞬間に割れたか（1フレームだけ true）
     float    bornTimer_   = 0.25f;         // 生まれた直後の「ポンッ」と出る演出時間
     float    spinAngle_   = 0.0f;          // 見た目のくるくる回転
 

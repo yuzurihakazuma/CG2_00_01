@@ -67,4 +67,5 @@ void Egg::Break(){
     if ( state_ == EggState::Broken ) return;
     state_       = EggState::Broken;
     brokenTimer_ = 0.3f;
+    justBroke_   = true; // 割れた瞬間（EggSystem が拾って星を弾けさせる）
 }

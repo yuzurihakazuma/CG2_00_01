@@ -5,9 +5,37 @@
 #include "engine/graphics/PipelineType.h"
 #include "engine/graphics/TextureManager.h"
 
-void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t textureIndex, uint32_t envMapIndex) {
+void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t textureIndex, uint32_t envMapIndex,
+                             StompEffectType type) {
     std::random_device seed_gen;
     std::mt19937 engine(seed_gen());
+
+    // --- 種類ごとの色パレット（state で見た目を分ける）---
+    Vector4 ringEndColor = { 0.4f, 0.85f, 1.0f, 1.0f };   // 円柱衝撃波の冷却色
+    Vector4 starColor    = { 1.0f, 0.9f,  0.1f, 1.0f };   // 星リングの色
+    Vector4 smokeColor   = { 0.9f, 0.92f, 0.95f, 0.55f }; // 煙（w=基準アルファ）
+    Vector4 popColors[3] = { { 1.0f, 0.35f, 0.6f, 1.0f }, { 1.0f, 0.85f, 0.1f, 1.0f }, { 0.2f, 0.95f, 0.5f, 1.0f } };
+    switch ( type ) {
+    case StompEffectType::Swallow: // ヨッシー緑のやわらかい吸い込み
+        ringEndColor = { 0.35f, 1.0f, 0.55f, 1.0f };
+        starColor    = { 0.6f, 1.0f, 0.45f, 1.0f };
+        smokeColor   = { 0.7f, 1.0f, 0.75f, 0.5f };
+        popColors[0] = { 0.4f, 1.0f, 0.5f, 1.0f };
+        popColors[1] = { 0.8f, 1.0f, 0.4f, 1.0f };
+        popColors[2] = { 0.95f, 1.0f, 0.85f, 1.0f };
+        break;
+    case StompEffectType::EggHit: // 黄＋緑の卵「ぱしゃっ」
+        ringEndColor = { 1.0f, 0.7f, 0.2f, 1.0f };
+        starColor    = { 1.0f, 0.95f, 0.4f, 1.0f };
+        smokeColor   = { 1.0f, 0.97f, 0.8f, 0.5f };
+        popColors[0] = { 1.0f, 0.9f, 0.3f, 1.0f };   // 黄身
+        popColors[1] = { 0.5f, 1.0f, 0.5f, 1.0f };   // 殻の緑
+        popColors[2] = { 1.0f, 1.0f, 0.95f, 1.0f };  // 白い殻
+        break;
+    case StompEffectType::Stomp:
+    default:
+        break; // 既定（上の初期値）
+    }
     
     // ランダム生成器の設定
     std::uniform_real_distribution<float> rotDist(0.0f, 3.141592f * 2.0f);
@@ -106,6 +134,7 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
             cyl.startScale = 0.1f;
             cyl.endScale = 2.0f;       // 横方向の最大半径 (星の輪と調和するサイズ)
             cyl.heightScale = 1.0f;
+            cyl.colorEnd = ringEndColor; // 白フラッシュ→種類ごとの色へ
 
             cylinders_.push_back(std::move(cyl));
         }
@@ -141,9 +170,10 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
             star.obj->SetPipelineType(PipelineType::Object3D_Additive);
             star.obj->SetEnvironmentMap(envMapIndex);
 
-            // ソリッドなイエローで発光
+            // 種類ごとの色でソリッド発光
+            star.color = starColor;
             if (auto model = star.obj->GetModel()) {
-                model->SetColor({ 1.0f, 0.9f, 0.1f, 1.0f });
+                model->SetColor(starColor);
                 if (auto mat = model->GetMaterial()) {
                     mat->enableLighting = 0;
                     mat->emissive = 1.0f;
@@ -160,11 +190,7 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
     }
 
     // 5. 飛び散るポップな3D星 (PopParticle) の生成 (くるくる回るカラフルな星ブロック)
-    Vector4 colors[] = {
-        { 1.0f, 0.35f, 0.6f, 1.0f }, // ポップピンク
-        { 1.0f, 0.85f, 0.1f, 1.0f }, // ポップイエロー
-        { 0.2f, 0.95f, 0.5f, 1.0f }  // ポップグリーン
-    };
+    //    色は種類ごとのパレット(popColors)から選ぶ。
     std::uniform_int_distribution<int> colorChoice(0, 2);
 
     for (int i = 0; i < 8; ++i) {
@@ -192,7 +218,7 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
             part.baseScale = initScale;
 
             // 色とマテリアル (ソリッド発光)
-            part.color = colors[colorChoice(engine)];
+            part.color = popColors[colorChoice(engine)];
             part.obj->SetPipelineType(PipelineType::Object3D_Additive);
             part.obj->SetEnvironmentMap(envMapIndex);
             
@@ -233,9 +259,10 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
             smoke.obj->SetPipelineType(PipelineType::Object3D_Additive);
             smoke.obj->SetEnvironmentMap(envMapIndex);
             
+            smoke.color = smokeColor;
             if (auto model = smoke.obj->GetModel()) {
                 model->SetTexture(textureIndex);
-                model->SetColor({ 0.9f, 0.92f, 0.95f, 0.55f });
+                model->SetColor(smokeColor);
                 if (auto mat = model->GetMaterial()) {
                     mat->enableLighting = 0;
                 }
@@ -315,11 +342,11 @@ void StompEffect::Update(float dt) {
             cyl.obj->SetDissolveThreshold(dissolveThreshold);
 
             if (cyl.obj->GetModel()) {
-                // 色の変化: 最初は「真っ白な着地フラッシュ(白熱)」、広がるにつれて「水色」に冷えながらフェードアウト
+                // 色の変化: 最初は「真っ白な着地フラッシュ(白熱)」、広がるにつれて種類ごとの色へ冷えてフェードアウト
                 float colorLerp = progress;
-                float r = 1.0f + (0.4f - 1.0f) * colorLerp;
-                float g = 1.0f + (0.85f - 1.0f) * colorLerp;
-                float b = 1.0f; // 1.0f は維持
+                float r = 1.0f + (cyl.colorEnd.x - 1.0f) * colorLerp;
+                float g = 1.0f + (cyl.colorEnd.y - 1.0f) * colorLerp;
+                float b = 1.0f + (cyl.colorEnd.z - 1.0f) * colorLerp;
                 
                 // アルファ値の計算 (ディゾルブが映えるよう、消滅フェーズに入ってからマイルドに下げる)
                 float alpha = 0.9f;
@@ -375,9 +402,9 @@ void StompEffect::Update(float dt) {
             float curScale = star.baseScale * aliveRatio;
             star.obj->SetScale({ curScale, curScale, curScale });
 
-            // フェードアウト
+            // フェードアウト（種類ごとの星の色で）
             if (star.obj->GetModel()) {
-                star.obj->GetModel()->SetColor({ 1.0f, 0.9f, 0.1f, aliveRatio });
+                star.obj->GetModel()->SetColor({ star.color.x, star.color.y, star.color.z, aliveRatio });
             }
 
             star.obj->Update();
@@ -439,10 +466,10 @@ void StompEffect::Update(float dt) {
             pos.y += 0.8f * (dt);
             smoke.obj->SetTranslation(pos);
 
-            float alpha = 0.55f * (1.0f - progress);
+            float alpha = smoke.color.w * (1.0f - progress);
             if (alpha < 0.0f) alpha = 0.0f;
             if (smoke.obj->GetModel()) {
-                smoke.obj->GetModel()->SetColor({ 0.9f, 0.92f, 0.95f, alpha });
+                smoke.obj->GetModel()->SetColor({ smoke.color.x, smoke.color.y, smoke.color.z, alpha });
             }
 
             smoke.obj->Update();

@@ -7,14 +7,23 @@
 
 class Camera;
 
+// ヒットの種類（state で見た目を切り替える）。同じ立体エフェクトを色違いで使い分ける。
+enum class StompEffectType {
+    Stomp,   // 踏みつけ：水色の衝撃波＋黄色い星（既存のノリ）
+    Swallow, // 飲み込み：ヨッシー緑のやわらかい吸い込み演出
+    EggHit,  // 卵が命中：黄＋緑の「ぱしゃっ」とした着弾
+};
+
 // =====================================================================
-//  StompEffect : エネミー踏みつけ時の専用3Dヒットエフェクト (2.5D・立体クラフト版)
+//  StompEffect : エネミーへのヒット用3Dエフェクト (2.5D・立体クラフト版)
 //  予兆のコア球体、中空円柱ドーム衝撃波、くるくる回るカラフル3Dキューブ、モコモコ煙
+//  StompEffectType で色を切り替え、踏みつけ／飲み込み／卵命中を区別する。
 // =====================================================================
 class StompEffect {
 public:
-    // 発生位置、カメラ、テクスチャ、環境マップを渡して初期化
-    void Initialize(const Vector3& position, Camera* camera, uint32_t textureIndex, uint32_t envMapIndex);
+    // 発生位置、カメラ、テクスチャ、環境マップ、種類を渡して初期化
+    void Initialize(const Vector3& position, Camera* camera, uint32_t textureIndex, uint32_t envMapIndex,
+                    StompEffectType type = StompEffectType::Stomp);
 
     void Update(float dt);   // dt = 経過時間(秒)。timeScale 適用済みを渡すとヒットストップで止まる
     void Draw();
@@ -40,6 +49,7 @@ private:
         float startScale;
         float endScale;
         float heightScale;
+        Vector4 colorEnd { 0.4f, 0.85f, 1.0f, 1.0f }; // 白フラッシュ→この色へ冷えていく
     };
 
     // 2-B. 放射状に広がる星型の輪 (StarRing)
@@ -53,6 +63,7 @@ private:
         float startRadius;
         float endRadius;
         float baseScale;
+        Vector4 color { 1.0f, 0.9f, 0.1f, 1.0f }; // 星の色
     };
 
     // 3. 飛び散るポップな3D星 (ヨッシーの工作風)
@@ -76,6 +87,7 @@ private:
         float baseScale;
         float rotationSpeed;
         float currentRotation;
+        Vector4 color { 0.9f, 0.92f, 0.95f, 0.55f }; // 煙の色（wが基準アルファ）
     };
 
     std::vector<Core> cores_;

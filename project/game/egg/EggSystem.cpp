@@ -1,7 +1,14 @@
 #include "game/egg/EggSystem.h"
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/3d/model/Model.h"
+#include "engine/particle/ParticleManager.h" // 煙・星のパーティクル
 #include <algorithm>
+
+// パーティクルのグループ名（実体は GamePlayScene::LoadResources で生成・設定）。
+namespace {
+    const char* kSmokeGroup = "EggSmoke"; // 飛行中の煙トレイル
+    const char* kStarGroup  = "EggStar";  // 投げ・着弾の星（ぱっと弾ける）
+}
 
 void EggSystem::Initialize(){
     eggs_.clear();
@@ -46,8 +53,18 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         ++held;
     }
 
-    // 各卵の状態と見た目を進める
-    for ( auto& e : eggs_ ) { e->Update(dt); }
+    // 各卵の状態と見た目を進める＋飛行トレイル／割れた瞬間の星
+    ParticleManager* pm = ParticleManager::GetInstance();
+    for ( auto& e : eggs_ ) {
+        if ( e->IsFlying() ) {
+            pm->Emit(kSmokeGroup, e->GetPosition(), 2); // 飛んでる間は煙をもくもく
+        }
+        e->Update(dt);
+        if ( e->JustBroke() ) {
+            pm->Emit(kStarGroup, e->GetPosition(), 18); // 着弾/時間切れで星がぱっと弾ける
+            e->ClearJustBroke();
+        }
+    }
 
     // 割れて消えてよくなった卵を後始末
     eggs_.erase(
@@ -64,11 +81,23 @@ void EggSystem::Draw() const{
 bool EggSystem::TryThrow(const Vector3& playerPos, const Vector3& dir, float speed){
     for ( auto& e : eggs_ ) {
         if ( !e->IsHeld() ) continue;
-        e->SetPosition({ playerPos.x, playerPos.y + 0.5f, playerPos.z });
+        Vector3 from = { playerPos.x, playerPos.y + 0.5f, playerPos.z };
+        e->SetPosition(from);
         e->Throw(dir, speed);
+        ParticleManager::GetInstance()->Emit(kStarGroup, from, 8); // 「ぽいっ」と投げる時の星
         return true;
     }
     return false;
+}
+
+// 飛行中の卵を当たり判定にかけ、当たった卵を割る（敵側の処理は onHit 内でシーンが行う）。
+void EggSystem::ResolveHits(const std::function<bool(const Vector3&, float)>& onHit){
+    for ( auto& e : eggs_ ) {
+        if ( !e->IsFlying() ) continue;
+        if ( onHit(e->GetPosition(), e->GetRadius()) ) {
+            e->Break(); // 命中 → 割れる（星は次の Update が JustBroke を拾って出す）
+        }
+    }
 }
 
 int EggSystem::HeldCount() const{

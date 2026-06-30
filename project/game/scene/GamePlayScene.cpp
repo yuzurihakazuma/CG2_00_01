@@ -75,6 +75,33 @@ void GamePlayScene::LoadResources(){
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
 
+	// 卵のパーティクル：飛行中の煙(EggSmoke) と 投げ/着弾の星(EggStar)
+	//   ※ EggSystem がこの名前で Emit する。星は丸テクスチャを明るい黄で代用（星画像があれば差し替え可）。
+	{
+		ParticleManager* pm = ParticleManager::GetInstance();
+		pm->CreateParticleGroup("EggSmoke", "resources/circle.png");
+		ParticleSetting smoke;
+		smoke.minVelocity = { -0.03f, 0.0f,  -0.03f };
+		smoke.maxVelocity = {  0.03f, 0.05f,  0.03f };
+		smoke.startColor  = { 0.85f, 0.85f, 0.85f, 0.7f }; // 薄いグレー煙
+		smoke.gravity     = 0.0008f;                       // ほんの少し上へ
+		smoke.minLifeTime = 0.25f; smoke.maxLifeTime = 0.5f;
+		smoke.startScale  = 0.5f;  smoke.endScale    = 0.0f; // 縮んで消える
+		smoke.isBillboard = true;
+		pm->SetParticleSetting("EggSmoke", smoke);
+
+		pm->CreateParticleGroup("EggStar", "resources/circle2.png");
+		ParticleSetting star;
+		star.minVelocity = { -0.12f, -0.05f, -0.12f };
+		star.maxVelocity = {  0.12f,  0.18f,  0.12f };       // 外へ弾ける
+		star.startColor  = { 1.0f, 0.95f, 0.5f, 1.0f };      // 明るい黄（キラッ）
+		star.gravity     = -0.004f;                          // 少し落ちる
+		star.minLifeTime = 0.2f;  star.maxLifeTime = 0.45f;
+		star.startScale  = 0.45f; star.endScale    = 0.0f;
+		star.isBillboard = true;
+		pm->SetParticleSetting("EggStar", star);
+	}
+
 	// テクスチャ（短縮版 Load：commandList を渡さなくてよい）
 	TextureManager* tex = TextureManager::GetInstance();
 	textures_["uvChecker"]     = tex->Load("resources/uvChecker.png");
@@ -417,6 +444,24 @@ void GamePlayScene::UpdatePlayMode(){
 	// Q長押しで構え→矢印で狙う→離して投げる（構え中はプレイヤーが止まる）
 	UpdateThrowAim();
 
+	// 飛行中の卵 → 敵の当たり判定（当たったら敵を倒して卵を割る。割れ演出は卵の Update が出す）
+	eggSystem_.ResolveHits([&](const Vector3& eggPos, float eggR) -> bool {
+		for ( auto& e : enemies_ ) {
+			if ( !e->IsAlive() ) continue;
+			float reach = eggR + e->GetRadius();
+			if ( Length(eggPos - e->GetPosition()) <= reach ) {
+				Vector3 ep = e->GetPosition();
+				e->Defeat();
+				TriggerHitFeel(0.05f, 0.2f); // 命中の手応え
+				auto fx = std::make_unique<StompEffect>();
+				fx->Initialize(ep, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::EggHit);
+				stompEffects_.push_back(std::move(fx));
+				return true; // 命中
+			}
+		}
+		return false;
+	});
+
 	// 卵の追従・飛行・割れの更新
 	if ( player_ ) {
 		Vector3 ppos = player_->GetPosition();
@@ -474,7 +519,7 @@ void GamePlayScene::UpdateStompCollision(){
 			fxWorldPos_ = enemyPos;
 
 			auto newStompEffect = std::make_unique<StompEffect>();
-			newStompEffect->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
+			newStompEffect->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Stomp);
 			stompEffects_.push_back(std::move(newStompEffect));
 		}
 	}
@@ -511,7 +556,7 @@ void GamePlayScene::UpdateSwallow(){
 	// 飲み込んだ手応え＋エフェクト（踏みつけより軽め）
 	TriggerHitFeel(0.04f, 0.15f);
 	auto fx = std::make_unique<StompEffect>();
-	fx->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
+	fx->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Swallow);
 	stompEffects_.push_back(std::move(fx));
 }
 
