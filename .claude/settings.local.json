@@ -41,7 +41,11 @@
       "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" project/CG2_00_01.vcxproj //p:Configuration=Release //p:Platform=x64 //nologo //v:minimal)",
       "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 10; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 10s — Release OK'\\\\''; Stop-Process -Id $p.Id -Force }')",
       "Bash(awk '/^v /{print $2, $3, $4}' project/resources/egg/egg.obj)",
-      "Bash(awk ' *)"
+      "Bash(awk ' *)",
+      "mcp__visualize__read_me",
+      "Bash(python -c ' *)",
+      "mcp__visualize__show_widget",
+      "Bash(python -c \"import json,io; d=json.load\\(io.open\\(r'project/resources/map/stage1.json',encoding='utf-8'\\)\\); print\\('rails:',len\\(d['railLines']\\),'enemies:',len\\(d['enemies']\\),'motions:',len\\(d['railMotions']\\),'holes:',[sum\\(h\\) for h in d['railNodeHoles']]\\)\")"
     ]
   }
 }
