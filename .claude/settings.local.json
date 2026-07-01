@@ -39,7 +39,9 @@
       "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 10; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 10s — Release starts OK'\\\\''; Stop-Process -Id $p.Id -Force }')",
       "Bash(grep -nE '^exit 0$|exit 0</Command>' project/CG2_00_01.vcxproj)",
       "Bash(\"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe\" project/CG2_00_01.vcxproj //p:Configuration=Release //p:Platform=x64 //nologo //v:minimal)",
-      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 10; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 10s — Release OK'\\\\''; Stop-Process -Id $p.Id -Force }')"
+      "Bash(powershell -NoProfile -Command '$p = Start-Process -FilePath '\\\\''.\\\\CG2_00_01.exe'\\\\'' -PassThru -WorkingDirectory \\(Get-Location\\); Start-Sleep -Seconds 10; if \\($p.HasExited\\) { Write-Output \\('\\\\''EXITED early, code=0x{0:X8}'\\\\'' -f \\($p.ExitCode -band 0xFFFFFFFF\\)\\) } else { Write-Output '\\\\''ALIVE after 10s — Release OK'\\\\''; Stop-Process -Id $p.Id -Force }')",
+      "Bash(awk '/^v /{print $2, $3, $4}' project/resources/egg/egg.obj)",
+      "Bash(awk ' *)"
     ]
   }
 }

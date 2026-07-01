@@ -53,13 +53,12 @@ bool EggSystem::LayEgg(const Vector3& birthPos){
 
     auto egg = std::make_unique<Egg>(birthPos);
 
-    // 実体（見た目）：球モデルを卵っぽく縦長＋淡い緑にする。
-    const Vector3 baseScale = { 0.35f, 0.45f, 0.35f };
-    if ( auto obj = Obj3d::Create("sphere") ) { // 既定カメラが自動でバインドされる
+    // 実体（見た目）：専用の卵モデル（resources/egg/egg.obj）を使う。
+    //   ※以前は "sphere" を潰して代用していたが、"sphere" は敵とも共有しているモデルのため
+    //   色を変えると敵まで一緒に染まってしまっていた。専用モデルにしたことでその干渉も無くなる。
+    const Vector3 baseScale = { 0.7f, 0.7f, 0.7f }; // モデル自体が卵の形なので均等スケールでOK
+    if ( auto obj = Obj3d::Create("egg") ) { // 既定カメラが自動でバインドされる
         obj->SetScale(baseScale);
-        if ( obj->GetModel() && obj->GetModel()->GetMaterial() ) {
-            obj->GetModel()->GetMaterial()->color = { 0.6f, 1.0f, 0.6f, 1.0f };
-        }
         egg->AttachVisual(std::move(obj), baseScale);
     }
     eggs_.push_back(std::move(egg));

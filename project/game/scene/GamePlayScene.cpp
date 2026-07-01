@@ -71,6 +71,7 @@ void GamePlayScene::LoadResources(){
 	model->CreatePlaneModel("plane");
 	model->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	model->LoadModel("human", "resources/human", "walk.gltf");
+	model->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
 
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
