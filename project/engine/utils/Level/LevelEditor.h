@@ -41,7 +41,18 @@ public:
     // resources/ を走査してモデルアセット一覧を更新する
     void ScanAssets();
 
+    // resources/map/ を走査してマップファイル一覧を更新する
+    void ScanMaps();
+
+    // 現在開いているファイルに上書き保存する（名前入力不要）
+    void QuickSave();
+
 private:
+    // 見える位置（カメラ前方）にモデルを1個配置する共通処理
+    void SpawnObject(const std::string& type);
+    // カメラの前方にあるスポーン地点を計算する
+    Vector3 CalcSpawnPoint() const;
+
     // アセットブラウザ用：resources/ から見つけたモデル1件分
     struct AssetEntry{
         std::string name;     // モデル名（FindModel/LoadModel に渡すキー＝ファイル名から拡張子を除いたもの）
@@ -63,8 +74,17 @@ private:
     std::vector<std::unique_ptr<Obj3d>> object3ds_; // 配置された3Dオブジェクト
     int selectedObjectIndex_ = -1; // 選択中のオブジェクト番号
 
-    std::string saveFileName_ = "map01.json"; // ファイル名
+    std::string saveFileName_ = "map01.json"; // 別名保存/新規作成用のファイル名
     bool snapToGrid_ = true;
+
+    // --- マップファイル選択 / 保存 ---
+    std::vector<std::string> mapList_;      // resources/map/ 内の *.json
+    int selectedMapIndex_ = -1;             // 一覧で選択中のマップ
+    std::string currentMapFile_ = "resources/map/map01.json"; // 今開いているファイル
+    bool  dirty_ = false;                   // 未保存の変更があるか
+    bool  autoSave_ = false;                // 自動保存 ON/OFF
+    float autoSaveTimer_ = 0.0f;            // 自動保存までのフレームカウンタ
+    int   spawnCounter_ = 0;                // 連続配置時に少しずらすためのカウンタ
 
 	//bool isEditorActive = true; // エディタのアクティブ状態
 

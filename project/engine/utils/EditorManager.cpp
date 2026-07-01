@@ -14,6 +14,7 @@
 #include "engine/scene/SceneManager.h"
 #include "engine/utils/Level/LevelEditor.h"
 #include "engine/utils/Level/BlenderImporter.h"
+#include "engine/utils/FileEditor.h"
 #include "engine/particle/GPUParticleEditor.h"
 #include "engine/utils/GlobalVariables.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
@@ -45,11 +46,20 @@ void EditorManager::Initialize(){
     blenderImporter_->Initialize(levelEditor_.get());
 
     gpuParticleEditor_ = std::make_unique<GPUParticleEditor>();
+
+    // ファイルエディタ（Project風）
+    fileEditor_ = std::make_unique<FileEditor>();
+    fileEditor_->Initialize();
 }
 
 
 
 void EditorManager::Begin(){
+    // フレーム先頭（コマンドリストが閉じている安全なタイミング）で
+    // ファイルエディタのサムネイル画像をまとめて読み込む。
+    if ( fileEditor_ ) {
+        fileEditor_->ProcessPendingThumbnails();
+    }
 #ifdef USE_IMGUI
     ImGuiManager::GetInstance()->Begin();
 #endif
@@ -278,6 +288,11 @@ void EditorManager::Update(){
 
     if ( gpuParticleEditor_ ) {
         gpuParticleEditor_->DrawDebugUI();
+    }
+
+    // ファイルエディタ（Project風のファイル閲覧・編集）
+    if ( fileEditor_ ) {
+        fileEditor_->DrawDebugUI();
     }
 
     // 調整項目（GlobalVariables）の編集ウィンドウ

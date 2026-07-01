@@ -248,6 +248,9 @@ void GamePlayScene::Update(){
 	// カメラ更新
 	camera_->Update();
 
+	// 実行中のブロック投げ（Bキーで生成＋物理更新）
+	UpdateThrownBlocks();
+
 	Input* input = Input::GetInstance();
 
 	// 1. スペースキーでエフェクト発生＋BGM再生（1か所に統合）
@@ -372,6 +375,59 @@ void GamePlayScene::Update(){
 	emitter_.Update(Time::GetInstance()->GetDeltaTime());
 }
 
+// 実行中に投げるブロックの生成・物理・寿命管理
+void GamePlayScene::UpdateThrownBlocks(){
+	if ( !camera_ ) return;
+	float dt = Time::GetInstance()->GetDeltaTime();
+
+	// --- Bキーで生成（カメラの見ている方向へ投げる） ---
+	if ( Input::GetInstance()->Triggerkey(DIK_B) ) {
+		// カメラのワールド行列から前方向(+Z)を取り出す
+		const Matrix4x4& w = camera_->GetWorldMatrix();
+		Vector3 fwd = { w.m[2][0], w.m[2][1], w.m[2][2] };
+		float len = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+		if ( len > 0.0001f ) { fwd.x /= len; fwd.y /= len; fwd.z /= len; }
+		Vector3 camPos = camera_->GetWorldPosition();
+
+		ThrownBlock b;
+		b.obj = Obj3d::Create("block");             // 既定カメラで生成される
+		b.pos = { camPos.x + fwd.x * 2.0f, camPos.y + fwd.y * 2.0f, camPos.z + fwd.z * 2.0f };
+		b.vel = { fwd.x * 22.0f, fwd.y * 22.0f + 6.0f, fwd.z * 22.0f }; // 前方へ＋少し上に放る
+		b.life = 8.0f;
+		if ( b.obj ) {
+			b.obj->SetTranslation(b.pos);
+			b.obj->Update();
+			thrownBlocks_.push_back(std::move(b));
+		}
+	}
+
+	// --- 物理更新（重力＋地面バウンド） ---
+	const float gravity = -24.0f;
+	const float groundY = 0.0f;
+	for ( auto it = thrownBlocks_.begin(); it != thrownBlocks_.end(); ) {
+		it->vel.y += gravity * dt;
+		it->pos.x += it->vel.x * dt;
+		it->pos.y += it->vel.y * dt;
+		it->pos.z += it->vel.z * dt;
+
+		// 地面で軽くバウンドして減衰
+		if ( it->pos.y < groundY ) {
+			it->pos.y = groundY;
+			it->vel.x *= 0.5f;
+			it->vel.z *= 0.5f;
+			it->vel.y = -it->vel.y * 0.35f;
+		}
+
+		it->life -= dt;
+		if ( it->obj ) {
+			it->obj->SetTranslation(it->pos);
+			it->obj->Update();
+		}
+
+		if ( it->life <= 0.0f ) { it = thrownBlocks_.erase(it); } else { ++it; }
+	}
+}
+
 void GamePlayScene::Draw(){
 	auto dxCommon = DirectXCommon::GetInstance();
 	auto commandList = dxCommon->GetCommandList();
@@ -389,6 +445,12 @@ void GamePlayScene::Draw(){
 	// 1. 先に「不透明」なものを全部描き切る！！！
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
+
+	// レベルエディタで配置したオブジェクト（マップ）を描画する
+	EditorManager::GetInstance()->Draw();
+
+	// 実行中に投げたブロックを描画する
+	for ( auto& b : thrownBlocks_ ) { if ( b.obj ) b.obj->Draw(); }
 
 
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -533,6 +595,8 @@ void GamePlayScene::Finalize(){
 	EditorManager::GetInstance()->ResetSceneReferences();
 
 	GPUParticleManager::GetInstance()->Finalize();
+
+	thrownBlocks_.clear();
 
 	textures_.clear();
 	depthStencilResource_.Reset();

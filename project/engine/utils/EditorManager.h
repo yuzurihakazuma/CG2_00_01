@@ -3,6 +3,7 @@
 
 class LevelEditor;
 class BlenderImporter;
+class FileEditor;
 class Camera;
 class DebugCamera;
 class GPUParticleEditor;
@@ -93,6 +94,9 @@ private:
 
     // Blenderシーンインポータ（levelEditor_ に反映する）
     std::unique_ptr<BlenderImporter> blenderImporter_ = nullptr;
+
+    // ファイルエディタ（Project風のファイル閲覧・テキスト編集）
+    std::unique_ptr<FileEditor> fileEditor_ = nullptr;
 
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;
