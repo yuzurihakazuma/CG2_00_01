@@ -180,6 +180,95 @@ void ModelManager::CreateStarModel(const std::string& modelName, float outerRadi
 	models_.insert(std::make_pair(modelName, std::move(newModel)));
 }
 
+// 卵の殻の破片モデル：球の一部を切り取った「湾曲した薄いカケラ」を頂点から手作りする。
+//   ・実際の殻と同じく球面の一部なので、ライティングで丸い陰影がつき殻らしく見える。
+//   ・割れ口(外周)はギザギザに欠けさせ、薄い厚みを付ける。全部コード生成＝専用アート不要。
+//   ・薄いので両面表示前提（描画側で Object3D_CullNone を使う）。
+void ModelManager::CreateEggShellModel(const std::string& modelName, float size){
+	if ( models_.contains(modelName) ) { return; } // 重複防止
+
+	Model::ModelData modelData;
+
+	const int   segs      = 10;             // 円周方向の分割数
+	const float R         = size * 2.2f;    // 曲率半径（カケラより大きめ＝ゆるやかに湾曲）
+	const float thickness = size * 0.05f;   // 殻の薄さ
+	const float thetaMax  = 0.52f;          // キャップの開き角(rad)＝カケラの大きさ
+	const float Ri        = R - thickness;  // 内側（背面）の半径
+	const float PI        = 3.14159265f;
+
+	// キャップ中央の高さぶん下げて、原点付近を中心に回るようにする
+	const float zShift = R * std::cos(thetaMax * 0.5f);
+
+	// 球面上(半径rad, 極角th, 方位ph)の点を頂点として追加（法線は外向き単位ベクトル×sign）
+	auto addOnSphere = [&](float rad, float th, float ph, float nSign) -> uint32_t {
+		float sx = std::sin(th) * std::cos(ph);
+		float sy = std::sin(th) * std::sin(ph);
+		float sz = std::cos(th);
+		Model::VertexData v;
+		v.position = { rad * sx, rad * sy, rad * sz - zShift, 1.0f };
+		v.normal   = { sx * nSign, sy * nSign, sz * nSign }; // 外側+1 / 内側-1
+		v.texcoord = { 0.5f, 0.5f }; // 白テクスチャなのでUVは中央固定でOK
+		modelData.vertices.push_back(v);
+		return ( uint32_t ) modelData.vertices.size() - 1;
+	};
+
+	// 割れ口(外周)のギザギザ：方位ごとに開き角を変える
+	auto edgeTheta = [&](int j) -> float {
+		float jag = 0.55f + 0.45f * ( 0.5f + 0.5f * std::sin(( float ) j * 2.39996f + 0.7f ) );
+		return thetaMax * jag;
+	};
+
+	// 極（前面=外側 / 背面=内側）
+	uint32_t pf = addOnSphere(R,  0.0f, 0.0f,  1.0f);
+	uint32_t pb = addOnSphere(Ri, 0.0f, 0.0f, -1.0f);
+
+	// リング頂点：mid(なめらか) と out(ギザギザ外周) を前面/背面ぶん確保
+	std::vector<uint32_t> fMid(segs), fOut(segs), bMid(segs), bOut(segs);
+	for ( int j = 0; j < segs; ++j ) {
+		float ph = ( float ) j / segs * 2.0f * PI;
+		float te = edgeTheta(j);
+		float tm = te * 0.5f;
+		fMid[j] = addOnSphere(R,  tm, ph,  1.0f);
+		fOut[j] = addOnSphere(R,  te, ph,  1.0f);
+		bMid[j] = addOnSphere(Ri, tm, ph, -1.0f);
+		bOut[j] = addOnSphere(Ri, te, ph, -1.0f);
+	}
+
+	auto tri = [&](uint32_t a, uint32_t b, uint32_t c){
+		modelData.indices.push_back(a); modelData.indices.push_back(b); modelData.indices.push_back(c);
+	};
+
+	// 両面描画(CullNone)前提なので巻き順は気にせず、面を張る。
+	for ( int j = 0; j < segs; ++j ) {
+		int k = ( j + 1 ) % segs;
+		// 前面：極→中リング→外リング(バンド)
+		tri(pf, fMid[j], fMid[k]);
+		tri(fMid[j], fOut[j], fMid[k]);
+		tri(fMid[k], fOut[j], fOut[k]);
+		// 背面（内側）
+		tri(pb, bMid[j], bMid[k]);
+		tri(bMid[j], bOut[j], bMid[k]);
+		tri(bMid[k], bOut[j], bOut[k]);
+		// 割れ口の厚み（前面外周と背面外周をつなぐ）
+		tri(fOut[j], bOut[j], fOut[k]);
+		tri(fOut[k], bOut[j], bOut[k]);
+	}
+
+	// 外部アート非依存：汎用の白テクスチャ＋形状の陰影だけで殻を表現する。
+	modelData.material.textureFilePath = "resources/block/white1x1.png";
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializePrimitive(modelCommon_.get(), modelData);
+
+	// 殻らしいクリーム色＋ライティングONで湾曲の陰影を出す（共有マテリアルにデフォルトとして焼き込む）。
+	if ( auto* mat = newModel->GetMaterial() ) {
+		mat->color          = { 0.97f, 0.95f, 0.86f, 1.0f };
+		mat->enableLighting = 1;
+	}
+
+	models_.insert(std::make_pair(modelName, std::move(newModel)));
+}
+
 void ModelManager::LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename){
 	// 重複読み込み防止：すでに同じ名前で登録されていたら何もしない
 	if ( models_.contains(modelName) ) {

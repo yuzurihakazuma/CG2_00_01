@@ -72,6 +72,14 @@ void GamePlayScene::LoadResources(){
 	model->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	model->LoadModel("human", "resources/human", "walk.gltf");
 	model->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
+	model->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
+
+	// 汎用パーティクル用の粒（"sphere" は敵と共有＋モンスターボール柄がデフォルトなので、
+	//   色を付けるだけの粒には専用の白い球を使う。これも手作りモデル＋既存の白テクスチャだけで完結）。
+	model->CreateSphereModel("fxSphere", 8);
+	if ( auto* fxModel = model->FindModel("fxSphere") ) {
+		fxModel->SetTexture("resources/block/white1x1.png");
+	}
 
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
@@ -573,10 +581,10 @@ void GamePlayScene::UpdateThrowAim(){
 		};
 
 	if ( throwState_ == ThrowState::Idle ) {
-		// Q を押し始めた＆地上＆卵を持っている → 構えに入る
-		if ( input->Pushkey(DIK_Q) && player_->IsGrounded() && eggSystem_.HeldCount() > 0 ) {
+		// Q を押し始めた＆卵を持っている → 構えに入る（地上/ジャンプ/踏ん張り中どこでもOK）
+		if ( input->Pushkey(DIK_Q) && eggSystem_.HeldCount() > 0 ) {
 			throwState_ = ThrowState::Aiming;
-			// 構え中も移動・ジャンプは受け付ける（狙いは矢印キーで別操作なので競合しない）
+			// 構え中も移動・ジャンプ・踏ん張りは受け付ける（狙いは矢印キーで別操作なので競合しない）
 			// カーソルの初期位置：プレイヤーの少し前方上をスクリーン投影（無理なら画面中央）
 			float px, py;
 			Vector3 facing = { std::sin(player_->GetRotation().y), 0.0f, std::cos(player_->GetRotation().y) };

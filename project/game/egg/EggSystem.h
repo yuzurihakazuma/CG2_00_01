@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <string>
 
 class Obj3d; // トレイル煙パフ用（実体で確実に表示する）
 
@@ -60,6 +61,8 @@ private:
         std::unique_ptr<Obj3d> obj;
         Vector3 pos { 0.0f, 0.0f, 0.0f };
         Vector3 vel { 0.0f, 0.0f, 0.0f };
+        Vector3 rot { 0.0f, 0.0f, 0.0f };      // 姿勢（欠片が舞うように回す）
+        Vector3 rotSpeed { 0.0f, 0.0f, 0.0f };
         float   life    = 0.0f;
         float   maxLife = 0.4f;
         float   baseScale = 0.3f;
@@ -67,6 +70,9 @@ private:
     std::vector<TrailPuff> puffs_;
     float trailTimer_ = 0.0f; // 一定間隔でトレイルを出すためのタイマー
 
-    // パフを1個出す（pos=位置, vel=初速, color=色, scale=大きさ, life=寿命秒）
-    void SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life);
+    // パフを1個出す（pos=位置, vel=初速, color=色, scale=大きさ, life=寿命秒, modelName=見た目）。
+    //   modelName="fxSphere"（白い専用の粒。敵の"sphere"とは別物）の時だけ color でタイントする。
+    //   "eggShell" 等の専用モデルは自前の色をそのまま見せる。
+    void SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life,
+                   const std::string& modelName = "fxSphere");
 };

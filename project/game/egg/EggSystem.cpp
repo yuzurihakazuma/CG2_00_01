@@ -18,19 +18,27 @@ void EggSystem::Initialize(){
     trailTimer_ = 0.0f;
 }
 
-// 煙パフ（実体の小球）を1個出す。縮みながら消えるので加算でなくても確実に見える。
-void EggSystem::SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life){
+// 実体パフを1個出す（fxSphere=色付きの粒／eggShell=殻の欠片）。縮みながら消えるので加算でなくても確実に見える。
+void EggSystem::SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life,
+                          const std::string& modelName){
     TrailPuff p;
-    p.obj = Obj3d::Create("sphere"); // 既定カメラが自動バインド
+    p.obj = Obj3d::Create(modelName); // 既定カメラが自動バインド
     if ( p.obj ) {
         p.obj->SetScale({ scale, scale, scale });
-        if ( p.obj->GetModel() && p.obj->GetModel()->GetMaterial() ) {
+        // 殻の欠片(eggShell)は自前の色をそのまま見せる。汎用の粒(fxSphere)だけ呼び出し側の色を付ける。
+        if ( modelName == "fxSphere" && p.obj->GetModel() && p.obj->GetModel()->GetMaterial() ) {
             p.obj->GetModel()->GetMaterial()->color = color;
+        }
+        // 殻は薄い湾曲面なので両面表示（裏返っても消えない）
+        if ( modelName == "eggShell" ) {
+            p.obj->SetPipelineType(PipelineType::Object3D_CullNone);
         }
         p.obj->SetTranslation(pos);
         p.obj->Update();
     }
     p.pos = pos; p.vel = vel; p.life = life; p.maxLife = life; p.baseScale = scale;
+    p.rot = { Rand11() * 3.14f, Rand11() * 3.14f, Rand11() * 3.14f };       // ランダムな初期姿勢
+    p.rotSpeed = { Rand11() * 8.0f, Rand11() * 8.0f, Rand11() * 8.0f };     // くるくる回りながら舞う
     puffs_.push_back(std::move(p));
 }
 
@@ -95,29 +103,36 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
                       { 0.95f, 0.97f, 1.0f, 1.0f }, 0.28f, 0.4f); // 白い煙
         }
         e->Update(dt);
-        if ( e->JustBroke() ) { // 着弾／時間切れ：殻が黄＋緑に飛び散る
+        if ( e->JustBroke() ) { // 着弾／時間切れ：殻の欠片が飛び散り、黄身が splash する
             Vector3 p = e->GetPosition();
-            for ( int i = 0; i < 10; ++i ) {
-                Vector4 col = ( i % 2 ) ? Vector4{ 1.0f, 0.9f, 0.3f, 1.0f }   // 黄身
-                                        : Vector4{ 0.5f, 1.0f, 0.5f, 1.0f };  // 殻の緑
-                SpawnPuff(p, { Rand11() * 3.5f, 2.0f + Rand11() * 2.0f, Rand11() * 3.5f }, col, 0.22f, 0.4f);
+            for ( int i = 0; i < 6; ++i ) { // 殻の欠片（くるくる回りながら舞う）
+                SpawnPuff(p, { Rand11() * 3.5f, 2.0f + Rand11() * 2.0f, Rand11() * 3.5f },
+                          { 1.0f, 1.0f, 1.0f, 1.0f }, 0.22f, 0.45f, "eggShell");
+            }
+            for ( int i = 0; i < 6; ++i ) { // 黄身の飛沫（小さい黄色の粒）
+                SpawnPuff(p, { Rand11() * 2.5f, 1.5f + Rand11() * 1.5f, Rand11() * 2.5f },
+                          { 1.0f, 0.85f, 0.2f, 1.0f }, 0.12f, 0.35f);
             }
             e->ClearJustBroke();
         }
     }
 
-    // 煙パフの更新（移動＋軽い重力＋縮小、寿命切れで削除）
+    // 実体パフの更新（移動＋軽い重力＋回転＋縮小、寿命切れで削除）
     for ( auto& p : puffs_ ) {
         p.life   -= dt;
         p.vel.y  -= 3.0f * dt;
         p.pos.x  += p.vel.x * dt;
         p.pos.y  += p.vel.y * dt;
         p.pos.z  += p.vel.z * dt;
+        p.rot.x  += p.rotSpeed.x * dt;
+        p.rot.y  += p.rotSpeed.y * dt;
+        p.rot.z  += p.rotSpeed.z * dt;
         float r = ( p.maxLife > 0.0f ) ? ( p.life / p.maxLife ) : 0.0f;
         if ( r < 0.0f ) r = 0.0f;
         float s = p.baseScale * r;
         if ( p.obj ) {
             p.obj->SetTranslation(p.pos);
+            p.obj->SetRotation(p.rot);
             p.obj->SetScale({ s, s, s });
             p.obj->Update();
         }
@@ -172,13 +187,15 @@ void EggSystem::SpawnLayFx(const Vector3& pos){
     }
 }
 
-// 命中：黄＆オレンジが全方向へ鋭く飛び散る（衝撃感。速い・多い）。
+// 命中：殻の欠片が勢いよく飛び散り、黄身が splash する（衝撃感。速い・多い）。
 void EggSystem::SpawnHitFx(const Vector3& pos){
-    for ( int i = 0; i < 16; ++i ) {
-        Vector4 col = ( i % 2 ) ? Vector4{ 1.0f, 0.85f, 0.2f, 1.0f }  // 黄
-                                : Vector4{ 1.0f, 0.5f, 0.1f, 1.0f };  // オレンジ
+    for ( int i = 0; i < 8; ++i ) { // 殻の欠片（大きめ・速い・回転）
         SpawnPuff(pos, { Rand11() * 4.8f, 1.0f + Rand11() * 3.0f, Rand11() * 4.8f },
-                  col, 0.22f, 0.38f); // 鋭く速い
+                  { 1.0f, 1.0f, 1.0f, 1.0f }, 0.24f, 0.4f, "eggShell");
+    }
+    for ( int i = 0; i < 8; ++i ) { // 黄身の飛沫
+        SpawnPuff(pos, { Rand11() * 3.5f, 0.8f + Rand11() * 2.2f, Rand11() * 3.5f },
+                  { 1.0f, 0.6f, 0.1f, 1.0f }, 0.14f, 0.32f);
     }
 }
 

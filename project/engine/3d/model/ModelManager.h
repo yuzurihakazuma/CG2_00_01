@@ -28,6 +28,8 @@ public:
 	void CreateCylinderModel(const std::string& modelName, int subdivision = 32, float radius = 1.0f, float height = 2.0f);
 	// 3D星型モデルの作成
 	void CreateStarModel(const std::string& modelName, float outerRadius = 0.5f, float innerRadius = 0.2f, float depth = 0.15f);
+	// 卵の殻の破片モデルの作成（歪んだ五角形をドーム状に湾曲させた薄い欠片。割れ演出用）
+	void CreateEggShellModel(const std::string& modelName, float size = 0.3f);
 
 	// シングルストーンのインスタンスを取得
 	static ModelManager* GetInstance();
