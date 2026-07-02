@@ -33,6 +33,10 @@ public:
 	// 汎用グラフィックスパイプライン生成
 	void SetPostEffectPipeline(ID3D12GraphicsCommandList* commandList, PostEffectType effectType);
 
+	// ノードエディタ等が生成したピクセルシェーダーで Object3D 互換 PSO を作る
+	// （VS/ルートシグネチャ/フォーマットは通常の Object3D と同じ）
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreateCustomObject3DPipeline(const std::wstring& psPath);
+
 
 	// Computeパイプラインをセット
 	void SetGPUParticleComputePipeline(ID3D12GraphicsCommandList* commandList);
