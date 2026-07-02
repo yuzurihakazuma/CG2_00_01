@@ -40,6 +40,16 @@ public:
     bool ShowMarkers() const { return showMarkers_; }
     void SetShowMarkers(bool v) { showMarkers_ = v; }
 
+    // --- スタート/ゴール地点（マップ設定から Sync 時に距離へ変換済み）---
+    int   GetStartRail() const { return startRail_; }
+    float GetStartDistance() const { return startDist_; }
+    bool  HasGoal() const { return goalRail_ >= 0 && goalRail_ < ( int ) rails_.size(); }
+    // ゴールの現在ワールド座標（動くレール上でも追従する）
+    Vector3 GetGoalPos() const {
+        if ( !HasGoal() ) return { 0.0f, 0.0f, 0.0f };
+        return rails_[goalRail_].GetPositionByDistance(goalDist_);
+    }
+
 private:
     void BuildMarkers();          // rails_ をサンプルして線マーカーを作り直す
     void UpdateMarkerPositions(); // マーカー位置 = 基準位置 + そのレールの animOffset
@@ -52,6 +62,10 @@ private:
     float    animTime_ = 0.0f;     // 動くレール用の経過時間
     int      lastVersion_ = -1;    // 直近に同期したエディタ編集世代
     bool     showMarkers_ = true;  // 緑線表示ON/OFF
+
+    // スタート/ゴール（Sync 時にノード番号から距離へ変換して保持）
+    int   startRail_ = 0;   float startDist_ = 0.0f;
+    int   goalRail_  = -1;  float goalDist_  = 0.0f;
 
     Camera*  camera_ = nullptr;    // 直近 Sync のカメラ（マーカー生成・再構築に使う）
     uint32_t whiteTexIndex_ = 0;   // 単色化用テクスチャ

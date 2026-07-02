@@ -37,7 +37,14 @@ public:
     float* MoveSpeedPtr(){ return &moveSpeed_; }
     float* JumpPowerPtr(){ return &jumpPower_; }
 
+    // スタート地点（リスポーン先）。マップ設定から Sync 後にシーンが渡す
+    void SetSpawn(int rail, float dist){ spawnRail_ = rail; spawnDist_ = dist; }
+
 private: // メンバ変数
+
+    // スタート地点（Initialize / リスポーンで使う）
+    int   spawnRail_ = 0;
+    float spawnDist_ = 0.0f;
 
     bool movementLocked_ = false; // true の間は移動・ジャンプ入力を無視（構え中など）
 
@@ -122,6 +129,9 @@ private: // メンバ変数
 
     // 別タイプの近接レールへ乗り換える（押した方向に伸びているもの）
     void TrySwitchRail(const std::vector<SplineRail>& rails, const SplineRail& cur, bool curHorizontal, int switchInput, bool& transitioned);
+
+    // T字路の途中分岐（branchPoints）で分岐する（同タイプ同士でも乗り換え可能。成功:true）
+    bool TryBranch(const std::vector<SplineRail>& rails, const SplineRail& cur, int switchInput, bool& transitioned);
 
     // ジャンプ＋ふんばり＋着地。穴の上で降りてきて空中状態になったら true（呼び出し側は return）
     bool UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineRail>& rails, float dt);

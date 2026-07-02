@@ -222,6 +222,10 @@ void GamePlayScene::SyncRailsFromEditor(){
 
 	railField_.Sync(camera_.get(), whiteTex); // レール本体＋緑線を作り直す
 	SpawnEnemies();                           // 配置テンプレートを元に敵を生成し直す
+
+	// マップのスタート地点をプレイヤーへ（Initialize/リスポーンで使われる）
+	if ( player_ ) { player_->SetSpawn(railField_.GetStartRail(), railField_.GetStartDistance()); }
+	goalReached_ = false; // マップが変わったらゴール状態はリセット
 }
 
 // エディタに配置された敵情報（テンプレート）に基づいて敵の実体を生成する
@@ -464,10 +468,23 @@ void GamePlayScene::UpdatePlayMode(){
 
 	// 卵の追従・飛行・割れの更新
 	if ( player_ ) {
-		Vector3 ppos = player_->GetPosition();
+		Vector3 ppos2 = player_->GetPosition();
 		float yaw = player_->GetRotation().y;
 		Vector3 facing = { std::sin(yaw), 0.0f, std::cos(yaw) };
-		eggSystem_.Update(ppos, facing, dt);
+		eggSystem_.Update(ppos2, facing, dt);
+	}
+
+	// ゴール判定＋ゴールマーカー（金色の環。動くレール上でも追従する）
+	if ( railField_.HasGoal() && player_ ) {
+		Vector3 gp = railField_.GetGoalPos();
+		DebugDraw::GetInstance()->Sphere({ gp.x, gp.y + 0.8f, gp.z }, 0.8f, { 1.0f, 0.85f, 0.2f, 1.0f }, 16);
+		if ( !goalReached_ ) {
+			Vector3 d = player_->GetPosition() - gp;
+			if ( Length(d) < 1.2f ) {
+				goalReached_ = true;
+				TriggerHitFeel(0.08f, 0.3f); // 到達の手応え
+			}
+		}
 	}
 
 	// スペースキー：エフェクト発生＋BGM再生
@@ -864,6 +881,18 @@ void GamePlayScene::DrawDebugUI(){
 
 	// ※ヨッシーHUD（おなか/たまご数・操作説明の仮表示）は一旦削除した。
 	//   本実装のUI（スプライト等）を作る時に復活させる。
+
+	// ゴール到達表示（マップのゴール地点に触れた時だけ）
+	if ( goalReached_ ) {
+		ImGui::SetNextWindowPos(ImVec2(20.0f, 60.0f), ImGuiCond_Always);
+		ImGui::SetNextWindowBgAlpha(0.6f);
+		ImGui::Begin("##goal", nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+		ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "★ ゴール！");
+		ImGui::End();
+	}
 
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");

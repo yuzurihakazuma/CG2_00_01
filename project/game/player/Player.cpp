@@ -38,8 +38,9 @@ void Player::Initialize(){
     rotation_ = { 0.0f, 0.0f, 0.0f };
     scale_    = { 1.0f, 1.0f, 1.0f };
 
-    currentDistance_  = 0.0f;
-    currentRailIndex_ = 0;
+    // マップで指定されたスタート地点から開始（リスポーンもここへ戻る）
+    currentDistance_  = spawnDist_;
+    currentRailIndex_ = spawnRail_;
     moveSign_         = 1;
     dsSign_           = 0.0f;
     prevMoveInput_    = 0.0f;
@@ -98,9 +99,11 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     bool transitioned = false;
     if ( HandleRailEnds(allRails, cur, transitioned) ) return;
 
-    // 4. 乗り換え（別タイプの近接レールへ）
+    // 4. 乗り換え（T字路の途中分岐を優先 → 無ければ別タイプの近接レールへ）
     if ( switchInput != 0 && switchCooldown_ <= 0.0f && !transitioned ) {
-        TrySwitchRail(allRails, cur, curHorizontal, switchInput, transitioned);
+        if ( !TryBranch(allRails, cur, switchInput, transitioned) ) {
+            TrySwitchRail(allRails, cur, curHorizontal, switchInput, transitioned);
+        }
     }
 
     // 5. 距離クランプ（ループはラップ）
@@ -132,7 +135,8 @@ bool Player::IsOverHole(const std::vector<SplineRail>& rails) const{
         if ( !r.IsHoleAtDistance(cd) ) continue;
         Vector3 cp = r.GetPositionByDistance(cd);
         float dx = cp.x - foot.x, dz = cp.z - foot.z;
-        if ( std::sqrt(dx * dx + dz * dz) < 0.5f && std::abs(cp.y - foot.y) < 0.6f ) return true;
+        // 高さ許容は±0.35m（広すぎると上下に重なった別の階の穴に誤爆して落ちる）
+        if ( std::sqrt(dx * dx + dz * dz) < 0.5f && std::abs(cp.y - foot.y) < 0.35f ) return true;
     }
     return false;
 }
@@ -197,7 +201,12 @@ void Player::MoveAlongRail(const SplineRail& cur, bool curHorizontal, float move
                     dsSign_ = moveInput; // 接線がほぼ直交（円の頂点など）→ 押した向きへ
                 }
             }
-            currentDistance_ += dsSign_ * moveSpeed_ * dt;
+            // 片方向レール：許可されていない向きへは進めない（ジェットコースター区間など）
+            if ( cur.oneWay == 1 && dsSign_ < 0.0f ) dsSign_ = 0.0f; // 正方向(front→back)のみ
+            if ( cur.oneWay == 2 && dsSign_ > 0.0f ) dsSign_ = 0.0f; // 逆方向(back→front)のみ
+
+            // レールごとの速度倍率（加速/減速レール）を掛ける
+            currentDistance_ += dsSign_ * moveSpeed_ * cur.speedMul * dt;
         }
     } else {
         dsSign_ = 0.0f; // 離したら次に押した時に向きを決め直す
@@ -228,6 +237,11 @@ bool Player::TryJoinNearbyBody(const std::vector<SplineRail>& rails, const Splin
     const float kJoinReach = 1.2f;
     Vector3 edgePos = cur.GetPositionByDistance(edgeS);
 
+    // 進行方向（端から出て行く向き）。「前方」にあるレールへだけ合流する。
+    //   これが無いと、1.2m以内を平行に走る隣のレールへ端に来ただけで勝手に飛び移る誤爆が起きる。
+    Vector3 tan = cur.GetTangentByDistance(edgeS);
+    Vector3 fwd = HorizDir(tan.x * dsSign_, tan.z * dsSign_);
+
     int     bestRail = -1;
     float   bestDist = kJoinReach;
     float   bestCd   = 0.0f;
@@ -240,8 +254,16 @@ bool Player::TryJoinNearbyBody(const std::vector<SplineRail>& rails, const Splin
         Vector3 cp = rj.GetPositionByDistance(cd);
         float dx = cp.x - edgePos.x, dy = cp.y - edgePos.y, dz = cp.z - edgePos.z;
         float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if ( d >= bestDist ) continue;
+
+        // 前方チェック：合流先が真横〜後方なら弾く（端点の真上を通る動くレール等、ほぼ同位置は許可）
+        if ( Length(fwd) > 1e-4f ) {
+            Vector3 to = HorizDir(dx, dz);
+            if ( Length(to) > 1e-4f && ( to.x * fwd.x + to.z * fwd.z ) < 0.1f ) continue;
+        }
+
         // 乗り移りのスナップは posSmooth_ で滑らかに補間するので、動くレールも 1.2m で確実に乗れる。
-        if ( d < bestDist ) { bestDist = d; bestRail = j; bestCd = cd; bestPos = cp; }
+        bestDist = d; bestRail = j; bestCd = cd; bestPos = cp;
     }
     if ( bestRail < 0 ) return false;
 
@@ -285,8 +307,8 @@ bool Player::HandleRailEnds(const std::vector<SplineRail>& rails, const SplineRa
             transitioned = true;
         } else if ( TryJoinNearbyBody(rails, cur, len) ) {
             transitioned = true;
-        } else if ( cur.groundType == SplineRail::GroundType::Gap && kFallOffEdges && dsSign_ != 0.0f ) {
-            DetachToAir(cur, len); // Gap レール：明示的に「落ちてよい端」
+        } else if ( cur.groundType == SplineRail::GroundType::Gap && kFallOffEdges ) {
+            DetachToAir(cur, len); // Gap レール：明示的に「落ちてよい端」（キーを離した瞬間でも飛び出せる）
             return true;
         } else {
             currentDistance_ = len; // 未接続の端 → クランプ（落下は穴/Gap だけ）
@@ -296,7 +318,7 @@ bool Player::HandleRailEnds(const std::vector<SplineRail>& rails, const SplineRa
             transitioned = true;
         } else if ( TryJoinNearbyBody(rails, cur, 0.0f) ) {
             transitioned = true;
-        } else if ( cur.groundType == SplineRail::GroundType::Gap && kFallOffEdges && dsSign_ != 0.0f ) {
+        } else if ( cur.groundType == SplineRail::GroundType::Gap && kFallOffEdges ) {
             DetachToAir(cur, 0.0f);
             return true;
         } else {
@@ -324,6 +346,7 @@ void Player::TrySwitchRail(const std::vector<SplineRail>& rails, const SplineRai
         if ( j == currentRailIndex_ ) continue;
         const SplineRail& rj = rails[j];
         if ( rj.nodes.size() < 2 ) continue;
+        if ( !rj.visible ) continue; // 見えない連結レールへは乗り換えできない（見えない道を歩く混乱防止）
         if ( ( rj.type == SplineRail::RailType::Horizontal ) != wantHorizontalTarget ) continue; // 反対タイプのみ
 
         float cd = rj.GetClosestDistance(footPos);
@@ -362,6 +385,38 @@ void Player::TrySwitchRail(const std::vector<SplineRail>& rails, const SplineRai
         transitioned     = true;
         dsSign_          = 0.0f; // 新しいレールでは次の入力で進行方向を決め直す
     }
+}
+
+// T字路の途中分岐（branchPoints）で分岐する。
+//   接続情報のロード時に「レールjの端がレールiの途中に接している」箇所を検出済み。
+//   分岐点の近く(0.9m)で、分岐の向きに合う乗り換えキーを押すと分岐先レールへ移る。
+//   TrySwitchRail と違い「同じタイプ同士のT字路」でも分岐できる。
+bool Player::TryBranch(const std::vector<SplineRail>& rails, const SplineRail& cur, int switchInput, bool& transitioned){
+    const float kNear = 0.9f; // 分岐点に反応する距離
+    for ( const auto& bp : cur.branchPoints ) {
+        if ( std::abs(currentDistance_ - bp.distance) > kNear ) continue;
+        if ( ( switchInput > 0 ) != ( bp.zSign > 0 ) ) continue; // 押した向きと分岐の向きが一致する時だけ
+        if ( bp.targetRail < 0 || bp.targetRail >= ( int ) rails.size() ) continue;
+
+        const SplineRail& tr = rails[bp.targetRail];
+        float len = tr.GetLength();
+        if ( len <= 0.0f ) continue;
+
+        float oldFootY = cur.GetPositionByDistance(currentDistance_).y;
+        float margin = ( std::min )( 0.15f, len * 0.25f ); // 端ちょうどに乗らないよう少し内側へ
+        currentRailIndex_ = bp.targetRail;
+        currentDistance_  = std::clamp(bp.targetDist, margin, len - margin);
+        // 空中で分岐した時は、見た目のワールドYが飛ばないよう heightOffset_ を補正
+        if ( !isGrounded_ ) {
+            float newFootY = tr.GetPositionByDistance(currentDistance_).y;
+            heightOffset_ += oldFootY - newFootY;
+        }
+        switchCooldown_ = 0.25f;
+        dsSign_         = 0.0f; // 分岐先では次の入力で進行方向を決め直す
+        transitioned    = true;
+        return true;
+    }
+    return false;
 }
 
 // ジャンプ＋ふんばり＋着地。穴の上で降りてきて空中状態になったら true（呼び出し側は return）。
@@ -501,6 +556,7 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
 
             const SplineRail& r = allRails[i];
             if ( r.nodes.size() < 2 ) continue;
+            if ( !r.visible ) continue; // 見えない連結レールには着地しない（床ではなく「道」なので）
 
             float cd = r.GetClosestDistance(position_);
             Vector3 cp = r.GetPositionByDistance(cd);

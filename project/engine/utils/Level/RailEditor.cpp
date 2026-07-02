@@ -79,6 +79,11 @@ void RailEditor::OnMapChanged(){
     if ( data_->railGroundTypes.size() != data_->railLines.size() ) {
         data_->railGroundTypes.resize(data_->railLines.size(), 0);
     }
+    // 追加分の並列配列も lines と同数に揃える
+    data_->railMotionTypes.resize(data_->railLines.size(), 0);
+    data_->railMotionPhases.resize(data_->railLines.size(), 0.0f);
+    data_->railOneWay.resize(data_->railLines.size(), 0);
+    data_->railSpeedMuls.resize(data_->railLines.size(), 1.0f);
     initialLines_   = data_->railLines;
     initialTypes_   = data_->railTypes;
     initialMotions_ = data_->railMotions;
@@ -297,6 +302,10 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railGroundTypes.push_back(0);
 	data_->railVisible.push_back(1);
 	data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
+	data_->railMotionTypes.push_back(0);
+	data_->railMotionPhases.push_back(0.0f);
+	data_->railOneWay.push_back(0);
+	data_->railSpeedMuls.push_back(1.0f);
 	SelectWholeRail(( int ) data_->railLines.size() - 1); // 置いた直後にギズモで微調整できる
 	RebuildRailPoints();
 
@@ -338,6 +347,10 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railVisible.push_back(( railIdx < ( int ) data_->railVisible.size() ) ? data_->railVisible[railIdx] : 1);
 	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
 	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
+	data_->railMotionTypes.push_back(( railIdx < ( int ) data_->railMotionTypes.size() ) ? data_->railMotionTypes[railIdx] : 0);
+	data_->railMotionPhases.push_back(( railIdx < ( int ) data_->railMotionPhases.size() ) ? data_->railMotionPhases[railIdx] : 0.0f);
+	data_->railOneWay.push_back(( railIdx < ( int ) data_->railOneWay.size() ) ? data_->railOneWay[railIdx] : 0);
+	data_->railSpeedMuls.push_back(( railIdx < ( int ) data_->railSpeedMuls.size() ) ? data_->railSpeedMuls[railIdx] : 1.0f);
 	SelectWholeRail(( int ) data_->railLines.size() - 1);
 	RebuildRailPoints();
 }
@@ -689,13 +702,25 @@ void RailEditor::DrawWindow(){
 		// --- このレールの「動き」（ムービングプラットフォーム）---
 		Vector4& motion = data_->railMotions[currentEditRailIndex_];
 		bool motionChanged = false;
-		ImGui::Text("動くレール (sin波で往復・全て0で停止):");
+		ImGui::Text("動くレール (全て0で停止):");
 		motionChanged |= ImGui::DragFloat3("振幅 XYZ (m)", &motion.x, 0.05f);
 		ImGui::SetNextItemWidth(110.0f);
 		motionChanged |= ImGui::DragFloat("周期 (秒)", &motion.w, 0.05f, 0.1f, 60.0f);
 		if ( motion.w < 0.1f ) motion.w = 0.1f;
+
+		// 波形（sin往復 / 端で一時停止つき往復 / 円運動）と位相（複数レールの動きをずらす）
+		data_->railMotionTypes.resize(data_->railLines.size(), 0);
+		data_->railMotionPhases.resize(data_->railLines.size(), 0.0f);
+		int& mtype = data_->railMotionTypes[currentEditRailIndex_];
+		const char* waveLabels[] = { "サイン往復", "停止つき往復 (端で一瞬止まる)", "円運動 (X,Z振幅で円)" };
+		ImGui::SetNextItemWidth(220.0f);
+		if ( ImGui::Combo("波形", &mtype, waveLabels, 3) ) { motionChanged = true; }
+		float& mphase = data_->railMotionPhases[currentEditRailIndex_];
+		ImGui::SetNextItemWidth(140.0f);
+		if ( ImGui::SliderFloat("位相 (0〜1)", &mphase, 0.0f, 1.0f, "%.2f") ) { motionChanged = true; }
+
 		if ( motionChanged ) { ++railVersion_; } // ゲーム側へ即反映
-		ImGui::TextDisabled("例: 振幅(0,0,3) 周期2 → 奥行きに±3mを2秒で往復");
+		ImGui::TextDisabled("例: 振幅(0,0,3) 周期2 → 奥行き±3mを2秒で往復 / 位相0.5=半周期ずれ");
 		ImGui::Separator();
 
 		// --- 地面タイプ（落下は「穴」で指定する。NoGround は廃止）---
@@ -714,6 +739,48 @@ void RailEditor::DrawWindow(){
 		}
 		ImGui::SameLine();
 		ImGui::TextDisabled(vis ? "(表示)" : "(非表示=連結用の見えないレール)");
+
+		// --- 片方向レール（逆走禁止。ジェットコースター区間など）---
+		data_->railOneWay.resize(data_->railLines.size(), 0);
+		int& ow = data_->railOneWay[currentEditRailIndex_];
+		const char* oneWayLabels[] = { "両方向 (通常)", "正方向のみ (始点→終点)", "逆方向のみ (終点→始点)" };
+		ImGui::SetNextItemWidth(220.0f);
+		if ( ImGui::Combo("片方向", &ow, oneWayLabels, 3) ) { ++railVersion_; }
+
+		// --- 速度倍率（加速/減速レール）---
+		data_->railSpeedMuls.resize(data_->railLines.size(), 1.0f);
+		float& sm = data_->railSpeedMuls[currentEditRailIndex_];
+		ImGui::SetNextItemWidth(140.0f);
+		if ( ImGui::SliderFloat("速度倍率", &sm, 0.25f, 3.0f, "%.2fx") ) { ++railVersion_; }
+		ImGui::Separator();
+
+		// --- スタート／ゴール地点（選択中のノードをマップに記録）---
+		ImGui::Text("スタート/ゴール:");
+		bool nodeSelected = ( selectedRailNode_ >= 0
+			&& selectedRailNode_ < ( int ) data_->railLines[currentEditRailIndex_].size() );
+		ImGui::BeginDisabled(!nodeSelected);
+		if ( ImGui::Button("選択ノードをスタート地点に") ) {
+			data_->startRailIndex = currentEditRailIndex_;
+			data_->startNodeIndex = selectedRailNode_;
+			++railVersion_;
+		}
+		ImGui::SameLine();
+		if ( ImGui::Button("選択ノードをゴールに") ) {
+			data_->goalRailIndex = currentEditRailIndex_;
+			data_->goalNodeIndex = selectedRailNode_;
+			++railVersion_;
+		}
+		ImGui::EndDisabled();
+		if ( !nodeSelected ) { ImGui::TextDisabled("(Game View でノードをクリックして選択してから押す)"); }
+		ImGui::Text("スタート: レール%d ノード%d", data_->startRailIndex, data_->startNodeIndex);
+		ImGui::SameLine();
+		if ( data_->goalRailIndex >= 0 ) {
+			ImGui::Text(" / ゴール: レール%d ノード%d", data_->goalRailIndex, data_->goalNodeIndex);
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("ゴール解除") ) { data_->goalRailIndex = -1; ++railVersion_; }
+		} else {
+			ImGui::TextDisabled(" / ゴール: 未設定");
+		}
 		ImGui::Separator();
 	}
 

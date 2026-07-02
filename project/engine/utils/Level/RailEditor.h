@@ -33,6 +33,14 @@ public:
     const std::vector<std::vector<int>>& GetRailNodeHoles() const{ return data_->railNodeHoles; }
     const std::vector<int>& GetRailVisible() const{ return data_->railVisible; }
     bool IsRailVisible(int rail) const;
+    const std::vector<int>&   GetRailMotionTypes() const{ return data_->railMotionTypes; }
+    const std::vector<float>& GetRailMotionPhases() const{ return data_->railMotionPhases; }
+    const std::vector<int>&   GetRailOneWay() const{ return data_->railOneWay; }
+    const std::vector<float>& GetRailSpeedMuls() const{ return data_->railSpeedMuls; }
+    int GetStartRail() const{ return data_->startRailIndex; }
+    int GetStartNode() const{ return data_->startNodeIndex; }
+    int GetGoalRail() const{ return data_->goalRailIndex; }
+    int GetGoalNode() const{ return data_->goalNodeIndex; }
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }
