@@ -48,7 +48,8 @@
       "Bash(python -c \"import json,io; d=json.load\\(io.open\\(r'project/resources/map/stage1.json',encoding='utf-8'\\)\\); print\\('rails:',len\\(d['railLines']\\),'enemies:',len\\(d['enemies']\\),'motions:',len\\(d['railMotions']\\),'holes:',[sum\\(h\\) for h in d['railNodeHoles']]\\)\")",
       "Bash(awk '/void LevelEditor::SpawnObject|void LevelEditor::SetObjectPosY|void LevelEditor::SetObjectRotY|void LevelEditor::SetObjectScale|void LevelEditor::SetObjectShaderParam/{f=1} f{print} /^}/{if\\(f\\)print \"----\"; f=0}')",
       "Bash(awk '/LevelEditor::GetObject3d|LevelEditor::GetObjectLabel|LevelEditor::GetObjectCount|LevelEditor::CalcSpawnPoint/{f=1} f{print} f&&/^}/{print \"----\"; f=0}')",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git ls-tree *)"
     ]
   }
 }

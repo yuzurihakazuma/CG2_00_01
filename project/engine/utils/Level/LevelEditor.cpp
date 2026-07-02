@@ -28,9 +28,90 @@ LevelEditor::~LevelEditor() = default;
 void LevelEditor::Initialize(){
 	// アセットブラウザ用に resources/ を走査
 	ScanAssets();
+	// マップファイル一覧を走査
+	ScanMaps();
 
 	// 最初は空の状態でスタートするか、デフォルトのマップを読み込む
 	LoadAndCreateMap("resources/map/map01.json");
+}
+
+// resources/map/ を走査して .json 一覧を更新する
+void LevelEditor::ScanMaps(){
+	mapList_.clear();
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	const fs::path dir("resources/map");
+	if ( !fs::exists(dir, ec) ) return;
+	for ( const auto& entry : fs::directory_iterator(dir, ec) ) {
+		if ( !entry.is_regular_file() ) continue;
+		std::string ext = entry.path().extension().string();
+		std::transform(ext.begin(), ext.end(), ext.begin(),
+			[](unsigned char c){ return ( char ) std::tolower(c); });
+		if ( ext != ".json" ) continue;
+		mapList_.push_back(entry.path().filename().string());
+	}
+	std::sort(mapList_.begin(), mapList_.end());
+
+	// 現在ファイルが一覧の何番目かを選択状態に反映
+	selectedMapIndex_ = -1;
+	for ( int i = 0; i < ( int ) mapList_.size(); ++i ) {
+		if ( "resources/map/" + mapList_[i] == currentMapFile_ ) { selectedMapIndex_ = i; break; }
+	}
+}
+
+// 今開いているファイルに上書き保存する
+void LevelEditor::QuickSave(){
+	LevelManager::GetInstance()->Save(currentMapFile_, levelData_);
+	dirty_ = false;
+	autoSaveTimer_ = 0.0f;
+	ScanMaps(); // 新規に作られたファイルを一覧へ反映
+}
+
+// levelData_.objects の内容から表示用 object3ds_ を作り直す（Undo/Redo用）
+void LevelEditor::RebuildObjects(){
+	object3ds_.clear();
+	for ( auto& objData : levelData_.objects ) {
+		Model* model = ModelManager::GetInstance()->FindModel(objData.type);
+		// 見つからなくても Update() の遅延解決に任せる（nullptrのまま作ってOK）
+		std::unique_ptr<Obj3d> newObj = std::make_unique<Obj3d>();
+		newObj->Initialize(model);
+		newObj->SetCamera(camera_);
+		newObj->SetTranslation(objData.translation);
+		newObj->SetRotation(objData.rotation);
+		newObj->SetScale(objData.scale);
+		newObj->Update();
+		object3ds_.push_back(std::move(newObj));
+	}
+	if ( selectedObjectIndex_ >= ( int ) levelData_.objects.size() ) {
+		selectedObjectIndex_ = -1;
+	}
+}
+
+// 変更「前」に呼んで履歴に積む（オブジェクト配置のみ）
+void LevelEditor::PushUndo(){
+	undoStack_.push_back(levelData_.objects);
+	// 積みすぎ防止（50手まで）
+	if ( undoStack_.size() > 50 ) { undoStack_.erase(undoStack_.begin()); }
+	// 新しい操作をしたら Redo 履歴は無効
+	redoStack_.clear();
+}
+
+void LevelEditor::Undo(){
+	if ( undoStack_.empty() ) return;
+	redoStack_.push_back(levelData_.objects);
+	levelData_.objects = undoStack_.back();
+	undoStack_.pop_back();
+	RebuildObjects();
+	dirty_ = true;
+}
+
+void LevelEditor::Redo(){
+	if ( redoStack_.empty() ) return;
+	undoStack_.push_back(levelData_.objects);
+	levelData_.objects = redoStack_.back();
+	redoStack_.pop_back();
+	RebuildObjects();
+	dirty_ = true;
 }
 
 // resources/ を再帰走査して .obj / .gltf をアセット一覧に登録する
@@ -73,6 +154,14 @@ bool LevelEditor::EnsureAssetLoaded(const std::string& name){
 }
 // マップの読み込みと生成
 void LevelEditor::LoadAndCreateMap(const std::string& fileName){
+	currentMapFile_ = fileName; // 以後の上書き保存先
+	// 別マップを開いたら履歴・保存状態はリセット
+	undoStack_.clear();
+	redoStack_.clear();
+	dirty_ = false;
+	autoSaveTimer_ = 0.0f;
+	ScanMaps(); // 一覧の選択状態を現在ファイルに合わせる
+
 	object3ds_.clear();
 	levelData_ = LevelManager::GetInstance()->Load(fileName);
 
@@ -127,7 +216,25 @@ void LevelEditor::Update(){
 	// ※ノードのキーボード移動は EditorManager（Game View側）に移行した。
 	//   矢印キー=グリッド1マス移動 / Q,E=上下 / Delete=削除 / Ctrl+D=路線複製
 
+	// まだモデルが解決できていないオブジェクトを解決する（Undo/Redo直後など）。
+	// ※ここでは読み込み(LoadModel)はせず検索のみなので安全
+	size_t n = ( std::min )( object3ds_.size(), levelData_.objects.size() );
+	for ( size_t i = 0; i < n; ++i ) {
+		if ( object3ds_[i]->GetModel() == nullptr ) {
+			Model* m = ModelManager::GetInstance()->FindModel(levelData_.objects[i].type);
+			if ( m ) { object3ds_[i]->SetModel(m); }
+		}
+	}
+
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
+
+	// 自動保存：変更があれば少し待ってから上書き保存（毎フレーム書かないようにデバウンス）
+	if ( autoSave_ && dirty_ ) {
+		autoSaveTimer_ += 1.0f;
+		if ( autoSaveTimer_ >= 60.0f ) { // 約1秒後
+			QuickSave();
+		}
+	}
 
 	// ※レールの可視化(緑線)はゲーム側(GamePlayScene)が GetRailLines() を参照して描画する。
 	//   ここで赤い球やパス点は生成・更新しない。
@@ -149,21 +256,66 @@ void LevelEditor::DrawDebugUI(){
 	// =========================================================
 	ImGui::Begin("ヒエラルキー (配置リスト)");
 	if ( ImGui::CollapsingHeader("マップファイル・モデル追加", ImGuiTreeNodeFlags_DefaultOpen) ) {
+
+	// --- 現在のファイルと保存状態（master_engine から移植） ---
+	ImGui::Text("現在のマップ: %s", currentMapFile_.c_str());
+	ImGui::SameLine();
+	if ( dirty_ ) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "[未保存]");
+	else          ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "[保存済]");
+
+	// 上書き保存（名前入力不要）。Ctrl+S でも保存
+	if ( ImGui::Button("上書き保存") ) { QuickSave(); }
+	ImGui::SameLine();
+	ImGui::Checkbox("自動保存", &autoSave_);
+	if ( !ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S) ) { QuickSave(); }
+
+	ImGui::Separator();
+
+	// --- マップ一覧から選んで読み込む（名前手入力不要） ---
+	const char* mapPreview = ( selectedMapIndex_ >= 0 && selectedMapIndex_ < ( int ) mapList_.size() )
+		? mapList_[selectedMapIndex_].c_str() : "(選択してください)";
+	if ( ImGui::BeginCombo("マップ一覧", mapPreview) ) {
+		for ( int i = 0; i < ( int ) mapList_.size(); ++i ) {
+			if ( ImGui::Selectable(mapList_[i].c_str(), selectedMapIndex_ == i) ) selectedMapIndex_ = i;
+		}
+		ImGui::EndCombo();
+	}
+	if ( ImGui::Button("選択マップを読み込む")
+		&& selectedMapIndex_ >= 0 && selectedMapIndex_ < ( int ) mapList_.size() ) {
+		LoadAndCreateMap("resources/map/" + mapList_[selectedMapIndex_]);
+	}
+	ImGui::SameLine();
+	if ( ImGui::Button("一覧を更新") ) { ScanMaps(); }
+
+	ImGui::Separator();
+
+	// --- 別名で保存 / 新規作成 ---
 	char buffer[256];
 	strcpy_s(buffer, saveFileName_.c_str());
-	if ( ImGui::InputText("保存ファイル名", buffer, sizeof(buffer)) ) {
-		saveFileName_ = buffer;
+	if ( ImGui::InputText("新規 / 別名", buffer, sizeof(buffer)) ) { saveFileName_ = buffer; }
+	if ( ImGui::Button("この名前で保存（新規作成）") ) {
+		std::string name = saveFileName_;
+		if ( name.size() < 5 || name.substr(name.size() - 5) != ".json" ) name += ".json";
+		currentMapFile_ = "resources/map/" + name; // 以後の上書き先を新ファイルに切り替え
+		QuickSave();
 	}
-	std::string fullPath = "resources/map/" + saveFileName_;
-	if ( ImGui::Button("マップを保存") ) { LevelManager::GetInstance()->Save(fullPath, levelData_); }
-	ImGui::SameLine();
-	if ( ImGui::Button("マップを読み込む") ) { LoadAndCreateMap(fullPath); }
 	ImGui::SameLine();
 	if ( ImGui::Button("マップをクリア") ) {
+		PushUndo(); // クリア前を履歴へ（Ctrl+Zで戻せる）
 		object3ds_.clear();
 		levelData_.objects.clear();
 		selectedObjectIndex_ = -1;
+		dirty_ = true;
 	}
+
+	ImGui::Separator();
+
+	// --- Undo / Redo（オブジェクト配置用。※Ctrl+Z/Y はレール編集の履歴に割り当て済み） ---
+	if ( ImGui::Button("元に戻す (配置)") ) { Undo(); }
+	ImGui::SameLine();
+	if ( ImGui::Button("やり直す (配置)") ) { Redo(); }
+	ImGui::SameLine();
+	ImGui::TextDisabled("履歴 %d / 先 %d", ( int ) undoStack_.size(), ( int ) redoStack_.size());
 	ImGui::Separator();
 
 	// アセット一覧（resources/ 走査結果）から選んで追加
@@ -189,6 +341,7 @@ void LevelEditor::DrawDebugUI(){
 		EnsureAssetLoaded(newObj.type); // 未ロードならこのタイミングで自動ロード
 		Model* model = ModelManager::GetInstance()->FindModel(newObj.type);
 		if ( model != nullptr ) {
+			PushUndo(); // 追加前を履歴へ
 			// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
 			levelData_.objects.push_back(newObj);
 			std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
@@ -196,6 +349,7 @@ void LevelEditor::DrawDebugUI(){
 			obj->SetCamera(camera_);
 			object3ds_.push_back(std::move(obj));
 			selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
+			dirty_ = true;
 		}
 	}
 	} // CollapsingHeader: マップファイル・モデル追加
@@ -224,6 +378,7 @@ void LevelEditor::DrawDebugUI(){
 			EnsureAssetLoaded(newObj.type); // 未ロードならこのタイミングで自動ロード
 			Model* model = ModelManager::GetInstance()->FindModel(newObj.type);
 			if ( model != nullptr ) {
+				PushUndo(); // 追加前を履歴へ
 				// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
 				levelData_.objects.push_back(newObj);
 				std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
@@ -231,6 +386,7 @@ void LevelEditor::DrawDebugUI(){
 				obj->SetCamera(camera_);
 				object3ds_.push_back(std::move(obj));
 				selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
+				dirty_ = true;
 			}
 		}
 		ImGui::EndDragDropTarget();
@@ -246,18 +402,21 @@ void LevelEditor::DrawDebugUI(){
 		ImGui::Text("選択中: [%d] %s", selectedObjectIndex_, objData.type.c_str());
 		ImGui::Separator();
 		if ( ImGui::Button("オブジェクトを削除") ) {
+			PushUndo(); // 削除前を履歴へ
 			levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
 			object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
 			selectedObjectIndex_ = -1;
+			dirty_ = true;
 		}
 
 		if ( selectedObjectIndex_ != -1 ) {
 			ImGui::SameLine();
 			if ( ImGui::Button("複製") ) {
 				LevelObjectData dupObj = objData;
-				levelData_.objects.push_back(dupObj);
 				Model* model = ModelManager::GetInstance()->FindModel(dupObj.type);
 				if ( model != nullptr ) {
+					PushUndo(); // 複製前を履歴へ
+					levelData_.objects.push_back(dupObj);
 					std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
 					obj->Initialize(model);
 					obj->SetCamera(camera_);
@@ -266,6 +425,7 @@ void LevelEditor::DrawDebugUI(){
 					obj->SetScale(dupObj.scale);
 					object3ds_.push_back(std::move(obj));
 					selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
+					dirty_ = true;
 				}
 			}
 
@@ -286,6 +446,7 @@ void LevelEditor::DrawDebugUI(){
 				object3ds_[selectedObjectIndex_]->SetTranslation(objData.translation);
 				object3ds_[selectedObjectIndex_]->SetRotation(objData.rotation);
 				object3ds_[selectedObjectIndex_]->SetScale(objData.scale);
+				dirty_ = true; // 未保存マーク（自動保存ONなら少し後に上書き保存される）
 			}
 		}
 	} else {
@@ -366,6 +527,8 @@ void LevelEditor::SpawnObject(const std::string& type){
 	Model* model = ModelManager::GetInstance()->FindModel(type);
 	if ( model == nullptr ) return;
 
+	PushUndo(); // 配置前を履歴へ
+
 	Vector3 p = CalcSpawnPoint();
 	if ( snapToGrid_ ) { p.x = std::round(p.x); p.y = std::round(p.y); p.z = std::round(p.z); }
 
@@ -384,6 +547,7 @@ void LevelEditor::SpawnObject(const std::string& type){
 
 	selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
 	++spawnCounter_;
+	dirty_ = true;
 }
 
 int LevelEditor::GetObjectCount() const{
