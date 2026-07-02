@@ -28,6 +28,15 @@ public:
     // パーティクル系の適用ノードが操作するエミッター（シーンから受け取る）
     void SetParticleEmitter(GPUParticleEmitter* emitter) { emitter_ = emitter; }
 
+    // --- ゲーム値の登録（シーンから受け取る）---
+    //   「→ ゲーム値」ノードのターゲット一覧になる。プレイヤー速度・卵の投げ初速など、
+    //   ゲーム側の float 変数を登録すると、ノードから直接動かせる。
+    //   ※ポインタは所有しない。シーン終了時に必ず ClearGameValues() を呼ぶこと（ダングリング防止）。
+    void RegisterGameValue(const std::string& label, float* target, float minV, float maxV) {
+        gameValues_.push_back({ label, target, minV, maxV });
+    }
+    void ClearGameValues() { gameValues_.clear(); }
+
 private:
     // ノードの種類
     enum class NodeType : int {
@@ -61,6 +70,8 @@ private:
         ShaderGray,       // グレースケール化
         ShaderInvert,     // 色反転
         ShaderOutput,     // 最終色（コンパイルしてオブジェクトに適用）
+        // --- 適用（シーンが登録したゲーム値に作用する。※末尾に追加＝保存データ互換のため） ---
+        GameParam,        // 登録されたゲームの変数（プレイヤー速度・卵の投げ初速など）に反映
     };
 
     struct Node {
@@ -128,6 +139,14 @@ private:
 
     // 適用ノードの操作対象（所有しない）
     GPUParticleEmitter* emitter_ = nullptr;
+
+    // 「→ ゲーム値」ノードのターゲット一覧（シーンが登録。所有しない）
+    struct GameValue {
+        std::string label;   // 表示名（例:「プレイヤー移動速度」）
+        float* target = nullptr;
+        float  minV = 0.0f, maxV = 1.0f; // 反映時のクランプ範囲
+    };
+    std::vector<GameValue> gameValues_;
 
     char fileBuf_[128] = "resources/nodes/graph01.json";
     std::string status_;

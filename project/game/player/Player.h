@@ -32,6 +32,11 @@ public:
     // 卵を構えている間など、移動・ジャンプを止める（その場で待機）
     void SetMovementLocked(bool locked){ movementLocked_ = locked; }
 
+    // --- ノードエディタの「→ ゲーム値」用：調整したい変数のポインタを公開 ---
+    //   （Bloom の SetTargetEmissivePower と同じ、エディタに float* を登録するイディオム）
+    float* MoveSpeedPtr(){ return &moveSpeed_; }
+    float* JumpPowerPtr(){ return &jumpPower_; }
+
 private: // メンバ変数
 
     bool movementLocked_ = false; // true の間は移動・ジャンプ入力を無視（構え中など）

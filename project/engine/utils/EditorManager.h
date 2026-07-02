@@ -60,6 +60,12 @@ public:
     // レベルエディタへのアクセス（FileEditor / NodeEditor がオブジェクト配置等で使う）
     LevelEditor* GetLevelEditor(){ return levelEditor_.get(); }
 
+    // --- ノードエディタへの「ゲーム値」登録（シーンから転送）---
+    //   プレイヤー速度・卵の投げ初速などの float を登録すると「→ ゲーム値」ノードで動かせる。
+    //   ポインタは所有しないため、シーン終了時に必ず ClearNodeGameValues() を呼ぶこと。
+    void RegisterNodeGameValue(const std::string& label, float* target, float minV, float maxV);
+    void ClearNodeGameValues();
+
     // エディタがアクティブかどうか
     bool IsActive() const{ return isEditorActive_; }
 

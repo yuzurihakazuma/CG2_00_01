@@ -191,6 +191,19 @@ void GamePlayScene::SetupGameplay(){
 	enemyEditor_ = std::make_unique<EnemyEditor>();
 	enemyEditor_->Initialize();
 
+	// --- ノードエディタの「→ ゲーム値」に、今作っているゲームの調整値を登録する ---
+	//   ノードグラフから接続すると、プレイ中の挙動をリアルタイムに動かせる。
+	//   ※ポインタ登録なので、シーン終了時（Finalize）に必ず解除する。
+	{
+		EditorManager* em = EditorManager::GetInstance();
+		em->ClearNodeGameValues(); // シーン再初期化時の二重登録防止
+		em->RegisterNodeGameValue("プレイヤー移動速度",   player_->MoveSpeedPtr(),  0.5f, 20.0f);
+		em->RegisterNodeGameValue("ジャンプ力",           player_->JumpPowerPtr(),  1.0f, 20.0f);
+		em->RegisterNodeGameValue("卵の投げ初速",         &throwSpeedNormal_,       1.0f, 40.0f);
+		em->RegisterNodeGameValue("ロックオン投げ初速",   &throwSpeedLock_,         1.0f, 60.0f);
+		em->RegisterNodeGameValue("飲み込みの届く距離",   &swallowReach_,           0.5f, 10.0f);
+	}
+
 	// レール可視化用モデル（通常=緑 / 穴=赤 の2モデル。マテリアルはモデル単位で共有のため別モデルが必要）
 	ModelManager::GetInstance()->CreateCubeModel("railLineCube", 1.0f);
 	ModelManager::GetInstance()->CreateCubeModel("railLineCubeHole", 1.0f);
@@ -523,9 +536,8 @@ void GamePlayScene::UpdateSwallow(){
 
 	// --- E：飲み込み開始（縮小吸い込みアニメ。卵にはまだしない）---
 	if ( input->Triggerkey(DIK_E) ) {
-		const float kSwallowReach = 2.0f; // 舌の届く範囲
 		Enemy* target = nullptr;
-		float bestDist = kSwallowReach;
+		float bestDist = swallowReach_; // 舌の届く範囲（ノードエディタから調整可）
 		for ( auto& e : enemies_ ) {
 			if ( !e->IsAlive() ) continue;
 			float d = Length(playerPos - e->GetPosition());
@@ -615,7 +627,7 @@ void GamePlayScene::UpdateThrowAim(){
 
 	Vector3 origin = { ppos.x, ppos.y + 0.5f, ppos.z };
 	Vector3 throwDir = { 0.0f, 0.0f, 1.0f };
-	float   throwSpeed = 13.0f;  // 通常の投げ速度
+	float   throwSpeed = throwSpeedNormal_;  // 通常の投げ速度（ノードエディタから調整可）
 	float   dispX = cursorX_, dispY = cursorY_;
 	Vector3 cursorWorld;         // 狙い線の先端（奥に追従させる）
 
@@ -626,7 +638,7 @@ void GamePlayScene::UpdateThrowAim(){
 		Vector3 t = cursorWorld - origin;
 		float d = Length(t);
 		if ( d > 1e-4f ) throwDir = { t.x / d, t.y / d, t.z / d };
-		throwSpeed = 22.0f; // ★敵ロック時は速く
+		throwSpeed = throwSpeedLock_; // ★敵ロック時は速く（ノードエディタから調整可）
 		DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
 	} else {
 		// 未ロック：カーソルの画面位置を奥へアンプロジェクトした方向へ投げる（奥に投げ込める）。
@@ -850,28 +862,8 @@ void GamePlayScene::DrawDebugUI(){
 
 	TextManager::GetInstance()->DrawDebugUI();
 
-	// --- ヨッシーHUD（仮）：画面左上に常時表示。卵の数・状態を確認できる ---
-	{
-		ImGui::SetNextWindowPos(ImVec2(20.0f, 60.0f), ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.55f);
-		ImGui::Begin("ヨッシーHUD", nullptr,
-			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
-
-		ImGui::Text("おなか %d   たまご %d / %d", eggSystem_.BellyCount(), eggSystem_.HeldCount(), EggSystem::kMaxEggs);
-		ImGui::SameLine();
-		ImGui::TextDisabled("(飛行中:%d)", eggSystem_.FlyingCount());
-
-		if ( throwState_ == ThrowState::Aiming ) {
-			ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.2f, 1.0f), "▼ 構え中！ 矢印でカーソル移動 / Q を離す");
-			if ( aimLocked_ ) { ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.25f, 1.0f), "   ★ ロックオン！ Q を離すと命中"); }
-			else              { ImGui::TextDisabled("   敵にカーソルを重ねるとロック（重ねないと投げない）"); }
-		} else {
-			ImGui::Text("E:飲み込む   左Ctrl:しゃがんで産む   Q長押し:構える→投げる");
-		}
-		ImGui::End();
-	}
+	// ※ヨッシーHUD（おなか/たまご数・操作説明の仮表示）は一旦削除した。
+	//   本実装のUI（スプライト等）を作る時に復活させる。
 
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");
@@ -941,6 +933,8 @@ GamePlayScene::~GamePlayScene(){}
 void GamePlayScene::Finalize(){
 	// エディタが保持している外部ポインタをリセット（ダングリングポインタ防止）
 	EditorManager::GetInstance()->ResetSceneReferences();
+	// ノードエディタに登録したゲーム値（player_ 等のポインタ）も解除する
+	EditorManager::GetInstance()->ClearNodeGameValues();
 
 	object3ds_.clear();
 	GPUParticleManager::GetInstance()->Finalize();

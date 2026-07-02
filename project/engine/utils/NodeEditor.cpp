@@ -97,6 +97,14 @@ void NodeEditor::Update() {
             if ( le ) { le->SetObjectShaderParam(n.target, ClampF(v, 0.0f, 1.0f)); }
             break;
         }
+        case NodeType::GameParam: {
+            // シーンが登録したゲーム値（プレイヤー速度・卵の投げ初速など）に反映
+            if ( n.target >= 0 && n.target < ( int ) gameValues_.size() ) {
+                const GameValue& gv = gameValues_[n.target];
+                if ( gv.target ) { *gv.target = ClampF(v, gv.minV, gv.maxV); }
+            }
+            break;
+        }
         default: break;
         }
     }
@@ -161,6 +169,7 @@ const char* NodeEditor::TypeName(NodeType t) const {
     case NodeType::ShaderGray:      return "グレースケール";
     case NodeType::ShaderInvert:    return "色反転";
     case NodeType::ShaderOutput:    return "最終色 (シェーダー)";
+    case NodeType::GameParam:       return "→ ゲーム値";
     }
     return "?";
 }
@@ -191,6 +200,7 @@ const char* NodeEditor::TypeDesc(NodeType t) const {
     case NodeType::ShaderGray:      return "白黒にする";
     case NodeType::ShaderInvert:    return "色を反転する（ネガ）";
     case NodeType::ShaderOutput:    return "ここに繋いだ色でHLSLを自動生成し、選んだオブジェクトに適用";
+    case NodeType::GameParam:       return "繋いだ値をゲームの変数に反映（プレイヤー速度・卵の投げ初速など。ノード内で対象を選ぶ）";
     }
     return "";
 }
@@ -211,6 +221,7 @@ int NodeEditor::InputCount(NodeType t) const {
     case NodeType::ObjRotY:
     case NodeType::ObjScale:
     case NodeType::ObjParam:
+    case NodeType::GameParam:
     case NodeType::ShaderGray:
     case NodeType::ShaderInvert:
     case NodeType::ShaderOutput: return 1;
@@ -225,6 +236,7 @@ bool NodeEditor::HasOutput(NodeType t) const {
 bool NodeEditor::IsApplyNode(NodeType t) const {
     return t == NodeType::LightIntensity || t == NodeType::ParticleRate
         || t == NodeType::ParticleGravity || t == NodeType::TimeScale
+        || t == NodeType::GameParam
         || IsObjApplyNode(t);
 }
 
@@ -506,6 +518,9 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
         { NodeType::ObjScale, ImVec4(0.80f, 0.40f, 0.65f, 1.0f) },
         { NodeType::ObjParam, ImVec4(0.80f, 0.40f, 0.65f, 1.0f) },
     };
+    const PaletteEntry games[] = {
+        { NodeType::GameParam, ImVec4(0.90f, 0.60f, 0.20f, 1.0f) },
+    };
     const PaletteEntry shaders[] = {
         { NodeType::ShaderTexture, ImVec4(0.20f, 0.55f, 0.60f, 1.0f) },
         { NodeType::ShaderUV,      ImVec4(0.20f, 0.55f, 0.60f, 1.0f) },
@@ -547,6 +562,9 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
     ImGui::Spacing();
     ImGui::Text("配置オブジェクトに適用");
     paletteButtons(objs, 4);
+    ImGui::Spacing();
+    ImGui::Text("ゲームの値に適用");
+    paletteButtons(games, 1);
     ImGui::Spacing();
     ImGui::Text("シェーダー（マテリアル）");
     paletteButtons(shaders, 10);
@@ -832,6 +850,23 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
                     if ( count == 0 ) { ImGui::TextDisabled("(配置オブジェクトなし)"); }
                     for ( int i = 0; i < count; ++i ) {
                         if ( ImGui::Selectable(le->GetObjectLabel(i).c_str(), n.target == i) ) {
+                            n.target = i;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                widgetY += kRowH;
+            }
+            // ゲーム値：シーンが登録した変数（プレイヤー速度・卵の投げ初速など）をコンボで選ぶ
+            if ( n.type == NodeType::GameParam ) {
+                ImGui::SetCursorScreenPos(ImVec2(p0.x + 8, widgetY));
+                ImGui::SetNextItemWidth(kNodeWidth - 16);
+                const char* current = ( n.target >= 0 && n.target < ( int ) gameValues_.size() )
+                    ? gameValues_[n.target].label.c_str() : "(なし)";
+                if ( ImGui::BeginCombo("##gtarget", current) ) {
+                    if ( gameValues_.empty() ) { ImGui::TextDisabled("(ゲーム値が未登録です)"); }
+                    for ( int i = 0; i < ( int ) gameValues_.size(); ++i ) {
+                        if ( ImGui::Selectable(gameValues_[i].label.c_str(), n.target == i) ) {
                             n.target = i;
                         }
                     }
