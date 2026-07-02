@@ -14,6 +14,7 @@
 #include "engine/utils/ImGuiManager.h"
 #include "engine/3d/model/ModelManager.h"
 #include "engine/base/Input.h"
+#include "engine/camera/Camera.h" // CalcSpawnPoint（カメラの視線の先に配置）用
 
 
 LevelEditor::LevelEditor(){
@@ -336,4 +337,95 @@ void LevelEditor::DrawDebugUI(){
 void LevelEditor::SetCamera(const Camera* camera){
 	camera_ = camera;
 	for ( auto& obj : object3ds_ ) { obj->SetCamera(camera_); }
+}
+
+// =====================================================================
+//  外部ツール連携（FileEditor / NodeEditor 用。master_engine から移植）
+// =====================================================================
+
+// カメラの視線の先の配置位置を計算する
+Vector3 LevelEditor::CalcSpawnPoint() const{
+	if ( !camera_ ) return { 0.0f, 0.0f, 5.0f };
+	// カメラのワールド行列の +Z 軸（3行目）＝視線方向
+	const Matrix4x4& w = camera_->GetWorldMatrix();
+	Vector3 fwd = { w.m[2][0], w.m[2][1], w.m[2][2] };
+	float len = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+	if ( len > 0.0001f ) { fwd.x /= len; fwd.y /= len; fwd.z /= len; }
+	Vector3 pos = camera_->GetWorldPosition();
+	// 視線の少し先に置く。連続配置時は少しずつずらして重ならないようにする
+	float dist = 8.0f;
+	Vector3 p{ pos.x + fwd.x * dist, pos.y + fwd.y * dist, pos.z + fwd.z * dist };
+	float off = ( float ) ( spawnCounter_ % 4 );
+	p.x += off; p.z += off;
+	return p;
+}
+
+// モデル名を指定してカメラの前に1個配置する（FileEditor のダブルクリック配置用）
+void LevelEditor::SpawnObject(const std::string& type){
+	if ( !EnsureAssetLoaded(type) ) return;
+	Model* model = ModelManager::GetInstance()->FindModel(type);
+	if ( model == nullptr ) return;
+
+	Vector3 p = CalcSpawnPoint();
+	if ( snapToGrid_ ) { p.x = std::round(p.x); p.y = std::round(p.y); p.z = std::round(p.z); }
+
+	LevelObjectData newObj;
+	newObj.type = type;
+	newObj.translation = p;
+
+	// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
+	levelData_.objects.push_back(newObj);
+	std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
+	obj->Initialize(model);
+	obj->SetCamera(camera_);
+	obj->SetTranslation(p);
+	obj->Update();
+	object3ds_.push_back(std::move(obj));
+
+	selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
+	++spawnCounter_;
+}
+
+int LevelEditor::GetObjectCount() const{
+	return ( int ) levelData_.objects.size();
+}
+
+std::string LevelEditor::GetObjectLabel(int index) const{
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return "(なし)";
+	return std::to_string(index) + ": " + levelData_.objects[index].type;
+}
+
+Obj3d* LevelEditor::GetObject3d(int index){
+	if ( index < 0 || index >= ( int ) object3ds_.size() ) return nullptr;
+	return object3ds_[index].get();
+}
+
+void LevelEditor::SetObjectPosY(int index, float y){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].translation.y = y;
+	object3ds_[index]->SetTranslation(levelData_.objects[index].translation);
+	// ノード駆動のアニメーションなので Undo には積まない
+}
+
+void LevelEditor::SetObjectRotY(int index, float r){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].rotation.y = r;
+	object3ds_[index]->SetRotation(levelData_.objects[index].rotation);
+}
+
+void LevelEditor::SetObjectScale(int index, float s){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].scale = { s, s, s };
+	object3ds_[index]->SetScale(levelData_.objects[index].scale);
+}
+
+void LevelEditor::SetObjectShaderParam(int index, float v){
+	if ( index < 0 || index >= ( int ) object3ds_.size() ) return;
+	// ディゾルブ用CBを「自由パラメータ」として使う
+	// （生成シェーダーの『パラメータ』ノードがこの値を読む。
+	//   通常シェーダーのオブジェクトに使うとディゾルブとして作用する点に注意）
+	object3ds_[index]->SetDissolveThreshold(v);
 }

@@ -52,7 +52,24 @@ public:
     // マップを読み込んだ回数（増えたら＝新しいマップが読み込まれた合図）
     int GetMapLoadVersion() const{ return mapLoadVersion_; }
 
+    // --- 外部ツール連携（FileEditor / NodeEditor から使う。master_engine から移植） ---
+    // モデル名を指定してカメラの前に1個配置する（FileEditor のダブルクリック配置用）
+    void SpawnObject(const std::string& type);
+    // 配置オブジェクトへのアクセス（NodeEditor のターゲット選択用）
+    int         GetObjectCount() const;
+    std::string GetObjectLabel(int index) const;    // 表示用 "0: block"
+    Obj3d*      GetObject3d(int index);             // 表示オブジェクトを取得（シェーダー適用用）
+    // ノード駆動でオブジェクトを動かす（Undo履歴には積まない）
+    void        SetObjectPosY(int index, float y);  // Y座標を反映
+    void        SetObjectRotY(int index, float r);  // Y回転を反映（ラジアン）
+    void        SetObjectScale(int index, float s); // 均一スケールを反映
+    void        SetObjectShaderParam(int index, float v); // シェーダーパラメータ(0〜1)を反映
+
 private:
+
+    // カメラの視線の先の配置位置を計算する（SpawnObject 用）
+    Vector3 CalcSpawnPoint() const;
+    int spawnCounter_ = 0; // 連続配置時に位置をずらすカウンタ
 
     // アセットブラウザ用：resources/ から見つけたモデル1件分
     struct AssetEntry{
