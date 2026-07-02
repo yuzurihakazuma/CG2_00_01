@@ -13,14 +13,128 @@
 #include "engine/math/VectorMath.h"
 #include "engine/graphics/ResourceFactory.h"
 
+#include <fstream>
+#include "externals/nlohmann/json.hpp"
+
 using namespace VectorMath;
 using namespace MatrixMath;
+using json = nlohmann::json;
+
+// ライティングのプリセット適用（0:昼 1:夕方 2:夜）
+void Obj3dCommon::ApplyLightPreset(int index){
+	if ( !directionalLightData_ ) return;
+	auto& L = directionalLightData_->lights[0];
+	directionalLightData_->activeCount = 1;
+	switch ( index ) {
+	case 0: // 昼：白くて強い光が上から
+		L.color = { 1.0f, 1.0f, 0.98f, 1.0f };
+		L.direction = Normalize(Vector3{ 0.3f, -1.0f, 0.4f });
+		L.intensity = 1.0f;
+		break;
+	case 1: // 夕方：オレンジの低い光
+		L.color = { 1.0f, 0.55f, 0.3f, 1.0f };
+		L.direction = Normalize(Vector3{ 0.8f, -0.25f, 0.2f });
+		L.intensity = 1.1f;
+		break;
+	case 2: // 夜：青白い弱い光
+		L.color = { 0.45f, 0.55f, 0.95f, 1.0f };
+		L.direction = Normalize(Vector3{ -0.2f, -1.0f, -0.3f });
+		L.intensity = 0.35f;
+		break;
+	}
+}
+
+// ライティング設定の保存（平行光源・点光源・スポットライトをまとめてJSONへ）
+void Obj3dCommon::SaveLighting(const std::string& path) const{
+	if ( !directionalLightData_ || !pointLightData_ || !spotLightData_ ) return;
+	json j;
+	j["directional"] = json::array();
+	j["activeCount"] = directionalLightData_->activeCount;
+	for ( uint32_t i = 0; i < MAX_DIRECTIONAL_LIGHTS; ++i ) {
+		const auto& L = directionalLightData_->lights[i];
+		j["directional"].push_back({
+			{ "color", { L.color.x, L.color.y, L.color.z, L.color.w } },
+			{ "direction", { L.direction.x, L.direction.y, L.direction.z } },
+			{ "intensity", L.intensity },
+		});
+	}
+	const auto& P = *pointLightData_;
+	j["point"] = {
+		{ "color", { P.color.x, P.color.y, P.color.z, P.color.w } },
+		{ "position", { P.position.x, P.position.y, P.position.z } },
+		{ "intensity", P.intensity }, { "radius", P.radius }, { "decay", P.decay },
+	};
+	const auto& S = *spotLightData_;
+	j["spot"] = {
+		{ "color", { S.color.x, S.color.y, S.color.z, S.color.w } },
+		{ "position", { S.position.x, S.position.y, S.position.z } },
+		{ "direction", { S.direction.x, S.direction.y, S.direction.z } },
+		{ "intensity", S.intensity }, { "distance", S.distance }, { "decay", S.decay },
+		{ "cosAngle", S.cosAngle }, { "cosFalloffStart", S.cosFalloffStart },
+	};
+	std::ofstream f(path);
+	if ( f ) { f << j.dump(4); }
+}
+
+void Obj3dCommon::LoadLighting(const std::string& path){
+	if ( !directionalLightData_ || !pointLightData_ || !spotLightData_ ) return;
+	std::ifstream f(path);
+	if ( !f ) return;
+	json j;
+	f >> j;
+
+	directionalLightData_->activeCount = j.value("activeCount", 1);
+	if ( j.contains("directional") && j["directional"].is_array() ) {
+		for ( uint32_t i = 0; i < MAX_DIRECTIONAL_LIGHTS && i < j["directional"].size(); ++i ) {
+			auto& jl = j["directional"][i];
+			auto& L = directionalLightData_->lights[i];
+			if ( jl.contains("color") )     { L.color = { jl["color"][0], jl["color"][1], jl["color"][2], jl["color"][3] }; }
+			if ( jl.contains("direction") ) { L.direction = { jl["direction"][0], jl["direction"][1], jl["direction"][2] }; }
+			L.intensity = jl.value("intensity", 1.0f);
+		}
+	}
+	if ( j.contains("point") ) {
+		auto& jp = j["point"];
+		auto& P = *pointLightData_;
+		if ( jp.contains("color") )    { P.color = { jp["color"][0], jp["color"][1], jp["color"][2], jp["color"][3] }; }
+		if ( jp.contains("position") ) { P.position = { jp["position"][0], jp["position"][1], jp["position"][2] }; }
+		P.intensity = jp.value("intensity", P.intensity);
+		P.radius = jp.value("radius", P.radius);
+		P.decay = jp.value("decay", P.decay);
+	}
+	if ( j.contains("spot") ) {
+		auto& js = j["spot"];
+		auto& S = *spotLightData_;
+		if ( js.contains("color") )     { S.color = { js["color"][0], js["color"][1], js["color"][2], js["color"][3] }; }
+		if ( js.contains("position") )  { S.position = { js["position"][0], js["position"][1], js["position"][2] }; }
+		if ( js.contains("direction") ) { S.direction = { js["direction"][0], js["direction"][1], js["direction"][2] }; }
+		S.intensity = js.value("intensity", S.intensity);
+		S.distance = js.value("distance", S.distance);
+		S.decay = js.value("decay", S.decay);
+		S.cosAngle = js.value("cosAngle", S.cosAngle);
+		S.cosFalloffStart = js.value("cosFalloffStart", S.cosFalloffStart);
+	}
+}
 
 void Obj3dCommon::DrawDebugUI(){
 #ifdef USE_IMGUI
 	// 他のツールと同じウィンドウにまとめる
 	if ( ImGui::Begin("インスペクター (詳細設定)") ) {
 		if ( ImGui::CollapsingHeader("ライティング設定 (Lighting)", ImGuiTreeNodeFlags_DefaultOpen) ) {
+
+			// --- プリセット＆保存/読込 ---
+			ImGui::TextDisabled("プリセット:");
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("昼") )   { ApplyLightPreset(0); }
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("夕方") ) { ApplyLightPreset(1); }
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("夜") )   { ApplyLightPreset(2); }
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("保存") ) { SaveLighting("resources/data/lighting.json"); }
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("読込") ) { LoadLighting("resources/data/lighting.json"); }
+			ImGui::Separator();
 
 			// --- 平行光源 (Directional Light) ---
 			if ( ImGui::TreeNode("平行光源 (Directional Light)") ) {

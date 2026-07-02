@@ -206,6 +206,12 @@ void Obj3d::Draw(){
 
 	PipelineManager::GetInstance()->SetPipeline(commandList, pipelineType_);
 
+	// ノードエディタ製の専用PSOがあれば差し替える
+	// （ルートシグネチャはObject3D互換なのでバインドはそのまま使える）
+	if ( customPipeline_ ) {
+		commandList->SetPipelineState(customPipeline_.Get());
+	}
+
 	// 1. 座標情報の転送 (WVP) -> RootParameter[1]
 	// ※PipelineManagerの設定（RootSignature）と番号を合わせてください
 	commandList->SetGraphicsRootConstantBufferView(1, wvpResource_->GetGPUVirtualAddress());

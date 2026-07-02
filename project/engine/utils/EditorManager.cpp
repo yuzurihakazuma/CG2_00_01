@@ -9,6 +9,9 @@
 #include "engine/base/WindowProc.h"
 #include "engine/utils/ImGuiManager.h"
 #include "engine/utils/RenderStats.h"
+#include "engine/utils/PerformanceMonitor.h"
+#include "engine/utils/FileEditor.h"
+#include "engine/utils/NodeEditor.h"
 #include "engine/postEffect/PostEffect.h"
 #include "engine/graphics/SrvManager.h"
 #include "engine/scene/SceneManager.h"
@@ -47,11 +50,28 @@ void EditorManager::Initialize(){
     blenderImporter_->Initialize(levelEditor_.get());
 
     gpuParticleEditor_ = std::make_unique<GPUParticleEditor>();
+
+    // 性能モニター（master_engine から移植）
+    perfMonitor_ = std::make_unique<PerformanceMonitor>();
+    perfMonitor_->Initialize();
+
+    // ファイルエディタ（Project風。master_engine から移植）
+    fileEditor_ = std::make_unique<FileEditor>();
+    fileEditor_->Initialize();
+
+    // ノードエディタ（ブループリント風。master_engine から移植）
+    nodeEditor_ = std::make_unique<NodeEditor>();
+    nodeEditor_->Initialize();
 }
 
 
 
 void EditorManager::Begin(){
+    // フレーム先頭（コマンドリストが閉じている安全なタイミング）で
+    // ファイルエディタのサムネイル画像をまとめて読み込む。
+    if ( fileEditor_ ) {
+        fileEditor_->ProcessPendingThumbnails();
+    }
 #ifdef USE_IMGUI
     ImGuiManager::GetInstance()->Begin();
 #endif
@@ -80,6 +100,11 @@ void EditorManager::Update(){
     // LevelEditor の更新は常に行う（エディタ非表示でも3Dオブジェクトは動く）
     if ( levelEditor_ ) {
         levelEditor_->Update();
+    }
+
+    // ノードグラフの実行も常に行う（ウィンドウが閉じていても適用ノードが作用する）
+    if ( nodeEditor_ ) {
+        nodeEditor_->Update();
     }
 
     if ( !isEditorActive_ ) {
@@ -217,6 +242,8 @@ void EditorManager::Update(){
             } else {
                 ImGui::TextDisabled("デバッグカメラ未登録");
             }
+            ImGui::Separator();
+            ImGui::Checkbox("ノードエディタ", &showNodeEditor_);
             ImGui::EndMenu();
         }
 
@@ -704,6 +731,11 @@ void EditorManager::Update(){
         gpuParticleEditor_->DrawDebugUI();
     }
 
+    // ファイルエディタ（Project風のファイル閲覧・編集。master_engine から移植）
+    if ( fileEditor_ ) {
+        fileEditor_->DrawDebugUI();
+    }
+
     // 調整項目（GlobalVariables）の編集ウィンドウ
     GlobalVariables::GetInstance()->Update();
 
@@ -737,49 +769,15 @@ void EditorManager::Update(){
     }
     ImGui::End();
 
-    // 7. パフォーマンスモニター
-    ImGui::Begin("パフォーマンスモニター");
-    float fps = ImGui::GetIO().Framerate;
-
-    // --- FPS 履歴グラフ（直近の推移を可視化）---
-    static float fpsHistory[120] = {};
-    static int   fpsOffset = 0;
-    fpsHistory[fpsOffset] = fps;
-    fpsOffset = ( fpsOffset + 1 ) % IM_ARRAYSIZE(fpsHistory);
-    char fpsOverlay[32];
-    snprintf(fpsOverlay, sizeof(fpsOverlay), "FPS %.1f", fps);
-    ImGui::PlotLines("##fps", fpsHistory, IM_ARRAYSIZE(fpsHistory), fpsOffset,
-        fpsOverlay, 0.0f, 120.0f, ImVec2(0, 60));
-
-    ImGui::Text("FPS: %.1f", fps);
-    ImGui::Text("フレーム時間: %.3f ms", 1000.0f / fps);
-    ImGui::Separator();
-    ImGui::Text("[CPU] 更新処理(Update) : %.3f ms", cpuUpdateTimeMs_);
-    ImGui::Text("[CPU] 描画準備(Draw)   : %.3f ms", cpuDrawTimeMs_);
-
-    // --- 描画統計（前フレームの集計値）---
-    ImGui::Separator();
-    ImGui::Text("ドローコール数 : %u", RenderStats::GetInstance()->GetDrawCalls());
-    ImGui::Text("時間 (Time) : 経過 %.1f s / フレーム %llu",
-        Time::GetInstance()->GetTotalTime(),
-        ( unsigned long long ) Time::GetInstance()->GetFrameCount());
-    // ※ 一時停止／スロー等の操作は「コントロール (Play / Stop)」ウィンドウに集約
-
-    ImGui::Separator();
-    float totalCpuTime = cpuUpdateTimeMs_ + cpuDrawTimeMs_;
-    if ( fps < 55.0f ) {
-        ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), " 警告: 処理落ちが発生しています！");
-        if ( totalCpuTime > 16.0f ) {
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
-                " 原因: CPUの処理が重いです\n（計算やループ処理が多すぎます）");
-        } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
-                " 原因: GPUの処理が重いです\n（描画する量が多すぎるか、シェーダーが重いです）");
-        }
-    } else {
-        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), " 快適に動作しています！ (60 FPS維持)");
+    // 7. パフォーマンスモニター（master_engine から移植：履歴グラフ・メモリ/VRAM・ドローコール付き）
+    if ( perfMonitor_ ) {
+        perfMonitor_->DrawDebugUI(cpuUpdateTimeMs_, cpuDrawTimeMs_);
     }
-    ImGui::End();
+
+    // 8. ノードエディタ（表示メニューでON/OFF。master_engine から移植）
+    if ( nodeEditor_ && showNodeEditor_ ) {
+        nodeEditor_->DrawDebugUI(&showNodeEditor_);
+    }
 #endif
 }
 // レベルエディタの描画
@@ -847,12 +845,32 @@ void EditorManager::End(){
 
 void EditorManager::Finalize(){
     blenderImporter_.reset();
+    fileEditor_.reset();
     levelEditor_.reset();
     gpuParticleEditor_.reset();
+    perfMonitor_.reset();
+    nodeEditor_.reset();
 }
 
 void EditorManager::SetParticleEmitter(GPUParticleEmitter* emitter){
     if ( gpuParticleEditor_ ) {
         gpuParticleEditor_->SetEmitter(emitter);
+    }
+    // ノードエディタの「パーティクル適用ノード」も同じエミッターを操作する
+    if ( nodeEditor_ ) {
+        nodeEditor_->SetParticleEmitter(emitter);
+    }
+}
+
+// ノードエディタの「→ ゲーム値」ノードのターゲットを登録する（シーンから）
+void EditorManager::RegisterNodeGameValue(const std::string& label, float* target, float minV, float maxV){
+    if ( nodeEditor_ ) {
+        nodeEditor_->RegisterGameValue(label, target, minV, maxV);
+    }
+}
+
+void EditorManager::ClearNodeGameValues(){
+    if ( nodeEditor_ ) {
+        nodeEditor_->ClearGameValues();
     }
 }

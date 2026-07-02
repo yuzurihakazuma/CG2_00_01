@@ -12,6 +12,9 @@ class GPUParticleEditor;
 class GPUParticleEmitter;
 class SkinnedObj3d;
 class Obj3d;
+class PerformanceMonitor;
+class FileEditor;
+class NodeEditor;
 
 
 enum class EngineMode{
@@ -53,6 +56,15 @@ public:
     void SetGameViewSrvIndex(uint32_t srvIndex) { gameViewSrvIndex_ = srvIndex; }
 
     void SetParticleEmitter(GPUParticleEmitter* emitter);
+
+    // レベルエディタへのアクセス（FileEditor / NodeEditor がオブジェクト配置等で使う）
+    LevelEditor* GetLevelEditor(){ return levelEditor_.get(); }
+
+    // --- ノードエディタへの「ゲーム値」登録（シーンから転送）---
+    //   プレイヤー速度・卵の投げ初速などの float を登録すると「→ ゲーム値」ノードで動かせる。
+    //   ポインタは所有しないため、シーン終了時に必ず ClearNodeGameValues() を呼ぶこと。
+    void RegisterNodeGameValue(const std::string& label, float* target, float minV, float maxV);
+    void ClearNodeGameValues();
 
     // エディタがアクティブかどうか
     bool IsActive() const{ return isEditorActive_; }
@@ -117,6 +129,16 @@ private:
 
     // Blenderシーンインポータ（levelEditor_ に反映する）
     std::unique_ptr<BlenderImporter> blenderImporter_ = nullptr;
+
+    // 性能モニター（master_engine から移植：FPS/メモリ/VRAM/ドローコール）
+    std::unique_ptr<PerformanceMonitor> perfMonitor_ = nullptr;
+
+    // ファイルエディタ（Project風。master_engine から移植）
+    std::unique_ptr<FileEditor> fileEditor_ = nullptr;
+
+    // ノードエディタ（ブループリント風。master_engine から移植）
+    std::unique_ptr<NodeEditor> nodeEditor_ = nullptr;
+    bool showNodeEditor_ = false; // 表示メニューでON/OFF
 
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;

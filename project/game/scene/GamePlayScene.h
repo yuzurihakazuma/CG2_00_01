@@ -80,6 +80,11 @@ private: // 初期化・更新の内部処理（べた書きを段階ごとに�
 	// --- 卵の投擲：構えのステート（Idle=通常 / Aiming=構え中）---
 	enum class ThrowState { Idle, Aiming };
 	ThrowState throwState_ = ThrowState::Idle;
+
+	// --- ノードエディタから調整できるゲーム値（「→ ゲーム値」ノードに登録する）---
+	float throwSpeedNormal_ = 13.0f; // 卵の通常投げ初速 (m/s)
+	float throwSpeedLock_   = 22.0f; // ロックオン時の投げ初速 (m/s)
+	float swallowReach_     = 2.0f;  // 飲み込みの届く距離 (m)
 	float cursorX_ = 0.0f;   // 狙いカーソルの画面位置X(px)。矢印で直感的に動かす（右=右）
 	float cursorY_ = 0.0f;   // 狙いカーソルの画面位置Y(px)（上=上）
 	std::unique_ptr<Sprite> cursorSprite_; // 狙い用カーソル（構え中だけ表示）

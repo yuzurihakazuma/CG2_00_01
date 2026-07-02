@@ -59,7 +59,11 @@ public:
 	void PlayAnimation(Animation* animation);
 
 	void SetPipelineType(PipelineType type) { pipelineType_ = type; }
-	
+
+	// ノードエディタ等が生成した専用PSOで描画する（Object3Dルートシグネチャ互換のこと）
+	// nullptr を渡すと解除して通常のパイプラインに戻る
+	void SetCustomPipeline(Microsoft::WRL::ComPtr<ID3D12PipelineState> pso) { customPipeline_ = pso; }
+
 public:
 	// -------------------------------------------------
 	// Getter / Setter
@@ -143,5 +147,8 @@ private:
 	uint32_t skyboxTextureIndex_ = 0;
 
 	PipelineType pipelineType_ = PipelineType::Object3D;
+
+	// ノードエディタが生成した専用PSO（未設定なら通常パイプライン）
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> customPipeline_;
 
 };

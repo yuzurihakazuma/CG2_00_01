@@ -192,6 +192,22 @@ void PipelineManager::CreateSpriteGraphicsPipeline(){
 
 
 }
+// ノードエディタ等が生成したPSでObject3D互換PSOを作る
+Microsoft::WRL::ComPtr<ID3D12PipelineState> PipelineManager::CreateCustomObject3DPipeline(const std::wstring& psPath){
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
+	CreateGraphicsPipelineCommon(
+		L"resources/shaders/Object3d/Object3d.VS.hlsl",
+		psPath,
+		object3DRootSignature_.Get(),
+		BlendMode::kNormal,
+		D3D12_CULL_MODE_BACK,
+		true,
+		{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB },
+		pso
+	);
+	return pso;
+}
+
 // ルートシグネチャの生成 Object3D用
 void PipelineManager::CreateObject3DRootSignature(){
 

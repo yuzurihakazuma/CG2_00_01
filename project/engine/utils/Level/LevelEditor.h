@@ -52,7 +52,49 @@ public:
     // マップを読み込んだ回数（増えたら＝新しいマップが読み込まれた合図）
     int GetMapLoadVersion() const{ return mapLoadVersion_; }
 
+    // --- マップファイル管理（master_engine から移植） ---
+    void ScanMaps();    // resources/map/ の *.json 一覧を更新する
+    void QuickSave();   // 今開いているファイルへ上書き保存（Ctrl+S / 自動保存もここを通る）
+
+    // --- オブジェクト配置の Undo/Redo（レールは RailEditor 側の履歴が担当） ---
+    void PushUndo();    // 変更「前」に呼んで履歴に積む
+    void Undo();        // Ctrl+Z
+    void Redo();        // Ctrl+Y
+
+    // --- 外部ツール連携（FileEditor / NodeEditor から使う。master_engine から移植） ---
+    // モデル名を指定してカメラの前に1個配置する（FileEditor のダブルクリック配置用）
+    void SpawnObject(const std::string& type);
+    // 配置オブジェクトへのアクセス（NodeEditor のターゲット選択用）
+    int         GetObjectCount() const;
+    std::string GetObjectLabel(int index) const;    // 表示用 "0: block"
+    Obj3d*      GetObject3d(int index);             // 表示オブジェクトを取得（シェーダー適用用）
+    // ノード駆動でオブジェクトを動かす（Undo履歴には積まない）
+    void        SetObjectPosY(int index, float y);  // Y座標を反映
+    void        SetObjectRotY(int index, float r);  // Y回転を反映（ラジアン）
+    void        SetObjectScale(int index, float s); // 均一スケールを反映
+    void        SetObjectShaderParam(int index, float v); // シェーダーパラメータ(0〜1)を反映
+
 private:
+
+    // カメラの視線の先の配置位置を計算する（SpawnObject 用）
+    Vector3 CalcSpawnPoint() const;
+    int spawnCounter_ = 0; // 連続配置時に位置をずらすカウンタ
+
+    // levelData_.objects の内容から表示用 object3ds_ を作り直す（Undo/Redo用）
+    void RebuildObjects();
+
+    // Undo/Redo 履歴（オブジェクト配置のみのスナップショット。
+    //   レールまで戻すと RailEditor の選択・履歴と衝突するため objects に限定）
+    std::vector<std::vector<LevelObjectData>> undoStack_;
+    std::vector<std::vector<LevelObjectData>> redoStack_;
+
+    // --- マップファイル選択 / 保存状態 ---
+    std::vector<std::string> mapList_;      // resources/map/ 内の *.json
+    int selectedMapIndex_ = -1;             // 一覧で選択中のマップ
+    std::string currentMapFile_ = "resources/map/map01.json"; // 今開いているファイル
+    bool  dirty_ = false;                   // 未保存の変更があるか
+    bool  autoSave_ = false;                // 自動保存 ON/OFF
+    float autoSaveTimer_ = 0.0f;            // 自動保存までのフレームカウンタ
 
     // アセットブラウザ用：resources/ から見つけたモデル1件分
     struct AssetEntry{

@@ -26,6 +26,8 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // マルチビューポート：ImGuiウィンドウをゲームウィンドウの外へドラッグで出せる
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 
     // OversampleH/V を 1 に下げることでフォントアトラスのテクスチャサイズを大幅に削減できる
@@ -38,27 +40,22 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
 
     ImGui::StyleColorsDark();
 
+    // 外に出したウィンドウの見た目調整（角丸なし・背景不透明でOSウィンドウらしく）
+    if ( io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable ) {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
+
     // 2. Win32用初期化
     // WindowProcからハンドルを取得して渡す
     ImGui_ImplWin32_Init(windowProc->GetHwnd());
 
     // 3. DirectX12用初期化
-    // SrvManagerからSRVを確保してインデックスを得る
     SrvManager* srvManager = dxCommon->GetSrvManager();
-    uint32_t srvIndex = srvManager->Allocate();
-
-#pragma region SRV記述子ヒープのハンドルを取得
-    // 確保したインデックスに対応するCPUハンドルとGPUハンドルを取得
-    D3D12_CPU_DESCRIPTOR_HANDLE srvCpuHandle = srvManager->GetCPUDescriptorHandle(srvIndex);
-    D3D12_GPU_DESCRIPTOR_HANDLE srvGpuHandle = srvManager->GetGPUDescriptorHandle(srvIndex);
 
     // SRVヒープそのものも必要
     ID3D12DescriptorHeap* srvHeap = srvManager->GetDescriptorHeap();
-#pragma endregion
-
-    // コールバック用にハンドルを保持する（最新仕様への対応）
-    static D3D12_CPU_DESCRIPTOR_HANDLE staticSrvCpuHandle = srvCpuHandle;
-    static D3D12_GPU_DESCRIPTOR_HANDLE staticSrvGpuHandle = srvGpuHandle;
 
     ImGui_ImplDX12_InitInfo init_info = {};
     init_info.Device = dxCommon->GetDevice();
@@ -69,9 +66,13 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
     init_info.SrvDescriptorHeap = srvHeap;
 
     // 最新ImGuiのルール：ハンドルはコールバック関数で渡す
+    // ※要求されるたびに SrvManager から新しく確保する
+    //   （マルチビューポート等で複数回呼ばれても安全）
     init_info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu) {
-        *out_cpu = staticSrvCpuHandle;
-        *out_gpu = staticSrvGpuHandle;
+        SrvManager* srv = SrvManager::GetInstance();
+        uint32_t idx = srv->Allocate();
+        *out_cpu = srv->GetCPUDescriptorHandle(idx);
+        *out_gpu = srv->GetGPUDescriptorHandle(idx);
         };
     init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE) {};
 
@@ -91,6 +92,14 @@ void ImGuiManager::End(ID3D12GraphicsCommandList* commandList){
 #ifdef USE_IMGUI
     ImGui::Render(); // ImGui描画データ生成
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+
+    // マルチビューポート：外に出したウィンドウ（OSウィンドウ）を更新・描画する
+    // （DX12バックエンドはビューポートごとに専用のコマンドリスト/スワップチェーンを持つ）
+    ImGuiIO& io = ImGui::GetIO();
+    if ( io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable ) {
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault(nullptr, ( void* ) commandList);
+    }
 #endif
 }
 void ImGuiManager::Render(ID3D12GraphicsCommandList* commandList){
