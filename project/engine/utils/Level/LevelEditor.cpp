@@ -52,6 +52,98 @@ void LevelEditor::ScanMaps(){
 	}
 }
 
+// levelData_ の内容から表示用 object3ds_ を作り直す（Undo/Redo用）
+void LevelEditor::RebuildObjects(){
+	object3ds_.clear();
+	for ( auto& objData : levelData_.objects ) {
+		Model* model = ModelManager::GetInstance()->FindModel(objData.type);
+		// 見つからなくても Update() の遅延解決に任せる（nullptrのまま作ってOK）
+		std::unique_ptr<Obj3d> newObj = std::make_unique<Obj3d>();
+		newObj->Initialize(model);
+		newObj->SetCamera(camera_);
+		newObj->SetTranslation(objData.translation);
+		newObj->SetRotation(objData.rotation);
+		newObj->SetScale(objData.scale);
+		newObj->Update();
+		object3ds_.push_back(std::move(newObj));
+	}
+	if ( selectedObjectIndex_ >= ( int ) levelData_.objects.size() ) {
+		selectedObjectIndex_ = -1;
+	}
+}
+
+// 変更「前」に呼んで履歴に積む
+void LevelEditor::PushUndo(){
+	undoStack_.push_back(levelData_);
+	// 積みすぎ防止（50手まで）
+	if ( undoStack_.size() > 50 ) { undoStack_.erase(undoStack_.begin()); }
+	// 新しい操作をしたら Redo 履歴は無効
+	redoStack_.clear();
+}
+
+void LevelEditor::Undo(){
+	if ( undoStack_.empty() ) return;
+	redoStack_.push_back(levelData_);
+	levelData_ = undoStack_.back();
+	undoStack_.pop_back();
+	RebuildObjects();
+	dirty_ = true;
+}
+
+void LevelEditor::Redo(){
+	if ( redoStack_.empty() ) return;
+	undoStack_.push_back(levelData_);
+	levelData_ = redoStack_.back();
+	redoStack_.pop_back();
+	RebuildObjects();
+	dirty_ = true;
+}
+
+// --- ノードエディタ用アクセス ---
+int LevelEditor::GetObjectCount() const{
+	return ( int ) levelData_.objects.size();
+}
+
+std::string LevelEditor::GetObjectLabel(int index) const{
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return "(なし)";
+	return std::to_string(index) + ": " + levelData_.objects[index].type;
+}
+
+void LevelEditor::SetObjectPosY(int index, float y){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].translation.y = y;
+	object3ds_[index]->SetTranslation(levelData_.objects[index].translation);
+	// ノード駆動のアニメーションなので dirty_ / Undo には積まない
+}
+
+void LevelEditor::SetObjectRotY(int index, float r){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].rotation.y = r;
+	object3ds_[index]->SetRotation(levelData_.objects[index].rotation);
+}
+
+void LevelEditor::SetObjectScale(int index, float s){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].scale = { s, s, s };
+	object3ds_[index]->SetScale(levelData_.objects[index].scale);
+}
+
+void LevelEditor::SetObjectShaderParam(int index, float v){
+	if ( index < 0 || index >= ( int ) object3ds_.size() ) return;
+	// ディゾルブ用CBを「自由パラメータ」として使う
+	// （生成シェーダーの『パラメータ』ノードがこの値を読む。
+	//   通常シェーダーのオブジェクトに使うとディゾルブとして作用する点に注意）
+	object3ds_[index]->SetDissolveThreshold(v);
+}
+
+Obj3d* LevelEditor::GetObject3d(int index){
+	if ( index < 0 || index >= ( int ) object3ds_.size() ) return nullptr;
+	return object3ds_[index].get();
+}
+
 // 今開いているファイルに上書き保存する
 void LevelEditor::QuickSave(){
 	LevelManager::GetInstance()->Save(currentMapFile_, levelData_);
@@ -82,6 +174,8 @@ void LevelEditor::SpawnObject(const std::string& type){
 	if ( !EnsureAssetLoaded(type) ) return;
 	Model* model = ModelManager::GetInstance()->FindModel(type);
 	if ( model == nullptr ) return;
+
+	PushUndo(); // 配置前の状態を履歴へ
 
 	Vector3 p = CalcSpawnPoint();
 	if ( snapToGrid_ ) { p.x = std::round(p.x); p.y = std::round(p.y); p.z = std::round(p.z); }
@@ -148,6 +242,9 @@ void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 	currentMapFile_ = fileName; // 以後の上書き保存先
 	dirty_ = false;
 	autoSaveTimer_ = 0.0f;
+	// 別マップを開いたら履歴はリセット
+	undoStack_.clear();
+	redoStack_.clear();
 
 	for ( auto& objData : levelData_.objects ) {
 		// 実際のモデルデータを検索して持ってくる（この時点で未ロードなら後で解決する）
@@ -280,10 +377,25 @@ void LevelEditor::DrawDebugUI(){
 	}
 	ImGui::SameLine();
 	if ( ImGui::Button("マップをクリア") ) {
+		PushUndo(); // クリア前を履歴へ（Ctrl+Zで戻せる）
 		object3ds_.clear();
 		levelData_.objects.clear();
 		selectedObjectIndex_ = -1;
 		dirty_ = true;
+	}
+
+	ImGui::Separator();
+
+	// --- Undo / Redo ---
+	if ( ImGui::Button("元に戻す (Ctrl+Z)") ) { Undo(); }
+	ImGui::SameLine();
+	if ( ImGui::Button("やり直す (Ctrl+Y)") ) { Redo(); }
+	ImGui::SameLine();
+	ImGui::TextDisabled("履歴 %d / 先 %d", ( int ) undoStack_.size(), ( int ) redoStack_.size());
+	// キーボードショートカット（テキスト入力中は無効）
+	if ( !ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl ) {
+		if ( ImGui::IsKeyPressed(ImGuiKey_Z) ) { Undo(); }
+		if ( ImGui::IsKeyPressed(ImGuiKey_Y) ) { Redo(); }
 	}
 
 	ImGui::Separator();
@@ -357,6 +469,7 @@ void LevelEditor::DrawDebugUI(){
 		ImGui::Separator();
 
 		if ( ImGui::Button("オブジェクトを削除") ) {
+			PushUndo(); // 削除前を履歴へ
 			levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
 			object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
 			selectedObjectIndex_ = -1;
@@ -366,6 +479,7 @@ void LevelEditor::DrawDebugUI(){
 		if ( selectedObjectIndex_ != -1 ) {
 			ImGui::SameLine();
 			if ( ImGui::Button("複製") ) {
+				PushUndo(); // 複製前を履歴へ
 				LevelObjectData dupObj = objData;
 				levelData_.objects.push_back(dupObj);
 
@@ -389,8 +503,11 @@ void LevelEditor::DrawDebugUI(){
 			bool isChanged = false;
 			float moveStep = snapToGrid_ ? 1.0f : 0.1f;
 			isChanged |= ImGui::DragFloat3("座標", &objData.translation.x, moveStep);
+			if ( ImGui::IsItemActivated() ) { PushUndo(); } // ドラッグ開始時に1回だけ履歴へ
 			isChanged |= ImGui::DragFloat3("回転", &objData.rotation.x, 0.05f);
+			if ( ImGui::IsItemActivated() ) { PushUndo(); }
 			isChanged |= ImGui::DragFloat3("スケール", &objData.scale.x, 0.1f);
+			if ( ImGui::IsItemActivated() ) { PushUndo(); }
 
 			if ( isChanged ) {
 				if ( snapToGrid_ ) {

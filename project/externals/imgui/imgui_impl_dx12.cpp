@@ -1125,12 +1125,17 @@ static void ImGui_ImplDX12_CreateWindow(ImGuiViewport* viewport)
 
     // Create swap chain
     // FIXME-VIEWPORT: May want to copy/inherit swap chain settings from the user/application.
+    // [ENGINE PATCH] flip-model スワップチェーンは _SRGB フォーマット不可のため、
+    // UNORM で作成し、RTV 側を sRGB ビューにする（メインウィンドウと同じ手法）
+    DXGI_FORMAT swapchain_format = bd->RTVFormat;
+    if (swapchain_format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB) swapchain_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (swapchain_format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) swapchain_format = DXGI_FORMAT_B8G8R8A8_UNORM;
     DXGI_SWAP_CHAIN_DESC1 sd1;
     ZeroMemory(&sd1, sizeof(sd1));
     sd1.BufferCount = bd->numFramesInFlight;
     sd1.Width = (UINT)viewport->Size.x;
     sd1.Height = (UINT)viewport->Size.y;
-    sd1.Format = bd->RTVFormat;
+    sd1.Format = swapchain_format;
     sd1.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     sd1.SampleDesc.Count = 1;
     sd1.SampleDesc.Quality = 0;
@@ -1174,12 +1179,17 @@ static void ImGui_ImplDX12_CreateWindow(ImGuiViewport* viewport)
             rtv_handle.ptr += rtv_descriptor_size;
         }
 
+        // [ENGINE PATCH] PSO は bd->RTVFormat（sRGB）想定なので、RTV も明示的に
+        // bd->RTVFormat のビューとして作成する（UNORMバッファ + sRGBビューは合法）
+        D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
+        rtv_desc.Format = bd->RTVFormat;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
         ID3D12Resource* back_buffer;
         for (UINT i = 0; i < bd->numFramesInFlight; i++)
         {
             IM_ASSERT(vd->FrameCtx[i].RenderTarget == nullptr);
             vd->SwapChain->GetBuffer(i, IID_PPV_ARGS(&back_buffer));
-            bd->pd3dDevice->CreateRenderTargetView(back_buffer, nullptr, vd->FrameCtx[i].RenderTargetCpuDescriptors);
+            bd->pd3dDevice->CreateRenderTargetView(back_buffer, &rtv_desc, vd->FrameCtx[i].RenderTargetCpuDescriptors);
             vd->FrameCtx[i].RenderTarget = back_buffer;
         }
 
@@ -1263,10 +1273,14 @@ static void ImGui_ImplDX12_SetWindowSize(ImGuiViewport* viewport, ImVec2 size)
         DXGI_SWAP_CHAIN_DESC1 desc = {};
         vd->SwapChain->GetDesc1(&desc);
         vd->SwapChain->ResizeBuffers(0, (UINT)size.x, (UINT)size.y, desc.Format, desc.Flags);
+        // [ENGINE PATCH] RTV は PSO と同じ bd->RTVFormat（sRGB）ビューで作り直す
+        D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
+        rtv_desc.Format = bd->RTVFormat;
+        rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
         for (UINT i = 0; i < bd->numFramesInFlight; i++)
         {
             vd->SwapChain->GetBuffer(i, IID_PPV_ARGS(&back_buffer));
-            bd->pd3dDevice->CreateRenderTargetView(back_buffer, nullptr, vd->FrameCtx[i].RenderTargetCpuDescriptors);
+            bd->pd3dDevice->CreateRenderTargetView(back_buffer, &rtv_desc, vd->FrameCtx[i].RenderTargetCpuDescriptors);
             vd->FrameCtx[i].RenderTarget = back_buffer;
         }
     }

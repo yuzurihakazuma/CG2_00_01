@@ -4,6 +4,8 @@
 class LevelEditor;
 class BlenderImporter;
 class FileEditor;
+class PerformanceMonitor;
+class NodeEditor;
 class Camera;
 class DebugCamera;
 class GPUParticleEditor;
@@ -78,6 +80,9 @@ public:
     // Blenderインポータの取得（シーン側がカメラ適用要求を受け取るのに使う）
     BlenderImporter* GetBlenderImporter() const{ return blenderImporter_.get(); }
 
+    // レベルエディタの取得（ファイルエディタ等から配置/マップ読込に使う）
+    LevelEditor* GetLevelEditor() const{ return levelEditor_.get(); }
+
 private:
 
     // シングルトンなので外部からの生成・コピーを禁止
@@ -97,6 +102,14 @@ private:
 
     // ファイルエディタ（Project風のファイル閲覧・テキスト編集）
     std::unique_ptr<FileEditor> fileEditor_ = nullptr;
+
+    // パフォーマンスモニター（履歴グラフ・メモリ/VRAM表示）
+    std::unique_ptr<PerformanceMonitor> perfMonitor_ = nullptr;
+
+    // ノードエディタ（Unreal風のノードグラフ）
+    // 表示メニュー「ノードエディタ」でON/OFF
+    std::unique_ptr<NodeEditor> nodeEditor_ = nullptr;
+    bool showNodeEditor_ = false;
 
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;

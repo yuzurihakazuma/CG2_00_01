@@ -14,6 +14,15 @@
 #include "engine/camera/Camera.h"
 #include "engine/3d/model/ModelManager.h"
 #include "engine/3d/obj/Obj3d.h"
+#include "engine/3d/obj/Obj3dCommon.h"
+#include "engine/utils/EditorManager.h"
+#include "engine/utils/Level/LevelEditor.h"
+
+// モデルの事前検証用（Model.cpp は読めないファイルで assert するため、
+// ここで同じ条件を先にチェックして安全に弾く）
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 namespace {
     // 拡張子を小文字で取り出す
@@ -47,6 +56,26 @@ namespace {
     bool IsThumbable(const std::string& name) {
         std::string e = LowerExt(name);
         return e == ".png" || e == ".jpg" || e == ".jpeg" || e == ".bmp" || e == ".tga";
+    }
+
+    // 3Dサムネイルを試みてよいモデル拡張子か（.blend/.fbx はエンジンのローダー非対応）
+    bool IsModelThumbable(const std::string& name) {
+        std::string e = LowerExt(name);
+        return e == ".obj" || e == ".gltf" || e == ".glb";
+    }
+
+    // Model.cpp と同じ条件（メッシュ・法線・UVあり）を満たすか事前チェックする。
+    // 満たさないファイルを ModelManager に渡すと assert で落ちるため、ここで弾く。
+    bool ValidateModelFile(const std::string& path) {
+        Assimp::Importer importer;
+        const aiScene* scene = importer.ReadFile(path.c_str(),
+            aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
+        if ( scene == nullptr || !scene->HasMeshes() ) return false;
+        for ( uint32_t i = 0; i < scene->mNumMeshes; ++i ) {
+            if ( !scene->mMeshes[i]->HasNormals() ) return false;
+            if ( !scene->mMeshes[i]->HasTextureCoords(0) ) return false;
+        }
+        return true;
     }
 
 #ifdef USE_IMGUI
@@ -184,6 +213,9 @@ void FileEditor::SetupThumbResources() {
 
     // Object3D は MRT（色＋マスク）なので、2枚目に捨てマスクRTが要る（全モデルで共有）
     maskRT_ = std::make_unique<RenderTexture>();
+    // ※クリア色は「作成時の最適化クリア値」と一致させないと
+    //   デバッグレイヤーの警告（このエンジンは警告でもブレーク）になる
+    maskRT_->SetClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     maskRT_->Initialize(dx, SrvManager::GetInstance(), kThumbSize, kThumbSize);
 
     thumbSetupDone_ = true;
@@ -225,6 +257,8 @@ void FileEditor::RenderModelThumbnails() {
         std::string file = p.filename().string();
 
         if ( !ModelManager::GetInstance()->FindModel(name) ) {
+            // エンジンのローダーは読めないファイルで assert するため、先に検証して弾く
+            if ( !ValidateModelFile(path) ) { modelThumbs_[path] = nullptr; continue; }
             ModelManager::GetInstance()->LoadModel(name, dir, file);
         }
         Model* model = ModelManager::GetInstance()->FindModel(name);
@@ -242,11 +276,26 @@ void FileEditor::RenderModelThumbnails() {
         obj->SetTranslation({ 0.0f, 0.0f, 0.0f });
         obj->SetRotation({ 0.5f, 0.7f, 0.0f });
         obj->SetScale({ 1.0f, 1.0f, 1.0f });
+
+        // 【重要】ノイズ/環境マップの SRV が未設定（スロット0＝未初期化）だと
+        // GPUベース検証の Uninitialized descriptor エラーで落ちるため必ず設定する
+        TextureData noiseTd = TextureManager::GetInstance()->Load("resources/block/white1x1.png");
+        obj->SetNoiseTexture(noiseTd.srvIndex);
+        obj->SetDissolveThreshold(0.0f); // 溶かさない
+        uint32_t envSrv = Obj3dCommon::GetInstance()->GetEnvironmentTextureSrvIndex();
+        if ( envSrv == 0 ) {
+            // シーンが未設定でもキューブマップを直接読み込んで使う（キャッシュされるので二重読みはしない）
+            TextureData cube = TextureManager::GetInstance()->LoadCube("resources/StandardCubeMap.dds");
+            envSrv = cube.srvIndex;
+        }
+        obj->SetEnvironmentMap(envSrv);
+
         obj->Update();
 
         // 描画先を RT へ（色RTのバリア＋クリアは PreDrawScene を利用）
         rt->PreDrawScene(cmdList, dx);
         // MRT（色＋マスク）＋自前DSV＋128x128ビューポートに上書き
+        // ※クリア色は必ず「作成時の最適化クリア値」と一致させること（警告ブレーク対策）
         D3D12_CPU_DESCRIPTOR_HANDLE rtvs[2] = { rt->GetRtvHandle(), maskRT_->GetRtvHandle() };
         cmdList->OMSetRenderTargets(2, rtvs, FALSE, &thumbDsvHandle_);
         const float maskClear[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -435,6 +484,16 @@ void FileEditor::DrawDebugUI() {
         bool hovered = ImGui::IsItemHovered();
         bool selected = ( e.fullPath == openedFile_ );
 
+        // モデルはドラッグ元にする（ヒエラルキーへD&Dで配置できる）
+        Kind dragKind = Classify(e.name, e.isDir);
+        if ( dragKind == Kind::Model && IsModelThumbable(e.name)
+            && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID) ) {
+            std::string stem = fs::path(e.fullPath).stem().string();
+            ImGui::SetDragDropPayload("DND_MODEL", stem.c_str(), stem.size() + 1);
+            ImGui::Text("モデルを配置: %s", stem.c_str());
+            ImGui::EndDragDropSource();
+        }
+
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 tileEnd(p0.x + cell, p0.y + tileH);
         // カード風の下地（常時薄く、ホバー/選択で強調）
@@ -455,8 +514,8 @@ void FileEditor::DrawDebugUI() {
             if ( it != thumbCache_.end() ) srv = it->second;
             else                           pending_.push_back(e.fullPath);
         }
-        // モデルは3Dサムネイル（RTのSRV）。未描画なら積む
-        else if ( kind == Kind::Model ) {
+        // モデルは3Dサムネイル（RTのSRV）。未描画なら積む（.obj/.gltf のみ）
+        else if ( kind == Kind::Model && IsModelThumbable(e.name) ) {
             auto it = modelThumbs_.find(e.fullPath);
             if ( it != modelThumbs_.end() ) { if ( it->second ) srv = it->second->GetSrvIndex(); }
             else                            pendingModels_.push_back(e.fullPath);
@@ -511,18 +570,50 @@ void FileEditor::DrawDebugUI() {
 
     ImGui::BeginChild("editor", ImVec2(0.0f, 0.0f), true);
     if ( !openedFile_.empty() ) {
-        ImGui::Text("編集中: %s", openedFile_.c_str());
-        ImGui::SameLine();
-        if ( dirty_ ) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "[未保存]");
-        else          ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "[保存済]");
+        // 開いているファイルの種別で右ペインの内容を切り替える
+        std::string openedName = fs::path(openedFile_).filename().string();
+        Kind okind = Classify(openedName, false);
+        bool isImage   = ( okind == Kind::Image ) && IsThumbable(openedName);
+        bool isModel   = ( okind == Kind::Model );
+        bool isMapJson = ( LowerExt(openedName) == ".json" )
+            && openedFile_.find("resources/map/") != std::string::npos;
+        bool isText    = !isImage && !isModel && !isBinaryOpened_;
 
-        if ( ImGui::Button("保存") ) { SaveFile(); }
-        ImGui::SameLine();
-        if ( ImGui::Button("再読込") ) { OpenFile(openedFile_); }
-        ImGui::SameLine();
+        ImGui::Text("選択中: %s", openedFile_.c_str());
+        if ( isText ) {
+            ImGui::SameLine();
+            if ( dirty_ ) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "[未保存]");
+            else          ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "[保存済]");
+        }
+
+        // --- アクション行（種別ごと） ---
+        if ( isText ) {
+            if ( ImGui::Button("保存") ) { SaveFile(); }
+            ImGui::SameLine();
+            if ( ImGui::Button("再読込") ) { OpenFile(openedFile_); }
+            ImGui::SameLine();
+            // Ctrl+S 保存
+            if ( ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S) ) { SaveFile(); }
+        }
+        if ( isModel && IsModelThumbable(openedName) ) {
+            if ( ImGui::Button("シーンに配置（カメラの前に出ます）") ) {
+                if ( LevelEditor* le = EditorManager::GetInstance()->GetLevelEditor() ) {
+                    le->SpawnObject(fs::path(openedFile_).stem().string());
+                    status_ = "配置しました: " + openedName;
+                }
+            }
+            ImGui::SameLine();
+        }
+        if ( isMapJson ) {
+            if ( ImGui::Button("マップとして読み込む") ) {
+                if ( LevelEditor* le = EditorManager::GetInstance()->GetLevelEditor() ) {
+                    le->LoadAndCreateMap(openedFile_);
+                    status_ = "マップを読み込みました: " + openedName;
+                }
+            }
+            ImGui::SameLine();
+        }
         if ( ImGui::Button("削除") ) { ImGui::OpenPopup("delete_confirm"); }
-        // Ctrl+S 保存
-        if ( ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S) ) { SaveFile(); }
 
         if ( ImGui::BeginPopup("delete_confirm") ) {
             ImGui::Text("本当に削除しますか？");
@@ -532,9 +623,51 @@ void FileEditor::DrawDebugUI() {
             ImGui::EndPopup();
         }
 
-        if ( isBinaryOpened_ ) {
+        ImGui::Separator();
+
+        // --- 本文（種別ごと） ---
+        if ( isImage ) {
+            // 画像は大きなプレビューを表示
+            uint32_t srv = kNoThumb;
+            auto it = thumbCache_.find(openedFile_);
+            if ( it != thumbCache_.end() ) srv = it->second;
+            else                           pending_.push_back(openedFile_); // 次フレームで読み込み
+            if ( srv != kNoThumb ) {
+                const TextureData& td = TextureManager::GetInstance()->GetTextureDataBySrvIndex(srv);
+                float w = td.width  > 0.0f ? td.width  : 256.0f;
+                float h = td.height > 0.0f ? td.height : 256.0f;
+                ImGui::Text("サイズ: %.0f x %.0f", w, h);
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                float scale = ( std::min )( ( avail.x - 8.0f ) / w, ( avail.y - 8.0f ) / h );
+                if ( scale > 4.0f ) scale = 4.0f;       // 拡大しすぎ防止
+                if ( scale <= 0.0f ) scale = 0.1f;
+                D3D12_GPU_DESCRIPTOR_HANDLE hgpu = SrvManager::GetInstance()->GetGPUDescriptorHandle(srv);
+                ImGui::Image(( ImTextureID ) ( uintptr_t ) hgpu.ptr, ImVec2(w * scale, h * scale));
+            } else {
+                ImGui::TextDisabled("プレビューを読み込み中...");
+            }
+        } else if ( isModel ) {
+            // モデルは3Dプレビュー＋配置
+            if ( IsModelThumbable(openedName) ) {
+                auto it = modelThumbs_.find(openedFile_);
+                if ( it != modelThumbs_.end() && it->second ) {
+                    float size = ( std::min )( ImGui::GetContentRegionAvail().x - 8.0f, 320.0f );
+                    if ( size < 64.0f ) size = 64.0f;
+                    D3D12_GPU_DESCRIPTOR_HANDLE hgpu =
+                        SrvManager::GetInstance()->GetGPUDescriptorHandle(it->second->GetSrvIndex());
+                    ImGui::Image(( ImTextureID ) ( uintptr_t ) hgpu.ptr, ImVec2(size, size));
+                } else if ( it != modelThumbs_.end() ) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "このモデルは読み込みできませんでした");
+                } else {
+                    pendingModels_.push_back(openedFile_); // 次フレームで3D描画
+                    ImGui::TextDisabled("3Dプレビューを生成中...");
+                }
+            } else {
+                ImGui::TextDisabled("この形式（.blend / .fbx）はプレビュー非対応です");
+            }
+        } else if ( isBinaryOpened_ ) {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
-                "バイナリ/未対応形式のため編集できません（画像・モデル等）");
+                "バイナリ/未対応形式のため編集できません");
         } else {
             ImVec2 avail = ImGui::GetContentRegionAvail();
             if ( ImGui::InputTextMultiline("##edit", textBuffer_.data(),
@@ -544,7 +677,7 @@ void FileEditor::DrawDebugUI() {
             }
         }
     } else {
-        ImGui::TextDisabled("左のリストからテキストファイルを選ぶと編集できます");
+        ImGui::TextDisabled("左のリストからファイルを選ぶと、編集・プレビュー・シーン配置ができます");
     }
     ImGui::EndChild();
 

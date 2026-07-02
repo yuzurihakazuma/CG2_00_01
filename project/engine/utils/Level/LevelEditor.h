@@ -47,11 +47,33 @@ public:
     // 現在開いているファイルに上書き保存する（名前入力不要）
     void QuickSave();
 
-private:
-    // 見える位置（カメラ前方）にモデルを1個配置する共通処理
+    // 見える位置（カメラ前方）にモデルを1個配置する
+    // （ファイルエディタなど外部からも使えるよう public）
     void SpawnObject(const std::string& type);
+
+    // --- Undo / Redo ---
+    void PushUndo();   // 変更「前」に呼んで履歴に積む
+    void Undo();       // Ctrl+Z
+    void Redo();       // Ctrl+Y
+
+    // --- ノードエディタ用アクセス（配置オブジェクトをノードから動かす） ---
+    int         GetObjectCount() const;
+    std::string GetObjectLabel(int index) const;    // 表示用 "0: block"
+    void        SetObjectPosY(int index, float y);  // Y座標を反映
+    void        SetObjectRotY(int index, float r);  // Y回転を反映（ラジアン）
+    void        SetObjectScale(int index, float s); // 均一スケールを反映
+    void        SetObjectShaderParam(int index, float v); // シェーダーパラメータ(0〜1)を反映
+    Obj3d*      GetObject3d(int index);             // 表示オブジェクトを取得（シェーダー適用用）
+
+private:
     // カメラの前方にあるスポーン地点を計算する
     Vector3 CalcSpawnPoint() const;
+    // levelData_ の内容から表示用 object3ds_ を作り直す（Undo/Redo用）
+    void RebuildObjects();
+
+    // Undo/Redo 履歴（LevelData のスナップショット）
+    std::vector<LevelData> undoStack_;
+    std::vector<LevelData> redoStack_;
 
     // アセットブラウザ用：resources/ から見つけたモデル1件分
     struct AssetEntry{

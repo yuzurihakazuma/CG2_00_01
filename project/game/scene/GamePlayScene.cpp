@@ -253,8 +253,14 @@ void GamePlayScene::Update(){
 
 	Input* input = Input::GetInstance();
 
+	// ゲームプレイ入力の許可判定：
+	//   エディタが閉じている（通常プレイ） or エディタ表示中でも Play モードなら操作可。
+	//   Edit モード中（編集作業中）は誤操作防止のためゲーム入力を止める。
+	bool gameplayInput = !EditorManager::GetInstance()->IsActive()
+		|| EditorManager::GetInstance()->GetMode() == EngineMode::Play;
+
 	// 1. スペースキーでエフェクト発生＋BGM再生（1か所に統合）
-	if (input->Triggerkey(DIK_SPACE)) {
+	if (gameplayInput && input->Triggerkey(DIK_SPACE)) {
 		// 新しいエフェクトを生成
 		auto newEffect = std::make_unique<HitEffect>();
 
@@ -380,8 +386,12 @@ void GamePlayScene::UpdateThrownBlocks(){
 	if ( !camera_ ) return;
 	float dt = Time::GetInstance()->GetDeltaTime();
 
+	// ゲームプレイ入力の許可判定（Edit モード中は投げられない）
+	bool gameplayInput = !EditorManager::GetInstance()->IsActive()
+		|| EditorManager::GetInstance()->GetMode() == EngineMode::Play;
+
 	// --- Bキーで生成（カメラの見ている方向へ投げる） ---
-	if ( Input::GetInstance()->Triggerkey(DIK_B) ) {
+	if ( gameplayInput && Input::GetInstance()->Triggerkey(DIK_B) ) {
 		// カメラのワールド行列から前方向(+Z)を取り出す
 		const Matrix4x4& w = camera_->GetWorldMatrix();
 		Vector3 fwd = { w.m[2][0], w.m[2][1], w.m[2][2] };
