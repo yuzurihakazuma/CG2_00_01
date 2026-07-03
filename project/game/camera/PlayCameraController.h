@@ -53,13 +53,19 @@ private:
         Vector3 offset { 0.0f, 3.0f, -6.0f };    // mode0: アンカーからのカメラ位置
         float yawRad = 3.14159f; float camDist = 10.0f; float camHeight = 3.5f; // mode1
         bool  revert = false;                    // mode1: 半径から出たら通常の向きへ戻る
+        bool  freeze = false;                    // mode1: 回転が終わるまで時間を止める
         float fovRad = 0.785f;
     };
     std::vector<Zone> zones_;
 
-    // 「戻る」設定つき向き切替ゾーンに入っている間、そのゾーン番号を覚える（-1=なし）。
-    // 半径から出た瞬間に追従の目標を通常（followOffset_ 基準）へ戻すため。
-    int activeRevertZone_ = -1;
+    // 回転フリーズ：向き切替（freeze指定）の回転が終わるまで時間を止める。
+    //   時間停止中も dt=0 になるため、回転の補間はリアル時間(1/60)で進める。
+    bool freezingRotation_ = false;
+
+    // 今「入っている」扱いのゾーン番号（-1=なし）。
+    //   入り=半径ちょうど / 出=半径×1.25 のヒステリシス付き。境界に立った時に
+    //   入退場が毎フレーム入れ替わってカメラが震えるのを防ぐ。切替の適用は入った瞬間だけ。
+    int lastZone_ = -1;
 
     // 追従の目標を通常（followOffset_ 基準）へ戻す（Cur は補間で滑らかに追いつく）
     void SetDefaultTargets();

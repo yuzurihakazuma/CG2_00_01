@@ -3,6 +3,7 @@
 #include "engine/camera/Camera.h"
 #include "engine/rail/SplineRail.h"
 #include "engine/graphics/DebugDraw.h"
+#include "engine/base/TimeManager.h" // 回転フリーズ（タイムスケール制御）用
 #include "engine/math/VectorMath.h"
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -30,10 +31,11 @@ void PlayCameraController::Sync(const std::vector<LevelCameraZone>& zones, const
         cz.camDist   = z.dist;
         cz.camHeight = z.height;
         cz.revert    = ( z.revert != 0 );
+        cz.freeze    = ( z.freeze != 0 );
         cz.fovRad = z.fovDeg * 3.14159265f / 180.0f;
         zones_.push_back(cz);
     }
-    activeRevertZone_ = -1;
+    lastZone_ = -1;
 }
 
 // 追従の目標だけを通常（followOffset_ 基準）へ戻す。Cur はそのまま＝補間で滑らかに復帰する
@@ -52,7 +54,9 @@ void PlayCameraController::Reset(){
     camDistCur_ = camDistTgt_;
     camHgtCur_  = camHgtTgt_;
     camFovCur_  = camFovTgt_;
-    activeRevertZone_ = -1;
+    lastZone_ = -1;
+    // 回転フリーズ中にモードが切り替わっても時間が止まったままにならないよう必ず戻す
+    if ( freezingRotation_ ) { Time::GetInstance()->SetTimeScale(1.0f); freezingRotation_ = false; }
 }
 
 void PlayCameraController::Update(Camera* camera, const Vector3& playerPos, const std::vector<SplineRail>& rails,
@@ -60,35 +64,73 @@ void PlayCameraController::Update(Camera* camera, const Vector3& playerPos, cons
     if ( !followCam_ || !camera ) return;
     if ( debugCamActive ) return; // デバッグカメラ優先
 
-    // 半径内のゾーンを探す（一番近いもの）。mode を問わず1個だけ有効。
+    // --- ゾーンの入退場判定（ヒステリシス付き）---
+    //   入り=半径ちょうど / 出=半径×1.25。境界ぴったりに立った時に「入った/出た」が
+    //   毎フレーム入れ替わり、目標角が交互に切り替わってカメラが激しく震えるのを防ぐ。
+    //   さらに向き切替の適用は「入った瞬間だけ」にして、境界での再発火（フリーズ連打）も防ぐ。
+
+    // 1) 今入っているゾーンからの離脱チェック
+    if ( lastZone_ >= 0 && lastZone_ < ( int ) zones_.size() ) {
+        const Zone& z = zones_[lastZone_];
+        bool leave = true;
+        if ( z.rail >= 0 && z.rail < ( int ) rails.size() ) {
+            Vector3 a = rails[z.rail].GetPositionByDistance(z.dist);
+            leave = ( Length(playerPos - a) > z.radius * 1.25f ); // 出る判定は少し外側
+        }
+        if ( leave ) {
+            // 「戻る」設定の向き切替から出た → 追従の目標を通常へ（Cur は補間でゆっくり戻る）
+            if ( z.mode == 1 && z.revert ) { SetDefaultTargets(); }
+            lastZone_ = -1;
+        }
+    } else {
+        lastZone_ = -1;
+    }
+
+    // 2) 未入場なら、新しく入ったゾーンを探す（一番近いもの）
+    if ( lastZone_ < 0 ) {
+        float bestD = 1e30f;
+        for ( int i = 0; i < ( int ) zones_.size(); ++i ) {
+            const Zone& z = zones_[i];
+            if ( z.rail < 0 || z.rail >= ( int ) rails.size() ) continue;
+            Vector3 a = rails[z.rail].GetPositionByDistance(z.dist); // 動くレールなら animOffset 込みで追従
+            float d = Length(playerPos - a);
+            if ( d < z.radius && d < bestD ) { bestD = d; lastZone_ = i; }
+        }
+        // 入った瞬間だけ、向き切替の目標を適用（毎フレーム適用しない）
+        if ( lastZone_ >= 0 && zones_[lastZone_].mode == 1 ) {
+            const Zone& z = zones_[lastZone_];
+            camYawTgt_  = z.yawRad;
+            camDistTgt_ = z.camDist;
+            camHgtTgt_  = z.camHeight;
+            camFovTgt_  = z.fovRad;
+
+            // 「回転中は時間を止める」：まだ大きく回す必要があるならフリーズ開始。
+            //   （角度を少し変えるだけの演出は freeze OFF でそのまま進ませる＝ゾーンごとに選べる）
+            if ( z.freeze ) {
+                float dy = camYawTgt_ - camYawCur_;
+                while ( dy >  3.14159265f ) dy -= 2.0f * 3.14159265f;
+                while ( dy < -3.14159265f ) dy += 2.0f * 3.14159265f;
+                if ( std::abs(dy) > 0.26f ) { freezingRotation_ = true; } // 約15°以上回すなら停止演出
+            }
+        }
+    }
+
+    // 3) 固定カメラ(mode0)ゾーンに入っている間の情報（毎フレーム位置を追う）
     const Zone* active = nullptr;
-    int     activeIdx = -1;
     Vector3 anchor {};
-    float bestD = 1e30f;
-    for ( int i = 0; i < ( int ) zones_.size(); ++i ) {
-        const Zone& z = zones_[i];
-        if ( z.rail < 0 || z.rail >= ( int ) rails.size() ) continue;
-        Vector3 a = rails[z.rail].GetPositionByDistance(z.dist); // 動くレールなら animOffset 込みで追従
-        float d = Length(playerPos - a);
-        if ( d < z.radius && d < bestD ) { bestD = d; active = &z; activeIdx = i; anchor = a; }
+    if ( lastZone_ >= 0 && zones_[lastZone_].mode == 0 ) {
+        const Zone& z = zones_[lastZone_];
+        if ( z.rail >= 0 && z.rail < ( int ) rails.size() ) {
+            anchor = rails[z.rail].GetPositionByDistance(z.dist);
+            active = &z;
+        }
     }
 
-    // 向き切替トリガー：目標の向き/距離/高さ/画角を更新
-    //   revert=OFF → 半径を出ても維持（次のトリガーまで）
-    //   revert=ON  → 半径から出た瞬間に通常の向きへ滑らかに戻る
-    if ( active && active->mode == 1 ) {
-        camYawTgt_  = active->yawRad;
-        camDistTgt_ = active->camDist;
-        camHgtTgt_  = active->camHeight;
-        camFovTgt_  = active->fovRad;
-        activeRevertZone_ = active->revert ? activeIdx : -1;
-    } else if ( activeRevertZone_ >= 0 && activeIdx != activeRevertZone_ ) {
-        // 「戻る」設定のゾーンから出た → 追従の目標を通常へ復元（Cur は補間でゆっくり戻る）
-        SetDefaultTargets();
-        activeRevertZone_ = -1;
-    }
-
-    float k = ( std::min )( 4.0f * dt, 1.0f );
+    // 回転フリーズ中：時間を止める（毎フレーム上書き＝ヒットストップ終了で戻されても維持）。
+    //   dt=0 になるので、カメラの補間だけリアル時間(1/60)で進めて回転を完了させる。
+    if ( freezingRotation_ ) { Time::GetInstance()->SetTimeScale(0.0f); }
+    float camDt = freezingRotation_ ? ( 1.0f / 60.0f ) : dt;
+    float k = ( std::min )( 4.0f * camDt, 1.0f );
 
     // 目標のカメラ位置と視野角
     Vector3 targetPos;
@@ -102,6 +144,13 @@ void PlayCameraController::Update(Camera* camera, const Vector3& playerPos, cons
         float dyaw = camYawTgt_ - camYawCur_;
         while ( dyaw >  3.14159265f ) dyaw -= 2.0f * 3.14159265f;
         while ( dyaw < -3.14159265f ) dyaw += 2.0f * 3.14159265f;
+
+        // 回転フリーズ：ほぼ回り終わったら時間を戻してゲーム再開
+        if ( freezingRotation_ && std::abs(dyaw) < 0.05f ) {
+            freezingRotation_ = false;
+            Time::GetInstance()->SetTimeScale(1.0f);
+        }
+
         camYawCur_  += dyaw * k;
         camDistCur_ += ( camDistTgt_ - camDistCur_ ) * k;
         camHgtCur_  += ( camHgtTgt_  - camHgtCur_ )  * k;

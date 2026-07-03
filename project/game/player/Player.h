@@ -53,6 +53,8 @@ private: // メンバ変数
 
     // カメラの向き(yaw)。入力のキー割り当てを画面基準に回すために使う
     float camYaw_ = 0.0f;
+    // 直近に確定したキー割り当ての向き(0〜3)。カメラ回転の途中は前回を維持（ちらつき防止）
+    mutable int lastKeyQuad_ = 0;
 
     bool movementLocked_ = false; // true の間は移動・ジャンプ入力を無視（構え中など）
 

@@ -38,6 +38,7 @@ struct LevelCameraZone{
     float   dist      = 10.0f;          // プレイヤーからの距離 (m)
     float   height    = 3.5f;           // プレイヤーからの高さ (m)
     int     revert    = 0;              // 1=半径から出たら通常の向きへ戻る / 0=次のトリガーまで維持
+    int     freeze    = 0;              // 1=回転が終わるまで時間を止める / 0=動きながら回す
     // --- 共通 ---
     float   fovDeg    = 45.0f;          // 視野角（度）。45=標準
 };

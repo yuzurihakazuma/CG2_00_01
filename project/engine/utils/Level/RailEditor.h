@@ -145,6 +145,7 @@ private:
 
     // カメラプレビュー要求（DrawCameraWindow で積み、シーンが Consume で受け取る）
     bool    camPreviewPending_ = false;
+    bool    camPreviewLive_ = false; // ON の間、毎フレーム要求を出す＝スライダー操作が即カメラに反映
     Vector3 camPreviewPos_ { 0.0f, 0.0f, 0.0f };
     Vector3 camPreviewRot_ { 0.0f, 0.0f, 0.0f };
 

@@ -108,7 +108,7 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
             { "mode", z.mode },
             { "offset", { z.offset.x, z.offset.y, z.offset.z } },
             { "yawDeg", z.yawDeg }, { "dist", z.dist }, { "height", z.height },
-            { "revert", z.revert },
+            { "revert", z.revert }, { "freeze", z.freeze },
             { "fovDeg", z.fovDeg },
         });
     }
@@ -280,6 +280,7 @@ LevelData LevelManager::Load(const std::string& fileName){
             z.dist   = jz.value("dist", 10.0f);
             z.height = jz.value("height", 3.5f);
             z.revert = jz.value("revert", 0); // 旧データは維持(0)扱い
+            z.freeze = jz.value("freeze", 0); // 旧データは止めない(0)扱い
             z.fovDeg = jz.value("fovDeg", 45.0f);
             levelData.cameraZones.push_back(z);
         }

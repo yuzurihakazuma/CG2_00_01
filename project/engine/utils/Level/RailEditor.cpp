@@ -1432,8 +1432,9 @@ void RailEditor::DrawCameraWindow(){
 		const auto& z = data_->cameraZones[i];
 		char zlabel[128];
 		if ( z.mode == 1 ) {
-			snprintf(zlabel, sizeof(zlabel), "%d : [向き切替 %.0f°%s] レール%d ノード%d",
-				i, z.yawDeg, ( z.revert != 0 ? "・戻る" : "・維持" ), z.railIndex, z.nodeIndex);
+			snprintf(zlabel, sizeof(zlabel), "%d : [向き切替 %.0f°%s%s] レール%d ノード%d",
+				i, z.yawDeg, ( z.revert != 0 ? "・戻る" : "・維持" ),
+				( z.freeze != 0 ? "・停止" : "" ), z.railIndex, z.nodeIndex);
 		} else {
 			snprintf(zlabel, sizeof(zlabel), "%d : [固定カメラ] レール%d ノード%d (半径%.1fm)",
 				i, z.railIndex, z.nodeIndex, z.radius);
@@ -1455,23 +1456,51 @@ void RailEditor::DrawCameraWindow(){
 		LevelCameraZone& z = data_->cameraZones[selectedCamZone_];
 		bool zchanged = false;
 
+		// 対象（レール/ノード）をここから直接変更できる（Game Viewで選び直さなくてよい）
+		int railMax = ( int ) data_->railLines.size() - 1;
+		ImGui::SetNextItemWidth(110.0f);
+		if ( ImGui::InputInt("対象レール", &z.railIndex) ) {
+			z.railIndex = std::clamp(z.railIndex, 0, ( std::max )( railMax, 0 ));
+			zchanged = true;
+		}
+		ImGui::SameLine();
+		int nodeMax = ( z.railIndex >= 0 && z.railIndex <= railMax )
+			? ( int ) data_->railLines[z.railIndex].size() - 1 : 0;
+		ImGui::SetNextItemWidth(110.0f);
+		if ( ImGui::InputInt("ノード", &z.nodeIndex) ) {
+			z.nodeIndex = std::clamp(z.nodeIndex, 0, ( std::max )( nodeMax, 0 ));
+			zchanged = true;
+		}
+
 		const char* modeLabels[] = { "固定カメラ（範囲内だけ）", "向き切替（通過で回す）" };
 		ImGui::SetNextItemWidth(240.0f);
 		zchanged |= ImGui::Combo("モード", &z.mode, modeLabels, 2);
 
 		if ( z.mode == 1 ) {
-			ImGui::SetNextItemWidth(180.0f);
+			// よく使う向きはワンクリックで
+			ImGui::TextDisabled("向き:");
+			ImGui::SameLine(); if ( ImGui::SmallButton("後ろ(0°)") )   { z.yawDeg = 0.0f;    zchanged = true; }
+			ImGui::SameLine(); if ( ImGui::SmallButton("右(90°)") )    { z.yawDeg = 90.0f;   zchanged = true; }
+			ImGui::SameLine(); if ( ImGui::SmallButton("正面(180°)") ) { z.yawDeg = 180.0f;  zchanged = true; }
+			ImGui::SameLine(); if ( ImGui::SmallButton("左(-90°)") )   { z.yawDeg = -90.0f;  zchanged = true; }
+			ImGui::SetNextItemWidth(200.0f);
 			zchanged |= ImGui::SliderFloat("カメラの向き (度)", &z.yawDeg, -180.0f, 180.0f, "%.0f");
-			ImGui::TextDisabled("0=後ろから / 180=正面から(180度回転) / ±90=横から");
 			ImGui::SetNextItemWidth(140.0f);
 			zchanged |= ImGui::DragFloat("距離 (m)", &z.dist, 0.1f, 2.0f, 40.0f);
 			ImGui::SetNextItemWidth(140.0f);
 			zchanged |= ImGui::DragFloat("高さ (m)", &z.height, 0.1f, 0.0f, 30.0f);
+
 			// 半径から出たら通常の向きへ戻すか（OFF=次のトリガーまで維持）
 			bool rev = ( z.revert != 0 );
 			if ( ImGui::Checkbox("離れたら元の向きに戻す", &rev) ) { z.revert = rev ? 1 : 0; zchanged = true; }
 			ImGui::SameLine();
 			ImGui::TextDisabled(rev ? "(区間演出向け)" : "(次のトリガーまで維持)");
+
+			// 回転が終わるまで時間を止めるか（角度を少し変えるだけなら OFF で動きながら回す）
+			bool frz = ( z.freeze != 0 );
+			if ( ImGui::Checkbox("回転中は時間を止める", &frz) ) { z.freeze = frz ? 1 : 0; zchanged = true; }
+			ImGui::SameLine();
+			ImGui::TextDisabled(frz ? "(回り終わったら再開)" : "(動きながら回す)");
 		} else {
 			zchanged |= ImGui::DragFloat3("カメラ位置オフセット", &z.offset.x, 0.1f);
 		}
@@ -1481,34 +1510,50 @@ void RailEditor::DrawCameraWindow(){
 		zchanged |= ImGui::DragFloat("発動半径 (m)", &z.radius, 0.1f, 0.5f, 30.0f);
 		if ( zchanged ) { ++railVersion_; }
 
-		// --- プレビュー：この画角をメインカメラにワンショット適用（アンカーを注視）---
-		if ( ImGui::Button("この画角をプレビュー") ) {
+		// --- プレビュー ---
+		//   ボタン=ワンショット / ライブ=ONの間、値をいじるたびにメインカメラへ即反映
+		auto pushPreview = [&](){
 			Vector3 a;
-			if ( anchorPos(z, a) ) {
-				Vector3 camPos;
-				if ( z.mode == 1 ) {
-					float yawRad = z.yawDeg * 3.14159265f / 180.0f;
-					camPos = { a.x + std::sin(yawRad) * z.dist, a.y + z.height, a.z - std::cos(yawRad) * z.dist };
-				} else {
-					camPos = { a.x + z.offset.x, a.y + z.offset.y, a.z + z.offset.z };
-				}
-				// アンカー（プレイヤーの立ち位置想定）を注視する回転
-				Vector3 look = { a.x - camPos.x, ( a.y + 1.0f ) - camPos.y, a.z - camPos.z };
-				float horiz = std::sqrt(look.x * look.x + look.z * look.z);
-				camPreviewPos_ = camPos;
-				camPreviewRot_ = { std::atan2(-look.y, horiz), std::atan2(look.x, look.z), 0.0f };
-				camPreviewPending_ = true;
+			if ( !anchorPos(z, a) ) return;
+			Vector3 camPos;
+			if ( z.mode == 1 ) {
+				float yawRad = z.yawDeg * 3.14159265f / 180.0f;
+				camPos = { a.x + std::sin(yawRad) * z.dist, a.y + z.height, a.z - std::cos(yawRad) * z.dist };
+			} else {
+				camPos = { a.x + z.offset.x, a.y + z.offset.y, a.z + z.offset.z };
 			}
+			// アンカー（プレイヤーの立ち位置想定）を注視する回転
+			Vector3 look = { a.x - camPos.x, ( a.y + 1.0f ) - camPos.y, a.z - camPos.z };
+			float horiz = std::sqrt(look.x * look.x + look.z * look.z);
+			camPreviewPos_ = camPos;
+			camPreviewRot_ = { std::atan2(-look.y, horiz), std::atan2(look.x, look.z), 0.0f };
+			camPreviewPending_ = true;
+		};
+
+		if ( ImGui::Button("この画角をプレビュー") ) { pushPreview(); }
+		ImGui::SameLine();
+		if ( ImGui::Checkbox("ライブプレビュー", &camPreviewLive_) ) { /* トグルだけ */ }
+		if ( camPreviewLive_ ) {
+			pushPreview(); // ONの間は毎フレーム反映＝スライダーを動かすと画角がその場で変わる
+			ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1.0f), "● ライブ中：値をいじるとカメラが即追従");
+		} else {
+			ImGui::TextDisabled("(ライブONで、いじった値がすぐ画面に反映される)");
+		}
+
+		if ( ImGui::Button("このゾーンを複製") ) {
+			LevelCameraZone dup = z;
+			data_->cameraZones.push_back(dup);
+			selectedCamZone_ = ( int ) data_->cameraZones.size() - 1;
+			++railVersion_;
 		}
 		ImGui::SameLine();
-		ImGui::TextDisabled("(メインカメラをこの位置へ)");
-
 		if ( ImGui::Button("このゾーンを削除") ) {
 			data_->cameraZones.erase(data_->cameraZones.begin() + selectedCamZone_);
 			selectedCamZone_ = -1;
 			++railVersion_;
 		}
 	} else {
+		camPreviewLive_ = false; // 選択が無ければライブ解除
 		ImGui::TextDisabled("(一覧からゾーンを選択すると編集できます)");
 	}
 

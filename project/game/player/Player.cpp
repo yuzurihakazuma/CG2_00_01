@@ -169,13 +169,27 @@ void Player::DetachToAir(const SplineRail& cur, float edgeS){
 //   どの向きでも「押したキーの方向＝画面で進む方向」が一致する。
 //   ※連続角で合成せず90°に量子化することで、既存の移動ロジック（dsSign等）を一切変えずに済む。
 void Player::GetWorldKeys(int& plusX, int& minusX, int& plusZ, int& minusZ) const{
+    // camYaw_ は「カメラが見ている方向」の yaw（camera->GetRotation().y）。
+    //   画面の奥(W) = 注視方向 (sinθ, cosθ) / 画面の右(D) = (cosθ, -sinθ)。
+    //   θ=+90°: W=+X, D=-Z / θ=-90°: W=-X, D=+Z（±90°を取り違えないこと！）
     const float kHalfPi = 1.57079632f;
-    int q = ( int ) std::lround(camYaw_ / kHalfPi);
-    q = ( ( q % 4 ) + 4 ) % 4; // 0=通常 / 1=+90° / 2=180° / 3=-90°
+    int qi = ( int ) std::lround(camYaw_ / kHalfPi);
+
+    // ヒステリシス：90°の中心から大きく外れている（＝カメラが回転の途中）間は
+    // 前回の割り当てを維持する。境界(45°)付近で毎フレーム切り替わるのを防ぐ。
+    float diff = std::abs(camYaw_ - qi * kHalfPi);
+    int q;
+    if ( diff < 0.6f ) { // 中心から約34°以内なら確定
+        q = ( ( qi % 4 ) + 4 ) % 4;
+        lastKeyQuad_ = q;
+    } else {
+        q = lastKeyQuad_; // 回転途中は前回の向きのまま
+    }
+
     switch ( q ) {
-    case 1:  plusX = DIK_S; minusX = DIK_W; plusZ = DIK_D; minusZ = DIK_A; break; // 横から(+90°)
+    case 1:  plusX = DIK_W; minusX = DIK_S; plusZ = DIK_A; minusZ = DIK_D; break; // 注視+90°（左側から見る）
     case 2:  plusX = DIK_A; minusX = DIK_D; plusZ = DIK_S; minusZ = DIK_W; break; // 正面(180°)＝完全反転
-    case 3:  plusX = DIK_W; minusX = DIK_S; plusZ = DIK_A; minusZ = DIK_D; break; // 横から(-90°)
+    case 3:  plusX = DIK_S; minusX = DIK_W; plusZ = DIK_D; minusZ = DIK_A; break; // 注視-90°（右側から見る）
     default: plusX = DIK_D; minusX = DIK_A; plusZ = DIK_W; minusZ = DIK_S; break; // 後ろから(0°)
     }
 }

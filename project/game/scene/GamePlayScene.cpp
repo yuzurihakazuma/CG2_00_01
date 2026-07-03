@@ -347,6 +347,11 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
 		railField_.ResetMotion();
+		// カメラ関連の後始末：
+		//   ・回転フリーズ中に Stop しても時間が止まったままにならないよう Reset（内部で TimeScale を戻す）
+		//   ・ゾーンで視野角を変えたまま戻るとエディタ画面が広角/望遠のままになるので標準に戻す
+		camCtrl_.Reset();
+		camera_->SetFovY(0.78f);
 	}
 	prevMode_ = current;
 }
