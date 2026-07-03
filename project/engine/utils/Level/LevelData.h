@@ -22,6 +22,25 @@ struct LevelEnemyData{
     float distance = 0.0f;
 };
 
+// レール上のカメラ演出ゾーン1個分のデータ（マップ保存用）。
+//   mode=0（固定カメラ）: 半径内にいる間だけ「アンカー+offset」からプレイヤーを見る。離れると戻る。
+//   mode=1（向き切替）  : 通過した瞬間に追従カメラの向き(yaw)・距離・高さが切り替わり、
+//                         次のトリガーまで【維持】される（180度回してそのままゲーム続行、等）。
+struct LevelCameraZone{
+    int     railIndex = 0;              // アンカーのレール番号
+    int     nodeIndex = 0;              // アンカーのノード番号
+    float   radius    = 4.0f;           // 発動する半径 (m)
+    int     mode      = 1;              // 0=固定カメラ / 1=追従の向き切替（維持）
+    // --- mode=0 用 ---
+    Vector3 offset { 0.0f, 3.0f, -6.0f }; // アンカーからのカメラ位置オフセット
+    // --- mode=1 用 ---
+    float   yawDeg    = 180.0f;         // カメラの向き（0=後ろから / 180=正面から / ±90=横から）
+    float   dist      = 10.0f;          // プレイヤーからの距離 (m)
+    float   height    = 3.5f;           // プレイヤーからの高さ (m)
+    // --- 共通 ---
+    float   fovDeg    = 45.0f;          // 視野角（度）。45=標準
+};
+
 // マップ全体のデータ
 struct LevelData{
     std::string name;
@@ -69,6 +88,9 @@ struct LevelData{
     // ゴール地点（レール番号＋ノード番号）。railIndex=-1 なら未設定
     int goalRailIndex = -1;
     int goalNodeIndex = 0;
+
+    // レール上のカメラ演出ゾーン（プレイヤーが近づくとカメラが指定位置・画角になる）
+    std::vector<LevelCameraZone> cameraZones;
 
     // 敵の配置（レール上に置く敵。マップと一緒に保存/読込する）
     std::vector<LevelEnemyData> enemies;

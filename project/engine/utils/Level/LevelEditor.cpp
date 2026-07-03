@@ -186,6 +186,8 @@ void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 
 // Blenderインポータ等の外部から変換済みデータを受け取って反映する
 void LevelEditor::ApplyImportedData(const LevelData& data, bool additive){
+	PushUndo(); // インポート前を履歴へ（「元に戻す(配置)」で取り消せる）
+	dirty_ = true;
 	if ( !additive ) {
 		levelData_.objects.clear();
 		object3ds_.clear();
@@ -352,6 +354,17 @@ void LevelEditor::DrawDebugUI(){
 			dirty_ = true;
 		}
 	}
+	ImGui::SameLine();
+	// 一覧で選択中のオブジェクトをその場で削除（インスペクターまで行かなくてよい）
+	ImGui::BeginDisabled(selectedObjectIndex_ < 0 || selectedObjectIndex_ >= ( int ) levelData_.objects.size());
+	if ( ImGui::Button("選択したオブジェクトを削除") ) {
+		PushUndo(); // 削除前を履歴へ
+		levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
+		object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
+		selectedObjectIndex_ = -1;
+		dirty_ = true;
+	}
+	ImGui::EndDisabled();
 	} // CollapsingHeader: マップファイル・モデル追加
 	ImGui::Separator();
 

@@ -475,6 +475,12 @@ void BlenderImporter::DrawDebugUI(){
         Import(importedPath_);
     }
     if ( importedPath_.empty() ) ImGui::EndDisabled();
+    ImGui::SameLine();
+    // インポートの取り消し：ApplyImportedData がインポート前を配置履歴に積むので、それを1手戻す
+    if ( ImGui::Button("取り消す") ) {
+        if ( levelEditor_ ) { levelEditor_->Undo(); }
+    }
+    if ( ImGui::IsItemHovered() ) { ImGui::SetTooltip("直前のインポート（や配置操作）を1手元に戻します"); }
 
     // =========================================================
     // 4. ホットリロード（ファイル更新を検知して自動再インポート）

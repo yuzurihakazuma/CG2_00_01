@@ -162,6 +162,16 @@ private: // メンバ変数
 	// --- レール実行時管理（レール本体・緑線マーカー・動くレールを RailField に集約）---
 	RailField railField_;
 	bool goalReached_ = false; // ゴール地点に到達したか（マップ再同期でリセット）
+
+	// --- プレイ中カメラ（プレイヤー追従＋レールのカメラ演出ゾーン）---
+	bool    followCam_ = true;                     // プレイ中カメラがプレイヤーを追うか
+	Vector3 followOffset_ { 0.0f, 3.5f, -10.0f };  // 追従時のカメラオフセット
+	float   camFovCur_ = 0.78f;                    // 現在の視野角(rad)。ゾーンで滑らかに変わる
+	// 実行用カメラゾーン（Sync 時にノード番号→レール上の距離へ変換して保持）
+	struct CamZone { int rail = 0; float dist = 0.0f; float radius = 4.0f;
+	                 Vector3 offset { 0.0f, 3.0f, -6.0f }; float fovRad = 0.785f; };
+	std::vector<CamZone> camZones_;
+	void UpdatePlayCamera(float dt);               // プレイ中のカメラ更新（追従＋ゾーン切替）
 	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
 	void SyncRailsFromEditor();
 

@@ -782,6 +782,52 @@ void RailEditor::DrawWindow(){
 			ImGui::TextDisabled(" / ゴール: 未設定");
 		}
 		ImGui::Separator();
+
+		// --- カメラ演出（レール上のカメラゾーン）---
+		//   選択ノードをアンカーにゾーンを置くと、プレイヤーがそこへ来た時に
+		//   カメラが「アンカー+オフセット」の位置からプレイヤーを見る画角へ切り替わる。
+		if ( ImGui::CollapsingHeader("カメラ演出（プレイヤー通過でカメラ切替）") ) {
+			ImGui::BeginDisabled(!nodeSelected);
+			if ( ImGui::Button("選択ノードにカメラゾーンを追加") ) {
+				LevelCameraZone z;
+				z.railIndex = currentEditRailIndex_;
+				z.nodeIndex = selectedRailNode_;
+				data_->cameraZones.push_back(z);
+				selectedCamZone_ = ( int ) data_->cameraZones.size() - 1;
+				++railVersion_;
+			}
+			ImGui::EndDisabled();
+			if ( !nodeSelected ) { ImGui::TextDisabled("(Game View でノードをクリックして選択してから押す)"); }
+
+			// ゾーン一覧
+			for ( int i = 0; i < ( int ) data_->cameraZones.size(); ++i ) {
+				const auto& z = data_->cameraZones[i];
+				char zlabel[96];
+				snprintf(zlabel, sizeof(zlabel), "ゾーン%d : レール%d ノード%d (半径%.1fm, %.0f°)",
+					i, z.railIndex, z.nodeIndex, z.radius, z.fovDeg);
+				if ( ImGui::Selectable(zlabel, selectedCamZone_ == i) ) { selectedCamZone_ = i; }
+			}
+			if ( data_->cameraZones.empty() ) { ImGui::TextDisabled("(カメラゾーンなし)"); }
+
+			// 選択中ゾーンの編集
+			if ( selectedCamZone_ >= 0 && selectedCamZone_ < ( int ) data_->cameraZones.size() ) {
+				LevelCameraZone& z = data_->cameraZones[selectedCamZone_];
+				bool zchanged = false;
+				zchanged |= ImGui::DragFloat3("カメラ位置オフセット", &z.offset.x, 0.1f);
+				ImGui::SetNextItemWidth(140.0f);
+				zchanged |= ImGui::SliderFloat("視野角 (度)", &z.fovDeg, 20.0f, 100.0f, "%.0f");
+				ImGui::SetNextItemWidth(140.0f);
+				zchanged |= ImGui::DragFloat("発動半径 (m)", &z.radius, 0.1f, 0.5f, 30.0f);
+				if ( zchanged ) { ++railVersion_; }
+				if ( ImGui::Button("このゾーンを削除") ) {
+					data_->cameraZones.erase(data_->cameraZones.begin() + selectedCamZone_);
+					selectedCamZone_ = -1;
+					++railVersion_;
+				}
+				ImGui::TextDisabled("水色の球=発動範囲 / 白い箱=カメラ位置（Game Viewに表示）");
+			}
+		}
+		ImGui::Separator();
 	}
 
 	// Undo / Redo

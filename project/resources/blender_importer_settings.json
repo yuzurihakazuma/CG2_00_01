@@ -1,11 +1,11 @@
 {
     "additive": false,
     "autoImportOnStartup": false,
-    "cameraCorrection": true,
-    "convertAxes": true,
+    "cameraCorrection": false,
+    "convertAxes": false,
     "folder": "resources/blender",
     "hotReload": true,
-    "importScale": 1.0,
+    "importScale": 4.659999847412109,
     "lastImportedPath": "resources/blender/sample.json",
     "rotationInDegrees": false
 }

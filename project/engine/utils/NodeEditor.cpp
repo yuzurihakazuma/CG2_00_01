@@ -51,6 +51,16 @@ void NodeEditor::Initialize() {
     links_.push_back({ vA, mul, 0 });
     links_.push_back({ vB, mul, 1 });
     links_.push_back({ mul, res, 0 });
+
+    // プレイヤー連動の例：数値(8) → ゲーム値[0]（＝プレイヤー移動速度）。
+    //   グラフ実行ONでプレイすると移動速度が8になる。数値を変えれば即反映＝ノードがゲームへ渡る確認。
+    int vSpd = AddNode(NodeType::Value,     40.0f, 320.0f);
+    int gp   = AddNode(NodeType::GameParam, 260.0f, 320.0f);
+    for ( auto& n : nodes_ ) {
+        if ( n.id == vSpd ) n.value = 8.0f;
+        if ( n.id == gp )   n.target = 0; // 登録順0番＝プレイヤー移動速度
+    }
+    links_.push_back({ vSpd, gp, 0 });
 }
 
 // 毎フレーム：適用ノードの値をゲームに反映する（入力が接続されているものだけ）
@@ -673,7 +683,10 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
                                                IM_COL32(215, 75, 75, 255);   // 適用ノードは赤
 
         // 本体（先に敷いてドラッグ移動＆右クリック削除を受ける）
+        //   ※AllowOverlap が無いと、後から出すノード内ウィジェット（数値入力等）や
+        //   ピンへのクリックを本体ボタンが独占してしまい「数値がいじれない」バグになる。
         ImGui::SetCursorScreenPos(p0);
+        ImGui::SetNextItemAllowOverlap();
         ImGui::InvisibleButton("node", ImVec2(kNodeWidth, h));
         if ( ImGui::IsItemActivated() ) {
             raiseNodeId = n.id;      // 触ったら最前面へ
@@ -746,6 +759,20 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
             }
             // 右クリックで切断
             if ( hov && ImGui::IsMouseReleased(ImGuiMouseButton_Right) ) { RemoveLinksTo(n.id, s); }
+            // 接続済みの入力ピンを左ドラッグ → 線を「掴んで」付け替えられる
+            //   （元の出力側から接続をやり直す状態になる。そのまま別のピンへ落とせる）
+            if ( linkingFromNode_ < 0 && ImGui::IsItemActivated() && HasInputLink(n.id, s) ) {
+                for ( const Link& l : links_ ) {
+                    if ( l.toNode == n.id && l.toSlot == s ) {
+                        linkingFromNode_ = l.fromNode; // 線の根本（出力側）から張り直す
+                        break;
+                    }
+                }
+                RemoveLinksTo(n.id, s);
+                linkingSticky_ = false;
+                linkStartX_ = ImGui::GetIO().MousePos.x;
+                linkStartY_ = ImGui::GetIO().MousePos.y;
+            }
             // 接続中は全入力ピンを緑に光らせて「ここに繋げる」と分かるようにする
             ImU32 pinCol = ( linkingFromNode_ >= 0 && linkingFromNode_ != n.id )
                 ? IM_COL32(120, 255, 140, 255)

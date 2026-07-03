@@ -41,6 +41,7 @@ public:
     int GetStartNode() const{ return data_->startNodeIndex; }
     int GetGoalRail() const{ return data_->goalRailIndex; }
     int GetGoalNode() const{ return data_->goalNodeIndex; }
+    const std::vector<LevelCameraZone>& GetCameraZones() const{ return data_->cameraZones; }
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }
@@ -129,6 +130,7 @@ private:
 
     int selectedRailNode_ = -1;
     int currentEditRailIndex_ = 0; // 現在編集しているレールの番号
+    int selectedCamZone_ = -1;     // カメラ演出：一覧で選択中のゾーン番号
 
     // マウス編集モード
     bool  railDrawMode_   = false; // true=地面クリックで末尾ノード追加

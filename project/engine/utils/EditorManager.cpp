@@ -850,6 +850,10 @@ int EditorManager::GetEditorGoalRail() const{
 int EditorManager::GetEditorGoalNode() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetGoalNode() : 0;
 }
+const std::vector<LevelCameraZone>& EditorManager::GetEditorCameraZones() const{
+    static const std::vector<LevelCameraZone> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetCameraZones() : kEmpty;
+}
 
 // 敵の配置データ（マップ保存に乗せる）を levelEditor_ へ委譲
 void EditorManager::SetEditorEnemyData(const std::vector<LevelEnemyData>& e){

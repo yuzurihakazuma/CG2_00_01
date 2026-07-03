@@ -234,6 +234,22 @@ void GamePlayScene::SyncRailsFromEditor(){
 	// マップのスタート地点をプレイヤーへ（Initialize/リスポーンで使われる）
 	if ( player_ ) { player_->SetSpawn(railField_.GetStartRail(), railField_.GetStartDistance()); }
 	goalReached_ = false; // マップが変わったらゴール状態はリセット
+
+	// カメラ演出ゾーン：ノード番号をレール上の距離へ変換して実行用に持つ
+	camZones_.clear();
+	const auto& rails = railField_.GetRails();
+	for ( const auto& z : EditorManager::GetInstance()->GetEditorCameraZones() ) {
+		if ( z.railIndex < 0 || z.railIndex >= ( int ) rails.size() ) continue;
+		CamZone cz;
+		cz.rail   = z.railIndex;
+		int maxN  = ( int ) rails[z.railIndex].nodes.size() - 1;
+		int node  = std::clamp(z.nodeIndex, 0, ( std::max )( maxN, 0 ));
+		cz.dist   = rails[z.railIndex].GetDistanceFromT(( float ) node);
+		cz.radius = z.radius;
+		cz.offset = z.offset;
+		cz.fovRad = z.fovDeg * 3.14159265f / 180.0f;
+		camZones_.push_back(cz);
+	}
 }
 
 // エディタに配置された敵情報（テンプレート）に基づいて敵の実体を生成する
@@ -495,6 +511,9 @@ void GamePlayScene::UpdatePlayMode(){
 		}
 	}
 
+	// プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン）
+	UpdatePlayCamera(dt);
+
 	// スペースキー：エフェクト発生＋BGM再生
 	if ( input->Triggerkey(DIK_SPACE) ) {
 		AudioManager::GetInstance()->PlayWave(bgmFile_);
@@ -548,6 +567,62 @@ void GamePlayScene::UpdateStompCollision(){
 			stompEffects_.push_back(std::move(newStompEffect));
 		}
 	}
+}
+
+// プレイ中のカメラ更新。
+//   基本：プレイヤーを followOffset_ で追従（滑らかに寄る）。
+//   カメラ演出ゾーン：プレイヤーがゾーン半径内に入ると、カメラが
+//   「アンカー(レール上の指定ノード) + オフセット」の位置からプレイヤーを見る画角へ
+//   滑らかに切り替わる（視野角も変更可）。離れると追従へ戻る。
+void GamePlayScene::UpdatePlayCamera(float dt){
+	if ( !followCam_ || !player_ || !camera_ ) return;
+	if ( debugCamera_ && debugCamera_->IsActive() ) return; // デバッグカメラ優先
+
+	Vector3 ppos = player_->GetPosition();
+
+	// 有効なカメラゾーンを探す（半径内で一番近いもの）
+	const auto& rails = railField_.GetRails();
+	const CamZone* active = nullptr;
+	Vector3 anchor {};
+	float bestD = 1e30f;
+	for ( const auto& z : camZones_ ) {
+		if ( z.rail < 0 || z.rail >= ( int ) rails.size() ) continue;
+		Vector3 a = rails[z.rail].GetPositionByDistance(z.dist); // 動くレールなら animOffset 込みで追従
+		float d = Length(ppos - a);
+		if ( d < z.radius && d < bestD ) { bestD = d; active = &z; anchor = a; }
+	}
+
+	// 目標のカメラ位置と視野角
+	Vector3 targetPos;
+	float   targetFov;
+	if ( active ) {
+		targetPos = { anchor.x + active->offset.x, anchor.y + active->offset.y, anchor.z + active->offset.z };
+		targetFov = active->fovRad;
+	} else {
+		targetPos = { ppos.x + followOffset_.x, ppos.y + followOffset_.y, ppos.z + followOffset_.z };
+		targetFov = 0.78f; // 通常の視野角へ戻す
+	}
+
+	// 位置・画角を滑らかに補間（急に切り替わらない＝演出として自然）
+	float k = ( std::min )( 4.0f * dt, 1.0f );
+	Vector3 cur = camera_->GetWorldPosition();
+	Vector3 np = { cur.x + ( targetPos.x - cur.x ) * k,
+	               cur.y + ( targetPos.y - cur.y ) * k,
+	               cur.z + ( targetPos.z - cur.z ) * k };
+	camera_->SetTranslation(np);
+	camPrevShake_ = { 0.0f, 0.0f, 0.0f }; // シェイクの自己相殺は追従で上書きされるためリセット
+
+	// プレイヤー（少し上）を見る向きへ
+	Vector3 look = { ppos.x - np.x, ( ppos.y + 1.0f ) - np.y, ppos.z - np.z };
+	float horiz = std::sqrt(look.x * look.x + look.z * look.z);
+	if ( horiz > 1e-4f || std::abs(look.y) > 1e-4f ) {
+		float yaw   = std::atan2(look.x, look.z);
+		float pitch = std::atan2(-look.y, horiz); // +で下を向く（行ベクトル×RotX の規約）
+		camera_->SetRotation({ pitch, yaw, 0.0f });
+	}
+
+	camFovCur_ += ( targetFov - camFovCur_ ) * k;
+	camera_->SetFovY(camFovCur_);
 }
 
 // ヨッシーの「飲み込む／産む」：
@@ -715,6 +790,19 @@ void GamePlayScene::UpdateThrowAim(){
 void GamePlayScene::UpdateSceneVisuals(){
 	Input* input = Input::GetInstance();
 	EngineMode currentMode = EditorManager::GetInstance()->GetMode();
+
+	// カメラ演出ゾーンの可視化（水色の球=発動範囲 / 白い箱=カメラ位置 / 線=対応）
+	{
+		const auto& rails = railField_.GetRails();
+		for ( const auto& z : camZones_ ) {
+			if ( z.rail < 0 || z.rail >= ( int ) rails.size() ) continue;
+			Vector3 a = rails[z.rail].GetPositionByDistance(z.dist);
+			Vector3 c = { a.x + z.offset.x, a.y + z.offset.y, a.z + z.offset.z };
+			DebugDraw::GetInstance()->Sphere(a, z.radius, { 0.3f, 0.8f, 1.0f, 0.35f }, 16);
+			DebugDraw::GetInstance()->Box(c, { 0.5f, 0.4f, 0.7f }, { 1.0f, 1.0f, 1.0f, 0.9f });
+			DebugDraw::GetInstance()->Line(a, c, { 0.3f, 0.8f, 1.0f, 0.8f });
+		}
+	}
 
 	// 円柱オーラ（UVスクロール）
 	if ( auraCylinderObj_ ) {
@@ -908,6 +996,11 @@ void GamePlayScene::DrawDebugUI(){
 	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
 	bool showMarkers = railField_.ShowMarkers();
 	if ( ImGui::Checkbox("レール経路を表示", &showMarkers) ) { railField_.SetShowMarkers(showMarkers); }
+
+	// プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン）
+	ImGui::Checkbox("プレイ中カメラ: プレイヤー追従", &followCam_);
+	ImGui::DragFloat3("追従オフセット", &followOffset_.x, 0.1f);
+	ImGui::TextDisabled("ゾーン数: %d（レールエディタの「カメラ演出」で追加）", ( int ) camZones_.size());
 	ImGui::Text("マーカー数: %d", railField_.MarkerCount());
 	if ( ImGui::Button("マーカー再構築") ) { railField_.RebuildMarkers(); }
 

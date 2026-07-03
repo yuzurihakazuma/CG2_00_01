@@ -99,6 +99,20 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     j["goalRailIndex"]  = levelData.goalRailIndex;
     j["goalNodeIndex"]  = levelData.goalNodeIndex;
 
+    // カメラ演出ゾーン
+    json camArray = json::array();
+    for ( const auto& z : levelData.cameraZones ) {
+        camArray.push_back({
+            { "railIndex", z.railIndex }, { "nodeIndex", z.nodeIndex },
+            { "radius", z.radius },
+            { "mode", z.mode },
+            { "offset", { z.offset.x, z.offset.y, z.offset.z } },
+            { "yawDeg", z.yawDeg }, { "dist", z.dist }, { "height", z.height },
+            { "fovDeg", z.fovDeg },
+        });
+    }
+    j["cameraZones"] = camArray;
+
     // 敵の配置 [type, railIndex, distance]
     json enemiesArray = json::array();
     for ( const auto& e : levelData.enemies ) {
@@ -249,6 +263,25 @@ LevelData LevelManager::Load(const std::string& fileName){
     levelData.startNodeIndex = j.value("startNodeIndex", 0);
     levelData.goalRailIndex  = j.value("goalRailIndex", -1);
     levelData.goalNodeIndex  = j.value("goalNodeIndex", 0);
+
+    // カメラ演出ゾーン
+    if ( j.contains("cameraZones") && j["cameraZones"].is_array() ) {
+        for ( const auto& jz : j["cameraZones"] ) {
+            LevelCameraZone z;
+            z.railIndex = jz.value("railIndex", 0);
+            z.nodeIndex = jz.value("nodeIndex", 0);
+            z.radius    = jz.value("radius", 4.0f);
+            z.mode      = jz.value("mode", 0); // 旧データ（modeなし）は固定カメラ扱い
+            if ( jz.contains("offset") && jz["offset"].is_array() && jz["offset"].size() >= 3 ) {
+                z.offset = { jz["offset"][0], jz["offset"][1], jz["offset"][2] };
+            }
+            z.yawDeg = jz.value("yawDeg", 180.0f);
+            z.dist   = jz.value("dist", 10.0f);
+            z.height = jz.value("height", 3.5f);
+            z.fovDeg = jz.value("fovDeg", 45.0f);
+            levelData.cameraZones.push_back(z);
+        }
+    }
 
     // 敵の配置を読み込む [type, railIndex, distance]
     if ( j.contains("enemies") && j["enemies"].is_array() ) {
