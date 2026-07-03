@@ -41,6 +41,7 @@
 #include "engine/rail/SplineRail.h"
 #include "engine/utils/Level/LevelManager.h"
 #include "engine/utils/Level/LevelEditor.h"
+#include "engine/utils/Level/RailEditor.h" // カメラプレビュー要求の受け取りに使う
 
 
 using namespace VectorMath;
@@ -178,9 +179,8 @@ void GamePlayScene::SetupGameplay(){
 	// スプライト・ブロック群・GPUパーティクル
 	sprite_ = Sprite::Create(textures_["uvChecker"].srvIndex, spritePos_);
 
-	// 狙い用カーソル（構え中だけ表示。敵に重なると赤＝ロックオン）
-	cursorSprite_ = Sprite::Create(textures_["circle2"].srvIndex, { 640.0f, 360.0f });
-	cursorSprite_->SetSize({ 56.0f, 56.0f });
+	// 狙い用カーソル（構え中だけ表示。敵に重なると赤＝ロックオン。AimThrowController が所有）
+	aimThrow_.Initialize(textures_["circle2"].srvIndex);
 	blockGroup_ = std::make_unique<InstancedGroup>();
 	blockGroup_->Initialize("block", 10000);
 	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
@@ -199,6 +199,9 @@ void GamePlayScene::SetupGameplay(){
 	enemyEditor_ = std::make_unique<EnemyEditor>();
 	enemyEditor_->Initialize();
 
+	// 戦闘（踏みつけ/卵命中）＋ヒット演出（エフェクト用テクスチャを渡す）
+	combat_.Initialize(textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
+
 	// --- ノードエディタの「→ ゲーム値」に、今作っているゲームの調整値を登録する ---
 	//   ノードグラフから接続すると、プレイ中の挙動をリアルタイムに動かせる。
 	//   ※ポインタ登録なので、シーン終了時（Finalize）に必ず解除する。
@@ -207,9 +210,9 @@ void GamePlayScene::SetupGameplay(){
 		em->ClearNodeGameValues(); // シーン再初期化時の二重登録防止
 		em->RegisterNodeGameValue("プレイヤー移動速度",   player_->MoveSpeedPtr(),  0.5f, 20.0f);
 		em->RegisterNodeGameValue("ジャンプ力",           player_->JumpPowerPtr(),  1.0f, 20.0f);
-		em->RegisterNodeGameValue("卵の投げ初速",         &throwSpeedNormal_,       1.0f, 40.0f);
-		em->RegisterNodeGameValue("ロックオン投げ初速",   &throwSpeedLock_,         1.0f, 60.0f);
-		em->RegisterNodeGameValue("飲み込みの届く距離",   &swallowReach_,           0.5f, 10.0f);
+		em->RegisterNodeGameValue("卵の投げ初速",         aimThrow_.ThrowSpeedNormalPtr(), 1.0f, 40.0f);
+		em->RegisterNodeGameValue("ロックオン投げ初速",   aimThrow_.ThrowSpeedLockPtr(),   1.0f, 60.0f);
+		em->RegisterNodeGameValue("飲み込みの届く距離",   swallow_.SwallowReachPtr(), 0.5f, 10.0f);
 	}
 
 	// レール可視化用モデル（通常=緑 / 穴=赤 の2モデル。マテリアルはモデル単位で共有のため別モデルが必要）
@@ -233,106 +236,23 @@ void GamePlayScene::SyncRailsFromEditor(){
 
 	// マップのスタート地点をプレイヤーへ（Initialize/リスポーンで使われる）
 	if ( player_ ) { player_->SetSpawn(railField_.GetStartRail(), railField_.GetStartDistance()); }
-	goalReached_ = false; // マップが変わったらゴール状態はリセット
+	stageFlow_.Reset(); // マップが変わったらゴール状態はリセット
 
-	// カメラ演出ゾーン：ノード番号をレール上の距離へ変換して実行用に持つ
-	camZones_.clear();
-	const auto& rails = railField_.GetRails();
-	for ( const auto& z : EditorManager::GetInstance()->GetEditorCameraZones() ) {
-		if ( z.railIndex < 0 || z.railIndex >= ( int ) rails.size() ) continue;
-		CamZone cz;
-		cz.rail   = z.railIndex;
-		int maxN  = ( int ) rails[z.railIndex].nodes.size() - 1;
-		int node  = std::clamp(z.nodeIndex, 0, ( std::max )( maxN, 0 ));
-		cz.dist   = rails[z.railIndex].GetDistanceFromT(( float ) node);
-		cz.radius = z.radius;
-		cz.offset = z.offset;
-		cz.fovRad = z.fovDeg * 3.14159265f / 180.0f;
-		camZones_.push_back(cz);
-	}
+	// カメラ演出ゾーンを PlayCameraController へ（ノード番号→距離の変換込み）
+	camCtrl_.Sync(EditorManager::GetInstance()->GetEditorCameraZones(), railField_.GetRails());
 }
 
 // エディタに配置された敵情報（テンプレート）に基づいて敵の実体を生成する
 void GamePlayScene::SpawnEnemies(){
-	enemies_.clear();
-	if ( !enemyEditor_ ) return;
-
-	const auto& rails = railField_.GetRails();
-	const auto& spawns = enemyEditor_->GetSpawnDatas();
-	for ( const auto& spawn : spawns ) {
-		if ( spawn.railIndex < 0 || spawn.railIndex >= ( int ) rails.size() ) continue;
-		if ( rails[spawn.railIndex].nodes.size() < 2 ) continue;
-
-		auto enemy = std::make_unique<Enemy>();
-		enemy->Initialize(spawn.type, spawn.railIndex, spawn.distance);
-		// dt=0 で Update を呼び、レール上の初期位置を即座に確定させる（原点に巨大球が出るのを防ぐ）
-		enemy->Update(rails, 0.0f);
-		enemies_.push_back(std::move(enemy));
-	}
+	if ( !enemyEditor_ ) { enemyMgr_.Clear(); return; }
+	enemyMgr_.Spawn(enemyEditor_->GetSpawnDatas(), railField_.GetRails());
 }
 
-// ヒット時の手応え：一瞬の停止（ヒットストップ）とカメラ揺れをまとめて発生させる
-void GamePlayScene::TriggerHitFeel(float stopSeconds, float shakeMag){
-	hitStopTimer_  = stopSeconds;
-	camShakeTimer_ = 0.22f;
-	camShakeMag_   = shakeMag;
-}
 
-// 踏みつけ点を中心にしたポストエフェクト（歪みリップル＋スポットグロー）を毎フレーム更新する。
-//   fxWorldPos_ をスクリーンUVへ投影し、MaskedDistortion(slot0)＝衝撃波、MaskedGlow(slot1)＝閃光を出す。
-void GamePlayScene::UpdateStompPostEffect(){
-	PostEffect* pe = PostEffect::GetInstance();
-	const PostEffectType kDist = PostEffectType::MaskedDistortion;
-	const PostEffectType kGlow = PostEffectType::MaskedGlow;
-
-	auto disableFx = [&](){
-		if ( pe->GetEffectActive(kDist) ) pe->SetEffectActive(kDist, false);
-		if ( pe->GetEffectActive(kGlow) ) pe->SetEffectActive(kGlow, false);
-		};
-
-	if ( fxTimer_ <= 0.0f ) { disableFx(); return; }
-
-	const float kDuration = 0.4f;
-	fxTimer_ -= 1.0f / 60.0f; // リアル時間で進める（ヒットストップ中も波は走る）
-	float progress = 1.0f - ( fxTimer_ / kDuration );
-	progress = std::clamp(progress, 0.0f, 1.0f);
-
-	// ワールド位置 → スクリーンUV（エディタの投影式と同じ。行ベクトル規約 v*VP）
-	const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
-	const Vector3& w = fxWorldPos_;
-	float cw = w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3];
-	if ( cw <= 0.0001f ) { disableFx(); return; } // カメラ後方なら出さない
-	float cx = w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0];
-	float cy = w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1];
-	float uvX = cx / cw * 0.5f + 0.5f;
-	float uvY = 1.0f - ( cy / cw * 0.5f + 0.5f );
-
-	// 半径アニメ：歪みは外へ広がる衝撃波、グローはパッと出て消えるパルス
-	float t = 1.0f - progress;
-	float easeOut = 1.0f - t * t;
-	float distRadius = 0.06f + ( 0.55f - 0.06f ) * easeOut;
-	float glowRadius = 0.45f * std::sin( progress * 3.14159265f );
-
-	// アスペクト比（正円補正）
-	float aspect = 16.0f / 9.0f;
-	if ( WindowProc* wp = WindowProc::GetInstance() ) {
-		int h = wp->GetClientHeight();
-		if ( h > 0 ) aspect = static_cast< float >( wp->GetClientWidth() ) / static_cast< float >( h );
-	}
-
-	PostEffectMaskParams mp{};
-	mp.slot0X = uvX; mp.slot0Y = uvY; mp.slot0Radius = distRadius; // 歪み(MaskedDistortion)
-	mp.slot1X = uvX; mp.slot1Y = uvY; mp.slot1Radius = glowRadius; // グロー(MaskedGlow)
-	mp.aspectRatio = aspect;
-	pe->SetMaskParams(mp);
-
-	pe->SetEffectActive(kDist, true);
-	pe->SetEffectActive(kGlow, true);
-}
 
 // メインのフレーム更新。べた書きを段階ごとの関数に委譲して見通しを良くした。
 void GamePlayScene::Update(){
-	UpdateHitStop();              // 踏みつけ等のヒットストップ
+	hitFeel_.UpdateHitStop();     // 踏みつけ等のヒットストップ
 	SyncFromEditors();            // エディタ編集（レール／敵／カメラ要求）をシーンへ反映
 	UpdateCameraAndPostEffect();  // カメラ更新＋シェイク＋踏みつけポストエフェクト
 
@@ -346,14 +266,6 @@ void GamePlayScene::Update(){
 	UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
 }
 
-// 踏みつけ等のヒットストップ（一瞬だけ時間を止めて手応えを出す）。リアルなフレームで数える。
-void GamePlayScene::UpdateHitStop(){
-	if ( hitStopTimer_ > 0.0f ) {
-		hitStopTimer_ -= 1.0f / 60.0f;
-		Time::GetInstance()->SetTimeScale(0.0f);
-		if ( hitStopTimer_ <= 0.0f ) { Time::GetInstance()->SetTimeScale(1.0f); }
-	}
-}
 
 // エディタ側の編集（レール／敵配置／Blenderカメラ要求）を検知してシーンへ反映する。
 void GamePlayScene::SyncFromEditors(){
@@ -399,29 +311,25 @@ void GamePlayScene::SyncFromEditors(){
 			camera_->SetRotation(blCamRot);
 		}
 	}
+
+	// カメラエディタからの「この画角をプレビュー」要求を反映（メインカメラをその画角へ）
+	if ( em->GetLevelEditor() ) {
+		Vector3 pvPos, pvRot;
+		if ( em->GetLevelEditor()->GetRailEditor()->ConsumeCameraPreviewRequest(pvPos, pvRot) ) {
+			camera_->SetTranslation(pvPos);
+			camera_->SetRotation(pvRot);
+		}
+	}
 }
 
-// カメラ更新（デバッグカメラ＋ヒット時のシェイク）と踏みつけ点中心のポストエフェクト。
+// カメラ更新（デバッグカメラ＋ヒット時のシェイク）とヒット点中心のポストエフェクト。
+//   演出の実体は HitFeel クラス（ヒットストップ/シェイク/歪み+グロー）に分離した。
 void GamePlayScene::UpdateCameraAndPostEffect(){
 	if ( debugCamera_ ) { debugCamera_->Update(camera_.get()); }
 
-	// カメラシェイク：ヒット時に一瞬揺らす。前フレームに足した揺れを引いてから今フレームの
-	//   揺れを足すので、基準位置を汚さない。
-	{
-		Vector3 shake { 0.0f, 0.0f, 0.0f };
-		if ( camShakeTimer_ > 0.0f ) {
-			camShakeTimer_ -= 1.0f / 60.0f;
-			if ( camShakeTimer_ < 0.0f ) camShakeTimer_ = 0.0f;
-			float m = camShakeMag_ * ( camShakeTimer_ / 0.22f ); // だんだん弱まる
-			shake.x = std::sin(camShakeTimer_ * 95.0f) * m;
-			shake.y = std::cos(camShakeTimer_ * 120.0f) * m;
-		}
-		camera_->SetTranslation(camera_->GetWorldPosition() - camPrevShake_ + shake);
-		camPrevShake_ = shake;
-	}
-
+	hitFeel_.ApplyCameraShake(camera_.get());          // ヒット時に一瞬揺らす
 	camera_->Update();
-	UpdateStompPostEffect(); // カメラ確定後にスクリーン投影する
+	hitFeel_.UpdateImpactPostEffect(camera_.get());    // カメラ確定後にスクリーン投影する
 }
 
 // Edit↔Play の切り替わり瞬間のリセット処理。最後に prevMode_ を更新する。
@@ -430,10 +338,11 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 	if ( prevMode_ == EngineMode::Edit && current == EngineMode::Play ) {
 		SyncRailsFromEditor();
 		if ( player_ ) { player_->Initialize(); player_->SetMovementLocked(false); }
+		camCtrl_.Reset(); // 向き切替トリガーの状態を初期化（前回プレイの向きを持ち越さない）
 		hitEffects_.clear();
-		stompEffects_.clear();
+		combat_.ClearEffects();
 		eggSystem_.Initialize();
-		throwState_ = ThrowState::Idle;
+		aimThrow_.Reset(); // 構え状態を解除
 	}
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
@@ -449,46 +358,27 @@ void GamePlayScene::UpdatePlayMode(){
 
 	// 動くレール → プレイヤー → 敵 の順で更新（位置の整合のため）
 	railField_.UpdateMotion(dt);
-	if ( player_ ) { player_->Update(railField_.GetRails()); }
+	if ( player_ ) {
+		// カメラの向きを渡す：向き切替（180°回り込み等）の後も「Dで画面の右へ」進めるように、
+		// プレイヤー側でキー→ワールド方向の割り当てを回す
+		player_->SetCameraYaw(camera_->GetRotation().y);
+		player_->Update(railField_.GetRails());
+	}
 	Vector3 ppos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
-	for ( auto& e : enemies_ ) {
-		if ( e->IsSwallowing() ) { e->TickSwallow(ppos, dt); } // 縮みながらプレイヤーへ吸い込まれる
-		else { e->Update(railField_.GetRails(), dt); }
-	}
-	// 吸い込み完了 → お腹に+1して消す（口元で緑がふわっと＝踏みつけのリングとは別物）
-	for ( auto& e : enemies_ ) {
-		if ( e->IsConsumed() ) {
-			eggSystem_.AddToBelly();
-			eggSystem_.SpawnSwallowFx(e->GetPosition());
-		}
-	}
-	enemies_.erase(std::remove_if(enemies_.begin(), enemies_.end(),
-		[](const std::unique_ptr<Enemy>& e){ return e->IsConsumed(); }), enemies_.end());
+	// 敵の移動＋吸い込みTick。吸い込み完了 → お腹に+1（口元で緑がふわっと）
+	enemyMgr_.Update(railField_.GetRails(), ppos, dt, [&](const Vector3& pos){
+		eggSystem_.AddToBelly();
+		eggSystem_.SpawnSwallowFx(pos);
+	});
 
 	// 当たり判定＋踏みつけ
-	UpdateStompCollision();
+	combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get());
 
-	// Eキーで近くの敵を飲み込む（卵にする）
-	UpdateSwallow();
+	// E=飲み込み / 左Ctrl=産卵（SwallowAbility へ分離）
+	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_);
 
-	// Q長押しで構え→矢印で狙う→離して投げる（構え中はプレイヤーが止まる）
-	UpdateThrowAim();
-
-	// 飛行中の卵 → 敵の当たり判定（当たったら敵を倒して卵を割る。割れ演出は卵の Update が出す）
-	eggSystem_.ResolveHits([&](const Vector3& eggPos, float eggR) -> bool {
-		for ( auto& e : enemies_ ) {
-			if ( !e->IsAlive() ) continue;
-			float reach = eggR + e->GetRadius();
-			if ( Length(eggPos - e->GetPosition()) <= reach ) {
-				Vector3 ep = e->GetPosition();
-				e->Defeat();
-				TriggerHitFeel(0.05f, 0.2f);  // 命中の手応え
-				eggSystem_.SpawnHitFx(ep);    // 黄＆オレンジが鋭く飛び散る（踏みつけのリングとは別物）
-				return true; // 命中（殻の緑＋黄身は卵の割れ演出が別に出す）
-			}
-		}
-		return false;
-	});
+	// Q長押しで構え→矢印で狙う→離して投げる（AimThrowController へ分離）
+	aimThrow_.Update(*player_, enemyMgr_, eggSystem_, camera_.get(), dt);
 
 	// 卵の追従・飛行・割れの更新
 	if ( player_ ) {
@@ -498,21 +388,15 @@ void GamePlayScene::UpdatePlayMode(){
 		eggSystem_.Update(ppos2, facing, dt);
 	}
 
-	// ゴール判定＋ゴールマーカー（金色の環。動くレール上でも追従する）
-	if ( railField_.HasGoal() && player_ ) {
-		Vector3 gp = railField_.GetGoalPos();
-		DebugDraw::GetInstance()->Sphere({ gp.x, gp.y + 0.8f, gp.z }, 0.8f, { 1.0f, 0.85f, 0.2f, 1.0f }, 16);
-		if ( !goalReached_ ) {
-			Vector3 d = player_->GetPosition() - gp;
-			if ( Length(d) < 1.2f ) {
-				goalReached_ = true;
-				TriggerHitFeel(0.08f, 0.3f); // 到達の手応え
-			}
-		}
-	}
+	// ゴール判定＋ゴールマーカー（StageFlow へ分離）
+	if ( player_ ) { stageFlow_.Update(player_->GetPosition(), railField_, hitFeel_); }
 
 	// プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン）
-	UpdatePlayCamera(dt);
+	if ( player_ ) {
+		camCtrl_.Update(camera_.get(), player_->GetPosition(), railField_.GetRails(),
+			debugCamera_ && debugCamera_->IsActive(), dt);
+		hitFeel_.NotifyCameraOverridden(); // カメラ位置を上書きしたのでシェイクの自己相殺をリセット
+	}
 
 	// スペースキー：エフェクト発生＋BGM再生
 	if ( input->Triggerkey(DIK_SPACE) ) {
@@ -535,274 +419,19 @@ void GamePlayScene::UpdatePlayMode(){
 	// エフェクトの更新と死んだものの削除（stompEffect は timeScale 適用 dt → ヒットストップで一緒に止まる）
 	for ( auto& effect : hitEffects_ ) { effect->Update(); }
 	hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e){ return e->IsDead(); });
-	for ( auto& effect : stompEffects_ ) { effect->Update(dt); }
-	stompEffects_.remove_if([](const std::unique_ptr<StompEffect>& e){ return e->IsDead(); });
+	combat_.UpdateEffects(dt); // 踏みつけ/命中の立体エフェクト
 }
 
-// プレイヤーと敵の球当たり判定＋踏みつけ演出（ヒットストップ・シェイク・ポスト・エフェクト生成）。
-void GamePlayScene::UpdateStompCollision(){
-	if ( !player_ ) return;
-	Vector3 playerPos = player_->GetPosition();
-	const float playerRadius = 0.5f; // プレイヤーの球体当たり判定半径
 
-	for ( auto& enemy : enemies_ ) {
-		if ( !enemy->IsAlive() ) continue;
 
-		Vector3 enemyPos = enemy->GetPosition();
-		float enemyRadius = enemy->GetRadius();
-		float dist = Length(playerPos - enemyPos); // using namespace VectorMath
-
-		if ( dist >= ( playerRadius + enemyRadius ) ) continue; // 接触してなければスキップ
-
-		// 踏みつけ成立：1.接地していない（空中）かつ 2.プレイヤーが敵より上
-		if ( !player_->IsGrounded() && playerPos.y > enemyPos.y + 0.1f ) {
-			enemy->Defeat();
-			player_->Bounce();
-			TriggerHitFeel(0.06f, 0.28f);       // 一瞬停止＋カメラ揺れ
-			fxTimer_    = 0.4f;                  // 踏んだ点中心のポストエフェクト起動
-			fxWorldPos_ = enemyPos;
-
-			auto newStompEffect = std::make_unique<StompEffect>();
-			newStompEffect->Initialize(enemyPos, camera_.get(), textures_["circle"].srvIndex, textures_["skybox"].srvIndex, StompEffectType::Stomp);
-			stompEffects_.push_back(std::move(newStompEffect));
-		}
-	}
-}
-
-// プレイ中のカメラ更新。
-//   基本：プレイヤーを followOffset_ で追従（滑らかに寄る）。
-//   カメラ演出ゾーン：プレイヤーがゾーン半径内に入ると、カメラが
-//   「アンカー(レール上の指定ノード) + オフセット」の位置からプレイヤーを見る画角へ
-//   滑らかに切り替わる（視野角も変更可）。離れると追従へ戻る。
-void GamePlayScene::UpdatePlayCamera(float dt){
-	if ( !followCam_ || !player_ || !camera_ ) return;
-	if ( debugCamera_ && debugCamera_->IsActive() ) return; // デバッグカメラ優先
-
-	Vector3 ppos = player_->GetPosition();
-
-	// 有効なカメラゾーンを探す（半径内で一番近いもの）
-	const auto& rails = railField_.GetRails();
-	const CamZone* active = nullptr;
-	Vector3 anchor {};
-	float bestD = 1e30f;
-	for ( const auto& z : camZones_ ) {
-		if ( z.rail < 0 || z.rail >= ( int ) rails.size() ) continue;
-		Vector3 a = rails[z.rail].GetPositionByDistance(z.dist); // 動くレールなら animOffset 込みで追従
-		float d = Length(ppos - a);
-		if ( d < z.radius && d < bestD ) { bestD = d; active = &z; anchor = a; }
-	}
-
-	// 目標のカメラ位置と視野角
-	Vector3 targetPos;
-	float   targetFov;
-	if ( active ) {
-		targetPos = { anchor.x + active->offset.x, anchor.y + active->offset.y, anchor.z + active->offset.z };
-		targetFov = active->fovRad;
-	} else {
-		targetPos = { ppos.x + followOffset_.x, ppos.y + followOffset_.y, ppos.z + followOffset_.z };
-		targetFov = 0.78f; // 通常の視野角へ戻す
-	}
-
-	// 位置・画角を滑らかに補間（急に切り替わらない＝演出として自然）
-	float k = ( std::min )( 4.0f * dt, 1.0f );
-	Vector3 cur = camera_->GetWorldPosition();
-	Vector3 np = { cur.x + ( targetPos.x - cur.x ) * k,
-	               cur.y + ( targetPos.y - cur.y ) * k,
-	               cur.z + ( targetPos.z - cur.z ) * k };
-	camera_->SetTranslation(np);
-	camPrevShake_ = { 0.0f, 0.0f, 0.0f }; // シェイクの自己相殺は追従で上書きされるためリセット
-
-	// プレイヤー（少し上）を見る向きへ
-	Vector3 look = { ppos.x - np.x, ( ppos.y + 1.0f ) - np.y, ppos.z - np.z };
-	float horiz = std::sqrt(look.x * look.x + look.z * look.z);
-	if ( horiz > 1e-4f || std::abs(look.y) > 1e-4f ) {
-		float yaw   = std::atan2(look.x, look.z);
-		float pitch = std::atan2(-look.y, horiz); // +で下を向く（行ベクトル×RotX の規約）
-		camera_->SetRotation({ pitch, yaw, 0.0f });
-	}
-
-	camFovCur_ += ( targetFov - camFovCur_ ) * k;
-	camera_->SetFovY(camFovCur_);
-}
-
-// ヨッシーの「飲み込む／産む」：
-//   ・E      … 一番近い敵の「飲み込み」を開始（敵が縮みながらプレイヤーへ吸い込まれ → お腹に入る）。
-//   ・左Ctrl … しゃがんでお腹の敵を1匹「卵」として後ろに産む（産んだ卵は投げられる）。
-//   敵を知るのはシーンなので判定はここで行う（吸い込み演出は Enemy 側、消化はUpdatePlayMode）。
-void GamePlayScene::UpdateSwallow(){
-	if ( !player_ ) return;
-	Input* input = Input::GetInstance();
-	Vector3 playerPos = player_->GetPosition();
-
-	// --- E：飲み込み開始（縮小吸い込みアニメ。卵にはまだしない）---
-	if ( input->Triggerkey(DIK_E) ) {
-		Enemy* target = nullptr;
-		float bestDist = swallowReach_; // 舌の届く範囲（ノードエディタから調整可）
-		for ( auto& e : enemies_ ) {
-			if ( !e->IsAlive() ) continue;
-			float d = Length(playerPos - e->GetPosition());
-			if ( d < bestDist ) { bestDist = d; target = e.get(); }
-		}
-		if ( target ) {
-			target->StartSwallow();      // 縮みながらプレイヤーへ（完了で UpdatePlayMode がお腹+1）
-			TriggerHitFeel(0.03f, 0.1f); // 軽い手応え
-		}
-	}
-
-	// --- 左Ctrl（しゃがみ）：お腹の敵を1匹、後ろに卵として産む ---
-	if ( input->Triggerkey(DIK_LCONTROL) ) {
-		float yaw = player_->GetRotation().y;
-		Vector3 behind = { playerPos.x - std::sin(yaw) * 0.8f, playerPos.y + 0.3f, playerPos.z - std::cos(yaw) * 0.8f };
-		if ( eggSystem_.LayEgg(behind) ) {
-			eggSystem_.SpawnLayFx(behind); // 産まれた合図（白＆緑がぽわっと）
-			TriggerHitFeel(0.03f, 0.08f);
-		}
-	}
-}
-
-// ヨッシー風の投げ：Q長押しで構え、矢印で「画面上のカーソル」を直感的に動かし、離して投げる。
-//   ・カーソルは画面座標で動く（上=上 / 右=右）。敵に近いと少し吸いつく（外せば再ロック可）。
-//   ・ロック中はその敵へ。未ロックはカーソルの先(奥)へ投げる（クラフトワールド風）。
-void GamePlayScene::UpdateThrowAim(){
-	if ( !player_ ) return;
-	Input* input = Input::GetInstance();
-	float dt = Time::GetInstance()->GetDeltaTime();
-	Vector3 ppos = player_->GetPosition();
-
-	const float W = ( float ) WindowProc::GetInstance()->GetClientWidth();
-	const float H = ( float ) WindowProc::GetInstance()->GetClientHeight();
-
-	// ワールド点 → スクリーン画素（行ベクトル v*VP）。カメラ後方なら false。
-	auto project = [&](const Vector3& w, float& px, float& py) -> bool {
-		const Matrix4x4& vp = camera_->GetViewProjectionMatrix();
-		float cw = w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3];
-		if ( cw <= 0.0001f ) return false;
-		float sx = ( w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0] ) / cw;
-		float sy = ( w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1] ) / cw;
-		px = ( sx * 0.5f + 0.5f ) * W;
-		py = ( 1.0f - ( sy * 0.5f + 0.5f ) ) * H;
-		return true;
-		};
-
-	if ( throwState_ == ThrowState::Idle ) {
-		// Q を押し始めた＆卵を持っている → 構えに入る（地上/ジャンプ/踏ん張り中どこでもOK）
-		if ( input->Pushkey(DIK_Q) && eggSystem_.HeldCount() > 0 ) {
-			throwState_ = ThrowState::Aiming;
-			// 構え中も移動・ジャンプ・踏ん張りは受け付ける（狙いは矢印キーで別操作なので競合しない）
-			// カーソルの初期位置：プレイヤーの少し前方上をスクリーン投影（無理なら画面中央）
-			float px, py;
-			Vector3 facing = { std::sin(player_->GetRotation().y), 0.0f, std::cos(player_->GetRotation().y) };
-			Vector3 ahead = { ppos.x + facing.x * 5.0f, ppos.y + 1.0f, ppos.z + facing.z * 5.0f };
-			if ( project(ahead, px, py) ) { cursorX_ = px; cursorY_ = py; }
-			else { cursorX_ = W * 0.5f; cursorY_ = H * 0.45f; }
-			// ★1f点滅対策：入場フレームのうちにカーソル位置を確定（return せず下の処理へ落ちる）
-			if ( cursorSprite_ ) { cursorSprite_->SetPosition({ cursorX_, cursorY_ }); cursorSprite_->Update(); }
-		} else {
-			return; // 構えていない時は何もしない
-		}
-	}
-
-	// --- 構え中（Aiming）---
-	// 矢印キーで「画面上のカーソル」を動かす（直感的：上=上 / 右=右 / 等速）。
-	const float kCursorSpeed = 620.0f; // px/s
-	if ( input->Pushkey(DIK_UP) )    cursorY_ -= kCursorSpeed * dt;
-	if ( input->Pushkey(DIK_DOWN) )  cursorY_ += kCursorSpeed * dt;
-	if ( input->Pushkey(DIK_LEFT) )  cursorX_ -= kCursorSpeed * dt;
-	if ( input->Pushkey(DIK_RIGHT) ) cursorX_ += kCursorSpeed * dt;
-	cursorX_ = std::clamp(cursorX_, 0.0f, W);
-	cursorY_ = std::clamp(cursorY_, 0.0f, H);
-
-	// --- ロックオン対象を探す：カーソル(自由位置)に画面上で一番近い敵（吸いつき無し）---
-	Enemy* lockEnemy = nullptr;
-	float  bestPix = 1e9f, bestEx = 0.0f, bestEy = 0.0f;
-	for ( auto& e : enemies_ ) {
-		if ( !e->IsAlive() ) continue;
-		float ex, ey;
-		if ( !project(e->GetPosition(), ex, ey) ) continue; // 後方は対象外
-		float dpix = std::sqrt(( ex - cursorX_ ) * ( ex - cursorX_ ) + ( ey - cursorY_ ) * ( ey - cursorY_ ));
-		if ( dpix < bestPix ) { bestPix = dpix; lockEnemy = e.get(); bestEx = ex; bestEy = ey; }
-	}
-	float lockThresh = aimLocked_ ? 120.0f : 80.0f; // 粘り（付く<外れる）
-	aimLocked_ = ( lockEnemy != nullptr && bestPix < lockThresh );
-
-	Vector3 origin = { ppos.x, ppos.y + 0.5f, ppos.z };
-	Vector3 throwDir = { 0.0f, 0.0f, 1.0f };
-	float   throwSpeed = throwSpeedNormal_;  // 通常の投げ速度（ノードエディタから調整可）
-	float   dispX = cursorX_, dispY = cursorY_;
-	Vector3 cursorWorld;         // 狙い線の先端（奥に追従させる）
-
-	if ( aimLocked_ ) {
-		// ロック中：その敵へ。命中しやすいよう速度を上げる。カーソルは敵にピタッと合わせる。
-		dispX = bestEx; dispY = bestEy;
-		cursorWorld = lockEnemy->GetPosition();
-		Vector3 t = cursorWorld - origin;
-		float d = Length(t);
-		if ( d > 1e-4f ) throwDir = { t.x / d, t.y / d, t.z / d };
-		throwSpeed = throwSpeedLock_; // ★敵ロック時は速く（ノードエディタから調整可）
-		DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
-	} else {
-		// 未ロック：カーソルの画面位置を奥へアンプロジェクトした方向へ投げる（奥に投げ込める）。
-		Matrix4x4 invVP = Inverse(camera_->GetViewProjectionMatrix());
-		float ndcX = cursorX_ / W * 2.0f - 1.0f;
-		float ndcY = 1.0f - cursorY_ / H * 2.0f;
-		auto unproj = [&](float z) -> Vector3 {
-			float ow = ndcX * invVP.m[0][3] + ndcY * invVP.m[1][3] + z * invVP.m[2][3] + invVP.m[3][3];
-			return { ( ndcX * invVP.m[0][0] + ndcY * invVP.m[1][0] + z * invVP.m[2][0] + invVP.m[3][0] ) / ow,
-			         ( ndcX * invVP.m[0][1] + ndcY * invVP.m[1][1] + z * invVP.m[2][1] + invVP.m[3][1] ) / ow,
-			         ( ndcX * invVP.m[0][2] + ndcY * invVP.m[1][2] + z * invVP.m[2][2] + invVP.m[3][2] ) / ow };
-			};
-		Vector3 nearP = unproj(0.0f), farP = unproj(1.0f);
-		Vector3 ray = { farP.x - nearP.x, farP.y - nearP.y, farP.z - nearP.z };
-		float rl = Length(ray);
-		if ( rl > 1e-4f ) throwDir = { ray.x / rl, ray.y / rl, ray.z / rl };
-		// 狙い線の先端＝カーソル方向の少し奥（奥に動かすと線もそちらへ追従する）
-		cursorWorld = { origin.x + throwDir.x * 12.0f, origin.y + throwDir.y * 12.0f, origin.z + throwDir.z * 12.0f };
-	}
-
-	// 狙い線：プレイヤー → カーソルの先端（奥に合わせると線もそちらへ伸びる）
-	DebugDraw::GetInstance()->Line(origin, cursorWorld, { 1.0f, 0.9f, 0.2f, 0.9f });
-
-	// カーソル表示
-	if ( cursorSprite_ ) {
-		cursorSprite_->SetPosition({ dispX, dispY });
-		cursorSprite_->SetSize(aimLocked_ ? Vector2{ 64.0f, 64.0f } : Vector2{ 48.0f, 48.0f });
-		cursorSprite_->SetColor(aimLocked_ ? Vector4{ 1.0f, 0.25f, 0.2f, 1.0f }
-		                                   : Vector4{ 1.0f, 1.0f, 1.0f, 0.85f });
-		cursorSprite_->Update();
-	}
-
-	// Q を離した瞬間 → 投げる（ロック中=敵へ速く / 未ロック=カーソルの奥へ）。
-	//   ※「投げずにキャンセル」したい時用のコマンドは別途キーで足せる（今は常に投げる）。
-	if ( !input->Pushkey(DIK_Q) ) {
-		// 投げる方向へプレイヤーの向きも合わせる（水平成分のyaw）
-		if ( std::abs(throwDir.x) > 1e-4f || std::abs(throwDir.z) > 1e-4f ) {
-			float yaw = std::atan2(throwDir.x, throwDir.z);
-			Vector3 r = player_->GetRotation();
-			player_->SetRotation({ r.x, yaw, r.z });
-		}
-		eggSystem_.TryThrow(ppos, throwDir, throwSpeed);
-		throwState_ = ThrowState::Idle;
-		aimLocked_  = false;
-	}
-}
 
 // モードに関わらず毎フレーム行う描画用の更新（オーラ・各種オブジェクト・マーカー・パーティクル等）。
 void GamePlayScene::UpdateSceneVisuals(){
 	Input* input = Input::GetInstance();
 	EngineMode currentMode = EditorManager::GetInstance()->GetMode();
 
-	// カメラ演出ゾーンの可視化（水色の球=発動範囲 / 白い箱=カメラ位置 / 線=対応）
-	{
-		const auto& rails = railField_.GetRails();
-		for ( const auto& z : camZones_ ) {
-			if ( z.rail < 0 || z.rail >= ( int ) rails.size() ) continue;
-			Vector3 a = rails[z.rail].GetPositionByDistance(z.dist);
-			Vector3 c = { a.x + z.offset.x, a.y + z.offset.y, a.z + z.offset.z };
-			DebugDraw::GetInstance()->Sphere(a, z.radius, { 0.3f, 0.8f, 1.0f, 0.35f }, 16);
-			DebugDraw::GetInstance()->Box(c, { 0.5f, 0.4f, 0.7f }, { 1.0f, 1.0f, 1.0f, 0.9f });
-			DebugDraw::GetInstance()->Line(a, c, { 0.3f, 0.8f, 1.0f, 0.8f });
-		}
-	}
+	// カメラ演出ゾーンの可視化（球=発動範囲 / 白い箱=カメラ位置の目安。編集中も見える）
+	camCtrl_.DrawZoneMarkers(railField_.GetRails());
 
 	// 円柱オーラ（UVスクロール）
 	if ( auraCylinderObj_ ) {
@@ -879,7 +508,7 @@ void GamePlayScene::Draw(){
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
-	for ( auto& e : enemies_ ) { e->Draw(); }   // 敵
+	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵
 
 	// レール経路の可視化マーカー（プレイヤーが通る道筋）
@@ -913,9 +542,7 @@ void GamePlayScene::Draw(){
 	for ( auto& effect : hitEffects_ ) {
 		effect->Draw();
 	}
-	for ( auto& effect : stompEffects_ ) {
-		effect->Draw();
-	}
+	combat_.Draw(); // 踏みつけ/命中の立体エフェクト
 
 	// --- パーティクル描画 ---
 	PipelineManager::GetInstance()->SetPipeline(commandList, PipelineType::Particle);
@@ -958,7 +585,7 @@ void GamePlayScene::Draw(){
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 	if ( sprite_ ) { sprite_->Draw(); }
-	if ( cursorSprite_ && throwState_ == ThrowState::Aiming ) { cursorSprite_->Draw(); } // 構え中だけ狙いカーソル
+	aimThrow_.DrawSprite(); // 構え中だけ狙いカーソル
 	TextManager::GetInstance()->Draw();
 
 
@@ -978,17 +605,8 @@ void GamePlayScene::DrawDebugUI(){
 	// ※ヨッシーHUD（おなか/たまご数・操作説明の仮表示）は一旦削除した。
 	//   本実装のUI（スプライト等）を作る時に復活させる。
 
-	// ゴール到達表示（マップのゴール地点に触れた時だけ）
-	if ( goalReached_ ) {
-		ImGui::SetNextWindowPos(ImVec2(20.0f, 60.0f), ImGuiCond_Always);
-		ImGui::SetNextWindowBgAlpha(0.6f);
-		ImGui::Begin("##goal", nullptr,
-			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-			ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
-		ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "★ ゴール！");
-		ImGui::End();
-	}
+	// ゴール到達表示（StageFlow へ分離）
+	stageFlow_.DrawDebugUI();
 
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
 	ImGui::Begin("インスペクター (詳細設定)");
@@ -998,9 +616,7 @@ void GamePlayScene::DrawDebugUI(){
 	if ( ImGui::Checkbox("レール経路を表示", &showMarkers) ) { railField_.SetShowMarkers(showMarkers); }
 
 	// プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン）
-	ImGui::Checkbox("プレイ中カメラ: プレイヤー追従", &followCam_);
-	ImGui::DragFloat3("追従オフセット", &followOffset_.x, 0.1f);
-	ImGui::TextDisabled("ゾーン数: %d（レールエディタの「カメラ演出」で追加）", ( int ) camZones_.size());
+	camCtrl_.DrawDebugUI();
 	ImGui::Text("マーカー数: %d", railField_.MarkerCount());
 	if ( ImGui::Button("マーカー再構築") ) { railField_.RebuildMarkers(); }
 

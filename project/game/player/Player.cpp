@@ -163,22 +163,44 @@ void Player::DetachToAir(const SplineRail& cur, float edgeS){
     currentDistance_ = edgeS;
 }
 
+// カメラの向き(90°単位)に応じた「実キー → ワールド方向」の割り当て。
+//   通常（カメラが後ろ・0°）は D=+X / A=-X / W=+Z / S=-Z。
+//   カメラが正面へ回り込んだ(180°)ら D=-X / W=-Z … と割り当てごと回すので、
+//   どの向きでも「押したキーの方向＝画面で進む方向」が一致する。
+//   ※連続角で合成せず90°に量子化することで、既存の移動ロジック（dsSign等）を一切変えずに済む。
+void Player::GetWorldKeys(int& plusX, int& minusX, int& plusZ, int& minusZ) const{
+    const float kHalfPi = 1.57079632f;
+    int q = ( int ) std::lround(camYaw_ / kHalfPi);
+    q = ( ( q % 4 ) + 4 ) % 4; // 0=通常 / 1=+90° / 2=180° / 3=-90°
+    switch ( q ) {
+    case 1:  plusX = DIK_S; minusX = DIK_W; plusZ = DIK_D; minusZ = DIK_A; break; // 横から(+90°)
+    case 2:  plusX = DIK_A; minusX = DIK_D; plusZ = DIK_S; minusZ = DIK_W; break; // 正面(180°)＝完全反転
+    case 3:  plusX = DIK_W; minusX = DIK_S; plusZ = DIK_A; minusZ = DIK_D; break; // 横から(-90°)
+    default: plusX = DIK_D; minusX = DIK_A; plusZ = DIK_W; minusZ = DIK_S; break; // 後ろから(0°)
+    }
+}
+
 // 入力をレールタイプに応じて「移動入力」と「乗り換え入力」へ振り分ける。
-//   横レール … A/D=移動 / W/S=縦レールへ乗り換え
-//   縦レール … W/S=移動 / A/D=横レールへ乗り換え
+//   横レール … ±Xキー=移動 / ±Zキー=縦レールへ乗り換え
+//   縦レール … ±Zキー=移動 / ±Xキー=横レールへ乗り換え
+//   （キー→ワールド方向の対応はカメラの向きで回る。GetWorldKeys 参照）
 void Player::ReadRailInput(bool curHorizontal, float& moveInput, int& switchInput) const{
     Input* input = Input::GetInstance();
     moveInput = 0.0f; switchInput = 0;
+
+    int kPX, kMX, kPZ, kMZ;
+    GetWorldKeys(kPX, kMX, kPZ, kMZ);
+
     if ( curHorizontal ) {
-        if ( input->Pushkey(DIK_D) )    moveInput   += 1.0f; // 右(+X)
-        if ( input->Pushkey(DIK_A) )    moveInput   -= 1.0f; // 左(-X)
-        if ( input->Triggerkey(DIK_W) ) switchInput += 1;    // 奥(+Z)の縦レールへ
-        if ( input->Triggerkey(DIK_S) ) switchInput -= 1;    // 手前(-Z)の縦レールへ
+        if ( input->Pushkey(( BYTE ) kPX) )    moveInput   += 1.0f; // ワールド+X へ
+        if ( input->Pushkey(( BYTE ) kMX) )    moveInput   -= 1.0f; // ワールド-X へ
+        if ( input->Triggerkey(( BYTE ) kPZ) ) switchInput += 1;    // 奥(+Z)の縦レールへ
+        if ( input->Triggerkey(( BYTE ) kMZ) ) switchInput -= 1;    // 手前(-Z)の縦レールへ
     } else {
-        if ( input->Pushkey(DIK_W) )    moveInput   += 1.0f; // 奥(+Z)
-        if ( input->Pushkey(DIK_S) )    moveInput   -= 1.0f; // 手前(-Z)
-        if ( input->Triggerkey(DIK_D) ) switchInput += 1;    // 右(+X)の横レールへ
-        if ( input->Triggerkey(DIK_A) ) switchInput -= 1;    // 左(-X)の横レールへ
+        if ( input->Pushkey(( BYTE ) kPZ) )    moveInput   += 1.0f; // ワールド+Z へ
+        if ( input->Pushkey(( BYTE ) kMZ) )    moveInput   -= 1.0f; // ワールド-Z へ
+        if ( input->Triggerkey(( BYTE ) kPX) ) switchInput += 1;    // 右(+X)の横レールへ
+        if ( input->Triggerkey(( BYTE ) kMX) ) switchInput -= 1;    // 左(-X)の横レールへ
     }
 }
 
@@ -496,11 +518,14 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
     //   空中に出た時の進行方向(airDir_)に沿った前後だけ速度を増減できる。
     //   横方向の自由移動は不可（落下中に WASD で自由に動き回れないようにする）。
     if ( Length(airDir_) > 1e-4f ) {
+        // キー→ワールド方向の対応はカメラの向きで回す（レール上と同じ操作感にする）
+        int kPX, kMX, kPZ, kMZ;
+        GetWorldKeys(kPX, kMX, kPZ, kMZ);
         float ax = 0.0f, az = 0.0f;
-        if ( input->Pushkey(DIK_D) ) ax += 1.0f;
-        if ( input->Pushkey(DIK_A) ) ax -= 1.0f;
-        if ( input->Pushkey(DIK_W) ) az += 1.0f;
-        if ( input->Pushkey(DIK_S) ) az -= 1.0f;
+        if ( input->Pushkey(( BYTE ) kPX) ) ax += 1.0f;
+        if ( input->Pushkey(( BYTE ) kMX) ) ax -= 1.0f;
+        if ( input->Pushkey(( BYTE ) kPZ) ) az += 1.0f;
+        if ( input->Pushkey(( BYTE ) kMZ) ) az -= 1.0f;
         float along = ax * airDir_.x + az * airDir_.z; // 進行方向成分(+前/-後)
 
         const float kAccelFwd = 12.0f;             // 前後の加速

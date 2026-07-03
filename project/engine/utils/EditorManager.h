@@ -149,6 +149,10 @@ private:
     std::unique_ptr<NodeEditor> nodeEditor_ = nullptr;
     bool showNodeEditor_ = false; // 表示メニューでON/OFF
 
+    // Blenderインポータのパネル表示（普段は邪魔なので非表示。表示メニューでON/OFF。
+    //   非表示でもエクスプローラーからのD&Dインポート等の機能自体は生きている）
+    bool showBlenderImporter_ = false;
+
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;
     // パフォーマンスモニター用（SceneManagerから渡してもらう）

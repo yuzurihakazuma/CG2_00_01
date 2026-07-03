@@ -181,6 +181,13 @@ exit 0</Command>
     <ClCompile Include="engine\utils\PerformanceMonitor.cpp" />
     <ClCompile Include="engine\utils\FileEditor.cpp" />
     <ClCompile Include="engine\utils\NodeEditor.cpp" />
+    <ClCompile Include="game\camera\PlayCameraController.cpp" />
+    <ClCompile Include="game\combat\HitFeel.cpp" />
+    <ClCompile Include="game\enemy\EnemyManager.cpp" />
+    <ClCompile Include="game\combat\CombatSystem.cpp" />
+    <ClCompile Include="game\player\SwallowAbility.cpp" />
+    <ClCompile Include="game\player\AimThrowController.cpp" />
+    <ClCompile Include="game\stage\StageFlow.cpp" />
     <ClCompile Include="engine\postEffect\Bloom.cpp" />
     <ClCompile Include="engine\3d\animation\Animation.cpp" />
     <ClCompile Include="engine\collision\Collision.cpp" />
@@ -294,6 +301,13 @@ exit 0</Command>
     <ClInclude Include="engine\utils\PerformanceMonitor.h" />
     <ClInclude Include="engine\utils\FileEditor.h" />
     <ClInclude Include="engine\utils\NodeEditor.h" />
+    <ClInclude Include="game\camera\PlayCameraController.h" />
+    <ClInclude Include="game\combat\HitFeel.h" />
+    <ClInclude Include="game\enemy\EnemyManager.h" />
+    <ClInclude Include="game\combat\CombatSystem.h" />
+    <ClInclude Include="game\player\SwallowAbility.h" />
+    <ClInclude Include="game\player\AimThrowController.h" />
+    <ClInclude Include="game\stage\StageFlow.h" />
     <ClInclude Include="engine\postEffect\Bloom.h" />
     <ClInclude Include="engine\3d\animation\Animation.h" />
     <ClInclude Include="engine\collision\Collision.h" />

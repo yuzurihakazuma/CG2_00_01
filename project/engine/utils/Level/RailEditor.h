@@ -24,6 +24,13 @@ public:
     // レールエディタ用のウィンドウ（管理/作成タブ）を描画する
     void DrawWindow();
 
+    // カメラ演出専用のウィンドウ（ゾーンの追加・編集・プレビュー）を描画する
+    void DrawCameraWindow();
+
+    // 「この画角をプレビュー」の要求をシーンが受け取る（BlenderImporter と同じパターン）。
+    //   要求があれば true を返し、メインカメラに設定すべき位置・回転を出す（1回で消費）。
+    bool ConsumeCameraPreviewRequest(Vector3& outPos, Vector3& outRot);
+
     // --- ゲーム側へ公開（EditorManager 経由で GamePlayScene が参照）---
     int GetVersion() const{ return railVersion_; }
     const std::vector<std::vector<Vector3>>& GetRailLines() const{ return data_->railLines; }
@@ -60,6 +67,10 @@ public:
     // ノードの挿入・削除（マウス編集）
     void InsertRailNode(int afterIndex, const Vector3& p);
     void DeleteRailNode(int idx);
+
+    // 選択中レールの端を延長する形でノードを1個追加（front=true で先頭側）。
+    //   引き終わったレールに後からノードを足すためのボタン用。穴配列も同期する。
+    void ExtendRailNode(bool front);
 
     // 既存ノードへのスナップ
     bool    IsNodeSnap() const{ return railNodeSnap_; }
@@ -131,6 +142,11 @@ private:
     int selectedRailNode_ = -1;
     int currentEditRailIndex_ = 0; // 現在編集しているレールの番号
     int selectedCamZone_ = -1;     // カメラ演出：一覧で選択中のゾーン番号
+
+    // カメラプレビュー要求（DrawCameraWindow で積み、シーンが Consume で受け取る）
+    bool    camPreviewPending_ = false;
+    Vector3 camPreviewPos_ { 0.0f, 0.0f, 0.0f };
+    Vector3 camPreviewRot_ { 0.0f, 0.0f, 0.0f };
 
     // マウス編集モード
     bool  railDrawMode_   = false; // true=地面クリックで末尾ノード追加

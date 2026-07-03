@@ -244,6 +244,7 @@ void EditorManager::Update(){
             }
             ImGui::Separator();
             ImGui::Checkbox("ノードエディタ", &showNodeEditor_);
+            ImGui::Checkbox("Blenderインポータ", &showBlenderImporter_);
             ImGui::EndMenu();
         }
 
@@ -723,7 +724,9 @@ void EditorManager::Update(){
     }
 
     // 6.5 Blenderインポータ（パネル描画＋ホットリロード監視）
-    if ( blenderImporter_ ) {
+    //   普段は邪魔なので非表示（表示メニューでON）。D&D取り込みは Update 側で処理されるため生きている。
+    //   ※Blenderの自動リロード監視はパネル表示中のみ動く。
+    if ( blenderImporter_ && showBlenderImporter_ ) {
         blenderImporter_->DrawDebugUI();
     }
 

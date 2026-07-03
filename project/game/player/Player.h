@@ -40,11 +40,19 @@ public:
     // スタート地点（リスポーン先）。マップ設定から Sync 後にシーンが渡す
     void SetSpawn(int rail, float dist){ spawnRail_ = rail; spawnDist_ = dist; }
 
+    // カメラの向き(yaw)。シーンが毎フレーム渡す。
+    //   カメラが回り込んだ時（180°向き切替など）に、WASD→ワールド方向の割り当てを
+    //   画面基準に合わせて回すために使う（Dを押せば常に画面の右へ進む）。
+    void SetCameraYaw(float yawRad){ camYaw_ = yawRad; }
+
 private: // メンバ変数
 
     // スタート地点（Initialize / リスポーンで使う）
     int   spawnRail_ = 0;
     float spawnDist_ = 0.0f;
+
+    // カメラの向き(yaw)。入力のキー割り当てを画面基準に回すために使う
+    float camYaw_ = 0.0f;
 
     bool movementLocked_ = false; // true の間は移動・ジャンプ入力を無視（構え中など）
 
@@ -114,6 +122,11 @@ private: // メンバ変数
     void EnterAir(const Vector3& pos, const Vector3& tangent, float upVel, float landCooldown);
     // 端から空中へ飛び出す（Gap レール用）。edgeS=飛び出す端の距離
     void DetachToAir(const SplineRail& cur, float edgeS);
+
+    // カメラの向き(90°単位)に応じた「実キー → ワールド方向」の割り当てを返す。
+    //   戻り値は DIK_～ のキーコード。カメラが正面(180°)なら D は「ワールド-X」担当になる等、
+    //   どの向きでも「Dを押せば画面の右へ進む」ようにするための表引き。
+    void GetWorldKeys(int& plusX, int& minusX, int& plusZ, int& minusZ) const;
 
     // 入力をレールタイプに応じて「移動入力」と「乗り換え入力」へ振り分ける
     void ReadRailInput(bool curHorizontal, float& moveInput, int& switchInput) const;

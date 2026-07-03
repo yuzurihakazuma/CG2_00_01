@@ -150,7 +150,52 @@ void RailEditor::AppendRailNodeAt(const Vector3& p){
 	auto& line = data_->railLines[currentEditRailIndex_];
 
 	line.push_back(ComputePlacement(p));
+	// 穴配列も末尾に同期（ズレ防止）
+	if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
+		data_->railNodeHoles[currentEditRailIndex_].resize(line.size(), 0);
+	}
 	selectedRailNode_ = ( int ) line.size() - 1; // 追加した点を選択状態に
+	multiSelection_.clear();
+	multiSelection_.push_back({ currentEditRailIndex_, selectedRailNode_ });
+	++railVersion_;
+}
+
+// 選択中レールの端を「延長線上」に1個伸ばす（front=true で先頭側）。
+//   引き終わったレールへ後からノードを足すためのボタン用。
+void RailEditor::ExtendRailNode(bool front){
+	if ( currentEditRailIndex_ < 0 || currentEditRailIndex_ >= ( int ) data_->railLines.size() ) return;
+	auto& line = data_->railLines[currentEditRailIndex_];
+
+	// 追加位置：端の2点の延長線上に同じ間隔で置く（1点以下なら適当な距離だけ離す）
+	Vector3 p;
+	if ( line.empty() ) {
+		p = { 0.0f, railDrawHeight_, 0.0f };
+	} else if ( line.size() == 1 ) {
+		p = line.front();
+		p.z += front ? -3.0f : 3.0f;
+	} else if ( front ) {
+		const Vector3& a = line[0];
+		const Vector3& b = line[1];
+		p = { a.x * 2.0f - b.x, a.y * 2.0f - b.y, a.z * 2.0f - b.z };
+	} else {
+		const Vector3& a = line[line.size() - 1];
+		const Vector3& b = line[line.size() - 2];
+		p = { a.x * 2.0f - b.x, a.y * 2.0f - b.y, a.z * 2.0f - b.z };
+	}
+	p.x = SnapValue(p.x);
+	p.y = SnapValue(p.y);
+	p.z = SnapValue(p.z);
+
+	// 穴配列を現ノード数に揃えてから、同じ側へ同期挿入（ズレ防止）
+	if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
+		auto& h = data_->railNodeHoles[currentEditRailIndex_];
+		h.resize(line.size(), 0);
+		if ( front ) h.insert(h.begin(), 0);
+		else         h.push_back(0);
+	}
+
+	if ( front ) { line.insert(line.begin(), p); selectedRailNode_ = 0; }
+	else         { line.push_back(p);            selectedRailNode_ = ( int ) line.size() - 1; }
 	multiSelection_.clear();
 	multiSelection_.push_back({ currentEditRailIndex_, selectedRailNode_ });
 	++railVersion_;
@@ -464,6 +509,12 @@ void RailEditor::InsertRailNode(int afterIndex, const Vector3& p){
 	int insertAt = afterIndex + 1;
 	if ( insertAt < 0 ) insertAt = 0;
 	if ( insertAt > ( int ) line.size() ) insertAt = ( int ) line.size();
+	// 穴配列も同じ位置へ挿入（同期しないと既存の穴指定が後ろへズレるバグになる）
+	if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
+		auto& h = data_->railNodeHoles[currentEditRailIndex_];
+		h.resize(line.size(), 0);
+		h.insert(h.begin() + insertAt, 0);
+	}
 	line.insert(line.begin() + insertAt, p);
 	selectedRailNode_ = insertAt;
 	// ノード番号がずれるので選択を挿入ノードだけに引き直す
@@ -783,51 +834,6 @@ void RailEditor::DrawWindow(){
 		}
 		ImGui::Separator();
 
-		// --- カメラ演出（レール上のカメラゾーン）---
-		//   選択ノードをアンカーにゾーンを置くと、プレイヤーがそこへ来た時に
-		//   カメラが「アンカー+オフセット」の位置からプレイヤーを見る画角へ切り替わる。
-		if ( ImGui::CollapsingHeader("カメラ演出（プレイヤー通過でカメラ切替）") ) {
-			ImGui::BeginDisabled(!nodeSelected);
-			if ( ImGui::Button("選択ノードにカメラゾーンを追加") ) {
-				LevelCameraZone z;
-				z.railIndex = currentEditRailIndex_;
-				z.nodeIndex = selectedRailNode_;
-				data_->cameraZones.push_back(z);
-				selectedCamZone_ = ( int ) data_->cameraZones.size() - 1;
-				++railVersion_;
-			}
-			ImGui::EndDisabled();
-			if ( !nodeSelected ) { ImGui::TextDisabled("(Game View でノードをクリックして選択してから押す)"); }
-
-			// ゾーン一覧
-			for ( int i = 0; i < ( int ) data_->cameraZones.size(); ++i ) {
-				const auto& z = data_->cameraZones[i];
-				char zlabel[96];
-				snprintf(zlabel, sizeof(zlabel), "ゾーン%d : レール%d ノード%d (半径%.1fm, %.0f°)",
-					i, z.railIndex, z.nodeIndex, z.radius, z.fovDeg);
-				if ( ImGui::Selectable(zlabel, selectedCamZone_ == i) ) { selectedCamZone_ = i; }
-			}
-			if ( data_->cameraZones.empty() ) { ImGui::TextDisabled("(カメラゾーンなし)"); }
-
-			// 選択中ゾーンの編集
-			if ( selectedCamZone_ >= 0 && selectedCamZone_ < ( int ) data_->cameraZones.size() ) {
-				LevelCameraZone& z = data_->cameraZones[selectedCamZone_];
-				bool zchanged = false;
-				zchanged |= ImGui::DragFloat3("カメラ位置オフセット", &z.offset.x, 0.1f);
-				ImGui::SetNextItemWidth(140.0f);
-				zchanged |= ImGui::SliderFloat("視野角 (度)", &z.fovDeg, 20.0f, 100.0f, "%.0f");
-				ImGui::SetNextItemWidth(140.0f);
-				zchanged |= ImGui::DragFloat("発動半径 (m)", &z.radius, 0.1f, 0.5f, 30.0f);
-				if ( zchanged ) { ++railVersion_; }
-				if ( ImGui::Button("このゾーンを削除") ) {
-					data_->cameraZones.erase(data_->cameraZones.begin() + selectedCamZone_);
-					selectedCamZone_ = -1;
-					++railVersion_;
-				}
-				ImGui::TextDisabled("水色の球=発動範囲 / 白い箱=カメラ位置（Game Viewに表示）");
-			}
-		}
-		ImGui::Separator();
 	}
 
 	// Undo / Redo
@@ -1016,6 +1022,18 @@ void RailEditor::DrawWindow(){
 		ImGui::EndDisabled();
 	}
 	ImGui::Separator();
+
+	// --- 引き終わったレールへ後からノードを追加（端の延長線上に1個伸ばす）---
+	ImGui::Text("ノード追加 (レール%d):", currentEditRailIndex_);
+	ImGui::SameLine();
+	if ( ImGui::Button("先頭に追加") ) { ExtendRailNode(true); }
+	ImGui::SameLine();
+	if ( ImGui::Button("末尾に追加") ) { ExtendRailNode(false); }
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if ( ImGui::IsItemHovered() ) {
+		ImGui::SetTooltip("選択中レールの端の延長線上にノードを1個足します。\n追加後はギズモ/数値で位置を調整。途中への挿入は Ctrl+線クリック か「↓ 下に挿入」。");
+	}
 
 	ImGui::BeginChild("RailNodeList", ImVec2(0, 300), true);
 	for ( size_t i = 0; i < data_->railLines[currentEditRailIndex_].size(); ++i ) {
@@ -1333,6 +1351,10 @@ void RailEditor::DrawWindow(){
 	// --- マウスで描く設定 ---
 	if ( ImGui::CollapsingHeader("マウスで描く（追加モード・吸着設定）") ) {
 		ImGui::Checkbox("マウス追加モード（地面クリックで末尾に追加）", &railDrawMode_);
+		if ( railDrawMode_ ) {
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "対象: レール%d", currentEditRailIndex_);
+		}
 		ImGui::DragFloat("追加する高さ Y", &railDrawHeight_, 0.05f);
 		ImGui::Checkbox("グリッド吸着", &railSnap_);
 		ImGui::SameLine();
@@ -1366,4 +1388,141 @@ void RailEditor::DrawWindow(){
 	}
 	ImGui::End();
 #endif
+}
+
+// =====================================================================
+//  カメラ演出専用ウィンドウ
+//   レール上に「カメラゾーン」を置き、通過時のカメラ挙動（向き切替/固定カメラ）を編集する。
+//   レールエディタとは別ウィンドウにして、ゾーン一覧・編集・プレビューをここへ集約。
+// =====================================================================
+void RailEditor::DrawCameraWindow(){
+#ifdef USE_IMGUI
+	ImGui::SetNextWindowSize(ImVec2(380, 420), ImGuiCond_FirstUseEver);
+	ImGui::Begin("カメラエディタ");
+
+	// アンカー（レール上のノード位置）を取り出す補助
+	auto anchorPos = [&](const LevelCameraZone& z, Vector3& out) -> bool {
+		if ( z.railIndex < 0 || z.railIndex >= ( int ) data_->railLines.size() ) return false;
+		const auto& line = data_->railLines[z.railIndex];
+		if ( line.empty() ) return false;
+		int n = std::clamp(z.nodeIndex, 0, ( int ) line.size() - 1);
+		out = line[n];
+		return true;
+	};
+
+	// --- 追加 ---
+	bool nodeSelected = ( currentEditRailIndex_ >= 0 && currentEditRailIndex_ < ( int ) data_->railLines.size()
+		&& selectedRailNode_ >= 0 && selectedRailNode_ < ( int ) data_->railLines[currentEditRailIndex_].size() );
+	ImGui::BeginDisabled(!nodeSelected);
+	if ( ImGui::Button("選択ノードにカメラゾーンを追加") ) {
+		LevelCameraZone z;
+		z.railIndex = currentEditRailIndex_;
+		z.nodeIndex = selectedRailNode_;
+		data_->cameraZones.push_back(z);
+		selectedCamZone_ = ( int ) data_->cameraZones.size() - 1;
+		++railVersion_;
+	}
+	ImGui::EndDisabled();
+	if ( !nodeSelected ) { ImGui::TextDisabled("(Game View でレールのノードをクリック選択してから押す)"); }
+	ImGui::Separator();
+
+	// --- ゾーン一覧（クリックで選択＋対象ノードも選択して Game View で分かるように）---
+	ImGui::Text("ゾーン一覧 (%d 個):", ( int ) data_->cameraZones.size());
+	for ( int i = 0; i < ( int ) data_->cameraZones.size(); ++i ) {
+		const auto& z = data_->cameraZones[i];
+		char zlabel[128];
+		if ( z.mode == 1 ) {
+			snprintf(zlabel, sizeof(zlabel), "%d : [向き切替 %.0f°%s] レール%d ノード%d",
+				i, z.yawDeg, ( z.revert != 0 ? "・戻る" : "・維持" ), z.railIndex, z.nodeIndex);
+		} else {
+			snprintf(zlabel, sizeof(zlabel), "%d : [固定カメラ] レール%d ノード%d (半径%.1fm)",
+				i, z.railIndex, z.nodeIndex, z.radius);
+		}
+		if ( ImGui::Selectable(zlabel, selectedCamZone_ == i) ) {
+			selectedCamZone_ = i;
+			// 対象ノードも選択して Game View 上でどこか分かるようにする
+			if ( z.railIndex >= 0 && z.railIndex < ( int ) data_->railLines.size() ) {
+				SelectSingleNode(z.railIndex, std::clamp(z.nodeIndex, 0,
+					( int ) data_->railLines[z.railIndex].size() - 1));
+			}
+		}
+	}
+	if ( data_->cameraZones.empty() ) { ImGui::TextDisabled("(カメラゾーンなし)"); }
+	ImGui::Separator();
+
+	// --- 選択中ゾーンの編集 ---
+	if ( selectedCamZone_ >= 0 && selectedCamZone_ < ( int ) data_->cameraZones.size() ) {
+		LevelCameraZone& z = data_->cameraZones[selectedCamZone_];
+		bool zchanged = false;
+
+		const char* modeLabels[] = { "固定カメラ（範囲内だけ）", "向き切替（通過で回す）" };
+		ImGui::SetNextItemWidth(240.0f);
+		zchanged |= ImGui::Combo("モード", &z.mode, modeLabels, 2);
+
+		if ( z.mode == 1 ) {
+			ImGui::SetNextItemWidth(180.0f);
+			zchanged |= ImGui::SliderFloat("カメラの向き (度)", &z.yawDeg, -180.0f, 180.0f, "%.0f");
+			ImGui::TextDisabled("0=後ろから / 180=正面から(180度回転) / ±90=横から");
+			ImGui::SetNextItemWidth(140.0f);
+			zchanged |= ImGui::DragFloat("距離 (m)", &z.dist, 0.1f, 2.0f, 40.0f);
+			ImGui::SetNextItemWidth(140.0f);
+			zchanged |= ImGui::DragFloat("高さ (m)", &z.height, 0.1f, 0.0f, 30.0f);
+			// 半径から出たら通常の向きへ戻すか（OFF=次のトリガーまで維持）
+			bool rev = ( z.revert != 0 );
+			if ( ImGui::Checkbox("離れたら元の向きに戻す", &rev) ) { z.revert = rev ? 1 : 0; zchanged = true; }
+			ImGui::SameLine();
+			ImGui::TextDisabled(rev ? "(区間演出向け)" : "(次のトリガーまで維持)");
+		} else {
+			zchanged |= ImGui::DragFloat3("カメラ位置オフセット", &z.offset.x, 0.1f);
+		}
+		ImGui::SetNextItemWidth(140.0f);
+		zchanged |= ImGui::SliderFloat("視野角 (度)", &z.fovDeg, 20.0f, 100.0f, "%.0f");
+		ImGui::SetNextItemWidth(140.0f);
+		zchanged |= ImGui::DragFloat("発動半径 (m)", &z.radius, 0.1f, 0.5f, 30.0f);
+		if ( zchanged ) { ++railVersion_; }
+
+		// --- プレビュー：この画角をメインカメラにワンショット適用（アンカーを注視）---
+		if ( ImGui::Button("この画角をプレビュー") ) {
+			Vector3 a;
+			if ( anchorPos(z, a) ) {
+				Vector3 camPos;
+				if ( z.mode == 1 ) {
+					float yawRad = z.yawDeg * 3.14159265f / 180.0f;
+					camPos = { a.x + std::sin(yawRad) * z.dist, a.y + z.height, a.z - std::cos(yawRad) * z.dist };
+				} else {
+					camPos = { a.x + z.offset.x, a.y + z.offset.y, a.z + z.offset.z };
+				}
+				// アンカー（プレイヤーの立ち位置想定）を注視する回転
+				Vector3 look = { a.x - camPos.x, ( a.y + 1.0f ) - camPos.y, a.z - camPos.z };
+				float horiz = std::sqrt(look.x * look.x + look.z * look.z);
+				camPreviewPos_ = camPos;
+				camPreviewRot_ = { std::atan2(-look.y, horiz), std::atan2(look.x, look.z), 0.0f };
+				camPreviewPending_ = true;
+			}
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("(メインカメラをこの位置へ)");
+
+		if ( ImGui::Button("このゾーンを削除") ) {
+			data_->cameraZones.erase(data_->cameraZones.begin() + selectedCamZone_);
+			selectedCamZone_ = -1;
+			++railVersion_;
+		}
+	} else {
+		ImGui::TextDisabled("(一覧からゾーンを選択すると編集できます)");
+	}
+
+	ImGui::Separator();
+	ImGui::TextDisabled("Game View: オレンジ球=向き切替 / 水色球=固定カメラ / 白い箱=カメラ位置の目安");
+	ImGui::End();
+#endif
+}
+
+// 「この画角をプレビュー」の要求をシーンが受け取る（1回で消費）
+bool RailEditor::ConsumeCameraPreviewRequest(Vector3& outPos, Vector3& outRot){
+	if ( !camPreviewPending_ ) return false;
+	outPos = camPreviewPos_;
+	outRot = camPreviewRot_;
+	camPreviewPending_ = false;
+	return true;
 }

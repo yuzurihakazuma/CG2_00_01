@@ -37,6 +37,7 @@ struct LevelCameraZone{
     float   yawDeg    = 180.0f;         // カメラの向き（0=後ろから / 180=正面から / ±90=横から）
     float   dist      = 10.0f;          // プレイヤーからの距離 (m)
     float   height    = 3.5f;           // プレイヤーからの高さ (m)
+    int     revert    = 0;              // 1=半径から出たら通常の向きへ戻る / 0=次のトリガーまで維持
     // --- 共通 ---
     float   fovDeg    = 45.0f;          // 視野角（度）。45=標準
 };

@@ -504,6 +504,9 @@ void LevelEditor::DrawDebugUI(){
 	// 5. レールエディタ（レール編集は RailEditor クラスへ分離した）
 	railEditor_->DrawWindow();
 
+	// 6. カメラエディタ（レール上のカメラ演出ゾーン。専用ウィンドウ）
+	railEditor_->DrawCameraWindow();
+
 #endif
 }
 

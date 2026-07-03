@@ -12,9 +12,16 @@
 
 #include "engine/rail/SplineRail.h"
 #include "game/rail/RailField.h"
+#include "game/camera/PlayCameraController.h"
+#include "game/combat/HitFeel.h"
+#include "game/combat/CombatSystem.h"
 #include "game/player/Player.h"
+#include "game/player/SwallowAbility.h"
+#include "game/player/AimThrowController.h"
+#include "game/stage/StageFlow.h"
 #include "game/enemy/Enemy.h"
 #include "game/enemy/EnemyEditor.h"
+#include "game/enemy/EnemyManager.h"
 #include "game/egg/EggSystem.h"
 
 #include "Skybox.h"
@@ -68,27 +75,17 @@ private: // 初期化・更新の内部処理（べた書きを段階ごとに�
 	void SetupGameplay();      // プレイヤー・敵エディタ・レール・各種シーン部品
 
 	// --- Update の分割 ---
-	void UpdateHitStop();              // 踏みつけ等のヒットストップ（時間停止）
 	void SyncFromEditors();            // エディタ編集（レール／敵／カメラ要求）をシーンへ反映
 	void UpdateCameraAndPostEffect();  // カメラ更新＋シェイク＋踏みつけポストエフェクト
 	void HandleModeTransition(EngineMode current); // Edit↔Play 切替時のリセット処理
 	void UpdatePlayMode();             // プレイ中のゲーム進行（レール／プレイヤー／敵／踏みつけ／エフェクト）
-	void UpdateStompCollision();       // プレイヤーと敵の当たり判定＋踏みつけ演出
-	void UpdateSwallow();              // 近くの敵を飲み込んで卵にする（ヨッシー）
-	void UpdateThrowAim();             // Q長押しで構え→矢印で狙う→離して投げる
 
-	// --- 卵の投擲：構えのステート（Idle=通常 / Aiming=構え中）---
-	enum class ThrowState { Idle, Aiming };
-	ThrowState throwState_ = ThrowState::Idle;
+	// --- 飲み込み/産卵アクション（E / 左Ctrl。処理は SwallowAbility へ分離）---
+	SwallowAbility swallow_;
 
-	// --- ノードエディタから調整できるゲーム値（「→ ゲーム値」ノードに登録する）---
-	float throwSpeedNormal_ = 13.0f; // 卵の通常投げ初速 (m/s)
-	float throwSpeedLock_   = 22.0f; // ロックオン時の投げ初速 (m/s)
-	float swallowReach_     = 2.0f;  // 飲み込みの届く距離 (m)
-	float cursorX_ = 0.0f;   // 狙いカーソルの画面位置X(px)。矢印で直感的に動かす（右=右）
-	float cursorY_ = 0.0f;   // 狙いカーソルの画面位置Y(px)（上=上）
-	std::unique_ptr<Sprite> cursorSprite_; // 狙い用カーソル（構え中だけ表示）
-	bool  aimLocked_ = false;              // 敵にロックオン中か（吸いつき＋色変更）
+	// --- 卵の投擲（Q構え→矢印で狙う→離して投げる。処理は AimThrowController へ分離）---
+	AimThrowController aimThrow_;
+
 	void UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
 
 private: // メンバ変数
@@ -113,8 +110,7 @@ private: // メンバ変数
 	// デプスステンシル
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource_;
 
-	std::list<std::unique_ptr<HitEffect>> hitEffects_;
-	std::list<std::unique_ptr<StompEffect>> stompEffects_;
+	std::list<std::unique_ptr<HitEffect>> hitEffects_; // Spaceデモ用（当面シーンに残す）
 
 	std::string bgmFile_ = "resources/BGMDon.mp3";
 
@@ -161,40 +157,29 @@ private: // メンバ変数
 
 	// --- レール実行時管理（レール本体・緑線マーカー・動くレールを RailField に集約）---
 	RailField railField_;
-	bool goalReached_ = false; // ゴール地点に到達したか（マップ再同期でリセット）
 
-	// --- プレイ中カメラ（プレイヤー追従＋レールのカメラ演出ゾーン）---
-	bool    followCam_ = true;                     // プレイ中カメラがプレイヤーを追うか
-	Vector3 followOffset_ { 0.0f, 3.5f, -10.0f };  // 追従時のカメラオフセット
-	float   camFovCur_ = 0.78f;                    // 現在の視野角(rad)。ゾーンで滑らかに変わる
-	// 実行用カメラゾーン（Sync 時にノード番号→レール上の距離へ変換して保持）
-	struct CamZone { int rail = 0; float dist = 0.0f; float radius = 4.0f;
-	                 Vector3 offset { 0.0f, 3.0f, -6.0f }; float fovRad = 0.785f; };
-	std::vector<CamZone> camZones_;
-	void UpdatePlayCamera(float dt);               // プレイ中のカメラ更新（追従＋ゾーン切替）
+	// --- ステージ進行（ゴール判定・表示。処理は StageFlow へ分離）---
+	StageFlow stageFlow_;
+
+	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
+	PlayCameraController camCtrl_;
 	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
 	void SyncRailsFromEditor();
 
-	// --- 敵（レール上を動く。プレイヤーが踏める予定）---
-	std::vector<std::unique_ptr<Enemy>> enemies_;
-	std::unique_ptr<EnemyEditor>        enemyEditor_; // エネミーの配置テンプレートを管理するエディタ
-	void SpawnEnemies();                              // 配置テンプレートを元に敵の実体を再構築する
+	// --- 敵（生成・更新・描画は EnemyManager へ分離）---
+	EnemyManager                 enemyMgr_;
+	std::unique_ptr<EnemyEditor> enemyEditor_; // エネミーの配置テンプレートを管理するエディタ
+	void SpawnEnemies();                       // 配置テンプレートを元に敵の実体を再構築する
 
 	// --- ヨッシーの卵（敵を飲み込む→保持→投げる。今は状態管理のみ）---
 	EggSystem eggSystem_;
 	int  lastMapLoadVersion_ = -1;                    // マップ読込を検知して敵配置を復元するため
 
-	// --- ヒット時の手応え（踏みつけ等）：ヒットストップ＋カメラシェイク ---
-	float   hitStopTimer_  = 0.0f;              // >0 の間は時間を止める（ヒットストップ）
-	float   camShakeTimer_ = 0.0f;              // >0 の間カメラを揺らす
-	float   camShakeMag_   = 0.0f;              // 揺れの強さ (m)
-	Vector3 camPrevShake_ { 0.0f, 0.0f, 0.0f }; // 前フレームに足した揺れ（自己相殺用）
-	void TriggerHitFeel(float stopSeconds, float shakeMag); // ヒット時に呼ぶ
+	// --- ヒット時の手応え（ヒットストップ/シェイク/ポストエフェクト。処理は HitFeel へ分離）---
+	HitFeel hitFeel_;
 
-	// --- 踏みつけ時のポストエフェクト（A:踏んだ点中心の歪みリップル / D:スポットグロー）---
-	float   fxTimer_    = 0.0f;                  // >0 の間だけ歪み＋グローを出す
-	Vector3 fxWorldPos_ { 0.0f, 0.0f, 0.0f };    // 効果の中心（踏んだ敵のワールド座標）
-	void UpdateStompPostEffect();                // 毎フレーム：中心をスクリーン投影し半径アニメ
+	// --- 戦闘（踏みつけ/卵命中の判定＋StompEffect の管理。処理は CombatSystem へ分離）---
+	CombatSystem combat_;
 
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;
