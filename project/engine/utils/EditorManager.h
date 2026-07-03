@@ -90,6 +90,14 @@ public:
 	const std::vector<std::vector<int>>& GetEditorRailNodeHoles() const;
 	// 各レールの表示フラグ（1=表示/0=非表示）。railLines と同じ並び
 	const std::vector<int>& GetEditorRailVisible() const;
+	const std::vector<int>&   GetEditorRailMotionTypes() const;  // 動きの波形（0=sin/1=停止つき/2=円）
+	const std::vector<float>& GetEditorRailMotionPhases() const; // 動きの位相（0〜1）
+	const std::vector<int>&   GetEditorRailOneWay() const;       // 片方向（0=両/1=正/2=逆）
+	const std::vector<float>& GetEditorRailSpeedMuls() const;    // 速度倍率
+	int GetEditorStartRail() const;  // スタート地点（レール番号）
+	int GetEditorStartNode() const;  // スタート地点（ノード番号）
+	int GetEditorGoalRail() const;   // ゴール地点（レール番号。-1=未設定）
+	int GetEditorGoalNode() const;   // ゴール地点（ノード番号）
 
 	// --- 敵の配置（マップと一緒に保存/読込）。シーンの EnemyEditor と同期する ---
 	void SetEditorEnemyData(const std::vector<LevelEnemyData>& e); // シーン→エディタ（保存に乗せる）

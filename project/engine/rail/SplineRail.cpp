@@ -201,12 +201,36 @@ Vector3 SplineRail::GetTangentByDistance(float distance) const{
     return dir;
 }
 
-// 指定ワールド座標に最も近いレール上の距離 s（スナップ／分岐検出用）
+// 指定ワールド座標に最も近いレール上の距離 s（スナップ／分岐検出用）。
+//   毎フレーム全レールに対して呼ばれるため「粗く探して近傍だけ細かく」の2段探索で高速化。
+//   （全サンプル線形走査だとレール数×サンプル数で毎フレーム効いてくる）
 float SplineRail::GetClosestDistance(const Vector3& worldPos) const{
     if ( distanceTable_.empty() ) return 0.0f;
+    const int n = ( int ) distanceTable_.size();
+
+    // 1. 粗い走査：8個おきにサンプルして最も近い大まかな位置を見つける
+    const int stride = 8;
     float bestDistSq = 1e30f;
-    float bestS = 0.0f;
-    for ( size_t i = 0; i < distanceTable_.size(); ++i ) {
+    int   bestI = 0;
+    for ( int i = 0; i < n; i += stride ) {
+        Vector3 p = EvaluatePosition(tTable_[i]);
+        float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
+        float d2 = dx * dx + dy * dy + dz * dz;
+        if ( d2 < bestDistSq ) { bestDistSq = d2; bestI = i; }
+    }
+    // 末尾も必ず見る（stride の切り捨てで漏れないように）
+    {
+        Vector3 p = EvaluatePosition(tTable_[n - 1]);
+        float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
+        float d2 = dx * dx + dy * dy + dz * dz;
+        if ( d2 < bestDistSq ) { bestDistSq = d2; bestI = n - 1; }
+    }
+
+    // 2. 細かい走査：粗い最良点の前後 1 ストライドぶんだけ全サンプル確認
+    int lo = std::max(0, bestI - stride);
+    int hi = std::min(n - 1, bestI + stride);
+    float bestS = distanceTable_[bestI];
+    for ( int i = lo; i <= hi; ++i ) {
         Vector3 p = EvaluatePosition(tTable_[i]);
         float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
         float d2 = dx * dx + dy * dy + dz * dz;

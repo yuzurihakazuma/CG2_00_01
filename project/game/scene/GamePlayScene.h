@@ -161,6 +161,7 @@ private: // メンバ変数
 
 	// --- レール実行時管理（レール本体・緑線マーカー・動くレールを RailField に集約）---
 	RailField railField_;
+	bool goalReached_ = false; // ゴール地点に到達したか（マップ再同期でリセット）
 	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
 	void SyncRailsFromEditor();
 

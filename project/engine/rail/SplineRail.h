@@ -108,6 +108,18 @@ public:
     float   motionPeriod = 2.0f;              // 1往復にかかる秒数
     Vector3 animOffset { 0.0f, 0.0f, 0.0f };  // 現在のオフセット（ゲーム側が毎フレーム更新）
 
+    // 動きの波形と位相（エディタで選択）
+    //   motionType: 0=サイン往復 / 1=端で一時停止する往復 / 2=円運動(cos,sin)
+    //   motionPhase: 0〜1。複数レールの動きをずらす（0.5で半周期ずれ）
+    int   motionType  = 0;
+    float motionPhase = 0.0f;
+
+    // 片方向レール（0=両方向 / 1=正方向のみ(front→back) / 2=逆方向のみ(back→front)）
+    int oneWay = 0;
+
+    // このレール上での移動速度倍率（1=通常。2で加速レール、0.5で減速レール）
+    float speedMul = 1.0f;
+
     // 動きが設定されているか
     bool HasMotion() const {
         return motionAmp.x != 0.0f || motionAmp.y != 0.0f || motionAmp.z != 0.0f;

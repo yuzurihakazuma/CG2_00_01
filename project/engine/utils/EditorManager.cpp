@@ -822,6 +822,34 @@ const std::vector<int>& EditorManager::GetEditorRailVisible() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailVisible() : kEmpty;
 }
+const std::vector<int>& EditorManager::GetEditorRailMotionTypes() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailMotionTypes() : kEmpty;
+}
+const std::vector<float>& EditorManager::GetEditorRailMotionPhases() const{
+    static const std::vector<float> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailMotionPhases() : kEmpty;
+}
+const std::vector<int>& EditorManager::GetEditorRailOneWay() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailOneWay() : kEmpty;
+}
+const std::vector<float>& EditorManager::GetEditorRailSpeedMuls() const{
+    static const std::vector<float> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailSpeedMuls() : kEmpty;
+}
+int EditorManager::GetEditorStartRail() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetStartRail() : 0;
+}
+int EditorManager::GetEditorStartNode() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetStartNode() : 0;
+}
+int EditorManager::GetEditorGoalRail() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetGoalRail() : -1;
+}
+int EditorManager::GetEditorGoalNode() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetGoalNode() : 0;
+}
 
 // 敵の配置データ（マップ保存に乗せる）を levelEditor_ へ委譲
 void EditorManager::SetEditorEnemyData(const std::vector<LevelEnemyData>& e){

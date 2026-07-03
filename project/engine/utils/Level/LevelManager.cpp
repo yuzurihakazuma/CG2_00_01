@@ -77,6 +77,28 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     j["railVisible"] = visibleArray;
 
+    // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
+    json motionTypeArray = json::array();
+    json motionPhaseArray = json::array();
+    json oneWayArray = json::array();
+    json speedMulArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        motionTypeArray.push_back(( i < levelData.railMotionTypes.size() ) ? levelData.railMotionTypes[i] : 0);
+        motionPhaseArray.push_back(( i < levelData.railMotionPhases.size() ) ? levelData.railMotionPhases[i] : 0.0f);
+        oneWayArray.push_back(( i < levelData.railOneWay.size() ) ? levelData.railOneWay[i] : 0);
+        speedMulArray.push_back(( i < levelData.railSpeedMuls.size() ) ? levelData.railSpeedMuls[i] : 1.0f);
+    }
+    j["railMotionTypes"]  = motionTypeArray;
+    j["railMotionPhases"] = motionPhaseArray;
+    j["railOneWay"]       = oneWayArray;
+    j["railSpeedMuls"]    = speedMulArray;
+
+    // スタート/ゴール地点
+    j["startRailIndex"] = levelData.startRailIndex;
+    j["startNodeIndex"] = levelData.startNodeIndex;
+    j["goalRailIndex"]  = levelData.goalRailIndex;
+    j["goalNodeIndex"]  = levelData.goalNodeIndex;
+
     // 敵の配置 [type, railIndex, distance]
     json enemiesArray = json::array();
     for ( const auto& e : levelData.enemies ) {
@@ -208,6 +230,26 @@ LevelData LevelManager::Load(const std::string& fileName){
         }
     }
 
+    // 動き波形/位相・片方向・速度倍率を読み込む（無ければ後段の resize でデフォルトが入る）
+    if ( j.contains("railMotionTypes") && j["railMotionTypes"].is_array() ) {
+        for ( const auto& v : j["railMotionTypes"] ) { levelData.railMotionTypes.push_back(v.get<int>()); }
+    }
+    if ( j.contains("railMotionPhases") && j["railMotionPhases"].is_array() ) {
+        for ( const auto& v : j["railMotionPhases"] ) { levelData.railMotionPhases.push_back(v.get<float>()); }
+    }
+    if ( j.contains("railOneWay") && j["railOneWay"].is_array() ) {
+        for ( const auto& v : j["railOneWay"] ) { levelData.railOneWay.push_back(v.get<int>()); }
+    }
+    if ( j.contains("railSpeedMuls") && j["railSpeedMuls"].is_array() ) {
+        for ( const auto& v : j["railSpeedMuls"] ) { levelData.railSpeedMuls.push_back(v.get<float>()); }
+    }
+
+    // スタート/ゴール地点（無ければデフォルト：スタート=レール0ノード0 / ゴール=未設定）
+    levelData.startRailIndex = j.value("startRailIndex", 0);
+    levelData.startNodeIndex = j.value("startNodeIndex", 0);
+    levelData.goalRailIndex  = j.value("goalRailIndex", -1);
+    levelData.goalNodeIndex  = j.value("goalNodeIndex", 0);
+
     // 敵の配置を読み込む [type, railIndex, distance]
     if ( j.contains("enemies") && j["enemies"].is_array() ) {
         for ( const auto& je : j["enemies"] ) {
@@ -229,6 +271,10 @@ LevelData LevelManager::Load(const std::string& fileName){
     levelData.railMotions.resize(levelData.railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
     levelData.railGroundTypes.resize(levelData.railLines.size(), 0);
     levelData.railVisible.resize(levelData.railLines.size(), 1);
+    levelData.railMotionTypes.resize(levelData.railLines.size(), 0);
+    levelData.railMotionPhases.resize(levelData.railLines.size(), 0.0f);
+    levelData.railOneWay.resize(levelData.railLines.size(), 0);
+    levelData.railSpeedMuls.resize(levelData.railLines.size(), 1.0f);
     levelData.railNodeHoles.resize(levelData.railLines.size());
     // 各レールの穴配列をノード数に合わせる（足りない分は0=穴なし）
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {

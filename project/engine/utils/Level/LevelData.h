@@ -50,6 +50,26 @@ struct LevelData{
     // 各レールの表示フラグ（railLines と同じ並び）。1=表示 / 0=非表示（連結用の見えないレール）
     std::vector<int> railVisible;
 
+    // 各レールの動きの波形（railLines と同じ並び）
+    //   0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動
+    std::vector<int> railMotionTypes;
+    // 各レールの動きの位相（0〜1。複数レールの動きをずらす）
+    std::vector<float> railMotionPhases;
+
+    // 各レールの片方向設定（0=両方向 / 1=正方向のみ(front→back) / 2=逆方向のみ）
+    std::vector<int> railOneWay;
+
+    // 各レールの移動速度倍率（1=通常。2で加速レール、0.5で減速レール）
+    std::vector<float> railSpeedMuls;
+
+    // スタート地点（レール番号＋ノード番号。プレイヤーの開始・リスポーン先）
+    int startRailIndex = 0;
+    int startNodeIndex = 0;
+
+    // ゴール地点（レール番号＋ノード番号）。railIndex=-1 なら未設定
+    int goalRailIndex = -1;
+    int goalNodeIndex = 0;
+
     // 敵の配置（レール上に置く敵。マップと一緒に保存/読込する）
     std::vector<LevelEnemyData> enemies;
 
