@@ -14,6 +14,7 @@
 #include "engine/scene/SceneManager.h"
 #include "engine/utils/Level/LevelEditor.h"
 #include "engine/utils/Level/BlenderImporter.h"
+#include "engine/sdf/SDFManager.h"
 #include "engine/utils/FileEditor.h"
 #include "engine/utils/PerformanceMonitor.h"
 #include "engine/utils/NodeEditor.h"
@@ -49,6 +50,9 @@ void EditorManager::Initialize(){
 
     gpuParticleEditor_ = std::make_unique<GPUParticleEditor>();
 
+    // SDF（フォント/画像）システム：パイプライン構築＋前回の配置を復元
+    SDFManager::GetInstance()->Initialize();
+
     // ファイルエディタ（Project風）
     fileEditor_ = std::make_unique<FileEditor>();
     fileEditor_->Initialize();
@@ -65,6 +69,10 @@ void EditorManager::Initialize(){
 
 
 void EditorManager::Begin(){
+    // フレーム先頭（コマンドリストが閉じている安全な瞬間）に
+    // SDF アトラスのフォルダ監視・自動ロード・ホットリロードを行う
+    SDFManager::GetInstance()->Update();
+
     // フレーム先頭（コマンドリストが閉じている安全なタイミング）で
     // ファイルエディタのサムネイル画像をまとめて読み込む。
     if ( fileEditor_ ) {
@@ -312,6 +320,9 @@ void EditorManager::Update(){
         fileEditor_->DrawDebugUI();
     }
 
+    // 6.7 SDF（フォント/画像）パネル：アトラス一覧＋テキスト/スプライト配置
+    SDFManager::GetInstance()->DrawDebugUI();
+
     // 調整項目（GlobalVariables）の編集ウィンドウ
     GlobalVariables::GetInstance()->Update();
 
@@ -382,6 +393,9 @@ void EditorManager::Finalize(){
     blenderImporter_.reset();
     levelEditor_.reset();
     gpuParticleEditor_.reset();
+    // SDF は D3D12 リソース（アトラス/PSO/バッファ）を持つため、
+    // ResourceLeakChecker より先にここで必ず解放する
+    SDFManager::GetInstance()->Finalize();
     // FileEditor はサムネイル用の D3D12 リソース（RT/深度/DSVヒープ）を持つ。
     // ここで解放しないと終了時の ResourceLeakChecker がリークを検出して例外になる。
     fileEditor_.reset();

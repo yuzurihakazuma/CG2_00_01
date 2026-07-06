@@ -34,6 +34,7 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
+#include "engine/sdf/SDFManager.h"
 
 
 using namespace VectorMath;
@@ -515,6 +516,15 @@ void GamePlayScene::Draw(){
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
 
+	// 5.5 SDF（文字/画像）を最終画像に焼き込む
+	//     → エディタの Game View にもそのまま映る。
+	//     Bloom無効時は合成RTを経由しないので、後でバックバッファへ直描きする
+	bool sdfBaked = false;
+	if ( Bloom::GetInstance()->IsEnabled() ) {
+		SDFManager::GetInstance()->DrawIntoTexture(commandList, Bloom::GetInstance()->GetCombineTexture());
+		sdfBaked = true;
+	}
+
 	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
 
@@ -526,6 +536,11 @@ void GamePlayScene::Draw(){
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 	if (sprite_) { sprite_->Draw(); }
 	TextManager::GetInstance()->Draw();
+
+	// SDF 描画（Bloom無効で焼き込めなかった場合のみバックバッファへ直描き）
+	if ( !sdfBaked ) {
+		SDFManager::GetInstance()->Draw(commandList);
+	}
 	
 
 }

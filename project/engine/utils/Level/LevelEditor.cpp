@@ -11,6 +11,8 @@
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/utils/ImGuiManager.h"
 #include "engine/3d/model/ModelManager.h"
+#include "engine/base/Input.h"               // Delete キー削除用
+#include "engine/utils/EditorManager.h"      // 選択オブジェクトをギズモ対象にする
 #include "engine/camera/Camera.h"
 
 
@@ -195,6 +197,8 @@ void LevelEditor::SpawnObject(const std::string& type){
 	selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
 	++spawnCounter_;
 	dirty_ = true;
+	// 出した直後からギズモで動かせるように選択状態にしておく
+	EditorManager::GetInstance()->SetGizmoTarget(object3ds_.back().get());
 }
 
 // resources/ を再帰走査して .obj / .gltf をアセット一覧に登録する
@@ -237,6 +241,7 @@ bool LevelEditor::EnsureAssetLoaded(const std::string& name){
 }
 // マップの読み込みと生成
 void LevelEditor::LoadAndCreateMap(const std::string& fileName){
+	EditorManager::GetInstance()->SetGizmoTarget(nullptr); // 差し替え前の実体を参照させない
 	object3ds_.clear();
 	levelData_ = LevelManager::GetInstance()->Load(fileName);
 	currentMapFile_ = fileName; // 以後の上書き保存先
@@ -291,6 +296,19 @@ void LevelEditor::ApplyImportedData(const LevelData& data, bool additive){
 	}
 }
 
+// 選択中のオブジェクトを削除する（インスペクターの削除ボタンと Delete キーの共通処理）。
+//   ギズモ対象を先に解除してダングリングポインタを防ぐ。
+void LevelEditor::DeleteSelectedObject(){
+	if ( selectedObjectIndex_ < 0 || selectedObjectIndex_ >= ( int ) levelData_.objects.size() ) return;
+	if ( selectedObjectIndex_ >= ( int ) object3ds_.size() ) return;
+	EditorManager::GetInstance()->SetGizmoTarget(nullptr); // 消す前に必ずギズモから外す
+	PushUndo(); // 削除前を履歴へ
+	levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
+	object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
+	selectedObjectIndex_ = -1;
+	dirty_ = true;
+}
+
 void LevelEditor::Update(){
 
 	// まだモデルが解決できていないオブジェクトを解決する。
@@ -302,6 +320,37 @@ void LevelEditor::Update(){
 		if ( object3ds_[i]->GetModel() == nullptr ) {
 			Model* m = ModelManager::GetInstance()->FindModel(levelData_.objects[i].type);
 			if ( m ) { object3ds_[i]->SetModel(m); }
+		}
+	}
+
+	// ギズモ（Game View）で動かした結果をデータへ書き戻す。
+	//   ギズモは Obj3d を直接動かすため、これが無いと「見た目は動いたのに保存されない/
+	//   インスペクターと食い違う」状態になる。差分がある時だけ dirty を立てる。
+	if ( selectedObjectIndex_ >= 0 && selectedObjectIndex_ < ( int ) object3ds_.size()
+		&& selectedObjectIndex_ < ( int ) levelData_.objects.size() ) {
+		Obj3d* obj = object3ds_[selectedObjectIndex_].get();
+		LevelObjectData& d = levelData_.objects[selectedObjectIndex_];
+		const Vector3& t = obj->GetTranslation();
+		const Vector3& r = obj->GetRotation();
+		const Vector3& sc = obj->GetScale();
+		if ( t.x != d.translation.x || t.y != d.translation.y || t.z != d.translation.z
+			|| r.x != d.rotation.x || r.y != d.rotation.y || r.z != d.rotation.z
+			|| sc.x != d.scale.x || sc.y != d.scale.y || sc.z != d.scale.z ) {
+			d.translation = t; d.rotation = r; d.scale = sc;
+			dirty_ = true;
+		}
+	}
+
+	// Delete キーで選択中のオブジェクトを削除（テキスト入力中は無効）
+	{
+		Input* in = Input::GetInstance();
+		bool textInput = false;
+#ifdef USE_IMGUI
+		textInput = ImGui::GetIO().WantTextInput;
+#endif
+		if ( !textInput && in->Triggerkey(DIK_DELETE)
+			&& selectedObjectIndex_ >= 0 && selectedObjectIndex_ < ( int ) levelData_.objects.size() ) {
+			DeleteSelectedObject();
 		}
 	}
 
@@ -377,6 +426,7 @@ void LevelEditor::DrawDebugUI(){
 	}
 	ImGui::SameLine();
 	if ( ImGui::Button("マップをクリア") ) {
+		EditorManager::GetInstance()->SetGizmoTarget(nullptr); // 消える実体を参照させない
 		PushUndo(); // クリア前を履歴へ（Ctrl+Zで戻せる）
 		object3ds_.clear();
 		levelData_.objects.clear();
@@ -435,6 +485,8 @@ void LevelEditor::DrawDebugUI(){
 			std::string label = std::to_string(i) + ": " + levelData_.objects[i].type;
 			if ( ImGui::Selectable(label.c_str(), selectedObjectIndex_ == i) ) {
 				selectedObjectIndex_ = i;
+				// 選択したオブジェクトを Game View のギズモ対象にする（そのまま掴んで動かせる）
+				EditorManager::GetInstance()->SetGizmoTarget(object3ds_[i].get());
 			}
 		}
 		ImGui::EndListBox();
@@ -469,11 +521,7 @@ void LevelEditor::DrawDebugUI(){
 		ImGui::Separator();
 
 		if ( ImGui::Button("オブジェクトを削除") ) {
-			PushUndo(); // 削除前を履歴へ
-			levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
-			object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
-			selectedObjectIndex_ = -1;
-			dirty_ = true;
+			DeleteSelectedObject(); // ギズモ解除→履歴→削除（Deleteキーと共通）
 		}
 
 		if ( selectedObjectIndex_ != -1 ) {

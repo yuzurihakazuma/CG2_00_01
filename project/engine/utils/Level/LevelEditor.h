@@ -51,6 +51,10 @@ public:
     // （ファイルエディタなど外部からも使えるよう public）
     void SpawnObject(const std::string& type);
 
+    // 選択中のオブジェクトを削除（インスペクターの削除ボタン / Delete キー共通。
+    //   ギズモ対象の解除→Undo履歴→削除まで行う）
+    void DeleteSelectedObject();
+
     // --- Undo / Redo ---
     void PushUndo();   // 変更「前」に呼んで履歴に積む
     void Undo();       // Ctrl+Z
