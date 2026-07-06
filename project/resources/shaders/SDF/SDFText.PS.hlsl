@@ -9,7 +9,7 @@ struct SDFParams
     float4 outlineColor;    // アウトラインの色 (RGBA)
     float edgeWidth;        // アンチエイリアス幅の下限 (0.0〜0.1)
     float outlineWidth;     // アウトラインの太さ (0 = なし, 0.1 〜 0.3)
-    float padding0;
+    float boldOffset;       // 太さ調整 (+で太く / -で細く, -0.15〜0.2)
     float padding1;
 };
 
@@ -36,15 +36,17 @@ PSOutput main(VSOutput input)
     // SDF アトラスから距離値を取得 (R チャンネルに格納されている前提)
     float dist = gAtlas.Sample(gSampler, input.texcoord).r;
 
-    // 画面ピクセルの変化量から最適なアンチエイリアス幅を求める。
-    // edgeWidth を下限とし、拡大率に応じて自動調整する。
+    // 画面ピクセルの変化量から最適なアンチエイリアス幅を求める
     float delta = max(fwidth(dist), gParams.edgeWidth);
 
-    // 文字本体の alpha: 距離 0.5 を境にフェードイン
-    float alpha = smoothstep(0.5 - delta, 0.5 + delta, dist);
+    // 太さ調整：しきい値をずらすと文字が太く/細くなる（SDFならでは）
+    float center = 0.5 - gParams.boldOffset;
 
-    // アウトラインの alpha: 距離 (0.5 - outlineWidth) を境にフェードイン
-    float outlineInner = 0.5 - gParams.outlineWidth;
+    // 文字本体の alpha: しきい値を境にフェードイン
+    float alpha = smoothstep(center - delta, center + delta, dist);
+
+    // アウトラインの alpha: (center - outlineWidth) を境にフェードイン
+    float outlineInner = center - gParams.outlineWidth;
     float outlineAlpha = smoothstep(outlineInner - delta, outlineInner + delta, dist);
 
     // アウトラインと文字を合成 (文字が優先)

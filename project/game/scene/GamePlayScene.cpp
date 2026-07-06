@@ -34,6 +34,7 @@
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
+#include "engine/sdf/SDFManager.h"
 
 
 using namespace VectorMath;
@@ -110,36 +111,8 @@ void GamePlayScene::Initialize(){
 	// このカメラを既定（アクティブ）カメラに設定 → 以降の Obj3d::Create は自動でこのカメラを使う
 	Obj3dCommon::GetInstance()->SetDefaultCamera(camera_.get());
 
-	// ====== SDF デモ（不要なら丸ごと削除してOK） ======
-	// 画面上部にSDF文字（拡大してもガビガビにならない）
-	if (SDFFontManager::GetInstance()->Load(
-			"arial", "resources/sdf/arial_sdf.json", "resources/sdf/arial_sdf.png", commandList)) {
-		sdfText_ = std::make_unique<SDFText>();
-		sdfText_->Initialize(SDFFontManager::GetInstance()->Get("arial"));
-		sdfText_->SetText("Zoom in: Left=Normal(blur)  Right=SDF(sharp)");
-		sdfText_->SetPosition(40.0f, 28.0f);
-		sdfText_->SetFontSize(40.0f);
-		sdfText_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
-		sdfText_->SetOutlineWidth(0.2f);
-		sdfText_->SetOutlineColor({ 0.0f, 0.0f, 0.0f, 1.0f });
-	}
-
-	// 左の3D板: 低解像度(64px)の普通テクスチャをそのまま大きく貼る → ガビガビ/ボヤけがはっきり出る
-	textures_["starLow"] = TextureManager::GetInstance()->Load("resources/sdf/star64.png");
-	sdfRawPanel_ = std::make_unique<SDFSprite>();
-	sdfRawPanel_->InitializeRaw(
-		textures_["starLow"].srvIndex, textures_["starLow"].width, textures_["starLow"].height);
-	sdfRawPanel_->SetTransform3D({ -4.0f, 3.5f, 5.0f }, 7.0f, camera_.get());
-
-	// 右の3D板: 同じ64px素材から作ったSDFを大きく貼る → 拡大してもエッジくっきり
-	if (SDFSpriteManager::GetInstance()->Load(
-			"star64", "resources/sdf/star64_sdf.json", "resources/sdf/star64_sdf.png", commandList)) {
-		sdfSprite_ = std::make_unique<SDFSprite>();
-		sdfSprite_->Initialize(SDFSpriteManager::GetInstance()->Get("star64"), "star64");
-		sdfSprite_->SetTransform3D({ 4.0f, 3.5f, 5.0f }, 7.0f, camera_.get());
-		sdfSprite_->SetOutline(0.0f, { 0.0f, 0.0f, 0.0f, 1.0f }); // 純粋な形比較のためフチ/グロー無し
-		sdfSprite_->SetGlow(0.0f, { 0.0f, 0.0f, 0.0f, 0.0f });
-	}
+	// ※SDF の文字/画像は SDFManager が自動ロード＆エディタの「SDF」パネルで配置する
+	//   （素材は SDFWatcher の input/ に入れるだけでここへ自動で届く）
 
 
 	// デバッグカメラ生成
@@ -282,9 +255,6 @@ void GamePlayScene::Update(){
 	camera_->Update();
 
 	// SDF デモ更新
-	if (sdfText_)     { sdfText_->Update(); }
-	if (sdfSprite_)   { sdfSprite_->Update(); }
-	if (sdfRawPanel_) { sdfRawPanel_->Update(); }
 
 	Input* input = Input::GetInstance();
 
@@ -481,6 +451,15 @@ void GamePlayScene::Draw(){
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
 
+	// 5.5 SDF（文字/画像）を最終画像に焼き込む
+	//     → エディタの Game View にもそのまま映る。
+	//     Bloom無効時は合成RTを経由しないので、後でバックバッファへ直描きする
+	bool sdfBaked = false;
+	if ( Bloom::GetInstance()->IsEnabled() ) {
+		SDFManager::GetInstance()->DrawIntoTexture(commandList, Bloom::GetInstance()->GetCombineTexture());
+		sdfBaked = true;
+	}
+
 	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
 
@@ -493,10 +472,10 @@ void GamePlayScene::Draw(){
 	if (sprite_) { sprite_->Draw(); }
 	TextManager::GetInstance()->Draw();
 
-	// SDF 描画（独自パイプラインなので最後に。バックバッファへ最前面で乗る）
-	if (sdfRawPanel_) { sdfRawPanel_->Draw(commandList); }
-	if (sdfSprite_)   { sdfSprite_->Draw(commandList); }
-	if (sdfText_)     { sdfText_->Draw(commandList); }
+	// SDF 描画（Bloom無効で焼き込めなかった場合のみバックバッファへ直描き）
+	if ( !sdfBaked ) {
+		SDFManager::GetInstance()->Draw(commandList);
+	}
 	
 
 }
@@ -578,11 +557,7 @@ void GamePlayScene::Finalize(){
 	GPUParticleManager::GetInstance()->Finalize();
 
 	// SDF デモ後始末
-	sdfText_.reset();
-	sdfSprite_.reset();
-	sdfRawPanel_.reset();
-	SDFFontManager::GetInstance()->Finalize();
-	SDFSpriteManager::GetInstance()->Finalize();
+	// ※SDF の後始末は EditorManager::Finalize → SDFManager::Finalize で行う
 
 	textures_.clear();
 	depthStencilResource_.Reset();

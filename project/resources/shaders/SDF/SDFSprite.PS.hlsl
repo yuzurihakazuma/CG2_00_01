@@ -5,7 +5,7 @@
 
 struct SDFSpriteParams
 {
-    float4 baseColor;     // useTexColor=0 のときの塗り色 / 兼ティント色
+    float4 baseColor;     // ティント色（useTexColor=0 のときは塗り色）
     float4 outlineColor;  // アウトラインの色
     float4 glowColor;     // グロー(光彩)の色。a でグローの強さ
     float edgeBias;       // SDF 境界値 (通常 0.5)
@@ -13,7 +13,7 @@ struct SDFSpriteParams
     float glowWidth;      // グローの広がり (0=なし, 0.1〜0.4)
     float sdfInAlpha;     // 1.0=A から距離取得(keepColor) / 0.0=R から取得
     float useTexColor;    // 1.0=テクスチャRGBを表示(keepColor) / 0.0=baseColor
-    float rawSample;      // 1.0=SDF処理せず通常テクスチャをそのまま表示(比較用)
+    float pad0;
     float pad1;
     float pad2;
 };
@@ -39,15 +39,6 @@ PSOutput main(VSOutput input)
     PSOutput output;
 
     float4 tex = gAtlas.Sample(gSampler, input.texcoord);
-
-    // 比較用: SDF処理をせず、普通のテクスチャをそのまま描く。
-    // 拡大すると元画像のままぼやける／ガビガビになる（SDF版との違いが分かる）。
-    if (gParams.rawSample > 0.5f)
-    {
-        if (tex.a < 0.003f) discard;
-        output.color = tex * gParams.baseColor;
-        return output;
-    }
 
     // 距離値: keepColor なら A、そうでなければ R
     float dist = lerp(tex.r, tex.a, gParams.sdfInAlpha);

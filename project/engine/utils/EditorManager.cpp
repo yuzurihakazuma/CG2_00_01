@@ -14,6 +14,7 @@
 #include "engine/scene/SceneManager.h"
 #include "engine/utils/Level/LevelEditor.h"
 #include "engine/utils/Level/BlenderImporter.h"
+#include "engine/sdf/SDFManager.h"
 #include "engine/particle/GPUParticleEditor.h"
 #include "engine/utils/GlobalVariables.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
@@ -45,11 +46,18 @@ void EditorManager::Initialize(){
     blenderImporter_->Initialize(levelEditor_.get());
 
     gpuParticleEditor_ = std::make_unique<GPUParticleEditor>();
+
+    // SDF（フォント/画像）システム：パイプライン構築＋前回の配置を復元
+    SDFManager::GetInstance()->Initialize();
 }
 
 
 
 void EditorManager::Begin(){
+    // フレーム先頭（コマンドリストが閉じている安全な瞬間）に
+    // SDF アトラスのフォルダ監視・自動ロード・ホットリロードを行う
+    SDFManager::GetInstance()->Update();
+
 #ifdef USE_IMGUI
     ImGuiManager::GetInstance()->Begin();
 #endif
@@ -280,6 +288,9 @@ void EditorManager::Update(){
         gpuParticleEditor_->DrawDebugUI();
     }
 
+    // 6.7 SDF（フォント/画像）パネル：アトラス一覧＋テキスト/スプライト配置
+    SDFManager::GetInstance()->DrawDebugUI();
+
     // 調整項目（GlobalVariables）の編集ウィンドウ
     GlobalVariables::GetInstance()->Update();
 
@@ -384,6 +395,9 @@ void EditorManager::Finalize(){
     blenderImporter_.reset();
     levelEditor_.reset();
     gpuParticleEditor_.reset();
+    // SDF は D3D12 リソース（アトラス/PSO/バッファ）を持つため、
+    // ResourceLeakChecker より先にここで必ず解放する
+    SDFManager::GetInstance()->Finalize();
 }
 
 void EditorManager::SetParticleEmitter(GPUParticleEmitter* emitter){

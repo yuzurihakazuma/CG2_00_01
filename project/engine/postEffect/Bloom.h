@@ -57,6 +57,9 @@ public:
 	// すべての処理が終わった「最終結果」のSRVを取得
 	uint32_t GetCombineSrvIndex() const { return combineTexture_->GetSrvIndex(); }
 
+	// 合成結果のレンダーテクスチャ本体（SDF等のオーバーレイ焼き込みに使う）
+	RenderTexture* GetCombineTexture() const { return combineTexture_.get(); }
+
 	void SetTargetEmissivePower(float* emissivePower){ targetEmissivePower_ = emissivePower; }
 
 	void DrawDebugUI();

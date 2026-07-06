@@ -10,10 +10,6 @@
 #include "engine/utils/EditorManager.h"  // EngineMode のために必要
 #include "Skybox.h"
 #include "HitEffect.h"
-#include "engine/2d/sdf/SDFText.h"
-#include "engine/2d/sdf/SDFFontManager.h"
-#include "engine/2d/sdf/SDFSprite.h"
-#include "engine/2d/sdf/SDFSpriteManager.h"
 
 // --- 標準ライブラリ ---
 #include <vector>
@@ -111,9 +107,6 @@ private: // メンバ変数
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;
 
-	// --- SDF 描画デモ（不要なら丸ごと削除してOK） ---
-	std::unique_ptr<SDFText>   sdfText_     = nullptr; // 文字（ガビガビにならない）
-	std::unique_ptr<SDFSprite> sdfSprite_   = nullptr; // 3D板: SDF（くっきり）
-	std::unique_ptr<SDFSprite> sdfRawPanel_ = nullptr; // 3D板: 普通テクスチャ（比較用・ぼやける）
+	// SDF の文字/画像は SDFManager（エディタの「SDF」パネル）で配置・管理する
 
 };
