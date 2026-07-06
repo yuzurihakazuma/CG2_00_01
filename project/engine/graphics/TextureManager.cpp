@@ -151,6 +151,46 @@ TextureData TextureManager::LoadTextureAndCreateSRV(const std::string& filePath,
 	return texData;
 }
 
+// キャッシュを無視して再読み込み（ホットリロード用）
+TextureData TextureManager::ReloadTextureAndCreateSRV(const std::string& filePath, ID3D12GraphicsCommandList* commandList){
+
+	// 既存エントリがあれば SRV スロットを引き継ぐ（参照側のインデックスを無効にしない）
+	uint32_t reuseSrvIndex = UINT32_MAX;
+	auto it = textureDatas.find(filePath);
+	if ( it != textureDatas.end() ) {
+		reuseSrvIndex = it->second.srvIndex;
+		textureDatas.erase(it);
+	}
+
+	TextureData texData {};
+
+	// 1. 画像読み込み
+	DirectX::ScratchImage image = LoadTexture(filePath);
+	const DirectX::TexMetadata& metadata = image.GetMetadata();
+
+	// 2. GPUリソース生成
+	texData.resource = CreateTextureResource(metadata);
+
+	// 3. GPUへデータ転送
+	UploadTextureData(texData.resource, image, commandList);
+
+	// 4. SRVインデックス（再利用 or 新規確保）
+	texData.srvIndex = ( reuseSrvIndex != UINT32_MAX ) ? reuseSrvIndex : srvManager_->Allocate();
+
+	texData.width = static_cast< float >( metadata.width );
+	texData.height = static_cast< float >( metadata.height );
+
+	// 5. SRVを同じスロットに上書き作成
+	srvManager_->CreateSRVforTexture2D(
+		texData.srvIndex, texData.resource.Get(), metadata.format, static_cast< UINT >( metadata.mipLevels )
+	);
+
+	// 6. キャッシュ更新
+	textureDatas[filePath] = texData;
+
+	return texData;
+}
+
 TextureData TextureManager::LoadTextureAndCreateSRVCube(const std::string& filePath, ID3D12GraphicsCommandList* commandList){
 	// すでにロード済みならそれを返す
 	auto it = textureDatas.find(filePath);
