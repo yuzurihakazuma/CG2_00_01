@@ -160,6 +160,9 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
             float maxDist = splineRails[spawnRailIndex_].GetLength();
             DrawDistanceWidget("new", &spawnDistance_, maxDist);
 
+            // --- パトロール設定（既定OFF：置いた場所から動かない）---
+            ImGui::Checkbox("パトロール（レールを往復移動）##new", &spawnPatrol_);
+
             ImGui::Spacing();
 
             // --- 配置ボタン ---
@@ -168,7 +171,7 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.25f, 0.8f, 0.25f, 1.0f));
             if ( ImGui::Button("＋ 敵を追加", ImVec2(-1.0f, 28.0f)) ) {
                 EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
-                spawnDatas_.push_back({ type, spawnRailIndex_, spawnDistance_ });
+                spawnDatas_.push_back({ type, spawnRailIndex_, spawnDistance_, spawnPatrol_ });
                 changed_ = true;
             }
             ImGui::PopStyleColor(3);
@@ -231,10 +234,11 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
                 ImGui::PushStyleColor(ImGuiCol_HeaderActive,   ImVec4(0.35f, 0.35f, 0.4f, 0.6f));
             }
 
-            // ラベル行
+            // ラベル行（パトロールONの敵は [巡回] を付けて一目で分かるように）
             char label[128];
-            std::snprintf(label, sizeof(label), "%-6s  Rail %d   %.1f m",
-                GetTypeLabel(spawn.type), spawn.railIndex, spawn.distance);
+            std::snprintf(label, sizeof(label), "%-6s  Rail %d   %.1f m%s",
+                GetTypeLabel(spawn.type), spawn.railIndex, spawn.distance,
+                spawn.patrol ? "  [巡回]" : "");
 
             if ( ImGui::Selectable(label, isSelected, ImGuiSelectableFlags_AllowOverlap) ) {
                 selectedEntry_ = isSelected ? -1 : i;
@@ -295,6 +299,11 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
                 // 距離の変更
                 float editMax = validRail ? railLen : 100.0f;
                 if ( DrawDistanceWidget("edit", &spawn.distance, editMax) ) {
+                    changed_ = true;
+                }
+
+                // パトロールの変更（OFF=置いた場所に留まる）
+                if ( ImGui::Checkbox("パトロール（レールを往復移動）##edit", &spawn.patrol) ) {
                     changed_ = true;
                 }
 

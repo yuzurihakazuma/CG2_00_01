@@ -11,7 +11,7 @@ void EnemyManager::Spawn(const std::vector<EnemySpawnData>& spawns, const std::v
         if ( rails[spawn.railIndex].nodes.size() < 2 ) continue;
 
         auto enemy = std::make_unique<Enemy>();
-        enemy->Initialize(spawn.type, spawn.railIndex, spawn.distance);
+        enemy->Initialize(spawn.type, spawn.railIndex, spawn.distance, spawn.patrol);
         // dt=0 で Update を呼び、レール上の初期位置を即座に確定させる（原点に巨大球が出るのを防ぐ）
         enemy->Update(rails, 0.0f);
         enemies_.push_back(std::move(enemy));

@@ -20,6 +20,7 @@ struct LevelEnemyData{
     int   type = 0;
     int   railIndex = 0;
     float distance = 0.0f;
+    int   patrol = 0; // 1=レールを往復パトロール（旧データはフィールド無し=0で動かない）
 };
 
 // レール上のカメラ演出ゾーン1個分のデータ（マップ保存用）。

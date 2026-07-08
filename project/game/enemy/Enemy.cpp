@@ -9,11 +9,12 @@
 Enemy::Enemy() = default;
 Enemy::~Enemy() = default;
 
-void Enemy::Initialize(EnemyType type, int railIndex, float distance){
+void Enemy::Initialize(EnemyType type, int railIndex, float distance, bool patrol){
     type_      = type;
     railIndex_ = railIndex;
     distance_  = distance;
     dir_       = 1.0f;
+    patrol_    = patrol;
     alive_     = true;
 
     // エネミーの種類（タイプ）に応じてパラメータ（半径、移動速度）を設定
@@ -53,8 +54,11 @@ void Enemy::Update(const std::vector<SplineRail>& rails, float dt){
 
     const float len = rail.GetLength();
 
-    // レール上を往復（端で折り返す）
-    distance_ += dir_ * speed_ * dt;
+    // パトロールONの敵だけレール上を往復（端で折り返す）。OFFは置いた場所に留まる。
+    if ( patrol_ ) {
+        distance_ += dir_ * speed_ * dt;
+    }
+    // レール編集で全長が縮んだ時も範囲内に収める（OFFの敵も対象）
     if ( distance_ > len )  { distance_ = len;  dir_ = -1.0f; }
     if ( distance_ < 0.0f ) { distance_ = 0.0f; dir_ = 1.0f; }
 

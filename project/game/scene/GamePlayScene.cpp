@@ -231,7 +231,49 @@ void GamePlayScene::SyncRailsFromEditor(){
 	auto itWhite = textures_.find("white");
 	if ( itWhite != textures_.end() ) { whiteTex = itWhite->second.srvIndex; }
 
+	// --- 敵のピン留め準備：編集前のレールから各敵のワールド位置を覚えておく ---
+	//   敵は「レール番号＋距離(m)」で置かれているため、レールを編集すると全長が伸縮し、
+	//   触っていない敵まで距離ぶんズルズル滑ってしまう（＝レール編集に追従する問題）。
+	//   → 編集前の位置を記録し、編集後に「その位置へ一番近い点」に距離を張り直して固定する。
+	//   ※マップ読込直後のフレームは対象外：今の spawnDatas_ は旧マップの敵なので、
+	//     張り直して保存データへ書き戻すと読込した新マップの敵配置を潰してしまう。
+	const bool mapLoadPending =
+		( EditorManager::GetInstance()->GetMapLoadVersion() != lastMapLoadVersion_ );
+	std::vector<Vector3> oldEnemyPos;
+	std::vector<char>    oldEnemyValid;
+	if ( enemyEditor_ && !mapLoadPending ) {
+		const auto& oldRails = railField_.GetRails();
+		for ( const auto& s : enemyEditor_->GetSpawnDatas() ) {
+			bool ok = ( s.railIndex >= 0 && s.railIndex < ( int ) oldRails.size()
+			            && oldRails[s.railIndex].nodes.size() >= 2 );
+			oldEnemyValid.push_back(ok ? 1 : 0);
+			oldEnemyPos.push_back(ok ? oldRails[s.railIndex].GetPositionByDistance(s.distance)
+			                         : Vector3 { 0.0f, 0.0f, 0.0f });
+		}
+	}
+
 	railField_.Sync(camera_.get(), whiteTex); // レール本体＋緑線を作り直す
+
+	// --- 敵のピン留め：編集後のレール上で「元のワールド位置の最寄り点」へ距離を張り直す ---
+	//   路線まるごと移動なら一緒に付いていき、形の部分編集なら他の敵は動かない。
+	if ( enemyEditor_ && !mapLoadPending ) {
+		auto& datas = enemyEditor_->MutableSpawnDatas();
+		const auto& newRails = railField_.GetRails();
+		for ( size_t i = 0; i < datas.size() && i < oldEnemyValid.size(); ++i ) {
+			if ( !oldEnemyValid[i] ) continue;
+			auto& s = datas[i];
+			if ( s.railIndex < 0 || s.railIndex >= ( int ) newRails.size() ) continue;
+			if ( newRails[s.railIndex].nodes.size() < 2 ) continue;
+			s.distance = newRails[s.railIndex].GetClosestDistance(oldEnemyPos[i]);
+		}
+		// マップ保存用データにも張り直した距離を反映（保存した時に位置がズレないように）
+		std::vector<LevelEnemyData> save;
+		for ( const auto& s : datas ) {
+			save.push_back({ static_cast<int>( s.type ), s.railIndex, s.distance, s.patrol ? 1 : 0 });
+		}
+		EditorManager::GetInstance()->SetEditorEnemyData(save);
+	}
+
 	SpawnEnemies();                           // 配置テンプレートを元に敵を生成し直す
 
 	// マップのスタート地点をプレイヤーへ（Initialize/リスポーンで使われる）
@@ -286,7 +328,7 @@ void GamePlayScene::SyncFromEditors(){
 			if ( !saved.empty() ) {
 				std::vector<EnemySpawnData> datas;
 				for ( const auto& e : saved ) {
-					datas.push_back({ static_cast<EnemyType>( e.type ), e.railIndex, e.distance });
+					datas.push_back({ static_cast<EnemyType>( e.type ), e.railIndex, e.distance, e.patrol != 0 });
 				}
 				enemyEditor_->SetSpawnDatas(datas); // changed_ が立つ → 下で SpawnEnemies される
 			}
@@ -297,7 +339,7 @@ void GamePlayScene::SyncFromEditors(){
 	if ( enemyEditor_ && enemyEditor_->ConsumeChanged() ) {
 		std::vector<LevelEnemyData> save;
 		for ( const auto& s : enemyEditor_->GetSpawnDatas() ) {
-			save.push_back({ static_cast<int>( s.type ), s.railIndex, s.distance });
+			save.push_back({ static_cast<int>( s.type ), s.railIndex, s.distance, s.patrol ? 1 : 0 });
 		}
 		em->SetEditorEnemyData(save);
 		SpawnEnemies();
@@ -435,6 +477,15 @@ void GamePlayScene::UpdateSceneVisuals(){
 	Input* input = Input::GetInstance();
 	EngineMode currentMode = EditorManager::GetInstance()->GetMode();
 
+	// Editモード中も敵の見た目（WVP行列）を毎フレーム更新する。
+	//   Obj3d::Update は「呼ばれた時のカメラ行列」を焼き込むため、これが無いと
+	//   デバッグカメラを動かした時に敵が古い行列のまま描かれ、画面に貼り付いて付いてくる。
+	//   dt=0 で呼ぶのでパトロール等の移動は起きない（位置はレール上の現在距離のまま）。
+	if ( currentMode != EngineMode::Play ) {
+		Vector3 pp = player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f };
+		enemyMgr_.Update(railField_.GetRails(), pp, 0.0f, nullptr);
+	}
+
 	// カメラ演出ゾーンの可視化（球=発動範囲 / 白い箱=カメラ位置の目安。編集中も見える）
 	camCtrl_.DrawZoneMarkers(railField_.GetRails());
 
@@ -471,6 +522,19 @@ void GamePlayScene::UpdateSceneVisuals(){
 		if ( currentMode == EngineMode::Play && player_ ) {
 			pos = player_->GetPosition();
 			rot = player_->GetRotation();
+		} else {
+			// Editモード：スタート地点のレール上に立たせて表示（スポーンプレビュー）。
+			//   起動直後から「どこから始まるか」が一目で分かる。レール編集にも毎フレーム追従する。
+			const auto& rails = railField_.GetRails();
+			int sr = railField_.GetStartRail();
+			if ( sr >= 0 && sr < ( int ) rails.size() && rails[sr].nodes.size() >= 2 ) {
+				float sd = railField_.GetStartDistance();
+				pos = rails[sr].GetPositionByDistance(sd);
+				Vector3 tan = rails[sr].GetTangentByDistance(sd);
+				if ( std::abs(tan.x) > 1e-4f || std::abs(tan.z) > 1e-4f ) {
+					rot.y = std::atan2(tan.x, tan.z); // レールの進行方向を向かせる
+				}
+			}
 		}
 		skinnedObj_->SetTranslation(pos);
 		skinnedObj_->SetRotation(rot);

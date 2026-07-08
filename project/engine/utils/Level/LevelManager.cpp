@@ -121,6 +121,7 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         je["type"]      = e.type;
         je["railIndex"] = e.railIndex;
         je["distance"]  = e.distance;
+        je["patrol"]    = e.patrol;
         enemiesArray.push_back(je);
     }
     j["enemies"] = enemiesArray;
@@ -293,6 +294,7 @@ LevelData LevelManager::Load(const std::string& fileName){
             e.type      = je.value("type", 0);
             e.railIndex = je.value("railIndex", 0);
             e.distance  = je.value("distance", 0.0f);
+            e.patrol    = je.value("patrol", 0); // 旧データは0=動かない
             levelData.enemies.push_back(e);
         }
     }
