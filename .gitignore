@@ -331,6 +331,11 @@ project/externals/DirectXTex/Bin/
 logs/
 project/logs/
 
+# ===== Crash dump files =====
+*.dmp
+Dumps/
+project/Dumps/
+
 # ===== C++ build artifacts (念のため強化) =====
 *.tlog
 *.lastbuildstate
