@@ -78,6 +78,8 @@ void GamePlayScene::LoadResources(){
 	model->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	model->LoadModel("human", "resources/human", "walk.gltf");
 	model->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
+	model->LoadModel("roadSegment", "resources/road", "road_segment.obj"); // レール下の道（クラフト風4mタイル）
+	model->LoadModel("roadEnd",     "resources/road", "road_end.obj");     // 道の終端キャップ（断面を閉じる）
 	model->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
 
 	// 汎用パーティクル用の粒（"sphere" は敵と共有＋モンスターボール柄がデフォルトなので、
@@ -272,6 +274,7 @@ void GamePlayScene::SyncRailsFromEditor(){
 	}
 
 	railField_.Sync(camera_.get(), whiteTex); // レール本体＋緑線を作り直す
+	roadMesh_.Build(railField_.GetRails(), camera_.get()); // レール下の道メッシュも敷き直す
 
 	// --- 敵のピン留め：編集後のレール上で「元のワールド位置の最寄り点」へ距離を張り直す ---
 	//   路線まるごと移動なら一緒に付いていき、形の部分編集なら他の敵は動かない。
@@ -525,6 +528,7 @@ void GamePlayScene::UpdateSceneVisuals(){
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 	if ( testObj_ ){ testObj_->Update(); }
 	railField_.UpdateMarkers(); // レール緑線（カメラ移動に追従）
+	roadMesh_.Update(railField_.GetRails()); // 道メッシュ（動くレール追従＋カメラ追従）
 
 	// リングオーラ（UVスクロール）
 	if ( auraObj_ ) {
@@ -617,8 +621,14 @@ void GamePlayScene::Draw(){
 	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵
 
-	// レール経路の可視化マーカー（プレイヤーが通る道筋）
-	railField_.DrawMarkers();
+	// レール下の道メッシュ（クラフト風の地面）。Edit/Play どちらでも見える「本番の見た目」
+	roadMesh_.Draw();
+
+	// レール経路の緑線マーカーは「エディット中だけ」表示する。
+	//   Play開始やリリース版（初期モードがPlay）ではレールの線が全て消え、道メッシュだけが残る。
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit ) {
+		railField_.DrawMarkers();
+	}
 
 	EditorManager::GetInstance()->Draw();
 

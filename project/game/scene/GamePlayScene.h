@@ -12,6 +12,7 @@
 
 #include "engine/rail/SplineRail.h"
 #include "game/rail/RailField.h"
+#include "game/rail/RoadMesh.h"
 #include "game/camera/PlayCameraController.h"
 #include "game/combat/HitFeel.h"
 #include "game/combat/CombatSystem.h"
@@ -161,6 +162,9 @@ private: // メンバ変数
 
 	// --- レール実行時管理（レール本体・緑線マーカー・動くレールを RailField に集約）---
 	RailField railField_;
+
+	// --- レール下の道メッシュ（クラフト風の地面。緑線と違い Play 中も見せる本番の見た目）---
+	RoadMesh roadMesh_;
 
 	// --- ステージ進行（ゴール判定・表示。処理は StageFlow へ分離）---
 	StageFlow stageFlow_;

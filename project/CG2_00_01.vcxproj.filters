@@ -321,6 +321,9 @@
     <ClCompile Include="game\rail\RailField.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="game\rail\RoadMesh.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="game\egg\Egg.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -637,6 +640,9 @@
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\rail\RailField.h">
+      <Filter>ソース ファイル\ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="game\rail\RoadMesh.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\egg\Egg.h">
