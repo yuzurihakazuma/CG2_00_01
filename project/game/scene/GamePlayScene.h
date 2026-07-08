@@ -102,6 +102,10 @@ private: // メンバ変数
 	std::vector<std::unique_ptr<Sprite>> sprites_;
 	std::unique_ptr<Sprite> sprite_ = nullptr;
 
+	// 卵保持数HUD（画面左上）：保持卵のスロット6個＋お腹にためた数の小さい丸（T-07）
+	std::vector<std::unique_ptr<Sprite>> eggHudSlots_;
+	std::vector<std::unique_ptr<Sprite>> bellyHudIcons_;
+
 	Vector2 spritePos_ = { 100.0f, 100.0f };
 
 	// テクスチャデータ

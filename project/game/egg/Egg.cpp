@@ -27,7 +27,12 @@ void Egg::Update(float dt){
         pos_.y += vel_.y * dt;
         pos_.z += vel_.z * dt;
         flyTimer_ -= dt;
-        if ( flyTimer_ <= 0.0f ) { Break(); } // 何にも当たらず時間切れ → 割れる
+        if ( flyTimer_ <= 0.0f ) {           // 何にも当たらず時間切れ → 割れる（無限飛行防止）
+            Break();
+        } else if ( pos_.y <= radius_ ) {    // 地面(Y=0の床)に当たった → めり込む前にその場で割る
+            pos_.y = radius_;
+            Break();
+        }
         break;
 
     case EggState::Broken:

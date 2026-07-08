@@ -4,6 +4,7 @@
 #include "game/enemy/EnemyManager.h"
 #include "game/egg/EggSystem.h"
 #include "engine/2d/Sprite.h"
+#include "engine/audio/AudioManager.h"
 #include "engine/base/Input.h"
 #include "engine/base/TimeManager.h"
 #include "engine/base/WindowProc.h"
@@ -24,6 +25,8 @@ AimThrowController::~AimThrowController() = default;
 void AimThrowController::Initialize(uint32_t cursorTexSrv){
     cursorSprite_ = Sprite::Create(cursorTexSrv, { 640.0f, 360.0f });
     cursorSprite_->SetSize({ 56.0f, 56.0f });
+    lockRingSprite_ = Sprite::Create(cursorTexSrv, { 640.0f, 360.0f });
+    lockRingSprite_->SetSize({ 96.0f, 96.0f });
     state_ = State::Idle;
     aimLocked_ = false;
 }
@@ -128,13 +131,25 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
     // 狙い線：プレイヤー → カーソルの先端（奥に合わせると線もそちらへ伸びる）
     DebugDraw::GetInstance()->Line(origin, cursorWorld, { 1.0f, 0.9f, 0.2f, 0.9f });
 
-    // カーソル表示
+    // カーソル表示（視認性向上：脈動＋通常=黄(狙い線と同色)/ロック=赤で大きく）
+    pulseT_ += dt;
+    float pulse = 1.0f + 0.10f * std::sin(pulseT_ * 9.0f); // ふわふわ脈動して目を引く
     if ( cursorSprite_ ) {
         cursorSprite_->SetPosition({ dispX, dispY });
-        cursorSprite_->SetSize(aimLocked_ ? Vector2{ 64.0f, 64.0f } : Vector2{ 48.0f, 48.0f });
-        cursorSprite_->SetColor(aimLocked_ ? Vector4{ 1.0f, 0.25f, 0.2f, 1.0f }   // ロック=赤
-                                           : Vector4{ 1.0f, 1.0f, 1.0f, 0.85f }); // 通常=白
+        float base = aimLocked_ ? 68.0f : 52.0f;
+        cursorSprite_->SetSize({ base * pulse, base * pulse });
+        cursorSprite_->SetColor(aimLocked_ ? Vector4{ 1.0f, 0.25f, 0.2f, 1.0f }    // ロック=赤
+                                           : Vector4{ 1.0f, 0.95f, 0.35f, 0.95f }); // 通常=黄
         cursorSprite_->Update();
+    }
+    // ロックオンリング：ロック中の敵の周りでゆっくり回りながら収縮（「捕まえてる」感）
+    if ( lockRingSprite_ && aimLocked_ ) {
+        lockRingSprite_->SetPosition({ dispX, dispY });
+        float ring = 104.0f + 10.0f * std::sin(pulseT_ * 6.0f);
+        lockRingSprite_->SetSize({ ring, ring });
+        lockRingSprite_->SetRotation(pulseT_ * 2.5f);
+        lockRingSprite_->SetColor({ 1.0f, 0.4f, 0.25f, 0.5f });
+        lockRingSprite_->Update();
     }
 
     // Q を離した瞬間 → 投げる（ロック中=敵へ速く / 未ロック=カーソルの奥へ）。
@@ -146,12 +161,16 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
             Vector3 r = player.GetRotation();
             player.SetRotation({ r.x, yaw, r.z });
         }
-        eggs.TryThrow(ppos, throwDir, throwSpeed);
+        if ( eggs.TryThrow(ppos, throwDir, throwSpeed) ) {
+            AudioManager::GetInstance()->PlayWave("resources/se/eggThrow.wav", false, 0.55f); // 投擲音
+        }
         state_ = State::Idle;
         aimLocked_ = false;
     }
 }
 
 void AimThrowController::DrawSprite(){
-    if ( cursorSprite_ && state_ == State::Aiming ) { cursorSprite_->Draw(); }
+    if ( state_ != State::Aiming ) return;
+    if ( lockRingSprite_ && aimLocked_ ) { lockRingSprite_->Draw(); } // リングはカーソルの下に
+    if ( cursorSprite_ ) { cursorSprite_->Draw(); }
 }

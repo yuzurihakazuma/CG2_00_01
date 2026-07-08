@@ -63,6 +63,11 @@ void GamePlayScene::LoadResources(){
 	// BGM
 	AudioManager::GetInstance()->LoadWave(bgmFile_);
 
+	// 卵アクションのSE（投げ/命中/割れ）。自前生成のプレースホルダ音源（後で差し替え可）
+	AudioManager::GetInstance()->LoadWave("resources/se/eggThrow.wav");
+	AudioManager::GetInstance()->LoadWave("resources/se/eggHit.wav");
+	AudioManager::GetInstance()->LoadWave("resources/se/eggBreak.wav");
+
 	// モデル
 	ModelManager* model = ModelManager::GetInstance();
 	model->LoadModel("fence", "resources", "fence.obj");
@@ -181,6 +186,19 @@ void GamePlayScene::SetupGameplay(){
 
 	// 狙い用カーソル（構え中だけ表示。敵に重なると赤＝ロックオン。AimThrowController が所有）
 	aimThrow_.Initialize(textures_["circle2"].srvIndex);
+
+	// 卵保持数HUD（左上）：上段=保持卵スロット6個 / 下段=お腹にためた数（小さい丸）
+	eggHudSlots_.clear();
+	bellyHudIcons_.clear();
+	for ( int i = 0; i < EggSystem::kMaxEggs; ++i ) {
+		auto s = Sprite::Create(textures_["circle2"].srvIndex, { 36.0f + i * 42.0f, 34.0f });
+		s->SetSize({ 32.0f, 32.0f });
+		eggHudSlots_.push_back(std::move(s));
+
+		auto b = Sprite::Create(textures_["circle2"].srvIndex, { 36.0f + i * 42.0f, 72.0f });
+		b->SetSize({ 16.0f, 16.0f });
+		bellyHudIcons_.push_back(std::move(b));
+	}
 	blockGroup_ = std::make_unique<InstancedGroup>();
 	blockGroup_->Initialize("block", 10000);
 	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
@@ -213,6 +231,7 @@ void GamePlayScene::SetupGameplay(){
 		em->RegisterNodeGameValue("卵の投げ初速",         aimThrow_.ThrowSpeedNormalPtr(), 1.0f, 40.0f);
 		em->RegisterNodeGameValue("ロックオン投げ初速",   aimThrow_.ThrowSpeedLockPtr(),   1.0f, 60.0f);
 		em->RegisterNodeGameValue("飲み込みの届く距離",   swallow_.SwallowReachPtr(), 0.5f, 10.0f);
+		em->RegisterNodeGameValue("飲み込みクールタイム", swallow_.SwallowCooldownPtr(), 0.0f, 2.0f);
 	}
 
 	// レール可視化用モデル（通常=緑 / 穴=赤 の2モデル。マテリアルはモデル単位で共有のため別モデルが必要）
@@ -421,8 +440,8 @@ void GamePlayScene::UpdatePlayMode(){
 	// 当たり判定＋踏みつけ
 	combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get());
 
-	// E=飲み込み / 左Ctrl=産卵（SwallowAbility へ分離）
-	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_);
+	// E=飲み込み / 左Ctrl=産卵（SwallowAbility へ分離。dt はクールタイム用）
+	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, dt);
 
 	// Q長押しで構え→矢印で狙う→離して投げる（AimThrowController へ分離）
 	aimThrow_.Update(*player_, enemyMgr_, eggSystem_, camera_.get(), dt);
@@ -543,6 +562,24 @@ void GamePlayScene::UpdateSceneVisuals(){
 	}
 
 	if ( sprite_ ) { sprite_->Update(); }
+
+	// 卵保持数HUD：持っている卵＝緑で明るく / 空きスロット＝薄く。お腹の数はオレンジの小丸。
+	{
+		int held  = eggSystem_.HeldCount();
+		int belly = eggSystem_.BellyCount();
+		for ( int i = 0; i < ( int ) eggHudSlots_.size(); ++i ) {
+			eggHudSlots_[i]->SetColor(( i < held )
+				? Vector4 { 0.55f, 1.0f, 0.6f, 0.95f }    // 保持中＝ヨッシー緑
+				: Vector4 { 0.25f, 0.25f, 0.28f, 0.35f }); // 空き＝薄いグレー
+			eggHudSlots_[i]->Update();
+		}
+		for ( int i = 0; i < ( int ) bellyHudIcons_.size(); ++i ) {
+			// お腹にためた数だけオレンジで表示（それ以外は完全透明）
+			bellyHudIcons_[i]->SetColor({ 1.0f, 0.75f, 0.25f, ( i < belly ) ? 0.9f : 0.0f });
+			bellyHudIcons_[i]->Update();
+		}
+	}
+
 	PostEffect::GetInstance()->Update();
 	for ( auto& block : blocks_ ) { block->Update(); }
 
@@ -653,8 +690,15 @@ void GamePlayScene::Draw(){
 
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
-	if ( sprite_ ) { sprite_->Draw(); }
+	//if ( sprite_ ) { sprite_->Draw(); }
 	aimThrow_.DrawSprite(); // 構え中だけ狙いカーソル
+
+	// 卵保持数HUD（プレイ中のみ。エディット中は編集の邪魔になるので出さない）
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Play ) {
+		for ( auto& s : eggHudSlots_ )   { s->Draw(); }
+		for ( auto& s : bellyHudIcons_ ) { s->Draw(); }
+	}
+
 	TextManager::GetInstance()->Draw();
 
 

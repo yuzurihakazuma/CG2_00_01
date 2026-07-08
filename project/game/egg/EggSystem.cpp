@@ -1,6 +1,7 @@
 #include "game/egg/EggSystem.h"
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/3d/model/Model.h"
+#include "engine/audio/AudioManager.h"
 #include <algorithm>
 #include <cstdlib>
 
@@ -104,6 +105,7 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         }
         e->Update(dt);
         if ( e->JustBroke() ) { // 着弾／時間切れ：殻の欠片が飛び散り、黄身が splash する
+            AudioManager::GetInstance()->PlayWave("resources/se/eggBreak.wav", false, 0.4f); // 割れる音
             Vector3 p = e->GetPosition();
             for ( int i = 0; i < 6; ++i ) { // 殻の欠片（くるくる回りながら舞う）
                 SpawnPuff(p, { Rand11() * 3.5f, 2.0f + Rand11() * 2.0f, Rand11() * 3.5f },

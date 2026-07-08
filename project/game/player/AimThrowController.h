@@ -53,5 +53,8 @@ private:
     float throwSpeedNormal_ = 13.0f; // 通常の投げ初速 (m/s)
     float throwSpeedLock_   = 22.0f; // ロックオン時の投げ初速 (m/s)
 
-    std::unique_ptr<Sprite> cursorSprite_; // 狙い用カーソル（構え中だけ表示）
+    float pulseT_ = 0.0f; // カーソルの脈動用タイマー（視認性向上）
+
+    std::unique_ptr<Sprite> cursorSprite_;   // 狙い用カーソル（構え中だけ表示）
+    std::unique_ptr<Sprite> lockRingSprite_; // ロックオン中に敵の周りで回るリング
 };

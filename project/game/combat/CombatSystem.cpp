@@ -4,6 +4,7 @@
 #include "game/enemy/EnemyManager.h"
 #include "game/egg/EggSystem.h"
 #include "game/combat/HitFeel.h"
+#include "engine/audio/AudioManager.h"
 #include "engine/math/VectorMath.h"
 
 using namespace VectorMath;
@@ -53,6 +54,8 @@ void CombatSystem::Update(Player& player, EnemyManager& enemies, EggSystem& eggs
                 e->Defeat();
                 hitFeel.Trigger(0.05f, 0.2f); // 命中の手応え
                 eggs.SpawnHitFx(ep);          // 黄＆オレンジが鋭く飛び散る（踏みつけのリングとは別物）
+                SpawnStompEffect(ep, camera, StompEffectType::EggHit); // 立体の着弾エフェクト
+                AudioManager::GetInstance()->PlayWave("resources/se/eggHit.wav", false, 0.7f); // 命中音
                 return true; // 命中（殻の緑＋黄身は卵の割れ演出が別に出す）
             }
         }

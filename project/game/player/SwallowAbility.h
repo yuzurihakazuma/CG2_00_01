@@ -14,12 +14,15 @@ class HitFeel;
 // =====================================================================
 class SwallowAbility {
 public:
-    // 毎フレーム（Play中のみ）呼ぶ
-    void Update(Player& player, EnemyManager& enemies, EggSystem& eggs, HitFeel& hitFeel);
+    // 毎フレーム（Play中のみ）呼ぶ。dt はクールタイムの経過用
+    void Update(Player& player, EnemyManager& enemies, EggSystem& eggs, HitFeel& hitFeel, float dt);
 
-    // ノードエディタの「→ ゲーム値」用（舌の届く距離を外から調整できる）
+    // ノードエディタの「→ ゲーム値」用（舌の届く距離・再使用間隔を外から調整できる）
     float* SwallowReachPtr(){ return &swallowReach_; }
+    float* SwallowCooldownPtr(){ return &swallowCooldown_; }
 
 private:
-    float swallowReach_ = 2.0f; // 飲み込みの届く距離 (m)
+    float swallowReach_    = 2.0f;  // 飲み込みの届く距離 (m)
+    float swallowCooldown_ = 0.35f; // 飲み込み成功後の再使用間隔 (秒)。連打での吸い込み連発を防ぐ
+    float cooldownTimer_   = 0.0f;  // 残りクールタイム
 };
