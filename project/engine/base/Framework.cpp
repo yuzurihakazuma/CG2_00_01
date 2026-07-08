@@ -20,6 +20,8 @@
 #include "engine/utils/EditorManager.h"
 #include "engine/utils/TextManager.h"
 #include "engine/utils/RenderStats.h"
+#include "engine/utils/GlobalVariables.h"
+#include "engine/graphics/DebugDraw.h"
 
 
 void Framework::Initialize(){
@@ -88,6 +90,12 @@ void Framework::Initialize(){
 
 	// エディタマネージャー初期化（エンジン全体で1回だけ行う）
 	EditorManager::GetInstance()->Initialize();
+
+	// 調整項目（GlobalVariables）の保存ファイルを読み込む（シーン生成より前に）
+	GlobalVariables::GetInstance()->LoadFiles();
+
+	// デバッグ描画（線/球/AABB/グリッド）の初期化
+	DebugDraw::GetInstance()->Initialize(dxCommon);
 }
 
 void Framework::Finalize(){
@@ -100,6 +108,7 @@ void Framework::Finalize(){
 	// 2. ゲーム固有のマネージャー類を終了
 
 	EditorManager::GetInstance()->Finalize();
+	DebugDraw::GetInstance()->Finalize();
 	PostEffect::GetInstance()->Finalize();
 	ParticleManager::GetInstance()->Finalize();
 	ModelManager::GetInstance()->Finalize();
@@ -132,6 +141,9 @@ void Framework::Update(){
 	// ウィンドウ・入力の基盤更新
 	WindowProc::GetInstance()->Update();
 	Input::GetInstance()->Update();
+
+	// オーディオ更新（フェード進行＋再生終了ボイスの掃除）
+	AudioManager::GetInstance()->UpdateVoices();
 
 	// リサイズ対応
 	if ( WindowProc::GetInstance()->IsResized() ) {

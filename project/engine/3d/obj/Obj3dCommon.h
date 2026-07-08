@@ -3,6 +3,7 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <cstdint>
+#include <string>
 // --- エンジン側のファイル ---
 #include "engine/math/struct.h"
 
@@ -86,6 +87,12 @@ public:
 	
 	// デバッグUIの描画
 	void DrawDebugUI();
+
+	// ライティングのプリセット適用（0:昼 1:夕方 2:夜）
+	void ApplyLightPreset(int index);
+	// ライティング設定の保存/読み込み（JSON）
+	void SaveLighting(const std::string& path) const;
+	void LoadLighting(const std::string& path);
 
 
 	// 終了処理

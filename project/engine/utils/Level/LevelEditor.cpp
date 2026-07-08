@@ -11,6 +11,9 @@
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/utils/ImGuiManager.h"
 #include "engine/3d/model/ModelManager.h"
+#include "engine/base/Input.h"               // Delete キー削除用
+#include "engine/utils/EditorManager.h"      // 選択オブジェクトをギズモ対象にする
+#include "engine/camera/Camera.h"
 
 
 LevelEditor::LevelEditor() = default;
@@ -20,9 +23,182 @@ LevelEditor::~LevelEditor() = default;
 void LevelEditor::Initialize(){
 	// アセットブラウザ用に resources/ を走査
 	ScanAssets();
+	// マップファイル一覧を走査
+	ScanMaps();
 
 	// 最初は空の状態でスタートするか、デフォルトのマップを読み込む
 	LoadAndCreateMap("resources/map/map01.json");
+}
+
+// resources/map/ を走査して .json 一覧を更新する
+void LevelEditor::ScanMaps(){
+	mapList_.clear();
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	const fs::path dir("resources/map");
+	if ( !fs::exists(dir, ec) ) return;
+	for ( const auto& entry : fs::directory_iterator(dir, ec) ) {
+		if ( !entry.is_regular_file() ) continue;
+		std::string ext = entry.path().extension().string();
+		std::transform(ext.begin(), ext.end(), ext.begin(),
+			[](unsigned char c){ return ( char ) std::tolower(c); });
+		if ( ext != ".json" ) continue;
+		mapList_.push_back(entry.path().filename().string());
+	}
+	std::sort(mapList_.begin(), mapList_.end());
+
+	// 現在ファイルが一覧の何番目かを選択状態に反映
+	selectedMapIndex_ = -1;
+	for ( int i = 0; i < ( int ) mapList_.size(); ++i ) {
+		if ( "resources/map/" + mapList_[i] == currentMapFile_ ) { selectedMapIndex_ = i; break; }
+	}
+}
+
+// levelData_ の内容から表示用 object3ds_ を作り直す（Undo/Redo用）
+void LevelEditor::RebuildObjects(){
+	object3ds_.clear();
+	for ( auto& objData : levelData_.objects ) {
+		Model* model = ModelManager::GetInstance()->FindModel(objData.type);
+		// 見つからなくても Update() の遅延解決に任せる（nullptrのまま作ってOK）
+		std::unique_ptr<Obj3d> newObj = std::make_unique<Obj3d>();
+		newObj->Initialize(model);
+		newObj->SetCamera(camera_);
+		newObj->SetTranslation(objData.translation);
+		newObj->SetRotation(objData.rotation);
+		newObj->SetScale(objData.scale);
+		newObj->Update();
+		object3ds_.push_back(std::move(newObj));
+	}
+	if ( selectedObjectIndex_ >= ( int ) levelData_.objects.size() ) {
+		selectedObjectIndex_ = -1;
+	}
+}
+
+// 変更「前」に呼んで履歴に積む
+void LevelEditor::PushUndo(){
+	undoStack_.push_back(levelData_);
+	// 積みすぎ防止（50手まで）
+	if ( undoStack_.size() > 50 ) { undoStack_.erase(undoStack_.begin()); }
+	// 新しい操作をしたら Redo 履歴は無効
+	redoStack_.clear();
+}
+
+void LevelEditor::Undo(){
+	if ( undoStack_.empty() ) return;
+	redoStack_.push_back(levelData_);
+	levelData_ = undoStack_.back();
+	undoStack_.pop_back();
+	RebuildObjects();
+	dirty_ = true;
+}
+
+void LevelEditor::Redo(){
+	if ( redoStack_.empty() ) return;
+	undoStack_.push_back(levelData_);
+	levelData_ = redoStack_.back();
+	redoStack_.pop_back();
+	RebuildObjects();
+	dirty_ = true;
+}
+
+// --- ノードエディタ用アクセス ---
+int LevelEditor::GetObjectCount() const{
+	return ( int ) levelData_.objects.size();
+}
+
+std::string LevelEditor::GetObjectLabel(int index) const{
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return "(なし)";
+	return std::to_string(index) + ": " + levelData_.objects[index].type;
+}
+
+void LevelEditor::SetObjectPosY(int index, float y){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].translation.y = y;
+	object3ds_[index]->SetTranslation(levelData_.objects[index].translation);
+	// ノード駆動のアニメーションなので dirty_ / Undo には積まない
+}
+
+void LevelEditor::SetObjectRotY(int index, float r){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].rotation.y = r;
+	object3ds_[index]->SetRotation(levelData_.objects[index].rotation);
+}
+
+void LevelEditor::SetObjectScale(int index, float s){
+	if ( index < 0 || index >= ( int ) levelData_.objects.size() ) return;
+	if ( index >= ( int ) object3ds_.size() ) return;
+	levelData_.objects[index].scale = { s, s, s };
+	object3ds_[index]->SetScale(levelData_.objects[index].scale);
+}
+
+void LevelEditor::SetObjectShaderParam(int index, float v){
+	if ( index < 0 || index >= ( int ) object3ds_.size() ) return;
+	// ディゾルブ用CBを「自由パラメータ」として使う
+	// （生成シェーダーの『パラメータ』ノードがこの値を読む。
+	//   通常シェーダーのオブジェクトに使うとディゾルブとして作用する点に注意）
+	object3ds_[index]->SetDissolveThreshold(v);
+}
+
+Obj3d* LevelEditor::GetObject3d(int index){
+	if ( index < 0 || index >= ( int ) object3ds_.size() ) return nullptr;
+	return object3ds_[index].get();
+}
+
+// 今開いているファイルに上書き保存する
+void LevelEditor::QuickSave(){
+	LevelManager::GetInstance()->Save(currentMapFile_, levelData_);
+	dirty_ = false;
+	autoSaveTimer_ = 0.0f;
+	ScanMaps(); // 新規に作られたファイルを一覧へ反映
+}
+
+// カメラの前方にあるスポーン地点を計算する
+Vector3 LevelEditor::CalcSpawnPoint() const{
+	if ( !camera_ ) return { 0.0f, 0.0f, 5.0f };
+	// カメラのワールド行列の +Z 軸（3行目）＝視線方向
+	const Matrix4x4& w = camera_->GetWorldMatrix();
+	Vector3 fwd = { w.m[2][0], w.m[2][1], w.m[2][2] };
+	float len = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+	if ( len > 0.0001f ) { fwd.x /= len; fwd.y /= len; fwd.z /= len; }
+	Vector3 pos = camera_->GetWorldPosition();
+	// 視線の少し先に置く。連続配置時は少しずつずらして重ならないようにする
+	float dist = 8.0f;
+	Vector3 p{ pos.x + fwd.x * dist, pos.y + fwd.y * dist, pos.z + fwd.z * dist };
+	float off = ( float ) ( spawnCounter_ % 4 );
+	p.x += off; p.z += off;
+	return p;
+}
+
+// 見える位置にモデルを1個配置する共通処理
+void LevelEditor::SpawnObject(const std::string& type){
+	if ( !EnsureAssetLoaded(type) ) return;
+	Model* model = ModelManager::GetInstance()->FindModel(type);
+	if ( model == nullptr ) return;
+
+	PushUndo(); // 配置前の状態を履歴へ
+
+	Vector3 p = CalcSpawnPoint();
+	if ( snapToGrid_ ) { p.x = std::round(p.x); p.y = std::round(p.y); p.z = std::round(p.z); }
+
+	LevelObjectData newObj;
+	newObj.type = type;
+	newObj.translation = p;
+
+	levelData_.objects.push_back(newObj);
+	std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
+	obj->Initialize(model);
+	obj->SetCamera(camera_);
+	obj->SetTranslation(p);
+	obj->Update();
+	object3ds_.push_back(std::move(obj));
+
+	selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
+	++spawnCounter_;
+	dirty_ = true;
+	// 出した直後からギズモで動かせるように選択状態にしておく
+	EditorManager::GetInstance()->SetGizmoTarget(object3ds_.back().get());
 }
 
 // resources/ を再帰走査して .obj / .gltf をアセット一覧に登録する
@@ -65,11 +241,18 @@ bool LevelEditor::EnsureAssetLoaded(const std::string& name){
 }
 // マップの読み込みと生成
 void LevelEditor::LoadAndCreateMap(const std::string& fileName){
+	EditorManager::GetInstance()->SetGizmoTarget(nullptr); // 差し替え前の実体を参照させない
 	object3ds_.clear();
 	levelData_ = LevelManager::GetInstance()->Load(fileName);
+	currentMapFile_ = fileName; // 以後の上書き保存先
+	dirty_ = false;
+	autoSaveTimer_ = 0.0f;
+	// 別マップを開いたら履歴はリセット
+	undoStack_.clear();
+	redoStack_.clear();
 
 	for ( auto& objData : levelData_.objects ) {
-		// 実際のモデルデータを検索して持ってくる
+		// 実際のモデルデータを検索して持ってくる（この時点で未ロードなら後で解決する）
 		Model* model = ModelManager::GetInstance()->FindModel(objData.type);
 
 		std::unique_ptr<Obj3d> newObj = std::make_unique<Obj3d>();
@@ -113,10 +296,74 @@ void LevelEditor::ApplyImportedData(const LevelData& data, bool additive){
 	}
 }
 
+// 選択中のオブジェクトを削除する（インスペクターの削除ボタンと Delete キーの共通処理）。
+//   ギズモ対象を先に解除してダングリングポインタを防ぐ。
+void LevelEditor::DeleteSelectedObject(){
+	if ( selectedObjectIndex_ < 0 || selectedObjectIndex_ >= ( int ) levelData_.objects.size() ) return;
+	if ( selectedObjectIndex_ >= ( int ) object3ds_.size() ) return;
+	EditorManager::GetInstance()->SetGizmoTarget(nullptr); // 消す前に必ずギズモから外す
+	PushUndo(); // 削除前を履歴へ
+	levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
+	object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
+	selectedObjectIndex_ = -1;
+	dirty_ = true;
+}
+
 void LevelEditor::Update(){
+
+	// まだモデルが解決できていないオブジェクトを解決する。
+	// （エディタは Framework 初期化時にマップを読むため、シーンがモデルを
+	//   ロードするより早い。ここで毎フレーム FindModel し、見つかったら差し込む。
+	//   ※ここでは読み込み(LoadModel)はせず検索のみなので安全）
+	size_t n = ( std::min )( object3ds_.size(), levelData_.objects.size() );
+	for ( size_t i = 0; i < n; ++i ) {
+		if ( object3ds_[i]->GetModel() == nullptr ) {
+			Model* m = ModelManager::GetInstance()->FindModel(levelData_.objects[i].type);
+			if ( m ) { object3ds_[i]->SetModel(m); }
+		}
+	}
+
+	// ギズモ（Game View）で動かした結果をデータへ書き戻す。
+	//   ギズモは Obj3d を直接動かすため、これが無いと「見た目は動いたのに保存されない/
+	//   インスペクターと食い違う」状態になる。差分がある時だけ dirty を立てる。
+	if ( selectedObjectIndex_ >= 0 && selectedObjectIndex_ < ( int ) object3ds_.size()
+		&& selectedObjectIndex_ < ( int ) levelData_.objects.size() ) {
+		Obj3d* obj = object3ds_[selectedObjectIndex_].get();
+		LevelObjectData& d = levelData_.objects[selectedObjectIndex_];
+		const Vector3& t = obj->GetTranslation();
+		const Vector3& r = obj->GetRotation();
+		const Vector3& sc = obj->GetScale();
+		if ( t.x != d.translation.x || t.y != d.translation.y || t.z != d.translation.z
+			|| r.x != d.rotation.x || r.y != d.rotation.y || r.z != d.rotation.z
+			|| sc.x != d.scale.x || sc.y != d.scale.y || sc.z != d.scale.z ) {
+			d.translation = t; d.rotation = r; d.scale = sc;
+			dirty_ = true;
+		}
+	}
+
+	// Delete キーで選択中のオブジェクトを削除（テキスト入力中は無効）
+	{
+		Input* in = Input::GetInstance();
+		bool textInput = false;
+#ifdef USE_IMGUI
+		textInput = ImGui::GetIO().WantTextInput;
+#endif
+		if ( !textInput && in->Triggerkey(DIK_DELETE)
+			&& selectedObjectIndex_ >= 0 && selectedObjectIndex_ < ( int ) levelData_.objects.size() ) {
+			DeleteSelectedObject();
+		}
+	}
 
 	for ( auto& obj : object3ds_ ) {
 		obj->Update();
+	}
+
+	// 自動保存：変更があれば少し待ってから上書き保存（毎フレーム書かないようにデバウンス）
+	if ( autoSave_ && dirty_ ) {
+		autoSaveTimer_ += 1.0f;
+		if ( autoSaveTimer_ >= 60.0f ) { // 約1秒後
+			QuickSave();
+		}
 	}
 }
 void LevelEditor::Draw(){
@@ -135,22 +382,77 @@ void LevelEditor::DrawDebugUI(){
 	// =========================================================
 	ImGui::Begin("メインメニュー");
 
+	// --- 現在のファイルと保存状態 ---
+	ImGui::Text("現在のマップ: %s", currentMapFile_.c_str());
+	ImGui::SameLine();
+	if ( dirty_ ) ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "[未保存]");
+	else          ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "[保存済]");
+
+	// 上書き保存（名前入力不要）。Ctrl+S でも保存
+	if ( ImGui::Button("上書き保存") ) { QuickSave(); }
+	ImGui::SameLine();
+	ImGui::Checkbox("自動保存", &autoSave_);
+	if ( ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S) ) { QuickSave(); }
+
+	ImGui::Separator();
+
+	// --- マップ一覧から選んで読み込む（名前手入力不要） ---
+	const char* mapPreview = ( selectedMapIndex_ >= 0 && selectedMapIndex_ < ( int ) mapList_.size() )
+		? mapList_[selectedMapIndex_].c_str() : "(選択してください)";
+	if ( ImGui::BeginCombo("マップ一覧", mapPreview) ) {
+		for ( int i = 0; i < ( int ) mapList_.size(); ++i ) {
+			if ( ImGui::Selectable(mapList_[i].c_str(), selectedMapIndex_ == i) ) selectedMapIndex_ = i;
+		}
+		ImGui::EndCombo();
+	}
+	if ( ImGui::Button("選択マップを読み込む")
+		&& selectedMapIndex_ >= 0 && selectedMapIndex_ < ( int ) mapList_.size() ) {
+		LoadAndCreateMap("resources/map/" + mapList_[selectedMapIndex_]);
+	}
+	ImGui::SameLine();
+	if ( ImGui::Button("一覧を更新") ) { ScanMaps(); }
+
+	ImGui::Separator();
+
+	// --- 別名で保存 / 新規作成 ---
 	char buffer[256];
 	strcpy_s(buffer, saveFileName_.c_str());
-	if ( ImGui::InputText("保存ファイル名", buffer, sizeof(buffer)) ) {
-		saveFileName_ = buffer;
+	if ( ImGui::InputText("新規 / 別名", buffer, sizeof(buffer)) ) { saveFileName_ = buffer; }
+	if ( ImGui::Button("この名前で保存（新規作成）") ) {
+		std::string name = saveFileName_;
+		if ( name.size() < 5 || name.substr(name.size() - 5) != ".json" ) name += ".json";
+		currentMapFile_ = "resources/map/" + name; // 以後の上書き先を新ファイルに切り替え
+		QuickSave();
 	}
-
-	std::string fullPath = "resources/map/" + saveFileName_;
-	if ( ImGui::Button("マップを保存") ) { LevelManager::GetInstance()->Save(fullPath, levelData_); }
-	ImGui::SameLine();
-	if ( ImGui::Button("マップを読み込む") ) { LoadAndCreateMap(fullPath); }
 	ImGui::SameLine();
 	if ( ImGui::Button("マップをクリア") ) {
+		EditorManager::GetInstance()->SetGizmoTarget(nullptr); // 消える実体を参照させない
+		PushUndo(); // クリア前を履歴へ（Ctrl+Zで戻せる）
 		object3ds_.clear();
 		levelData_.objects.clear();
 		selectedObjectIndex_ = -1;
+		dirty_ = true;
 	}
+
+	ImGui::Separator();
+
+	// --- Undo / Redo ---
+	if ( ImGui::Button("元に戻す (Ctrl+Z)") ) { Undo(); }
+	ImGui::SameLine();
+	if ( ImGui::Button("やり直す (Ctrl+Y)") ) { Redo(); }
+	ImGui::SameLine();
+	ImGui::TextDisabled("履歴 %d / 先 %d", ( int ) undoStack_.size(), ( int ) redoStack_.size());
+	// キーボードショートカット（テキスト入力中は無効）
+	if ( !ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl ) {
+		if ( ImGui::IsKeyPressed(ImGuiKey_Z) ) { Undo(); }
+		if ( ImGui::IsKeyPressed(ImGuiKey_Y) ) { Redo(); }
+	}
+
+	ImGui::Separator();
+
+	// --- クイック配置（カメラの前にポンと出す） ---
+	ImGui::TextDisabled("クイック配置（カメラの見ている先に出ます）");
+	if ( ImGui::Button("ブロックを置く") ) { SpawnObject("block"); }
 
 	ImGui::Separator();
 
@@ -168,23 +470,7 @@ void LevelEditor::DrawDebugUI(){
 	}
 
 	if ( ImGui::Button("選択したモデルを追加") && !assetList_.empty() ) {
-		LevelObjectData newObj;
-		newObj.type = assetList_[currentModelIndex].name;
-		newObj.translation = { 0.0f, 0.0f, 0.0f };
-		newObj.rotation = { 0.0f, 0.0f, 0.0f };
-		newObj.scale = { 1.0f, 1.0f, 1.0f };
-
-		EnsureAssetLoaded(newObj.type); // 未ロードならこのタイミングで自動ロード
-		Model* model = ModelManager::GetInstance()->FindModel(newObj.type);
-		if ( model != nullptr ) {
-			// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
-			levelData_.objects.push_back(newObj);
-			std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
-			obj->Initialize(model);
-			obj->SetCamera(camera_);
-			object3ds_.push_back(std::move(obj));
-			selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
-		}
+		SpawnObject(assetList_[currentModelIndex].name);
 	}
 	ImGui::End();
 
@@ -199,6 +485,8 @@ void LevelEditor::DrawDebugUI(){
 			std::string label = std::to_string(i) + ": " + levelData_.objects[i].type;
 			if ( ImGui::Selectable(label.c_str(), selectedObjectIndex_ == i) ) {
 				selectedObjectIndex_ = i;
+				// 選択したオブジェクトを Game View のギズモ対象にする（そのまま掴んで動かせる）
+				EditorManager::GetInstance()->SetGizmoTarget(object3ds_[i].get());
 			}
 		}
 		ImGui::EndListBox();
@@ -215,24 +503,8 @@ void LevelEditor::DrawDebugUI(){
 			// 荷物（文字列）を取り出す
 			const char* droppedModelName = ( const char* ) payload->Data;
 
-			// ドロップされたモデルを新しく追加！
-			LevelObjectData newObj;
-			newObj.type = droppedModelName;
-			newObj.translation = { 0.0f, 0.0f, 0.0f }; // 原点に配置
-			newObj.rotation = { 0.0f, 0.0f, 0.0f };
-			newObj.scale = { 1.0f, 1.0f, 1.0f };
-
-			EnsureAssetLoaded(newObj.type); // 未ロードならこのタイミングで自動ロード
-			Model* model = ModelManager::GetInstance()->FindModel(newObj.type);
-			if ( model != nullptr ) {
-				// データと表示オブジェクトは必ずペアで追加する（インデックスのズレ防止）
-				levelData_.objects.push_back(newObj);
-				std::unique_ptr<Obj3d> obj = std::make_unique<Obj3d>();
-				obj->Initialize(model);
-				obj->SetCamera(camera_);
-				object3ds_.push_back(std::move(obj));
-				selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1; // 今追加したものを選択状態にする
-			}
+			// ドロップされたモデルをカメラ前方に追加！
+			SpawnObject(droppedModelName);
 		}
 		ImGui::EndDragDropTarget();
 	}
@@ -249,14 +521,13 @@ void LevelEditor::DrawDebugUI(){
 		ImGui::Separator();
 
 		if ( ImGui::Button("オブジェクトを削除") ) {
-			levelData_.objects.erase(levelData_.objects.begin() + selectedObjectIndex_);
-			object3ds_.erase(object3ds_.begin() + selectedObjectIndex_);
-			selectedObjectIndex_ = -1;
+			DeleteSelectedObject(); // ギズモ解除→履歴→削除（Deleteキーと共通）
 		}
 
 		if ( selectedObjectIndex_ != -1 ) {
 			ImGui::SameLine();
 			if ( ImGui::Button("複製") ) {
+				PushUndo(); // 複製前を履歴へ
 				LevelObjectData dupObj = objData;
 				levelData_.objects.push_back(dupObj);
 
@@ -270,6 +541,7 @@ void LevelEditor::DrawDebugUI(){
 					obj->SetScale(dupObj.scale);
 					object3ds_.push_back(std::move(obj));
 					selectedObjectIndex_ = ( int ) levelData_.objects.size() - 1;
+					dirty_ = true;
 				}
 			}
 
@@ -279,8 +551,11 @@ void LevelEditor::DrawDebugUI(){
 			bool isChanged = false;
 			float moveStep = snapToGrid_ ? 1.0f : 0.1f;
 			isChanged |= ImGui::DragFloat3("座標", &objData.translation.x, moveStep);
+			if ( ImGui::IsItemActivated() ) { PushUndo(); } // ドラッグ開始時に1回だけ履歴へ
 			isChanged |= ImGui::DragFloat3("回転", &objData.rotation.x, 0.05f);
+			if ( ImGui::IsItemActivated() ) { PushUndo(); }
 			isChanged |= ImGui::DragFloat3("スケール", &objData.scale.x, 0.1f);
+			if ( ImGui::IsItemActivated() ) { PushUndo(); }
 
 			if ( isChanged ) {
 				if ( snapToGrid_ ) {
@@ -291,6 +566,7 @@ void LevelEditor::DrawDebugUI(){
 				object3ds_[selectedObjectIndex_]->SetTranslation(objData.translation);
 				object3ds_[selectedObjectIndex_]->SetRotation(objData.rotation);
 				object3ds_[selectedObjectIndex_]->SetScale(objData.scale);
+					dirty_ = true;
 			}
 		}
 	} else {

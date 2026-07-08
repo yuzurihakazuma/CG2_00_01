@@ -30,9 +30,11 @@
 #include "engine/3d/model/Model.h"
 #include "engine/utils/EditorManager.h"
 #include "engine/utils/Level/BlenderImporter.h"
+#include "engine/graphics/DebugDraw.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/particle/GPUParticleManager.h"
 #include "engine/particle/GPUParticleEmitter.h"
+#include "engine/sdf/SDFManager.h"
 
 
 using namespace VectorMath;
@@ -111,6 +113,8 @@ void GamePlayScene::Initialize(){
 	// デバッグカメラ生成
 	debugCamera_ = std::make_unique<DebugCamera>();
 	debugCamera_->Initialize();
+	// メニューバー「表示」からON/OFFできるよう登録
+	EditorManager::GetInstance()->SetDebugCamera(debugCamera_.get());
 
 	// プレイヤーオブジェクト生成
 	testObj_ = Obj3d::Create("animatedCube");
@@ -245,10 +249,19 @@ void GamePlayScene::Update(){
 	// カメラ更新
 	camera_->Update();
 
+	// 実行中のブロック投げ（Bキーで生成＋物理更新）
+	UpdateThrownBlocks();
+
 	Input* input = Input::GetInstance();
 
+	// ゲームプレイ入力の許可判定：
+	//   エディタが閉じている（通常プレイ） or エディタ表示中でも Play モードなら操作可。
+	//   Edit モード中（編集作業中）は誤操作防止のためゲーム入力を止める。
+	bool gameplayInput = !EditorManager::GetInstance()->IsActive()
+		|| EditorManager::GetInstance()->GetMode() == EngineMode::Play;
+
 	// 1. スペースキーでエフェクト発生＋BGM再生（1か所に統合）
-	if (input->Triggerkey(DIK_SPACE)) {
+	if (gameplayInput && input->Triggerkey(DIK_SPACE)) {
 		// 新しいエフェクトを生成
 		auto newEffect = std::make_unique<HitEffect>();
 
@@ -369,6 +382,63 @@ void GamePlayScene::Update(){
 	emitter_.Update(Time::GetInstance()->GetDeltaTime());
 }
 
+// 実行中に投げるブロックの生成・物理・寿命管理
+void GamePlayScene::UpdateThrownBlocks(){
+	if ( !camera_ ) return;
+	float dt = Time::GetInstance()->GetDeltaTime();
+
+	// ゲームプレイ入力の許可判定（Edit モード中は投げられない）
+	bool gameplayInput = !EditorManager::GetInstance()->IsActive()
+		|| EditorManager::GetInstance()->GetMode() == EngineMode::Play;
+
+	// --- Bキーで生成（カメラの見ている方向へ投げる） ---
+	if ( gameplayInput && Input::GetInstance()->Triggerkey(DIK_B) ) {
+		// カメラのワールド行列から前方向(+Z)を取り出す
+		const Matrix4x4& w = camera_->GetWorldMatrix();
+		Vector3 fwd = { w.m[2][0], w.m[2][1], w.m[2][2] };
+		float len = std::sqrt(fwd.x * fwd.x + fwd.y * fwd.y + fwd.z * fwd.z);
+		if ( len > 0.0001f ) { fwd.x /= len; fwd.y /= len; fwd.z /= len; }
+		Vector3 camPos = camera_->GetWorldPosition();
+
+		ThrownBlock b;
+		b.obj = Obj3d::Create("block");             // 既定カメラで生成される
+		b.pos = { camPos.x + fwd.x * 2.0f, camPos.y + fwd.y * 2.0f, camPos.z + fwd.z * 2.0f };
+		b.vel = { fwd.x * 22.0f, fwd.y * 22.0f + 6.0f, fwd.z * 22.0f }; // 前方へ＋少し上に放る
+		b.life = 8.0f;
+		if ( b.obj ) {
+			b.obj->SetTranslation(b.pos);
+			b.obj->Update();
+			thrownBlocks_.push_back(std::move(b));
+		}
+	}
+
+	// --- 物理更新（重力＋地面バウンド） ---
+	const float gravity = -24.0f;
+	const float groundY = 0.0f;
+	for ( auto it = thrownBlocks_.begin(); it != thrownBlocks_.end(); ) {
+		it->vel.y += gravity * dt;
+		it->pos.x += it->vel.x * dt;
+		it->pos.y += it->vel.y * dt;
+		it->pos.z += it->vel.z * dt;
+
+		// 地面で軽くバウンドして減衰
+		if ( it->pos.y < groundY ) {
+			it->pos.y = groundY;
+			it->vel.x *= 0.5f;
+			it->vel.z *= 0.5f;
+			it->vel.y = -it->vel.y * 0.35f;
+		}
+
+		it->life -= dt;
+		if ( it->obj ) {
+			it->obj->SetTranslation(it->pos);
+			it->obj->Update();
+		}
+
+		if ( it->life <= 0.0f ) { it = thrownBlocks_.erase(it); } else { ++it; }
+	}
+}
+
 void GamePlayScene::Draw(){
 	auto dxCommon = DirectXCommon::GetInstance();
 	auto commandList = dxCommon->GetCommandList();
@@ -386,6 +456,12 @@ void GamePlayScene::Draw(){
 	// 1. 先に「不透明」なものを全部描き切る！！！
 	if ( testObj_ ){ testObj_->Draw(); }
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
+
+	// レベルエディタで配置したオブジェクト（マップ）を描画する
+	EditorManager::GetInstance()->Draw();
+
+	// 実行中に投げたブロックを描画する
+	for ( auto& b : thrownBlocks_ ) { if ( b.obj ) b.obj->Draw(); }
 
 
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -418,6 +494,13 @@ void GamePlayScene::Draw(){
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
 
+	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
+	//   Game View にも単体表示にも反映される（深度テストありで3D形状に隠れる）。
+	if ( showDebugGrid_ ) {
+		DebugDraw::GetInstance()->Grid(20.0f, 1.0f, { 0.3f, 0.3f, 0.35f, 0.5f }, 0.0f);
+	}
+	DebugDraw::GetInstance()->Render(camera_.get());
+
 	// 2. 【MRT終了】3Dの描画が終わったので、2枚のキャンバスを読み込みモードに戻す
 	PostEffect::GetInstance()->PostDrawSceneMRT(commandList);
 
@@ -433,6 +516,15 @@ void GamePlayScene::Draw(){
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
 
+	// 5.5 SDF（文字/画像）を最終画像に焼き込む
+	//     → エディタの Game View にもそのまま映る。
+	//     Bloom無効時は合成RTを経由しないので、後でバックバッファへ直描きする
+	bool sdfBaked = false;
+	if ( Bloom::GetInstance()->IsEnabled() ) {
+		SDFManager::GetInstance()->DrawIntoTexture(commandList, Bloom::GetInstance()->GetCombineTexture());
+		sdfBaked = true;
+	}
+
 	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
 
@@ -440,12 +532,15 @@ void GamePlayScene::Draw(){
 	//    エディタアクティブ時はRTVのセットのみ行い描画はスキップする
 	PostEffect::GetInstance()->FinalBlit(commandList, finalSrv, EditorManager::GetInstance()->IsActive());
 
-
-
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
 	if (sprite_) { sprite_->Draw(); }
 	TextManager::GetInstance()->Draw();
+
+	// SDF 描画（Bloom無効で焼き込めなかった場合のみバックバッファへ直描き）
+	if ( !sdfBaked ) {
+		SDFManager::GetInstance()->Draw(commandList);
+	}
 	
 
 }
@@ -461,6 +556,15 @@ void GamePlayScene::DrawDebugUI(){
 
 
 	TextManager::GetInstance()->DrawDebugUI();
+
+	// デバッグ描画（DebugDraw）の表示設定 — 共有「詳細設定」窓に合流
+	if ( ImGui::Begin("インスペクター (詳細設定)") ) {
+		if ( ImGui::CollapsingHeader("デバッグ描画 (DebugDraw)") ) {
+			ImGui::Checkbox("グリッドを表示", &showDebugGrid_);
+			ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
+		}
+	}
+	ImGui::End();
 
 	ImGui::Begin("Environment Map Control");
 
@@ -516,6 +620,8 @@ void GamePlayScene::Finalize(){
 	EditorManager::GetInstance()->ResetSceneReferences();
 
 	GPUParticleManager::GetInstance()->Finalize();
+
+	thrownBlocks_.clear();
 
 	textures_.clear();
 	depthStencilResource_.Reset();

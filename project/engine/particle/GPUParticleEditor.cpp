@@ -1,9 +1,85 @@
 #include "GPUParticleEditor.h"
-#include "engine/particle/GPUParticleEmitter.h"  
+#include "engine/particle/GPUParticleEmitter.h"
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
 #endif
 #include "engine/particle/GPUParticleManager.h"
+
+#include <algorithm>
+#include <filesystem>
+
+// resources/particles/ の .json を列挙する
+void GPUParticleEditor::ScanFiles(){
+	fileList_.clear();
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	const fs::path dir("resources/particles");
+	if ( !fs::exists(dir, ec) ) return;
+	for ( const auto& e : fs::directory_iterator(dir, ec) ) {
+		if ( !e.is_regular_file() ) continue;
+		if ( e.path().extension() != ".json" ) continue;
+		fileList_.push_back(e.path().filename().string());
+	}
+	std::sort(fileList_.begin(), fileList_.end());
+}
+
+// プリセット適用（よく使う見た目を1クリックで設定）
+void GPUParticleEditor::ApplyPreset(int index){
+	if ( !emitter_ ) return;
+	GPUParticleEmitterData& d = emitter_->GetData();
+	switch ( index ) {
+	case 0: // 炎：上昇・短寿命・赤→黄
+		d.name = "fire";
+		d.emitRate = 60.0f;
+		d.velocity = { 0.0f, 2.0f, 0.0f };  d.velocitySpread = 0.6f;
+		d.lifeTimeMin = 0.4f; d.lifeTimeMax = 1.0f;
+		d.scaleMin = 0.2f;    d.scaleMax = 0.6f;
+		d.startColor = { 1.0f, 0.25f, 0.05f, 1.0f };
+		d.endColor   = { 1.0f, 0.9f,  0.1f, 0.0f };
+		d.gravityY = 0.5f; // 熱で少し上向き
+		break;
+	case 1: // 煙：ゆっくり上昇・長寿命・灰色フェード
+		d.name = "smoke";
+		d.emitRate = 15.0f;
+		d.velocity = { 0.0f, 0.8f, 0.0f };  d.velocitySpread = 0.3f;
+		d.lifeTimeMin = 2.0f; d.lifeTimeMax = 4.0f;
+		d.scaleMin = 0.5f;    d.scaleMax = 1.5f;
+		d.startColor = { 0.4f, 0.4f, 0.45f, 0.6f };
+		d.endColor   = { 0.7f, 0.7f, 0.75f, 0.0f };
+		d.gravityY = 0.1f;
+		break;
+	case 2: // 火花：全方向に飛び散る・重力で落ちる
+		d.name = "spark";
+		d.emitRate = 80.0f;
+		d.velocity = { 0.0f, 3.0f, 0.0f };  d.velocitySpread = 2.0f;
+		d.lifeTimeMin = 0.3f; d.lifeTimeMax = 0.8f;
+		d.scaleMin = 0.05f;   d.scaleMax = 0.15f;
+		d.startColor = { 1.0f, 0.9f, 0.5f, 1.0f };
+		d.endColor   = { 1.0f, 0.4f, 0.1f, 0.0f };
+		d.gravityY = -3.0f;
+		break;
+	case 3: // 雪：ふわふわ落ちる・白
+		d.name = "snow";
+		d.emitRate = 25.0f;
+		d.velocity = { 0.0f, -0.5f, 0.0f }; d.velocitySpread = 0.4f;
+		d.lifeTimeMin = 3.0f; d.lifeTimeMax = 6.0f;
+		d.scaleMin = 0.05f;   d.scaleMax = 0.2f;
+		d.startColor = { 1.0f, 1.0f, 1.0f, 0.9f };
+		d.endColor   = { 1.0f, 1.0f, 1.0f, 0.0f };
+		d.gravityY = -0.1f;
+		break;
+	case 4: // 魔法：ゆらめく紫・上昇
+		d.name = "magic";
+		d.emitRate = 40.0f;
+		d.velocity = { 0.0f, 1.2f, 0.0f };  d.velocitySpread = 0.8f;
+		d.lifeTimeMin = 0.8f; d.lifeTimeMax = 1.8f;
+		d.scaleMin = 0.1f;    d.scaleMax = 0.4f;
+		d.startColor = { 0.6f, 0.2f, 1.0f, 1.0f };
+		d.endColor   = { 0.1f, 0.6f, 1.0f, 0.0f };
+		d.gravityY = 0.0f;
+		break;
+	}
+}
 
 // 編集対象のエミッターをセット（GamePlaySceneから渡してもらう）
 void GPUParticleEditor::SetEmitter(GPUParticleEmitter* emitter){
@@ -52,10 +128,48 @@ void GPUParticleEditor::DrawDebugUI(){
     // =========================================================
     // ファイル操作
     // =========================================================
+    if ( !scanned_ ) { ScanFiles(); scanned_ = true; }
+
     ImGui::InputText("ファイル名", saveFileName_, sizeof(saveFileName_));
-    if ( ImGui::Button("保存") ) { Save(); }
+    if ( ImGui::Button("保存") ) { Save(); ScanFiles(); }
     ImGui::SameLine();
     if ( ImGui::Button("読み込み") ) { Load(); }
+
+    // 保存済みファイルの一覧から選んで読み込む（手入力不要）
+    const char* preview = ( selectedFile_ >= 0 && selectedFile_ < ( int ) fileList_.size() )
+        ? fileList_[selectedFile_].c_str() : "(保存済み一覧)";
+    ImGui::SetNextItemWidth(220.0f);
+    if ( ImGui::BeginCombo("##filelist", preview) ) {
+        for ( int i = 0; i < ( int ) fileList_.size(); ++i ) {
+            if ( ImGui::Selectable(fileList_[i].c_str(), selectedFile_ == i) ) { selectedFile_ = i; }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("選択を読み込む")
+        && selectedFile_ >= 0 && selectedFile_ < ( int ) fileList_.size() ) {
+        std::string path = "resources/particles/" + fileList_[selectedFile_];
+        strcpy_s(saveFileName_, path.c_str());
+        Load();
+    }
+    ImGui::SameLine();
+    if ( ImGui::Button("一覧更新") ) { ScanFiles(); }
+
+    ImGui::Separator();
+
+    // =========================================================
+    // プリセット（1クリックでよく使う見た目に）
+    // =========================================================
+    ImGui::Text("[ プリセット ]");
+    if ( ImGui::Button("炎") )   { ApplyPreset(0); }
+    ImGui::SameLine();
+    if ( ImGui::Button("煙") )   { ApplyPreset(1); }
+    ImGui::SameLine();
+    if ( ImGui::Button("火花") ) { ApplyPreset(2); }
+    ImGui::SameLine();
+    if ( ImGui::Button("雪") )   { ApplyPreset(3); }
+    ImGui::SameLine();
+    if ( ImGui::Button("魔法") ) { ApplyPreset(4); }
 
     ImGui::Separator();
 

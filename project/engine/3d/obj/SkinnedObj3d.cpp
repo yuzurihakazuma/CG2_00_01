@@ -188,7 +188,9 @@ void SkinnedObj3d::Draw(){
 }
 
 void SkinnedObj3d::DrawDebugUI(){
-	if ( ImGui::Begin("Skinning Only Control") ) {
+	// 共有の「詳細設定」ウィンドウに折りたたみで合流（ウィンドウを増やさない）
+	if ( ImGui::Begin("インスペクター (詳細設定)") ) {
+		if ( ImGui::CollapsingHeader("スキニング (Skinning Control)") ) {
 		// アニメーションを止めるかどうかのチェックボックス
 		ImGui::Checkbox("Manual Mode (Pause Animation)", &isPause_);
 
@@ -204,6 +206,7 @@ void SkinnedObj3d::DrawDebugUI(){
 				}
 			}
 		}
+		} // CollapsingHeader: スキニング
 	}
 	ImGui::End();
 }

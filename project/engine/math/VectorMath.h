@@ -18,4 +18,7 @@ namespace VectorMath {
 	float Length(const Vector3& v);
 	// 正規化
 	Vector3 Normalize(const Vector3& v);
+
+	Vector3 CatmullRom(const Vector3& p0, const Vector3& p1, const Vector3& p2, const Vector3& p3, float t);
+
 }

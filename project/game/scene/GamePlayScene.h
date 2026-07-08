@@ -104,4 +104,17 @@ private: // メンバ変数
 	// 円柱オーラ用のUVスクロールタイマー
 	float auraCylinderScroll_ = 0.0f;
 
+	// デバッグ描画のグリッド表示ON/OFF
+	bool showDebugGrid_ = true;
+
+	// --- 実行中に投げるブロック ---
+	struct ThrownBlock {
+		std::unique_ptr<Obj3d> obj;
+		Vector3 pos{ 0.0f, 0.0f, 0.0f };
+		Vector3 vel{ 0.0f, 0.0f, 0.0f };
+		float life = 8.0f; // 秒。0で消える
+	};
+	std::list<ThrownBlock> thrownBlocks_;
+	void UpdateThrownBlocks(); // 生成・物理・寿命管理
+
 };
