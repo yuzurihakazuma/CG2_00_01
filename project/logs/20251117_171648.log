@@ -1,6 +1,0 @@
-Begin CompileShader,path:resources/shaders/Object3d.VS.hlsl,profile:vs_6_0
-
-resources/shaders/Object3d.VS.hlsl:7:62: error: invalid register specification, expected 'b' binding
-ConstantBuffer<TransformationMatirx> gTransformationMatrix : register(t0);
-                                                             ^
-
