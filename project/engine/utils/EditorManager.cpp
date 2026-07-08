@@ -326,13 +326,17 @@ void EditorManager::Update(){
 
                 Matrix4x4 world = MatrixMath::MakeAffine({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, railSelPivot_);
 
-                // グリッド吸着（ドラッグ結果がグリッドに揃う）
+                // グリッド刻み：Ctrl を押しながらドラッグした時だけ一定刻みで動く。
+                //   そのままドラッグは滑らかな自由移動（端点吸着だけは効く）。
+                //   刻み幅はレールエディタの「グリッドサイズ」を使う。
                 float snap[3] = { 0.0f, 0.0f, 0.0f };
                 float* snapPtr = nullptr;
-                if ( re->IsRailSnap() ) {
+                if ( ImGui::GetIO().KeyCtrl ) {
                     float g = re->GetRailGridSize();
-                    snap[0] = snap[1] = snap[2] = g;
-                    snapPtr = snap;
+                    if ( g > 0.0f ) {
+                        snap[0] = snap[1] = snap[2] = g;
+                        snapPtr = snap;
+                    }
                 }
                 ImGuizmo::Manipulate(&view.m[0][0], &proj.m[0][0],
                     ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &world.m[0][0], nullptr, snapPtr);
