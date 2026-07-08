@@ -2,6 +2,7 @@
 
 #include "engine/utils/Level/LevelData.h"
 #include <vector>
+#include <cstdint>
 
 // =====================================================================
 //  RailEditor：レール（Yoshi風コース）編集の専用クラス。
@@ -111,6 +112,21 @@ public:
     // 指定ノードが「穴」指定か（エディタの線・ノードを赤く表示するため）
     bool IsNodeHole(int rail, int node) const;
 
+    // --- 通行判定（プレイヤーがスタートのレールから辿り着けるか）---
+    //   Game View の線色（紫=到達不能）とパネルの「×通れない」表示で使う。
+    //   溶接/合流/乗り換えに加え、Gap レール端からのジャンプ（一方通行）も接続として辿る。
+    bool IsRailReachable(int rail) const;
+
+    // 端が他レールへ接続しているか（端から1.2m以内に相手の本体がある＝ゲームで合流できる）。
+    //   ループ（先頭と末尾がくっついたレール）は端が無い扱いで true を返す。
+    bool IsRailEndConnected(int rail, bool front) const;
+
+    // レール末端からのジャンプ弾道を予測し、着地できるレール番号を返す（-1=届かない）。
+    //   outArc に軌跡が入るので Game View で弧を描ける。useFlutter=ふんばり滞空込み。
+    //   物理定数は Player と同じ値を使う（実装内のコメント参照）。
+    int PredictJumpLanding(int rail, bool front, bool useFlutter,
+                           std::vector<Vector3>* outArc = nullptr) const;
+
     // シェイプのスタンプ配置（生成→マウスに追従→クリックで設置）
     bool HasPendingStamp() const{ return !pendingStamp_.empty(); }
     const std::vector<Vector3>& GetPendingStamp() const{ return pendingStamp_; }
@@ -165,6 +181,15 @@ private:
 
     // 値をグリッドに丸める（railSnap_ がOFFならそのまま）
     float SnapValue(float v) const;
+
+    // レール a,b が接続しているか（端から合流1.2m / 別タイプ交差0.9m。溶接0.7mは1.2mに含まれる）
+    bool AreRailsLinked(int a, int b) const;
+
+    // 通行可否のキャッシュ。railVersion_ が変わった時だけ BFS で作り直す。
+    //   const な表示系メソッドから触るため mutable（表示用キャッシュの常套手段）。
+    mutable int reachCacheVersion_ = -1;
+    mutable std::vector<uint8_t> reachable_;
+    void EnsureReachableCache() const;
 
     // 前のノードから相対(dx,dy,dz)に新ノードを追加（方向ボタン用・スナップ適用）
     void AppendRailNodeRelative(float dx, float dy, float dz);

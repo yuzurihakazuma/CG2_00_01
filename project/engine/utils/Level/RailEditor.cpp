@@ -239,6 +239,233 @@ Vector3 RailEditor::ApplyNodeSnap(const Vector3& p) const{
 }
 
 // ============================================================
+// 通行判定（プレイヤーがスタートから辿り着けるか）＋ジャンプ予測
+//   距離のしきい値・ジャンプ物理は全てゲーム側（Player / RailField）と同じ値。
+//   ゲーム側を調整したらここも合わせること（各定数に出典コメントあり）。
+// ============================================================
+namespace{
+
+// 点p と線分ab の最短距離の2乗（t をクランプした最近点方式）
+float SegDistSq(const Vector3& p, const Vector3& a, const Vector3& b){
+	Vector3 ab { b.x - a.x, b.y - a.y, b.z - a.z };
+	float len2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
+	float t = ( len2 > 1e-6f )
+		? ( ( p.x - a.x ) * ab.x + ( p.y - a.y ) * ab.y + ( p.z - a.z ) * ab.z ) / len2
+		: 0.0f;
+	t = std::clamp(t, 0.0f, 1.0f);
+	float dx = a.x + ab.x * t - p.x;
+	float dy = a.y + ab.y * t - p.y;
+	float dz = a.z + ab.z * t - p.z;
+	return dx * dx + dy * dy + dz * dz;
+}
+
+// 点p と折れ線line の最短距離の2乗
+float PolylineDistSq(const Vector3& p, const std::vector<Vector3>& line){
+	float best = 1e30f;
+	for ( size_t i = 0; i + 1 < line.size(); ++i ) {
+		float d = SegDistSq(p, line[i], line[i + 1]);
+		if ( d < best ) best = d;
+	}
+	return best;
+}
+
+// 点p に最も近い折れ線line 上の点。segIdx には最近区間の番号（先頭ノード側）が入る
+Vector3 ClosestOnPolyline(const Vector3& p, const std::vector<Vector3>& line, int* segIdx){
+	Vector3 best = line.empty() ? Vector3 { 0.0f, 0.0f, 0.0f } : line[0];
+	float bestSq = 1e30f;
+	if ( segIdx ) *segIdx = 0;
+	for ( size_t i = 0; i + 1 < line.size(); ++i ) {
+		const Vector3& a = line[i];
+		const Vector3& b = line[i + 1];
+		Vector3 ab { b.x - a.x, b.y - a.y, b.z - a.z };
+		float len2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
+		float t = ( len2 > 1e-6f )
+			? ( ( p.x - a.x ) * ab.x + ( p.y - a.y ) * ab.y + ( p.z - a.z ) * ab.z ) / len2
+			: 0.0f;
+		t = std::clamp(t, 0.0f, 1.0f);
+		Vector3 c { a.x + ab.x * t, a.y + ab.y * t, a.z + ab.z * t };
+		float dx = c.x - p.x, dy = c.y - p.y, dz = c.z - p.z;
+		float d2 = dx * dx + dy * dy + dz * dz;
+		if ( d2 < bestSq ) { bestSq = d2; best = c; if ( segIdx ) *segIdx = ( int ) i; }
+	}
+	return best;
+}
+
+} // namespace
+
+// レール a,b が接続しているか。ゲームでプレイヤーが実際に渡れる距離で判定する。
+bool RailEditor::AreRailsLinked(int a, int b) const{
+	const float kJoin   = 1.2f; // Player.cpp TryJoinNearbyBody の kJoinReach（溶接0.7mもこの範囲に含む）
+	const float kSwitch = 0.9f; // Player.cpp TrySwitchRail の kReach
+
+	const auto& la = data_->railLines[a];
+	const auto& lb = data_->railLines[b];
+	if ( la.size() < 2 || lb.size() < 2 ) return false;
+
+	// (1) 端から相手の本体へ 1.2m 以内なら合流できる
+	if ( PolylineDistSq(la.front(), lb) < kJoin * kJoin ) return true;
+	if ( PolylineDistSq(la.back(),  lb) < kJoin * kJoin ) return true;
+	if ( PolylineDistSq(lb.front(), la) < kJoin * kJoin ) return true;
+	if ( PolylineDistSq(lb.back(),  la) < kJoin * kJoin ) return true;
+
+	// (2) 別タイプ同士なら本体の交差でも乗り換えできる（0.9m）
+	if ( GetRailDisplayType(a) != GetRailDisplayType(b) ) {
+		for ( const auto& n : la ) {
+			if ( PolylineDistSq(n, lb) < kSwitch * kSwitch ) return true;
+		}
+	}
+	return false;
+}
+
+// 端が他レールへ接続しているか（1.2m 以内に相手の本体がある＝ゲームで合流できる）
+bool RailEditor::IsRailEndConnected(int rail, bool front) const{
+	const float kJoin = 1.2f; // Player.cpp TryJoinNearbyBody の kJoinReach
+	if ( rail < 0 || rail >= ( int ) data_->railLines.size() ) return false;
+	const auto& line = data_->railLines[rail];
+	if ( line.size() < 2 ) return false;
+
+	// ループ（先頭と末尾がくっついている）なら端は無い扱い（RailField の isLoop 判定と同じ0.7m）
+	if ( line.size() >= 3 ) {
+		float dx = line.front().x - line.back().x;
+		float dy = line.front().y - line.back().y;
+		float dz = line.front().z - line.back().z;
+		if ( dx * dx + dy * dy + dz * dz < 0.7f * 0.7f ) return true;
+	}
+
+	const Vector3& p = front ? line.front() : line.back();
+	for ( int j = 0; j < ( int ) data_->railLines.size(); ++j ) {
+		if ( j == rail ) continue;
+		const auto& lj = data_->railLines[j];
+		if ( lj.size() < 2 ) continue;
+		if ( PolylineDistSq(p, lj) < kJoin * kJoin ) return true;
+	}
+	return false;
+}
+
+// レール末端からのジャンプ弾道を予測し、着地できるレール番号を返す（-1=届かない）。
+//   「端で必ずジャンプし、頂点からふんばりを全部使う」ベストケースの予測。
+int RailEditor::PredictJumpLanding(int rail, bool front, bool useFlutter,
+                                   std::vector<Vector3>* outArc) const{
+	// --- Player と同じ物理値（出典コメント参照）。調整項目でゲーム側を変えたらここも直す ---
+	const float kMoveSpeed   = 5.0f;  // Player.h moveSpeed_
+	const float kJumpPower   = 8.0f;  // Player.h jumpPower_
+	const float kGravity     = 25.0f; // Player.h gravity_
+	const float kLandXZ      = 0.8f;  // Player.cpp UpdateAir の kLandXZ（着地の横許容）
+	const float kFloatTime   = 0.6f;  // Player.cpp のふんばり定数3種
+	const float kFloatTarget = 1.2f;
+	const float kFloatEase   = 6.0f;
+
+	if ( rail < 0 || rail >= ( int ) data_->railLines.size() ) return -1;
+	const auto& line = data_->railLines[rail];
+	if ( line.size() < 2 ) return -1;
+
+	// 端から「出て行く」水平方向（front端なら node1→node0 の向き）
+	Vector3 a = front ? line.front() : line.back();
+	Vector3 b = front ? line[1]      : line[line.size() - 2];
+	float dx = a.x - b.x, dz = a.z - b.z;
+	float dl = std::sqrt(dx * dx + dz * dz);
+	if ( dl < 1e-4f ) return -1;
+	dx /= dl; dz /= dl;
+
+	Vector3 pos = a;
+	float vy     = kJumpPower;
+	float budget = kFloatTime;
+	const float dt = 1.0f / 60.0f;
+
+	for ( int step = 0; step < 180; ++step ) { // 最大3秒ぶんシミュレート
+		// ふんばり：上昇が尽きたら SPACE 長押しで滞空した想定（Player と同じ式）
+		if ( useFlutter && vy < kFloatTarget && budget > 0.0f ) {
+			vy += ( kFloatTarget - vy ) * ( std::min )( kFloatEase * dt, 1.0f );
+			budget -= dt;
+		} else {
+			vy -= kGravity * dt;
+		}
+		float prevY = pos.y;
+		pos.x += dx * kMoveSpeed * dt;
+		pos.z += dz * kMoveSpeed * dt;
+		pos.y += vy * dt;
+		if ( outArc ) outArc->push_back(pos);
+
+		if ( vy > 0.0f ) continue; // 上昇中は着地しない（ゲームと同じ）
+
+		for ( int j = 0; j < ( int ) data_->railLines.size(); ++j ) {
+			if ( j == rail ) continue;          // 元レールへ戻る着地は「渡り」ではない
+			if ( !IsRailVisible(j) ) continue;  // 見えないレールには着地できない（Player と同じ）
+			const auto& lj = data_->railLines[j];
+			if ( lj.size() < 2 ) continue;
+
+			int seg = 0;
+			Vector3 cp = ClosestOnPolyline(pos, lj, &seg);
+			if ( IsNodeHole(j, seg) || IsNodeHole(j, seg + 1) ) continue; // 穴区間には着地しない
+			float hx = cp.x - pos.x, hz = cp.z - pos.z;
+			if ( std::sqrt(hx * hx + hz * hz) > kLandXZ ) continue;
+			// レール面のすぐ近くへ降りた or 1フレームで面を上→下へ通過（Player と同条件）
+			float above   = pos.y - cp.y;
+			bool  reached = ( above <= 0.1f && above >= -0.3f );
+			bool  crossed = ( prevY >= cp.y && pos.y <= cp.y );
+			if ( reached || crossed ) return j;
+		}
+		if ( pos.y < a.y - 30.0f ) break; // 落ちすぎ＝どこにも届かない
+	}
+	return -1;
+}
+
+// 到達可否キャッシュ：railVersion_ が変わった時だけ BFS で作り直す
+void RailEditor::EnsureReachableCache() const{
+	if ( reachCacheVersion_ == railVersion_ ) return;
+	reachCacheVersion_ = railVersion_;
+
+	const int n = ( int ) data_->railLines.size();
+	reachable_.assign(n, 0);
+	if ( n == 0 ) return;
+
+	// 隣接リスト：通常の接続（溶接/合流/乗り換え）は双方向
+	std::vector<std::vector<int>> links(n);
+	for ( int a = 0; a < n; ++a ) {
+		for ( int b = a + 1; b < n; ++b ) {
+			if ( AreRailsLinked(a, b) ) {
+				links[a].push_back(b);
+				links[b].push_back(a);
+			}
+		}
+	}
+	// Gap レールの未接続の端からはジャンプで渡れる（一方通行の辺として追加）。
+	//   Safe レールの端はゲーム側でクランプされ飛び出せないので辺にしない。
+	for ( int g = 0; g < n && g < ( int ) data_->railGroundTypes.size(); ++g ) {
+		if ( data_->railGroundTypes[g] != 1 ) continue; // 1 = SplineRail::GroundType::Gap
+		for ( int side = 0; side < 2; ++side ) {
+			const bool front = ( side == 0 );
+			if ( IsRailEndConnected(g, front) ) continue; // 接続済みの端は合流が優先＝飛べない
+			int t = PredictJumpLanding(g, front, true);
+			if ( t >= 0 ) links[g].push_back(t);
+		}
+	}
+
+	// スタートレール（未設定なら0番）から辿れるレールに印を付ける
+	int start = data_->startRailIndex;
+	if ( start < 0 || start >= n ) start = 0;
+	std::vector<int> open;
+	open.push_back(start);
+	reachable_[start] = 1;
+	while ( !open.empty() ) {
+		int cur = open.back(); open.pop_back();
+		for ( int nx : links[cur] ) {
+			if ( nx < 0 || nx >= n || reachable_[nx] ) continue;
+			reachable_[nx] = 1;
+			open.push_back(nx);
+		}
+	}
+}
+
+bool RailEditor::IsRailReachable(int rail) const{
+	EnsureReachableCache();
+	if ( rail < 0 || rail >= ( int ) data_->railLines.size() ) return true;
+	if ( rail >= ( int ) reachable_.size() ) return true;
+	if ( data_->railLines[rail].size() < 2 ) return true; // 作りかけの路線は警告しない
+	return reachable_[rail] != 0;
+}
+
+// ============================================================
 // 複数選択（路線まるごと移動・矩形選択）
 // ============================================================
 void RailEditor::AddToSelection(int rail, int node){
@@ -696,6 +923,10 @@ void RailEditor::DrawWindow(){
 			if ( ImGui::SmallButton("複製") ) { duplicateRail = i; }
 			ImGui::SameLine();
 			if ( ImGui::SmallButton("削除") ) { deleteRail = i; }
+			if ( !IsRailReachable(i) ) {
+				ImGui::SameLine();
+				ImGui::TextColored(ImVec4(0.85f, 0.45f, 1.0f, 1.0f), "×通れない");
+			}
 			ImGui::PopID();
 		}
 

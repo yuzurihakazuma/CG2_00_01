@@ -327,12 +327,13 @@ void EditorManager::Update(){
                 Matrix4x4 world = MatrixMath::MakeAffine({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, railSelPivot_);
 
                 // グリッド刻み：Ctrl を押しながらドラッグした時だけ一定刻みで動く。
-                //   そのままドラッグは滑らかな自由移動（端点吸着だけは効く）。
-                //   刻み幅はレールエディタの「グリッドサイズ」を使う。
+                //   Ctrl+Shift はさらに細かい 1/10 刻み。そのままドラッグは滑らかな自由移動、
+                //   Shift 単独は移動量を1/10にした微調整。刻み幅はレールエディタの「グリッドサイズ」。
                 float snap[3] = { 0.0f, 0.0f, 0.0f };
                 float* snapPtr = nullptr;
                 if ( ImGui::GetIO().KeyCtrl ) {
                     float g = re->GetRailGridSize();
+                    if ( ImGui::GetIO().KeyShift ) g *= 0.1f; // Ctrl+Shift = 1/10 の細かい刻み
                     if ( g > 0.0f ) {
                         snap[0] = snap[1] = snap[2] = g;
                         snapPtr = snap;
@@ -347,12 +348,16 @@ void EditorManager::Update(){
                     ImGuizmo::DecomposeMatrixToComponents(&world.m[0][0], t, r, s);
                     Vector3 np = { t[0], t[1], t[2] };
                     Vector3 delta = { np.x - railSelPivot_.x, np.y - railSelPivot_.y, np.z - railSelPivot_.z };
+                    // Shift 単独ドラッグ＝微調整（移動量を1/10に）。端点吸着に引っ張られると
+                    // 細かい調整と喧嘩するので、1ノードでも吸着なしの平行移動を使う。
+                    const bool fineDrag = ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyCtrl;
+                    if ( fineDrag ) { delta.x *= 0.1f; delta.y *= 0.1f; delta.z *= 0.1f; }
                     if ( delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f ) {
-                        if ( sel.size() == 1 ) {
+                        if ( sel.size() == 1 && !fineDrag ) {
                             // 1ノードだけなら従来どおり（他レール端点へのノード吸着も効く）
                             re->SetRailNodePos(sel[0].node, np);
                         } else {
-                            // 複数ノード：形を保ったまま平行移動
+                            // 複数ノード or 微調整：形を保ったまま平行移動
                             re->TranslateSelection(delta);
                         }
                     }
@@ -497,9 +502,11 @@ void EditorManager::Update(){
             }
 
             // ===== (C) キーボードでノード操作（Game View にマウスがある時のみ）=====
-            //   矢印=グリッド1マスXZ移動 / Q,E=上下Y / Delete=削除 / Ctrl+D=路線複製
+            //   矢印=グリッド1マスXZ移動 / Q,E=上下Y / Shift併用=1/10マスの微調整
+            //   Delete=削除 / Ctrl+D=路線複製
             if ( imageHovered && !ImGui::IsMouseDown(1) && !ImGui::GetIO().WantTextInput ) {
-                const float gs = re->GetRailGridSize();
+                float gs = re->GetRailGridSize();
+                if ( shiftHeld ) gs *= 0.1f; // Shift＋移動キー = 微調整
                 Vector3 kd { 0.0f, 0.0f, 0.0f };
                 if ( ImGui::IsKeyPressed(ImGuiKey_LeftArrow,  true) ) kd.x -= gs;
                 if ( ImGui::IsKeyPressed(ImGuiKey_RightArrow, true) ) kd.x += gs;
@@ -616,6 +623,11 @@ void EditorManager::Update(){
                     : ( ( dtype == 1 )
                         ? IM_COL32(255, 165, 70, isCur ? 235 : 150)   // 縦 = 橙
                         : IM_COL32(90, 180, 255, isCur ? 235 : 150) ); // 横 = 青
+                // プレイヤーがスタートから到達できないレールは紫で警告（穴=赤と区別できる色）
+                const bool reachable = re->IsRailReachable(rr);
+                if ( railVisible && !reachable ) {
+                    col = IM_COL32(200, 80, 255, isCur ? 235 : 160);
+                }
                 const ImU32 holeCol = IM_COL32(255, 60, 50, isCur ? 245 : 180); // 穴 = 赤
                 const float baseW = isCur ? 2.5f : 1.5f;
                 const int nodeCount = re->GetNodeCountOf(rr);
@@ -638,6 +650,71 @@ void EditorManager::Update(){
                     } else {
                         dl->AddLine(sa, mid, holeA ? holeCol : col, baseW + ( holeA ? 1.5f : 0.0f ));
                         dl->AddLine(mid, sb, holeB ? holeCol : col, baseW + ( holeB ? 1.5f : 0.0f ));
+                    }
+                }
+
+                // 到達できないレールの中央に補足を出す（なぜ紫なのかが一目で分かる）
+                if ( railVisible && !reachable && nodeCount >= 2 ) {
+                    Vector3 mid3;
+                    if ( re->GetNodePosOf(rr, nodeCount / 2, mid3) ) {
+                        ImVec2 sm;
+                        if ( project(mid3, sm) ) {
+                            dl->AddText({ sm.x + 8.0f, sm.y - 8.0f }, IM_COL32(220, 120, 255, 255), "未接続 (通れない)");
+                        }
+                    }
+                }
+            }
+
+            // --- ジャンプ予測：Gap レールの未接続の端から弾道（放物線）を点線で描く ---
+            //   シアン=どこかのレールへ着地できる（着地点に◎）/ 赤=届かない（先端に✕）。
+            //   Safe レールの端はゲーム仕様で飛び出せない（クランプ）ので、
+            //   飛べば届く相手がいる時だけ「端をGapにすれば渡れる」とヒントを出す。
+            {
+                const auto& groundTypes = re->GetRailGroundTypes();
+                for ( int rr = 0; rr < railCount; ++rr ) {
+                    if ( !re->IsRailVisible(rr) ) continue;
+                    const int nodeCnt = re->GetNodeCountOf(rr);
+                    if ( nodeCnt < 2 ) continue;
+                    const int gt = ( rr < ( int ) groundTypes.size() ) ? groundTypes[rr] : 0;
+                    for ( int side = 0; side < 2; ++side ) {
+                        const bool front = ( side == 0 );
+                        // 接続済みの端はゲームでは合流が優先されて飛び出せないので描かない
+                        if ( re->IsRailEndConnected(rr, front) ) continue;
+
+                        if ( gt == 1 ) { // 1 = GroundType::Gap（飛び出せる端）
+                            std::vector<Vector3> arc;
+                            int land = re->PredictJumpLanding(rr, front, true, &arc);
+                            ImU32 jcol = ( land >= 0 ) ? IM_COL32(80, 230, 230, 210)  // シアン = 渡れる
+                                                       : IM_COL32(255, 90, 90, 180);  // 赤 = 届かない
+                            ImVec2 prevS {}; bool prevOk = false;
+                            for ( size_t k = 0; k < arc.size(); ++k ) {
+                                ImVec2 s; bool ok = project(arc[k], s);
+                                if ( ok && prevOk && ( k % 2 == 0 ) ) dl->AddLine(prevS, s, jcol, 2.0f); // 1個おき＝点線
+                                prevS = s; prevOk = ok;
+                            }
+                            if ( !arc.empty() ) {
+                                ImVec2 e;
+                                if ( project(arc.back(), e) ) {
+                                    if ( land >= 0 ) {
+                                        dl->AddCircle(e, 7.0f, jcol, 0, 2.5f); // 予測着地点
+                                    } else {
+                                        dl->AddLine({ e.x - 5, e.y - 5 }, { e.x + 5, e.y + 5 }, jcol, 2.0f);
+                                        dl->AddLine({ e.x - 5, e.y + 5 }, { e.x + 5, e.y - 5 }, jcol, 2.0f);
+                                    }
+                                }
+                            }
+                        } else if ( gt == 0 ) { // Safe：端では止まる → 飛べば届くならヒント
+                            if ( re->PredictJumpLanding(rr, front, true) >= 0 ) {
+                                Vector3 p;
+                                if ( re->GetNodePosOf(rr, front ? 0 : nodeCnt - 1, p) ) {
+                                    ImVec2 s;
+                                    if ( project(p, s) ) {
+                                        dl->AddText({ s.x + 10.0f, s.y - 14.0f },
+                                            IM_COL32(255, 200, 90, 230), "端をGapにすれば渡れる");
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
