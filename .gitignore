@@ -326,6 +326,11 @@ generated/
 externals/DirectXTex/Bin/
 project/externals/DirectXTex/Bin/
 
+# ===== Log files =====
+*.log
+logs/
+project/logs/
+
 # ===== C++ build artifacts (念のため強化) =====
 *.tlog
 *.lastbuildstate
