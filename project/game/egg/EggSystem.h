@@ -5,7 +5,9 @@
 #include <functional>
 #include <string>
 
-class Obj3d; // トレイル煙パフ用（実体で確実に表示する）
+class Obj3d;            // トレイル煙パフ用（実体で確実に表示する）
+class SDFVolumeObject;  // 産卵エロージョン演出用（SDFの卵が芯から育つ）
+struct ID3D12GraphicsCommandList;
 
 // =====================================================================
 //  EggSystem：ヨッシーの卵を管理する（飲み込みで生成 → 後ろに整列・追従 → 投擲 → 割れる）。
@@ -51,9 +53,21 @@ public:
     int FlyingCount() const;  // 飛行中の卵の数
     int TotalCount() const { return ( int ) eggs_.size(); }
 
+    // --- 産卵エロージョン演出（SDFの卵が芯から育ち、育ちきったら実体メッシュへ交代）---
+    //   セットアップ：egg.sdf3d を読み込む（シーンの LoadResources から呼ぶ。
+    //   読み込み失敗時は演出なし＝従来のポン出しに自動フォールバック）
+    void InitializeBirthFx(ID3D12GraphicsCommandList* commandList);
+    //   描画：専用PSOへ切り替えるため、シーンMRTパスの最後（他のObj3dの後）で呼ぶこと
+    void DrawBirthFx(ID3D12GraphicsCommandList* commandList);
+
 private:
     std::vector<std::unique_ptr<Egg>> eggs_;
     int stomach_ = 0; // お腹にためた敵の数（産むと卵になる）
+
+    // --- 産卵エロージョン演出の状態 ---
+    std::unique_ptr<SDFVolumeObject> birthFx_; // SDFの卵（1個を使い回す）
+    Egg*  birthEgg_   = nullptr;               // 演出対象（eggs_ 内に存在するか毎フレーム検証）
+    float birthTimer_ = -1.0f;                 // 経過秒。負=演出していない
 
     // --- 飛行中の卵が残す「煙パフ」---
     //   加算パーティクルは明るい背景で見えないので、実体(Obj3d)の小球で表示する（縮んで消える）。

@@ -17,5 +17,6 @@
   ],
   "marginRatio": 0.15,
   "isWatertight": false,
-  "isNormalized": true
+  "isNormalized": true,
+  "hasColorVolume": true
 }

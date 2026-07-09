@@ -25,7 +25,8 @@ bool SDFVolumeObject::BuildPipeline() {
 
     RootSignatureBuilder rsBuilder;
     rsBuilder.AddCBV(0, D3D12_SHADER_VISIBILITY_ALL);                  // [0] b0（VS/PS共用）
-    rsBuilder.AddDescriptorTableSRV(0, D3D12_SHADER_VISIBILITY_PIXEL); // [1] t0（ボリューム）
+    rsBuilder.AddDescriptorTableSRV(0, D3D12_SHADER_VISIBILITY_PIXEL); // [1] t0（距離ボリューム）
+    rsBuilder.AddDescriptorTableSRV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [2] t1（カラーボリューム）
     rsBuilder.AddDefaultSampler(0);                                    //     s0
     rsBuilder.Build(device, sRootSignature_);
     if ( !sRootSignature_ ) return false;
@@ -135,6 +136,77 @@ bool SDFVolumeObject::Load(const std::string& sdf3dPath, ID3D12GraphicsCommandLi
     srvIndex_ = SrvManager::GetInstance()->Allocate();
     SrvManager::GetInstance()->CreateSRVforTexture3D(srvIndex_, texture_.Get(), DXGI_FORMAT_R32_FLOAT, 1);
 
+    // --- 4.5. カラーボリューム（同名の .sdfcol があれば読む。無ければ baseColor の単色）---
+    //   SDF3DPrintf.py がテクスチャ付きモデルから「最寄り表面の色」を焼いた RGBA8 ボリューム。
+    //   ヒット点でこれをサンプルすると、元テクスチャと同じ模様の色が付く。
+    {
+        std::string colPath = sdf3dPath;
+        size_t dot = colPath.find_last_of('.');
+        if ( dot != std::string::npos ) { colPath = colPath.substr(0, dot); }
+        colPath += ".sdfcol";
+
+        std::ifstream colFile(colPath, std::ios::binary);
+        if ( colFile ) {
+            Header ch {};
+            colFile.read(reinterpret_cast<char*>( &ch ), sizeof(Header));
+            const size_t colCount = static_cast<size_t>( ch.width ) * ch.height * ch.depth;
+            if ( ch.width == header_.width && ch.height == header_.height &&
+                 ch.depth == header_.depth && colCount > 0 ) {
+                std::vector<uint8_t> colData(colCount * 4);
+                colFile.read(reinterpret_cast<char*>( colData.data() ), colData.size());
+                if ( colFile ) {
+                    D3D12_RESOURCE_DESC cdesc = desc;
+                    cdesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; // PNG由来のsRGB色
+                    if ( SUCCEEDED(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &cdesc,
+                        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&colorTexture_))) ) {
+
+                        D3D12_PLACED_SUBRESOURCE_FOOTPRINT cfp {};
+                        UINT cRows = 0;
+                        UINT64 cRowSize = 0, cTotal = 0;
+                        device->GetCopyableFootprints(&cdesc, 0, 1, 0, &cfp, &cRows, &cRowSize, &cTotal);
+
+                        colorUploadBuffer_ = ResourceFactory::GetInstance()->CreateBufferResource(cTotal);
+                        uint8_t* cm = nullptr;
+                        colorUploadBuffer_->Map(0, nullptr, reinterpret_cast<void**>( &cm ));
+                        const size_t cSrcRow = static_cast<size_t>( w ) * 4;
+                        for ( uint32_t z = 0; z < d; ++z ) {
+                            for ( uint32_t y = 0; y < h; ++y ) {
+                                std::memcpy(
+                                    cm + cfp.Offset + ( static_cast<size_t>( z ) * cRows + y ) * cfp.Footprint.RowPitch,
+                                    colData.data() + ( static_cast<size_t>( z ) * h + y ) * cSrcRow,
+                                    cSrcRow);
+                            }
+                        }
+                        colorUploadBuffer_->Unmap(0, nullptr);
+
+                        D3D12_TEXTURE_COPY_LOCATION cdst {};
+                        cdst.pResource = colorTexture_.Get();
+                        cdst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                        cdst.SubresourceIndex = 0;
+                        D3D12_TEXTURE_COPY_LOCATION csrc {};
+                        csrc.pResource = colorUploadBuffer_.Get();
+                        csrc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                        csrc.PlacedFootprint = cfp;
+                        commandList->CopyTextureRegion(&cdst, 0, 0, 0, &csrc, nullptr);
+
+                        D3D12_RESOURCE_BARRIER cbarrier {};
+                        cbarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                        cbarrier.Transition.pResource = colorTexture_.Get();
+                        cbarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+                        cbarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                        cbarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                        commandList->ResourceBarrier(1, &cbarrier);
+
+                        colorSrvIndex_ = SrvManager::GetInstance()->Allocate();
+                        SrvManager::GetInstance()->CreateSRVforTexture3D(
+                            colorSrvIndex_, colorTexture_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 1);
+                        hasColorVolume_ = true;
+                    }
+                }
+            }
+        }
+    }
+
     // --- 5. プロキシ箱（単位キューブ 0〜1。VSで boxMin〜boxMax へ展開する）---
     const float cubeVerts[8][3] = {
         { 0,0,0 }, { 1,0,0 }, { 0,1,0 }, { 1,1,0 },
@@ -206,6 +278,8 @@ void SDFVolumeObject::Update() {
     cbData_->lightDir[0] = lightDir_.x;
     cbData_->lightDir[1] = lightDir_.y;
     cbData_->lightDir[2] = lightDir_.z;
+    cbData_->erode = erode_;
+    cbData_->useColorTex = hasColorVolume_ ? 1.0f : 0.0f;
 }
 
 // シーンMRTパスの最後で呼ぶ（専用のPSO/ルートシグネチャを自分でセットする）
@@ -219,5 +293,7 @@ void SDFVolumeObject::Draw(ID3D12GraphicsCommandList* commandList) {
     commandList->IASetIndexBuffer(&ibv_);
     commandList->SetGraphicsRootConstantBufferView(0, constantBuffer_->GetGPUVirtualAddress()); // b0
     SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, srvIndex_);                    // t0
+    // t1: カラーボリューム（無い時は距離ボリュームをダミーで挿す。useColorTex=0 なので読まれない）
+    SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, hasColorVolume_ ? colorSrvIndex_ : srvIndex_);
     commandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
 }

@@ -61,6 +61,16 @@ public:
     void SetViewerPosition(const Vector3& pos) { viewerPos_ = pos; viewerValid_ = true; }
     void ClearViewerPosition() { viewerValid_ = false; }
 
+    // --- シーン専用アイテムの単発描画 ---
+    //   sdf_scene.json の配置とは別に、シーンが自分で持つ SDFText / SDFSprite を描く入口
+    //   （タイトルロゴ・HUDの数字など）。パイプラインの張り替え込みで、
+    //   「現在セットされているレンダーターゲット」へそのまま描く。
+    void DrawTextItem(ID3D12GraphicsCommandList* commandList, SDFText& text, const std::string& atlasName);
+    void DrawSpriteItem(ID3D12GraphicsCommandList* commandList, SDFSprite& sprite, const std::string& atlasName);
+
+    // アトラス参照（画像サイズの取得などシーン側のレイアウト計算用）
+    SDFAtlas* GetAtlas(const std::string& name) const { return FindAtlas(name); }
+
 private:
     SDFManager() = default;
     ~SDFManager() = default;

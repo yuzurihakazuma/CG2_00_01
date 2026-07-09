@@ -11,11 +11,13 @@ struct VolumeCB
     float3 boxMax; float pad1;
     float3 cameraPos; float distScale;
     float4 baseColor;
-    float3 lightDir; float pad2;
+    float3 lightDir; float erode; // エロージョン量(m)。距離場に足すと表面が法線方向に痩せる
+    float useColorTex; float3 pad3; // 1=カラーボリューム(t1)で着色 / 0=baseColor
 };
 ConstantBuffer<VolumeCB> gVolume : register(b0);
 
-Texture3D<float> gSDF : register(t0);
+Texture3D<float>  gSDF      : register(t0); // 距離ボリューム
+Texture3D<float4> gColorVol : register(t1); // カラーボリューム（最寄り表面の色を焼いたもの）
 SamplerState gSampler : register(s0);
 
 struct PSInput
@@ -65,7 +67,9 @@ PSOutput main(PSInput input)
     for (int i = 0; i < 128; ++i)
     {
         p = ro + rd * t;
-        float d = SampleDist(p);
+        // エロージョン：距離に定数を足す＝「erode(m) ぶん痩せた形」の正しい距離場になる。
+        //   時間で増やすと氷が溶けるように細い所から消え、減らすと芯から生えてくる
+        float d = SampleDist(p) + gVolume.erode;
         if (d < eps) { hit = true; break; }
         t += max(d, eps); // 最低でも eps は進める（無限ループ防止）
         if (t > t1) { break; }
@@ -79,10 +83,16 @@ PSOutput main(PSInput input)
         SampleDist(p + float3(0, h, 0)) - SampleDist(p - float3(0, h, 0)),
         SampleDist(p + float3(0, 0, h)) - SampleDist(p - float3(0, 0, h))));
 
+    // 色：カラーボリュームがあればヒット点の焼き込み色、無ければ単色
+    float3 uvHit = (p - gVolume.boxMin) / (gVolume.boxMax - gVolume.boxMin);
+    float3 albedo = lerp(gVolume.baseColor.rgb,
+                         gColorVol.SampleLevel(gSampler, uvHit, 0).rgb,
+                         gVolume.useColorTex);
+
     // ハーフランバート＋環境光（クラフト風のやわらかい陰影）
     float3 l = normalize(-gVolume.lightDir);
     float ndl = saturate(dot(n, l) * 0.5f + 0.5f);
-    float3 rgb = gVolume.baseColor.rgb * (0.25f + 0.75f * ndl);
+    float3 rgb = albedo * (0.25f + 0.75f * ndl);
 
     PSOutput output;
     output.color = float4(rgb, gVolume.baseColor.a);

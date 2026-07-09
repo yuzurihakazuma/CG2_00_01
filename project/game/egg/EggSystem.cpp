@@ -2,6 +2,7 @@
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/3d/model/Model.h"
 #include "engine/audio/AudioManager.h"
+#include "engine/sdf/SDFVolumeObject.h"
 #include <algorithm>
 #include <cstdlib>
 
@@ -10,6 +11,11 @@ EggSystem::~EggSystem() = default; // unique_ptr<Obj3d> のため cpp 側で定�
 namespace {
     // -1.0〜1.0 の簡易乱数（トレイルのばらつき用）
     float Rand11(){ return ( ( float ) std::rand() / RAND_MAX ) * 2.0f - 1.0f; }
+
+    // --- 産卵エロージョン演出の定数 ---
+    const float kBirthFxDuration = 0.35f; // 芯から育ちきるまでの秒数
+    const float kBirthFxScale    = 0.91f; // メッシュ卵(モデル高さ1.3×スケール0.7=0.91m)と同じ大きさ
+    const float kBirthFullErode  = 0.5f * kBirthFxScale; // これだけ痩せると完全に消える量
 }
 
 void EggSystem::Initialize(){
@@ -17,6 +23,25 @@ void EggSystem::Initialize(){
     puffs_.clear();
     stomach_    = 0;
     trailTimer_ = 0.0f;
+    // 産卵演出の状態もリセット（birthFx_ 本体は読み込み済みのまま使い回す）
+    birthEgg_   = nullptr;
+    birthTimer_ = -1.0f;
+}
+
+// 産卵エロージョン演出のセットアップ（egg.sdf3d → Texture3D）
+void EggSystem::InitializeBirthFx(ID3D12GraphicsCommandList* commandList){
+    birthFx_ = std::make_unique<SDFVolumeObject>();
+    if ( !birthFx_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
+        birthFx_.reset(); // 読めなければ演出なし（従来のポン出しに自動フォールバック）
+        return;
+    }
+    birthFx_->SetScale(kBirthFxScale);
+    birthFx_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // 卵のクリーム色
+}
+
+// 演出中のSDF卵の描画（専用PSOに切り替えるためMRTパスの最後で呼ばれる）
+void EggSystem::DrawBirthFx(ID3D12GraphicsCommandList* commandList){
+    if ( birthTimer_ >= 0.0f && birthFx_ ) { birthFx_->Draw(commandList); }
 }
 
 // 実体パフを1個出す（fxSphere=色付きの粒／eggShell=殻の欠片）。縮みながら消えるので加算でなくても確実に見える。
@@ -71,6 +96,14 @@ bool EggSystem::LayEgg(const Vector3& birthPos){
         egg->AttachVisual(std::move(obj), baseScale);
     }
     eggs_.push_back(std::move(egg));
+
+    // 産卵エロージョン演出を開始：実体メッシュを隠し、SDFの卵を「芯から育てる」。
+    //   育ちきったら Update が実体メッシュへバトンタッチする
+    if ( birthFx_ ) {
+        birthEgg_   = eggs_.back().get();
+        birthTimer_ = 0.0f;
+        birthEgg_->SetVisualHidden(true);
+    }
     return true;
 }
 
@@ -147,6 +180,31 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         std::remove_if(eggs_.begin(), eggs_.end(),
             [](const std::unique_ptr<Egg>& e){ return e->IsDead(); }),
         eggs_.end());
+
+    // --- 産卵エロージョン演出の進行 ---
+    //   SDFの卵を実体と同じ位置に重ね、erode を「全部溶けた状態→0」へ戻して芯から育てる。
+    //   育ちきったら実体メッシュの表示に戻してバトンタッチ。
+    if ( birthTimer_ >= 0.0f && birthFx_ ) {
+        // 対象の卵がまだ存在するか検証（満杯で割られた等でポインタが死ぬのを防ぐ）
+        bool exists = false;
+        for ( auto& e : eggs_ ) { if ( e.get() == birthEgg_ ) { exists = true; break; } }
+
+        birthTimer_ += dt;
+        float t = birthTimer_ / kBirthFxDuration;
+
+        if ( !exists || !birthEgg_->IsHeld() || t >= 1.0f ) {
+            // 演出終了（or 途中で投げられた/割られた）→ 実体メッシュへ交代して後始末
+            if ( exists ) { birthEgg_->SetVisualHidden(false); }
+            birthEgg_   = nullptr;
+            birthTimer_ = -1.0f;
+        } else {
+            // イージング（2次アウト）＝ムクッと出て、ふわっと育ち切る
+            float grow = 1.0f - ( 1.0f - t ) * ( 1.0f - t );
+            birthFx_->SetTranslation(birthEgg_->GetPosition());
+            birthFx_->SetErode(kBirthFullErode * ( 1.0f - grow ));
+            birthFx_->Update(); // カメラ行列＋CBを毎フレーム焼き直す
+        }
+    }
 }
 
 void EggSystem::Draw() const{

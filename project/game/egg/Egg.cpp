@@ -56,7 +56,7 @@ void Egg::Update(float dt){
 }
 
 void Egg::Draw() const{
-    if ( obj_ && !IsDead() ) { obj_->Draw(); }
+    if ( obj_ && !IsDead() && !visualHidden_ ) { obj_->Draw(); }
 }
 
 // Held → Flying：指定方向へ初速を与える。

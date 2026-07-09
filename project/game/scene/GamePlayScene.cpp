@@ -34,6 +34,7 @@
 #include "engine/utils/EditorManager.h"
 #include "engine/sdf/SDFManager.h"
 #include "engine/sdf/SDFVolumeObject.h"
+#include "engine/sdf/SDFText.h"
 #include "engine/utils/Level/BlenderImporter.h"
 #include "engine/graphics/DebugDraw.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
@@ -123,6 +124,9 @@ void GamePlayScene::LoadResources(){
 		sdfEggObj_->SetScale(2.0f);
 		sdfEggObj_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // 卵のクリーム色
 	}
+
+	// 産卵エロージョン演出（左Ctrlで産む瞬間、SDFの卵が芯から育って実体メッシュに交代）
+	eggSystem_.InitializeBirthFx(commandList);
 }
 
 // メインカメラ／デバッグカメラの生成・登録
@@ -210,6 +214,15 @@ void GamePlayScene::SetupGameplay(){
 		b->SetSize({ 16.0f, 16.0f });
 		bellyHudIcons_.push_back(std::move(b));
 	}
+
+	// 卵保持数の数字（SDFText。アイコン列の右に「×N（＋お腹）」。小さくてもフチ付きで潰れない）
+	eggCountText_ = std::make_unique<SDFText>();
+	eggCountText_->Initialize();
+	eggCountText_->SetFontSize(34.0f);
+	eggCountText_->SetPosition(36.0f + EggSystem::kMaxEggs * 42.0f + 10.0f, 16.0f);
+	eggCountText_->SetColor({ 0.75f, 1.0f, 0.8f, 1.0f });
+	eggCountText_->SetOutlineWidth(0.22f);
+	eggCountText_->SetOutlineColor({ 0.05f, 0.12f, 0.05f, 1.0f });
 	blockGroup_ = std::make_unique<InstancedGroup>();
 	blockGroup_->Initialize("block", 10000);
 	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
@@ -574,8 +587,16 @@ void GamePlayScene::UpdateSceneVisuals(){
 
 	if ( sprite_ ) { sprite_->Update(); }
 
-	// SDFボリューム（カメラ追従のCB更新）
-	if ( sdfEggObj_ ) { sdfEggObj_->Update(); }
+	// SDFボリューム（カメラ追従のCB更新＋エロージョン自動デモ）
+	if ( sdfEggObj_ ) {
+		if ( sdfErodeAuto_ ) {
+			// 溶けて消える(erode→1.0) ⇔ 芯から生える(→0.0) をゆっくり繰り返す
+			sdfErodeTime_ += 1.0f / 60.0f;
+			float w = 0.5f * ( 1.0f - std::cos(sdfErodeTime_ * 1.2f) ); // 0→1→0
+			sdfEggObj_->SetErode(w);
+		}
+		sdfEggObj_->Update();
+	}
 
 	// SDF看板の近接表示：プレイ中はプレイヤー位置を基準に「近づいた時だけ表示」が効く。
 	// エディット中は配置作業ができるよう常に全表示（Clear）。
@@ -599,6 +620,12 @@ void GamePlayScene::UpdateSceneVisuals(){
 			// お腹にためた数だけオレンジで表示（それ以外は完全透明）
 			bellyHudIcons_[i]->SetColor({ 1.0f, 0.75f, 0.25f, ( i < belly ) ? 0.9f : 0.0f });
 			bellyHudIcons_[i]->Update();
+		}
+		// 数字表示：「×保持数」＋お腹にいる分は「（＋n）」
+		if ( eggCountText_ ) {
+			std::string s = "×" + std::to_string(held);
+			if ( belly > 0 ) { s += "（＋" + std::to_string(belly) + "）"; }
+			eggCountText_->SetText(s);
 		}
 	}
 
@@ -682,6 +709,7 @@ void GamePlayScene::Draw(){
 	// --- SDFボリューム（レイマーチング）---
 	//   専用PSOに切り替えるので、通常のObj3d描画が全部終わった後に描く
 	if ( sdfEggObj_ ) { sdfEggObj_->Draw(commandList); }
+	eggSystem_.DrawBirthFx(commandList); // 産卵エロージョン演出中のSDF卵
 
 	// 2. 【MRT終了】
 	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
@@ -730,6 +758,10 @@ void GamePlayScene::Draw(){
 	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Play ) {
 		for ( auto& s : eggHudSlots_ )   { s->Draw(); }
 		for ( auto& s : bellyHudIcons_ ) { s->Draw(); }
+		// 保持数の数字（SDFText。スプライトと同じターゲットへ描く）
+		if ( eggCountText_ ) {
+			SDFManager::GetInstance()->DrawTextItem(commandList, *eggCountText_, "jpdot");
+		}
 	}
 
 	TextManager::GetInstance()->Draw();
@@ -750,6 +782,23 @@ void GamePlayScene::DrawDebugUI(){
 
 
 	TextManager::GetInstance()->DrawDebugUI();
+
+	// SDFボリューム（卵）のエロージョン操作パネル
+	ImGui::Begin("SDF卵 (エロージョン)");
+	if ( sdfEggObj_ && sdfEggObj_->IsLoaded() ) {
+		ImGui::TextDisabled("距離場に足す量で形が痩せる/太る（SDFだけの演出）");
+		ImGui::Checkbox("自動アニメ（溶ける⇔生える）", &sdfErodeAuto_);
+		if ( sdfErodeAuto_ ) {
+			ImGui::TextDisabled("erode: %.2f m", sdfEggObj_->RefErode());
+		} else {
+			ImGui::SliderFloat("erode (m)", &sdfEggObj_->RefErode(), -0.3f, 1.2f);
+		}
+		ImGui::DragFloat3("位置", &sdfEggObj_->RefTranslation().x, 0.1f);
+		ImGui::DragFloat("スケール", &sdfEggObj_->RefScale(), 0.05f, 0.2f, 10.0f);
+	} else {
+		ImGui::TextDisabled("resources/sdf3d/egg.sdf3d が読み込まれていません");
+	}
+	ImGui::End();
 
 	// ※ヨッシーHUD（おなか/たまご数・操作説明の仮表示）は一旦削除した。
 	//   本実装のUI（スプライト等）を作る時に復活させる。

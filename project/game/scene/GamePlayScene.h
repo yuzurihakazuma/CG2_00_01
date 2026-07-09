@@ -41,6 +41,7 @@ class Camera;
 class Sprite;
 class Obj3d;
 class SDFVolumeObject;
+class SDFText;
 class DirectXCommon;
 class Input;
 class RenderTexture;
@@ -191,5 +192,10 @@ private: // メンバ変数
 
 	// --- SDFボリューム描画のデモ（egg.obj を SDF化した .sdf3d をレイマーチングで表示）---
 	std::unique_ptr<SDFVolumeObject> sdfEggObj_;
+	bool  sdfErodeAuto_ = true;   // エロージョン自動アニメ（溶ける⇔生える）
+	float sdfErodeTime_ = 0.0f;
+
+	// --- 卵保持数の数字表示（SDFText。HUDアイコン列の右に「×N」）---
+	std::unique_ptr<SDFText> eggCountText_;
 
 };

@@ -9,7 +9,8 @@ struct VolumeCB
     float3 boxMax; float pad1; // ワールド空間AABB最大
     float3 cameraPos; float distScale; // レイ原点 / 距離値のワールド換算係数
     float4 baseColor;
-    float3 lightDir; float pad2;
+    float3 lightDir; float erode;      // erode: エロージョン量(m)。+で痩せる/-で太る
+    float useColorTex; float3 pad3;    // 1=カラーボリュームで着色 / 0=baseColor
 };
 ConstantBuffer<VolumeCB> gVolume : register(b0);
 

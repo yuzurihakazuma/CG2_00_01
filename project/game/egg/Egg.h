@@ -47,6 +47,10 @@ public:
     bool JustBroke() const { return justBroke_; }
     void ClearJustBroke() { justBroke_ = false; }
 
+    // 産卵エロージョン演出中は実体メッシュを隠す（SDFの卵が育ちきったら表示に戻す）
+    void SetVisualHidden(bool hidden) { visualHidden_ = hidden; }
+    bool IsVisualHidden() const { return visualHidden_; }
+
 private:
     EggState state_ = EggState::Held;
     Vector3  pos_ { 0.0f, 0.0f, 0.0f };
@@ -56,6 +60,7 @@ private:
     float    flyTimer_   = 0.0f;
     float    brokenTimer_ = 0.0f;
     bool     justBroke_   = false;         // この瞬間に割れたか（1フレームだけ true）
+    bool     visualHidden_ = false;        // 産卵演出中の実体メッシュ非表示
     float    bornTimer_   = 0.25f;         // 生まれた直後の「ポンッ」と出る演出時間
     float    spinAngle_   = 0.0f;          // 見た目のくるくる回転
 

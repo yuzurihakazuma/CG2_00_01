@@ -158,6 +158,30 @@ void SDFManager::Draw(ID3D12GraphicsCommandList* commandList) {
     DrawItems(commandList);
 }
 
+// シーン専用テキストを1個描く（タイトル・HUD等。現在のレンダーターゲットへ）
+void SDFManager::DrawTextItem(ID3D12GraphicsCommandList* commandList, SDFText& text, const std::string& atlasName) {
+    if ( !pipelineReady_ ) return;
+    SDFAtlas* atlas = FindAtlas(atlasName);
+    if ( !atlas || !atlas->IsFont() ) return;
+    commandList->SetGraphicsRootSignature(rootSignature_.Get());
+    commandList->SetPipelineState(textPipeline_.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    text.Update(*atlas);
+    text.Draw(commandList, *atlas);
+}
+
+// シーン専用スプライトを1個描く（タイトルロゴ等。現在のレンダーターゲットへ）
+void SDFManager::DrawSpriteItem(ID3D12GraphicsCommandList* commandList, SDFSprite& sprite, const std::string& atlasName) {
+    if ( !pipelineReady_ ) return;
+    SDFAtlas* atlas = FindAtlas(atlasName);
+    if ( !atlas || atlas->IsFont() ) return;
+    commandList->SetGraphicsRootSignature(rootSignature_.Get());
+    commandList->SetPipelineState(spritePipeline_.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    sprite.Update(*atlas);
+    sprite.Draw(commandList, *atlas);
+}
+
 // レンダーテクスチャへ焼き込む（Game View にも映るように最終画像へ合成する）
 void SDFManager::DrawIntoTexture(ID3D12GraphicsCommandList* commandList, RenderTexture* target) {
     if ( !pipelineReady_ || !target ) return;

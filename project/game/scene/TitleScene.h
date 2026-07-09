@@ -18,6 +18,8 @@ class Input;
 class RenderTexture;
 class PostEffect;
 class LevelEditor;
+class SDFSprite;
+class SDFText;
 
 
 
@@ -76,6 +78,11 @@ private: // メンバ変数
 	std::unique_ptr<LevelEditor> levelEditor_;
 
 	bool isEditorActive_ = true;
+
+	// --- SDFタイトルロゴ＋スタート案内（拡大しても滲まない。グローと点滅はパラメータ制御）---
+	std::unique_ptr<SDFSprite> logoSprite_;
+	std::unique_ptr<SDFText>   startText_;
+	float titleAnimTime_ = 0.0f;
 
 	
 

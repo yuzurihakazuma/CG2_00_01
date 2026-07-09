@@ -24,8 +24,11 @@ public:
     void SetScale(float s) { scale_ = s; }               // 一様スケール（距離値も同率で換算）
     void SetColor(const Vector4& c) { color_ = c; }
     void SetLightDir(const Vector3& d) { lightDir_ = d; }
+    // エロージョン量(m)：+で表面が法線方向に痩せる（溶けて消える）/ -で太る。0=通常
+    void SetErode(float e) { erode_ = e; }
     Vector3& RefTranslation() { return translation_; }   // ImGui編集用
     float&   RefScale() { return scale_; }               // ImGui編集用
+    float&   RefErode() { return erode_; }               // ImGui編集用
     bool IsLoaded() const { return loaded_; }
 
     void Update();                                       // CB更新（毎フレーム。既定カメラ使用）
@@ -51,13 +54,20 @@ private:
         float boxMax[3]; float pad1;
         float cameraPos[3]; float distScale;
         float baseColor[4];
-        float lightDir[3]; float pad2;
+        float lightDir[3]; float erode;
+        float useColorTex; float pad3[3]; // 1=カラーボリュームで着色 / 0=baseColor
     };
 
     Header header_ {};
-    Microsoft::WRL::ComPtr<ID3D12Resource> texture_;      // Texture3D<float>
+    Microsoft::WRL::ComPtr<ID3D12Resource> texture_;      // Texture3D<float>（距離）
     Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer_; // 転送完了まで生かしておく
     uint32_t srvIndex_ = 0;
+
+    // カラーボリューム（.sdfcol があれば使う。無ければ baseColor の単色）
+    Microsoft::WRL::ComPtr<ID3D12Resource> colorTexture_;      // Texture3D<RGBA8(sRGB)>
+    Microsoft::WRL::ComPtr<ID3D12Resource> colorUploadBuffer_;
+    uint32_t colorSrvIndex_ = 0;
+    bool hasColorVolume_ = false;
 
     Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer_; // プロキシ箱（単位キューブ）
     D3D12_VERTEX_BUFFER_VIEW vbv_ {};
@@ -71,6 +81,7 @@ private:
     float   scale_ = 1.0f;
     Vector4 color_ { 1.0f, 1.0f, 1.0f, 1.0f };
     Vector3 lightDir_ { 0.4f, -1.0f, 0.3f }; // 上からの光（正規化はシェーダー側）
+    float   erode_ = 0.0f;                   // エロージョン量(m)
     bool    loaded_ = false;
 
     // 共有パイプライン（全インスタンスで1組）
