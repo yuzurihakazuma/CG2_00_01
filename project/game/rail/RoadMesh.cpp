@@ -14,7 +14,7 @@ RoadMesh::~RoadMesh() = default;
 //   （yaw = atan2(dir.x, dir.z) / pitch = -asin(dir.y)。回転順は Rx→Ry の行ベクトル）。
 void RoadMesh::PlaceTile(Model* model, const std::vector<SplineRail>& rails, int railIdx,
                          const Vector3& p0, const Vector3& p1, float zScale, Camera* camera){
-    const float kThickness = 1.0f;  // 道の厚み。モデルの上面はローカル Y=+1（README_road.md）
+    const float kThickness = 0.25f; // 道の厚み。モデルの上面はローカル Y=+0.25（README_road_v2.md）
     const float kTopGap    = 0.05f; // レール緑線とのZファイト回避（道の上面を少しだけ下げる）
 
     Vector3 d = { p1.x - p0.x, p1.y - p0.y, p1.z - p0.z };
@@ -49,12 +49,12 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera){
     tileRail_.clear();
     tileBase_.clear();
 
-    Model* segModel = ModelManager::GetInstance()->FindModel("roadSegment");
+    Model* segModel = ModelManager::GetInstance()->FindModel("roadStraight");
     Model* endModel = ModelManager::GetInstance()->FindModel("roadEnd");
     if ( segModel == nullptr ) { return; } // モデル未ロードなら何もしない（安全側）
     if ( endModel == nullptr ) { endModel = segModel; }
 
-    const float kTileLen = 4.0f; // road_segment の長さ（resources/road/README_road.md 参照）
+    const float kTileLen = 2.0f; // road_straight の長さ（resources/road/README_road_v2.md 参照）
 
     for ( int railIdx = 0; railIdx < ( int ) rails.size(); ++railIdx ) {
         const SplineRail& rail = rails[railIdx];
@@ -62,7 +62,7 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera){
         if ( len <= 0.0f || rail.nodes.size() < 2 ) continue;
         if ( !rail.visible ) continue; // 連結用の見えないレールには道を敷かない
 
-        // 4mタイルを等分割で敷く
+        // 2mタイルを等分割で敷く
         int   slots   = ( std::max )( 1, ( int ) std::lround(len / kTileLen) );
         float slotLen = len / slots;
         for ( int i = 0; i < slots; ++i ) {
@@ -74,8 +74,9 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera){
                       slotLen / kTileLen, camera);
         }
 
-        // 終端キャップ：非ループの両端の外側に向けて置き、開いている断面を閉じる。
+        // 終端キャップ（1.4m・丸く閉じる）：非ループの両端の外側に向けて置き、開いた断面を閉じる。
         //   キャップの接続面はモデル原点側（README準拠）。端の向きは少し内側の点との延長で出す。
+        //   上面の破線ドットが「行き止まり」の表現になる。
         if ( !rail.isLoop ) {
             const float kProbe = ( std::min )( 1.0f, len * 0.5f );
             Vector3 e1  = rail.GetPositionByDistance(len);
