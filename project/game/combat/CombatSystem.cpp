@@ -44,6 +44,22 @@ void CombatSystem::Update(Player& player, EnemyManager& enemies, EggSystem& eggs
         }
     }
 
+    // --- 吐き出した敵ボール × 敵：ぶつけて倒す（弾も消える）---
+    eggs.ResolveSpitHits([&](const Vector3& ballPos, float ballR) -> bool {
+        for ( auto& e : enemies.GetEnemies() ) {
+            if ( !e->IsAlive() ) continue;
+            if ( Length(ballPos - e->GetPosition()) <= ballR + e->GetRadius() ) {
+                Vector3 ep = e->GetPosition();
+                e->Defeat();
+                hitFeel.Trigger(0.05f, 0.2f); // 命中の手応え
+                SpawnStompEffect(ep, camera, StompEffectType::EggHit);
+                AudioManager::GetInstance()->PlayWave("resources/se/eggHit.wav", false, 0.7f);
+                return true; // 弾も消える
+            }
+        }
+        return false;
+    });
+
     // --- 飛行中の卵 × 敵：当たったら敵を倒して卵を割る（割れ演出は卵の Update が出す）---
     eggs.ResolveHits([&](const Vector3& eggPos, float eggR) -> bool {
         for ( auto& e : enemies.GetEnemies() ) {

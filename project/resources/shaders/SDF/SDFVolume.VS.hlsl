@@ -1,16 +1,20 @@
 // SDFボリューム（レイマーチング）用 頂点シェーダー
-// 単位キューブ(0〜1)の頂点をワールド空間のAABBへ展開し、カメラのVPでクリップへ変換する。
-// 実際の面はピクセルシェーダーのレイマーチングが作るので、ここはただの「箱の器」。
+// 単位キューブ(0〜1)の頂点をワールド空間のレイ用AABB（モーフ時はA∪B）へ展開し、
+// カメラのVPでクリップへ変換する。実際の面はピクセルシェーダーが作る。
 
 struct VolumeCB
 {
-    float4x4 viewProj;   // ビュー射影行列
-    float3 boxMin; float pad0; // ワールド空間AABB最小
-    float3 boxMax; float pad1; // ワールド空間AABB最大
-    float3 cameraPos; float distScale; // レイ原点 / 距離値のワールド換算係数
+    float4x4 viewProj;
+    float3 rayBoxMin; float pad0;  // レイ/プロキシ箱（モーフ時は A∪B）
+    float3 rayBoxMax; float pad1;
+    float3 boxMinA; float pad2;    // ボリュームAのワールドAABB
+    float3 boxMaxA; float pad3;
+    float3 boxMinB; float pad4;    // ボリュームB（モーフ先）のワールドAABB
+    float3 boxMaxB; float pad5;
+    float3 cameraPos; float distScale;
     float4 baseColor;
-    float3 lightDir; float erode;      // erode: エロージョン量(m)。+で痩せる/-で太る
-    float useColorTex; float3 pad3;    // 1=カラーボリュームで着色 / 0=baseColor
+    float3 lightDir; float erode;
+    float useColorTexA; float useColorTexB; float useMorph; float morphT;
 };
 ConstantBuffer<VolumeCB> gVolume : register(b0);
 
@@ -28,7 +32,7 @@ struct VSOutput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    float3 wp = lerp(gVolume.boxMin, gVolume.boxMax, input.position);
+    float3 wp = lerp(gVolume.rayBoxMin, gVolume.rayBoxMax, input.position);
     output.worldPos = wp;
     output.position = mul(float4(wp, 1.0f), gVolume.viewProj);
     return output;

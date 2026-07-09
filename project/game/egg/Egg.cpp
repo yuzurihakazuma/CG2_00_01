@@ -42,7 +42,9 @@ void Egg::Update(float dt){
 
     // --- 見た目の更新 ---
     if ( bornTimer_ > 0.0f ) { bornTimer_ -= dt; if ( bornTimer_ < 0.0f ) bornTimer_ = 0.0f; }
-    spinAngle_ += dt * 3.0f;
+    // 産卵演出（SDF）中は回転を止めておく：SDF卵は回っていないので、
+    // 交代の瞬間に斑点の向きが飛ばないよう「同じ向き(回転0)」から回り始める
+    if ( !visualHidden_ ) { spinAngle_ += dt * 3.0f; }
 
     if ( obj_ ) {
         // 生まれた直後は小さく→通常サイズへ膨らむ（ポンッと出る演出）

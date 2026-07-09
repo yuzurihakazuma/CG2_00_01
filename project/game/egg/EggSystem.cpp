@@ -12,15 +12,18 @@ namespace {
     // -1.0〜1.0 の簡易乱数（トレイルのばらつき用）
     float Rand11(){ return ( ( float ) std::rand() / RAND_MAX ) * 2.0f - 1.0f; }
 
-    // --- 産卵エロージョン演出の定数 ---
-    const float kBirthFxDuration = 0.35f; // 芯から育ちきるまでの秒数
+    // --- 産卵演出（出現エロージョン＋敵→卵モーフ＋クロスフェード）の定数 ---
+    const float kBirthFxDuration = 0.6f;  // 出現〜変形が終わるまでの秒数
+    const float kBirthFadeTime   = 0.15f; // 変形後、実体メッシュへクロスフェードする秒数
     const float kBirthFxScale    = 0.91f; // メッシュ卵(モデル高さ1.3×スケール0.7=0.91m)と同じ大きさ
     const float kBirthFullErode  = 0.5f * kBirthFxScale; // これだけ痩せると完全に消える量
+    const Vector4 kBirthFxColor  = { 0.98f, 0.96f, 0.86f, 1.0f }; // 予備色（αはフェードで使う）
 }
 
 void EggSystem::Initialize(){
     eggs_.clear();
     puffs_.clear();
+    spits_.clear();
     stomach_    = 0;
     trailTimer_ = 0.0f;
     // 産卵演出の状態もリセット（birthFx_ 本体は読み込み済みのまま使い回す）
@@ -28,15 +31,19 @@ void EggSystem::Initialize(){
     birthTimer_ = -1.0f;
 }
 
-// 産卵エロージョン演出のセットアップ（egg.sdf3d → Texture3D）
+// 産卵演出のセットアップ。
+//   ベース＝敵ボール(enemyBall.sdf3d)、モーフ先＝卵(egg.sdf3d)。
+//   「飲み込んだ敵がぐにゃりと卵に変わる」コアループの変換をそのまま見せる。
 void EggSystem::InitializeBirthFx(ID3D12GraphicsCommandList* commandList){
     birthFx_ = std::make_unique<SDFVolumeObject>();
-    if ( !birthFx_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
-        birthFx_.reset(); // 読めなければ演出なし（従来のポン出しに自動フォールバック）
+    if ( birthFx_->Load("resources/sdf3d/enemyBall.sdf3d", commandList) ) {
+        birthFx_->LoadMorphTarget("resources/sdf3d/egg.sdf3d", commandList); // 失敗してもボール単体で動く
+    } else if ( !birthFx_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
+        birthFx_.reset(); // どちらも無ければ演出なし（従来のポン出しに自動フォールバック）
         return;
     }
     birthFx_->SetScale(kBirthFxScale);
-    birthFx_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // 卵のクリーム色
+    birthFx_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // カラーボリュームが無い時の予備色
 }
 
 // 演出中のSDF卵の描画（専用PSOに切り替えるためMRTパスの最後で呼ばれる）
@@ -152,6 +159,34 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         }
     }
 
+    // --- 吐き出し弾の更新（軽い放物線＋転がり回転。地面/時間切れで煙になって消える）---
+    for ( auto& s : spits_ ) {
+        if ( s.dead ) continue;
+        s.life  -= dt;
+        s.vel.y -= 10.0f * dt; // 軽い重力＝少し先で落ちる放物線
+        s.pos.x += s.vel.x * dt;
+        s.pos.y += s.vel.y * dt;
+        s.pos.z += s.vel.z * dt;
+        s.spin  += 12.0f * dt;
+
+        if ( s.pos.y - s.radius <= 0.0f || s.life <= 0.0f ) {
+            // 地面(Y=0)に落ちた or 時間切れ → 白い煙を出して消える
+            for ( int i = 0; i < 5; ++i ) {
+                SpawnPuff(s.pos, { Rand11() * 1.5f, 0.8f + Rand11() * 0.6f, Rand11() * 1.5f },
+                          { 0.95f, 0.97f, 1.0f, 1.0f }, 0.22f, 0.35f);
+            }
+            s.dead = true;
+            continue;
+        }
+        if ( s.obj ) {
+            s.obj->SetTranslation(s.pos);
+            s.obj->SetRotation({ s.spin, 0.0f, 0.0f }); // 進行方向へ転がる見た目
+            s.obj->Update();
+        }
+    }
+    spits_.erase(std::remove_if(spits_.begin(), spits_.end(),
+        [](const SpitBall& s){ return s.dead; }), spits_.end());
+
     // 実体パフの更新（移動＋軽い重力＋回転＋縮小、寿命切れで削除）
     for ( auto& p : puffs_ ) {
         p.life   -= dt;
@@ -181,27 +216,45 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
             [](const std::unique_ptr<Egg>& e){ return e->IsDead(); }),
         eggs_.end());
 
-    // --- 産卵エロージョン演出の進行 ---
-    //   SDFの卵を実体と同じ位置に重ね、erode を「全部溶けた状態→0」へ戻して芯から育てる。
-    //   育ちきったら実体メッシュの表示に戻してバトンタッチ。
+    // --- 産卵演出の進行 ---
+    //   ①敵ボールが芯から育つ → ②卵へぐにゃり変形 → ③実体メッシュを出した上に
+    //   SDF卵を重ねたまま透明化（クロスフェード）→ 完全交代。
+    //   パッと差し替えず重ねて溶かすので、質感の微差が切り替わりとして見えない。
     if ( birthTimer_ >= 0.0f && birthFx_ ) {
         // 対象の卵がまだ存在するか検証（満杯で割られた等でポインタが死ぬのを防ぐ）
         bool exists = false;
         for ( auto& e : eggs_ ) { if ( e.get() == birthEgg_ ) { exists = true; break; } }
 
         birthTimer_ += dt;
-        float t = birthTimer_ / kBirthFxDuration;
+        float tMorph = birthTimer_ / kBirthFxDuration;                        // 0〜1: 出現＋変形
+        float tFade  = ( birthTimer_ - kBirthFxDuration ) / kBirthFadeTime;   // 0〜1: クロスフェード
 
-        if ( !exists || !birthEgg_->IsHeld() || t >= 1.0f ) {
-            // 演出終了（or 途中で投げられた/割られた）→ 実体メッシュへ交代して後始末
+        if ( !exists || !birthEgg_->IsHeld() || tFade >= 1.0f ) {
+            // 演出終了（or 途中で投げられた/割られた）→ 完全に実体メッシュへ交代
             if ( exists ) { birthEgg_->SetVisualHidden(false); }
             birthEgg_   = nullptr;
             birthTimer_ = -1.0f;
+        } else if ( tMorph >= 1.0f ) {
+            // ③クロスフェード：実体メッシュを表示した上に、完成形のSDF卵を重ねて透明化していく
+            birthEgg_->SetVisualHidden(false);
+            Vector4 c = kBirthFxColor;
+            c.w = 1.0f - std::clamp(tFade, 0.0f, 1.0f);
+            birthFx_->SetColor(c);
+            birthFx_->SetErode(0.0f);
+            birthFx_->SetMorphT(birthFx_->HasMorph() ? 1.0f : 0.0f);
+            birthFx_->SetTranslation(birthEgg_->GetPosition());
+            birthFx_->Update();
         } else {
-            // イージング（2次アウト）＝ムクッと出て、ふわっと育ち切る
-            float grow = 1.0f - ( 1.0f - t ) * ( 1.0f - t );
+            // ①②タイムライン：前半20%で敵ボールが芯から育ち、残り80%でボール→卵へぐにゃり変形
+            float growPhase  = ( std::min )( tMorph / 0.2f, 1.0f );
+            float grow = 1.0f - ( 1.0f - growPhase ) * ( 1.0f - growPhase );           // 2次アウト
+            float morphPhase = std::clamp(( tMorph - 0.2f ) / 0.8f, 0.0f, 1.0f);
+            float morph = morphPhase * morphPhase * ( 3.0f - 2.0f * morphPhase );      // smoothstep
+
+            birthFx_->SetColor(kBirthFxColor); // α=1（次の産卵に備えて毎回リセット）
             birthFx_->SetTranslation(birthEgg_->GetPosition());
             birthFx_->SetErode(kBirthFullErode * ( 1.0f - grow ));
+            birthFx_->SetMorphT(birthFx_->HasMorph() ? morph : 0.0f);
             birthFx_->Update(); // カメラ行列＋CBを毎フレーム焼き直す
         }
     }
@@ -209,6 +262,7 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
 
 void EggSystem::Draw() const{
     for ( const auto& e : eggs_ ) { e->Draw(); }
+    for ( const auto& s : spits_ ) { if ( s.obj && !s.dead ) s.obj->Draw(); }        // 吐き出し弾
     for ( const auto& p : puffs_ ) { if ( p.obj && p.life > 0.0f ) p.obj->Draw(); } // 煙パフ
 }
 
@@ -256,6 +310,44 @@ void EggSystem::SpawnHitFx(const Vector3& pos){
     for ( int i = 0; i < 8; ++i ) { // 黄身の飛沫
         SpawnPuff(pos, { Rand11() * 3.5f, 0.8f + Rand11() * 2.2f, Rand11() * 3.5f },
                   { 1.0f, 0.6f, 0.1f, 1.0f }, 0.14f, 0.32f);
+    }
+}
+
+// お腹の敵を1匹、指定方向へ吐き出す（口元 from から dir 方向へ発射）
+bool EggSystem::SpitOut(const Vector3& from, const Vector3& dir, float speed){
+    if ( stomach_ <= 0 ) return false;
+    --stomach_;
+
+    SpitBall ball;
+    ball.obj = Obj3d::Create("sphere"); // 敵と同じモンスターボール柄＝「飲んだ敵」がそのまま出てくる
+    ball.pos = from;
+    ball.vel = { dir.x * speed, 1.5f, dir.z * speed }; // 少し上向きに発射→軽い放物線を描く
+    if ( ball.obj ) {
+        ball.obj->SetScale({ ball.radius, ball.radius, ball.radius });
+        ball.obj->SetTranslation(ball.pos);
+        ball.obj->Update();
+    }
+    spits_.push_back(std::move(ball));
+
+    // 「ぷはっ」と吐いた煙
+    for ( int i = 0; i < 6; ++i ) {
+        SpawnPuff(from, { dir.x * 1.5f + Rand11() * 0.8f, 0.6f + Rand11() * 0.5f, dir.z * 1.5f + Rand11() * 0.8f },
+                  { 0.95f, 0.97f, 1.0f, 1.0f }, 0.24f, 0.35f);
+    }
+    return true;
+}
+
+// 飛行中の吐き出し弾を当たり判定にかけ、当たった弾を消す（敵側の処理は CombatSystem が行う）
+void EggSystem::ResolveSpitHits(const std::function<bool(const Vector3&, float)>& onHit){
+    for ( auto& s : spits_ ) {
+        if ( s.dead ) continue;
+        if ( onHit(s.pos, s.radius) ) {
+            for ( int i = 0; i < 5; ++i ) { // ぶつかって弾けた煙
+                SpawnPuff(s.pos, { Rand11() * 2.0f, 0.8f + Rand11() * 1.0f, Rand11() * 2.0f },
+                          { 1.0f, 0.9f, 0.8f, 1.0f }, 0.2f, 0.3f);
+            }
+            s.dead = true;
+        }
     }
 }
 

@@ -40,6 +40,14 @@ public:
     // 保持中の卵を1個、指定方向へ投げる（Held → Flying）。speed=初速。投げられたら true。
     bool TryThrow(const Vector3& playerPos, const Vector3& dir, float speed = 12.0f);
 
+    // お腹の敵を1匹、指定方向へ吐き出す（ヨッシーの吐き出し攻撃）。吐けたら true。
+    //   from=口元の位置 / dir=プレイヤーの向いている水平方向
+    bool SpitOut(const Vector3& from, const Vector3& dir, float speed = 13.0f);
+
+    // 飛行中の吐き出し弾を onHit(位置, 半径) で判定し、true が返ったら弾を消す。
+    //   （卵の ResolveHits と同じ流儀。敵側の処理は CombatSystem が行う）
+    void ResolveSpitHits(const std::function<bool(const Vector3&, float)>& onHit);
+
     // 飛行中の卵それぞれを onHit(卵位置, 卵半径) で判定し、true が返ったら卵を割る。
     //   敵を知るのはシーンなので、当たり判定の中身はシーンから渡す（割れ演出は Update が拾う）。
     void ResolveHits(const std::function<bool(const Vector3&, float)>& onHit);
@@ -83,6 +91,18 @@ private:
     };
     std::vector<TrailPuff> puffs_;
     float trailTimer_ = 0.0f; // 一定間隔でトレイルを出すためのタイマー
+
+    // --- 吐き出し弾（飲んだ敵をそのまま前方へ発射。モンスターボール柄の球）---
+    struct SpitBall {
+        std::unique_ptr<Obj3d> obj;
+        Vector3 pos { 0.0f, 0.0f, 0.0f };
+        Vector3 vel { 0.0f, 0.0f, 0.0f };
+        float   life   = 2.0f;   // 保険の寿命(秒)
+        float   radius = 0.45f;  // 当たり判定＆見た目の半径
+        float   spin   = 0.0f;   // 転がり回転
+        bool    dead   = false;
+    };
+    std::vector<SpitBall> spits_;
 
     // パフを1個出す（pos=位置, vel=初速, color=色, scale=大きさ, life=寿命秒, modelName=見た目）。
     //   modelName="fxSphere"（白い専用の粒。敵の"sphere"とは別物）の時だけ color でタイントする。

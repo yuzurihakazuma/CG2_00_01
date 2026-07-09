@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
+#include <algorithm>
 
 #include "engine/base/DirectXCommon.h"
 #include "engine/graphics/SrvManager.h"
@@ -25,8 +26,10 @@ bool SDFVolumeObject::BuildPipeline() {
 
     RootSignatureBuilder rsBuilder;
     rsBuilder.AddCBV(0, D3D12_SHADER_VISIBILITY_ALL);                  // [0] b0（VS/PS共用）
-    rsBuilder.AddDescriptorTableSRV(0, D3D12_SHADER_VISIBILITY_PIXEL); // [1] t0（距離ボリューム）
-    rsBuilder.AddDescriptorTableSRV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [2] t1（カラーボリューム）
+    rsBuilder.AddDescriptorTableSRV(0, D3D12_SHADER_VISIBILITY_PIXEL); // [1] t0（距離A）
+    rsBuilder.AddDescriptorTableSRV(1, D3D12_SHADER_VISIBILITY_PIXEL); // [2] t1（カラーA）
+    rsBuilder.AddDescriptorTableSRV(2, D3D12_SHADER_VISIBILITY_PIXEL); // [3] t2（距離B=モーフ先）
+    rsBuilder.AddDescriptorTableSRV(3, D3D12_SHADER_VISIBILITY_PIXEL); // [4] t3（カラーB）
     rsBuilder.AddDefaultSampler(0);                                    //     s0
     rsBuilder.Build(device, sRootSignature_);
     if ( !sRootSignature_ ) return false;
@@ -60,14 +63,14 @@ void SDFVolumeObject::FinalizeShared() {
     sRootSignature_.Reset();
 }
 
-bool SDFVolumeObject::Load(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList) {
-    if ( !BuildPipeline() ) return false;
-
-    // --- 1. ファイル読み込み（ヘッダ36バイト + float距離配列）---
+// .sdf3d（＋あれば同名の .sdfcol）を1組読み込み、Texture3D にして out へ詰める
+bool SDFVolumeObject::LoadVolumeSet(const std::string& sdf3dPath,
+                                    ID3D12GraphicsCommandList* commandList, VolumeSet& out) {
+    // --- 1. 距離ボリューム（ヘッダ36バイト + float配列）---
     std::ifstream file(sdf3dPath, std::ios::binary);
     if ( !file ) return false;
-    file.read(reinterpret_cast<char*>( &header_ ), sizeof(Header));
-    const size_t count = static_cast<size_t>( header_.width ) * header_.height * header_.depth;
+    file.read(reinterpret_cast<char*>( &out.header ), sizeof(Header));
+    const size_t count = static_cast<size_t>( out.header.width ) * out.header.height * out.header.depth;
     if ( count == 0 || count > 512ull * 512ull * 512ull ) return false; // 壊れたヘッダを弾く
     std::vector<float> data(count);
     file.read(reinterpret_cast<char*>( data.data() ), count * sizeof(float));
@@ -75,139 +78,110 @@ bool SDFVolumeObject::Load(const std::string& sdf3dPath, ID3D12GraphicsCommandLi
 
     auto dx = DirectXCommon::GetInstance();
     auto device = dx->GetDevice();
+    auto factory = ResourceFactory::GetInstance();
 
-    // --- 2. Texture3D（R32_FLOAT）を作成 ---
-    D3D12_RESOURCE_DESC desc {};
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
-    desc.Width = header_.width;
-    desc.Height = header_.height;
-    desc.DepthOrArraySize = static_cast<UINT16>( header_.depth );
-    desc.MipLevels = 1;
-    desc.Format = DXGI_FORMAT_R32_FLOAT;
-    desc.SampleDesc.Count = 1;
-    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    const uint32_t w = out.header.width, h = out.header.height, d = out.header.depth;
 
-    D3D12_HEAP_PROPERTIES heap {};
-    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-    HRESULT hr = device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
-        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&texture_));
-    if ( FAILED(hr) ) return false;
+    // Texture3D を1枚作ってアップロードする共通手順
+    auto createAndUpload = [&](DXGI_FORMAT format, const uint8_t* src, size_t srcPixelBytes,
+                               Microsoft::WRL::ComPtr<ID3D12Resource>& tex,
+                               Microsoft::WRL::ComPtr<ID3D12Resource>& uploadBuf) -> bool {
+        D3D12_RESOURCE_DESC desc {};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+        desc.Width = w;
+        desc.Height = h;
+        desc.DepthOrArraySize = static_cast<UINT16>( d );
+        desc.MipLevels = 1;
+        desc.Format = format;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
-    // --- 3. アップロード（フットプリントの RowPitch に合わせて行単位で詰める）---
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint {};
-    UINT numRows = 0;
-    UINT64 rowSize = 0, total = 0;
-    device->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &numRows, &rowSize, &total);
-
-    uploadBuffer_ = ResourceFactory::GetInstance()->CreateBufferResource(total);
-    uint8_t* mapped = nullptr;
-    uploadBuffer_->Map(0, nullptr, reinterpret_cast<void**>( &mapped ));
-    const uint32_t w = header_.width, h = header_.height, d = header_.depth;
-    const size_t srcRowBytes = static_cast<size_t>( w ) * sizeof(float);
-    for ( uint32_t z = 0; z < d; ++z ) {
-        for ( uint32_t y = 0; y < h; ++y ) {
-            std::memcpy(
-                mapped + footprint.Offset + ( static_cast<size_t>( z ) * numRows + y ) * footprint.Footprint.RowPitch,
-                reinterpret_cast<const uint8_t*>( data.data() ) + ( static_cast<size_t>( z ) * h + y ) * srcRowBytes,
-                srcRowBytes);
+        D3D12_HEAP_PROPERTIES heap {};
+        heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+        if ( FAILED(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&tex))) ) {
+            return false;
         }
+
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp {};
+        UINT numRows = 0;
+        UINT64 rowSize = 0, total = 0;
+        device->GetCopyableFootprints(&desc, 0, 1, 0, &fp, &numRows, &rowSize, &total);
+
+        uploadBuf = factory->CreateBufferResource(total);
+        uint8_t* mapped = nullptr;
+        uploadBuf->Map(0, nullptr, reinterpret_cast<void**>( &mapped ));
+        const size_t srcRowBytes = static_cast<size_t>( w ) * srcPixelBytes;
+        for ( uint32_t z = 0; z < d; ++z ) {
+            for ( uint32_t y = 0; y < h; ++y ) {
+                std::memcpy(
+                    mapped + fp.Offset + ( static_cast<size_t>( z ) * numRows + y ) * fp.Footprint.RowPitch,
+                    src + ( static_cast<size_t>( z ) * h + y ) * srcRowBytes,
+                    srcRowBytes);
+            }
+        }
+        uploadBuf->Unmap(0, nullptr);
+
+        D3D12_TEXTURE_COPY_LOCATION dst {};
+        dst.pResource = tex.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dst.SubresourceIndex = 0;
+        D3D12_TEXTURE_COPY_LOCATION srcLoc {};
+        srcLoc.pResource = uploadBuf.Get();
+        srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        srcLoc.PlacedFootprint = fp;
+        commandList->CopyTextureRegion(&dst, 0, 0, 0, &srcLoc, nullptr);
+
+        D3D12_RESOURCE_BARRIER barrier {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = tex.Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        commandList->ResourceBarrier(1, &barrier);
+        return true;
+    };
+
+    // 距離（R32_FLOAT）
+    if ( !createAndUpload(DXGI_FORMAT_R32_FLOAT,
+        reinterpret_cast<const uint8_t*>( data.data() ), sizeof(float), out.tex, out.upload) ) {
+        return false;
     }
-    uploadBuffer_->Unmap(0, nullptr);
+    out.srv = SrvManager::GetInstance()->Allocate();
+    SrvManager::GetInstance()->CreateSRVforTexture3D(out.srv, out.tex.Get(), DXGI_FORMAT_R32_FLOAT, 1);
 
-    D3D12_TEXTURE_COPY_LOCATION dst {};
-    dst.pResource = texture_.Get();
-    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    dst.SubresourceIndex = 0;
-    D3D12_TEXTURE_COPY_LOCATION src {};
-    src.pResource = uploadBuffer_.Get();
-    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    src.PlacedFootprint = footprint;
-    commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    // --- 2. カラーボリューム（同名 .sdfcol。無ければ単色フォールバック）---
+    std::string colPath = sdf3dPath;
+    size_t dot = colPath.find_last_of('.');
+    if ( dot != std::string::npos ) { colPath = colPath.substr(0, dot); }
+    colPath += ".sdfcol";
 
-    D3D12_RESOURCE_BARRIER barrier {};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = texture_.Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    commandList->ResourceBarrier(1, &barrier);
-
-    // --- 4. SRV（Texture3D）---
-    srvIndex_ = SrvManager::GetInstance()->Allocate();
-    SrvManager::GetInstance()->CreateSRVforTexture3D(srvIndex_, texture_.Get(), DXGI_FORMAT_R32_FLOAT, 1);
-
-    // --- 4.5. カラーボリューム（同名の .sdfcol があれば読む。無ければ baseColor の単色）---
-    //   SDF3DPrintf.py がテクスチャ付きモデルから「最寄り表面の色」を焼いた RGBA8 ボリューム。
-    //   ヒット点でこれをサンプルすると、元テクスチャと同じ模様の色が付く。
-    {
-        std::string colPath = sdf3dPath;
-        size_t dot = colPath.find_last_of('.');
-        if ( dot != std::string::npos ) { colPath = colPath.substr(0, dot); }
-        colPath += ".sdfcol";
-
-        std::ifstream colFile(colPath, std::ios::binary);
-        if ( colFile ) {
-            Header ch {};
-            colFile.read(reinterpret_cast<char*>( &ch ), sizeof(Header));
-            const size_t colCount = static_cast<size_t>( ch.width ) * ch.height * ch.depth;
-            if ( ch.width == header_.width && ch.height == header_.height &&
-                 ch.depth == header_.depth && colCount > 0 ) {
-                std::vector<uint8_t> colData(colCount * 4);
-                colFile.read(reinterpret_cast<char*>( colData.data() ), colData.size());
-                if ( colFile ) {
-                    D3D12_RESOURCE_DESC cdesc = desc;
-                    cdesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; // PNG由来のsRGB色
-                    if ( SUCCEEDED(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &cdesc,
-                        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&colorTexture_))) ) {
-
-                        D3D12_PLACED_SUBRESOURCE_FOOTPRINT cfp {};
-                        UINT cRows = 0;
-                        UINT64 cRowSize = 0, cTotal = 0;
-                        device->GetCopyableFootprints(&cdesc, 0, 1, 0, &cfp, &cRows, &cRowSize, &cTotal);
-
-                        colorUploadBuffer_ = ResourceFactory::GetInstance()->CreateBufferResource(cTotal);
-                        uint8_t* cm = nullptr;
-                        colorUploadBuffer_->Map(0, nullptr, reinterpret_cast<void**>( &cm ));
-                        const size_t cSrcRow = static_cast<size_t>( w ) * 4;
-                        for ( uint32_t z = 0; z < d; ++z ) {
-                            for ( uint32_t y = 0; y < h; ++y ) {
-                                std::memcpy(
-                                    cm + cfp.Offset + ( static_cast<size_t>( z ) * cRows + y ) * cfp.Footprint.RowPitch,
-                                    colData.data() + ( static_cast<size_t>( z ) * h + y ) * cSrcRow,
-                                    cSrcRow);
-                            }
-                        }
-                        colorUploadBuffer_->Unmap(0, nullptr);
-
-                        D3D12_TEXTURE_COPY_LOCATION cdst {};
-                        cdst.pResource = colorTexture_.Get();
-                        cdst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-                        cdst.SubresourceIndex = 0;
-                        D3D12_TEXTURE_COPY_LOCATION csrc {};
-                        csrc.pResource = colorUploadBuffer_.Get();
-                        csrc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-                        csrc.PlacedFootprint = cfp;
-                        commandList->CopyTextureRegion(&cdst, 0, 0, 0, &csrc, nullptr);
-
-                        D3D12_RESOURCE_BARRIER cbarrier {};
-                        cbarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                        cbarrier.Transition.pResource = colorTexture_.Get();
-                        cbarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-                        cbarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-                        cbarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                        commandList->ResourceBarrier(1, &cbarrier);
-
-                        colorSrvIndex_ = SrvManager::GetInstance()->Allocate();
-                        SrvManager::GetInstance()->CreateSRVforTexture3D(
-                            colorSrvIndex_, colorTexture_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 1);
-                        hasColorVolume_ = true;
-                    }
-                }
+    std::ifstream colFile(colPath, std::ios::binary);
+    if ( colFile ) {
+        Header ch {};
+        colFile.read(reinterpret_cast<char*>( &ch ), sizeof(Header));
+        if ( ch.width == out.header.width && ch.height == out.header.height && ch.depth == out.header.depth ) {
+            std::vector<uint8_t> colData(count * 4);
+            colFile.read(reinterpret_cast<char*>( colData.data() ), colData.size());
+            if ( colFile && createAndUpload(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+                colData.data(), 4, out.colTex, out.colUpload) ) {
+                out.colSrv = SrvManager::GetInstance()->Allocate();
+                SrvManager::GetInstance()->CreateSRVforTexture3D(
+                    out.colSrv, out.colTex.Get(), DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 1);
+                out.hasColor = true;
             }
         }
     }
 
-    // --- 5. プロキシ箱（単位キューブ 0〜1。VSで boxMin〜boxMax へ展開する）---
+    out.loaded = true;
+    return true;
+}
+
+bool SDFVolumeObject::Load(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList) {
+    if ( !BuildPipeline() ) return false;
+    if ( !LoadVolumeSet(sdf3dPath, commandList, volA_) ) return false;
+
+    // --- プロキシ箱（単位キューブ 0〜1。VSで rayBox へ展開する）---
     const float cubeVerts[8][3] = {
         { 0,0,0 }, { 1,0,0 }, { 0,1,0 }, { 1,1,0 },
         { 0,0,1 }, { 1,0,1 }, { 0,1,1 }, { 1,1,1 },
@@ -240,30 +214,47 @@ bool SDFVolumeObject::Load(const std::string& sdf3dPath, ID3D12GraphicsCommandLi
     ibv_.SizeInBytes = sizeof(cubeIndices);
     ibv_.Format = DXGI_FORMAT_R32_UINT;
 
-    // --- 6. 定数バッファ ---
     constantBuffer_ = factory->CreateBufferResource(sizeof(VolumeCB));
     constantBuffer_->Map(0, nullptr, reinterpret_cast<void**>( &cbData_ ));
 
-    loaded_ = true;
     return true;
+}
+
+// モーフ先（形B）の読み込み。SetMorphT(0〜1) で A→B へ連続変形できるようになる
+bool SDFVolumeObject::LoadMorphTarget(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList) {
+    if ( !volA_.loaded ) return false;
+    return LoadVolumeSet(sdf3dPath, commandList, volB_);
 }
 
 // 毎フレーム：カメラと配置から CB を作り直す
 void SDFVolumeObject::Update() {
-    if ( !loaded_ || !cbData_ ) return;
+    if ( !volA_.loaded || !cbData_ ) return;
     const Camera* camera = Obj3dCommon::GetInstance()->GetDefaultCamera();
     if ( !camera ) return;
 
     Matrix4x4 vp = camera->GetViewProjectionMatrix();
     std::memcpy(cbData_->viewProj, &vp, sizeof(float) * 16);
 
-    // ワールドAABB = ローカルbox × 一様スケール + 平行移動
-    cbData_->boxMin[0] = header_.boxMin[0] * scale_ + translation_.x;
-    cbData_->boxMin[1] = header_.boxMin[1] * scale_ + translation_.y;
-    cbData_->boxMin[2] = header_.boxMin[2] * scale_ + translation_.z;
-    cbData_->boxMax[0] = header_.boxMax[0] * scale_ + translation_.x;
-    cbData_->boxMax[1] = header_.boxMax[1] * scale_ + translation_.y;
-    cbData_->boxMax[2] = header_.boxMax[2] * scale_ + translation_.z;
+    // ワールドAABB = ローカルbox × 一様スケール + 平行移動（A/Bそれぞれ）
+    const float tr[3] = { translation_.x, translation_.y, translation_.z };
+    for ( int i = 0; i < 3; ++i ) {
+        float aMin = volA_.header.boxMin[i] * scale_ + tr[i];
+        float aMax = volA_.header.boxMax[i] * scale_ + tr[i];
+        cbData_->boxMinA[i] = aMin;
+        cbData_->boxMaxA[i] = aMax;
+
+        float bMin = aMin, bMax = aMax;
+        if ( volB_.loaded ) {
+            bMin = volB_.header.boxMin[i] * scale_ + tr[i];
+            bMax = volB_.header.boxMax[i] * scale_ + tr[i];
+        }
+        cbData_->boxMinB[i] = bMin;
+        cbData_->boxMaxB[i] = bMax;
+
+        // レイ/プロキシ箱は A∪B（モーフ中どちらの形も収まる）
+        cbData_->rayBoxMin[i] = ( std::min )( aMin, bMin );
+        cbData_->rayBoxMax[i] = ( std::max )( aMax, bMax );
+    }
 
     Vector3 camPos = camera->GetWorldPosition();
     cbData_->cameraPos[0] = camPos.x;
@@ -279,21 +270,28 @@ void SDFVolumeObject::Update() {
     cbData_->lightDir[1] = lightDir_.y;
     cbData_->lightDir[2] = lightDir_.z;
     cbData_->erode = erode_;
-    cbData_->useColorTex = hasColorVolume_ ? 1.0f : 0.0f;
+
+    cbData_->useColorTexA = volA_.hasColor ? 1.0f : 0.0f;
+    cbData_->useColorTexB = volB_.hasColor ? 1.0f : 0.0f;
+    cbData_->useMorph = volB_.loaded ? 1.0f : 0.0f;
+    cbData_->morphT = std::clamp(morphT_, 0.0f, 1.0f);
 }
 
 // シーンMRTパスの最後で呼ぶ（専用のPSO/ルートシグネチャを自分でセットする）
 void SDFVolumeObject::Draw(ID3D12GraphicsCommandList* commandList) {
-    if ( !loaded_ || !sPipeline_ ) return;
+    if ( !volA_.loaded || !sPipeline_ ) return;
 
+    auto srv = SrvManager::GetInstance();
     commandList->SetGraphicsRootSignature(sRootSignature_.Get());
     commandList->SetPipelineState(sPipeline_.Get());
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     commandList->IASetVertexBuffers(0, 1, &vbv_);
     commandList->IASetIndexBuffer(&ibv_);
     commandList->SetGraphicsRootConstantBufferView(0, constantBuffer_->GetGPUVirtualAddress()); // b0
-    SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, srvIndex_);                    // t0
-    // t1: カラーボリューム（無い時は距離ボリュームをダミーで挿す。useColorTex=0 なので読まれない）
-    SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, hasColorVolume_ ? colorSrvIndex_ : srvIndex_);
+    // 使わないスロットには距離Aをダミーで挿す（フラグ0なので読まれない。記述子は有効である必要がある）
+    srv->SetGraphicsRootDescriptorTable(1, volA_.srv);                                          // t0 距離A
+    srv->SetGraphicsRootDescriptorTable(2, volA_.hasColor ? volA_.colSrv : volA_.srv);          // t1 色A
+    srv->SetGraphicsRootDescriptorTable(3, volB_.loaded ? volB_.srv : volA_.srv);               // t2 距離B
+    srv->SetGraphicsRootDescriptorTable(4, volB_.hasColor ? volB_.colSrv : volA_.srv);          // t3 色B
     commandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
 }

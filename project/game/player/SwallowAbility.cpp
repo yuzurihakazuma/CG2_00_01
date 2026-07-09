@@ -4,6 +4,7 @@
 #include "game/enemy/EnemyManager.h"
 #include "game/egg/EggSystem.h"
 #include "game/combat/HitFeel.h"
+#include "engine/audio/AudioManager.h"
 #include "engine/base/Input.h"
 #include "engine/math/VectorMath.h"
 
@@ -55,6 +56,17 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
         if ( eggs.LayEgg(behind) ) {
             eggs.SpawnLayFx(behind);        // 産まれた合図（白＆緑がぽわっと）
             hitFeel.Trigger(0.03f, 0.08f);
+        }
+    }
+
+    // --- F：お腹の敵を吐き出す（プレイヤーの向いている方向へ発射。敵にぶつけて倒せる）---
+    if ( input->Triggerkey(DIK_F) ) {
+        float yaw = player.GetRotation().y;
+        Vector3 facing = { std::sin(yaw), 0.0f, std::cos(yaw) };
+        Vector3 mouth = { playerPos.x + facing.x * 0.6f, playerPos.y + 0.5f, playerPos.z + facing.z * 0.6f };
+        if ( eggs.SpitOut(mouth, facing) ) {
+            hitFeel.Trigger(0.03f, 0.1f);   // 吐き出しの軽い手応え
+            AudioManager::GetInstance()->PlayWave("resources/se/eggThrow.wav", false, 0.5f); // 発射音
         }
     }
 }

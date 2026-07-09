@@ -122,7 +122,9 @@ void GamePlayScene::LoadResources(){
 	if ( sdfEggObj_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
 		sdfEggObj_->SetTranslation({ 4.0f, 3.0f, 3.0f });
 		sdfEggObj_->SetScale(2.0f);
-		sdfEggObj_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // 卵のクリーム色
+		sdfEggObj_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // カラーボリュームが無い時の予備色
+		// モーフのデモ：スライダーで卵⇔敵ボールに変形できる
+		sdfEggObj_->LoadMorphTarget("resources/sdf3d/enemyBall.sdf3d", commandList);
 	}
 
 	// 産卵エロージョン演出（左Ctrlで産む瞬間、SDFの卵が芯から育って実体メッシュに交代）
@@ -795,6 +797,10 @@ void GamePlayScene::DrawDebugUI(){
 		}
 		ImGui::DragFloat3("位置", &sdfEggObj_->RefTranslation().x, 0.1f);
 		ImGui::DragFloat("スケール", &sdfEggObj_->RefScale(), 0.05f, 0.2f, 10.0f);
+		if ( sdfEggObj_->HasMorph() ) {
+			// 距離場のlerpによる連続変形（0=卵 / 1=敵ボール。中間も破綻しない）
+			ImGui::SliderFloat("モーフ (卵→ボール)", &sdfEggObj_->RefMorphT(), 0.0f, 1.0f);
+		}
 	} else {
 		ImGui::TextDisabled("resources/sdf3d/egg.sdf3d が読み込まれていません");
 	}
