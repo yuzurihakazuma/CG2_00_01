@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 128,
+  "textureHeight": 128,
+  "keepColor": true,
+  "sprites": {
+    "star64": {
+      "x": 0,
+      "y": 0,
+      "width": 72,
+      "height": 70,
+      "originalWidth": 64,
+      "originalHeight": 64,
+      "offsetX": -4,
+      "offsetY": -6
+    }
+  }
+}
