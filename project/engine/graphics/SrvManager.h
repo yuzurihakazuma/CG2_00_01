@@ -32,6 +32,9 @@ public:
 
 	void CreateSRVforTextureCube(uint32_t srvIndex, ID3D12Resource* pResource, DXGI_FORMAT Format, UINT MipLevels);
 
+	// 3Dテクスチャ（ボリューム）用SRVの作成（SDFボリュームのレイマーチングで使用）
+	void CreateSRVforTexture3D(uint32_t srvIndex, ID3D12Resource* pResource, DXGI_FORMAT Format, UINT MipLevels);
+
 	void PreDraw();
 
 	void SetGraphicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex);

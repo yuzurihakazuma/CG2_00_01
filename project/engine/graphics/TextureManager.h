@@ -63,6 +63,14 @@ public:
         ID3D12GraphicsCommandList* commandList
     );
 
+    // キャッシュを無視して再読み込み（SDFアトラス等のホットリロード用）。
+    //   既存エントリがあれば SRV スロットを引き継いで上書きするので、
+    //   参照側が持っている srvIndex はそのまま有効。
+    TextureData ReloadTextureAndCreateSRV(
+        const std::string& filePath,
+        ID3D12GraphicsCommandList* commandList
+    );
+
     TextureData LoadTextureAndCreateSRVCube(
         const std::string& filePath,
         ID3D12GraphicsCommandList* commandList

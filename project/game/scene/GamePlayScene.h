@@ -40,6 +40,7 @@ class DebugCamera;
 class Camera;
 class Sprite;
 class Obj3d;
+class SDFVolumeObject;
 class DirectXCommon;
 class Input;
 class RenderTexture;
@@ -187,5 +188,8 @@ private: // メンバ変数
 
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;
+
+	// --- SDFボリューム描画のデモ（egg.obj を SDF化した .sdf3d をレイマーチングで表示）---
+	std::unique_ptr<SDFVolumeObject> sdfEggObj_;
 
 };

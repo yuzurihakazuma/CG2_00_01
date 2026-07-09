@@ -246,6 +246,11 @@ exit 0</Command>
     <ClCompile Include="engine\utils\Level\BlenderImporter.cpp" />
     <ClCompile Include="game\player\Player.cpp" />
     <ClCompile Include="game\rail\RailField.cpp" />
+    <ClCompile Include="engine\sdf\SDFAtlas.cpp" />
+    <ClCompile Include="engine\sdf\SDFManager.cpp" />
+    <ClCompile Include="engine\sdf\SDFSprite.cpp" />
+    <ClCompile Include="engine\sdf\SDFText.cpp" />
+    <ClCompile Include="engine\sdf\SDFVolumeObject.cpp" />
     <ClCompile Include="game\egg\Egg.cpp" />
     <ClCompile Include="game\egg\EggSystem.cpp" />
     <ClCompile Include="game\enemy\Enemy.cpp" />
@@ -378,6 +383,11 @@ exit 0</Command>
     <ClInclude Include="engine\utils\Level\BlenderImporter.h" />
     <ClInclude Include="game\player\Player.h" />
     <ClInclude Include="game\rail\RailField.h" />
+    <ClInclude Include="engine\sdf\SDFAtlas.h" />
+    <ClInclude Include="engine\sdf\SDFManager.h" />
+    <ClInclude Include="engine\sdf\SDFSprite.h" />
+    <ClInclude Include="engine\sdf\SDFText.h" />
+    <ClInclude Include="engine\sdf\SDFVolumeObject.h" />
     <ClInclude Include="game\egg\Egg.h" />
     <ClInclude Include="game\egg\EggSystem.h" />
     <ClInclude Include="game\enemy\Enemy.h" />

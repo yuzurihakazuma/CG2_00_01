@@ -19,6 +19,8 @@
 #include "engine/utils/Level/RailEditor.h"
 #include "engine/utils/Level/BlenderImporter.h"
 #include "engine/particle/GPUParticleEditor.h"
+#include "engine/sdf/SDFManager.h"
+#include "engine/sdf/SDFVolumeObject.h"
 #include "engine/utils/GlobalVariables.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
 #include "engine/3d/obj/Obj3d.h"
@@ -62,6 +64,9 @@ void EditorManager::Initialize(){
     // ノードエディタ（ブループリント風。master_engine から移植）
     nodeEditor_ = std::make_unique<NodeEditor>();
     nodeEditor_->Initialize();
+
+    // SDF（フォント/画像）システム：パイプライン構築＋前回の配置(sdf_scene.json)を復元
+    SDFManager::GetInstance()->Initialize();
 }
 
 
@@ -72,6 +77,9 @@ void EditorManager::Begin(){
     if ( fileEditor_ ) {
         fileEditor_->ProcessPendingThumbnails();
     }
+
+    // SDF アトラスのフォルダ監視・自動ロード・ホットリロードも同じ安全な瞬間に行う
+    SDFManager::GetInstance()->Update();
 #ifdef USE_IMGUI
     ImGuiManager::GetInstance()->Begin();
 #endif
@@ -821,6 +829,9 @@ void EditorManager::Update(){
     }
 
     // 調整項目（GlobalVariables）の編集ウィンドウ
+    // 6.7 SDF（フォント/画像）パネル：アトラス一覧＋テキスト/スプライト配置
+    SDFManager::GetInstance()->DrawDebugUI();
+
     GlobalVariables::GetInstance()->Update();
 
     // 7.5 インスペクター（ギズモ対象オブジェクトの Transform 編集）
@@ -960,6 +971,10 @@ void EditorManager::End(){
 }
 
 void EditorManager::Finalize(){
+    // SDF は D3D12 リソースを持つため、リークチェッカーより先にここで必ず解放する
+    SDFManager::GetInstance()->Finalize();
+    SDFVolumeObject::FinalizeShared(); // 3Dボリューム描画の共有パイプラインも同様に解放
+
     blenderImporter_.reset();
     fileEditor_.reset();
     levelEditor_.reset();

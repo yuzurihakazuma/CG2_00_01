@@ -1,6 +1,7 @@
 #include "SDFManager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 
@@ -192,11 +193,28 @@ void SDFManager::DrawIntoTexture(ID3D12GraphicsCommandList* commandList, RenderT
 }
 
 void SDFManager::DrawItems(ID3D12GraphicsCommandList* commandList) {
+    // 近接表示のフェード係数：ビュワー（プレイヤー）との距離から求める。
+    //   表示距離の外側25%（最低0.5m）でなめらかにフェードイン/アウトする。
+    //   2Dアイテムや、ビュワー未設定（Edit中など）の時は常に全表示。
+    auto proximityAlpha = [&](bool is3D, bool enabled, float radius, const Vector3& wp) -> float {
+        if ( !enabled || !is3D || !viewerValid_ ) return 1.0f;
+        float dx = wp.x - viewerPos_.x;
+        float dy = wp.y - viewerPos_.y;
+        float dz = wp.z - viewerPos_.z;
+        float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        float fade = ( std::max )( radius * 0.25f, 0.5f );
+        return std::clamp(( radius - dist ) / fade, 0.0f, 1.0f);
+    };
+
     // --- テキスト ---
     bool textBound = false;
     for ( auto& t : texts_ ) {
         SDFAtlas* atlas = FindAtlas(t.atlasName);
         if ( !atlas || !atlas->IsFont() ) continue;
+        float alpha = proximityAlpha(t.text->Is3D(), t.text->IsProximityEnabled(),
+                                     t.text->GetProximityRadius(), t.text->RefWorldPos());
+        if ( alpha <= 0.0f ) continue; // 完全に見えないアイテムは描かない
+        t.text->SetDrawAlpha(alpha);
         if ( !textBound ) {
             commandList->SetGraphicsRootSignature(rootSignature_.Get());
             commandList->SetPipelineState(textPipeline_.Get());
@@ -212,6 +230,10 @@ void SDFManager::DrawItems(ID3D12GraphicsCommandList* commandList) {
     for ( auto& s : sprites_ ) {
         SDFAtlas* atlas = FindAtlas(s.atlasName);
         if ( !atlas || atlas->IsFont() ) continue;
+        float alpha = proximityAlpha(s.sprite->Is3D(), s.sprite->IsProximityEnabled(),
+                                     s.sprite->GetProximityRadius(), s.sprite->RefWorldPos());
+        if ( alpha <= 0.0f ) continue;
+        s.sprite->SetDrawAlpha(alpha);
         if ( !spriteBound ) {
             commandList->SetGraphicsRootSignature(rootSignature_.Get());
             commandList->SetPipelineState(spritePipeline_.Get());
@@ -243,6 +265,7 @@ void SDFManager::SaveScene() const {
         const SDFText& x = *t.text;
         Vector4 c = const_cast<SDFText&>( x ).RefColor();
         Vector4 oc = const_cast<SDFText&>( x ).RefOutlineColor();
+        Vector3 wp = const_cast<SDFText&>( x ).RefWorldPos();
         j["texts"].push_back({
             { "atlas", t.atlasName },
             { "text", x.GetText() },
@@ -252,6 +275,11 @@ void SDFManager::SaveScene() const {
             { "outlineWidth", const_cast<SDFText&>( x ).RefOutlineWidth() },
             { "outlineColor", { oc.x, oc.y, oc.z, oc.w } },
             { "thickness", const_cast<SDFText&>( x ).RefThickness() },
+            { "use3D", x.Is3D() },
+            { "worldPos", { wp.x, wp.y, wp.z } },
+            { "worldScale", const_cast<SDFText&>( x ).RefWorldScale() },
+            { "proximity", x.IsProximityEnabled() },
+            { "proximityRadius", x.GetProximityRadius() },
         });
     }
     j["sprites"] = json::array();
@@ -275,6 +303,8 @@ void SDFManager::SaveScene() const {
             { "worldPos", { wp.x, wp.y, wp.z } },
             { "worldScale", x.RefWorldScale() },
             { "edgeBias", x.RefEdgeBias() },
+            { "proximity", x.IsProximityEnabled() },
+            { "proximityRadius", x.GetProximityRadius() },
         });
     }
 
@@ -308,6 +338,12 @@ void SDFManager::LoadScene() {
             item.text->SetOutlineColor({ jt["outlineColor"][0], jt["outlineColor"][1], jt["outlineColor"][2], jt["outlineColor"][3] });
         }
         item.text->SetThickness(jt.value("thickness", 0.0f));
+        if ( jt.value("use3D", false) && jt.contains("worldPos") ) {
+            item.text->SetTransform3D(
+                { jt["worldPos"][0], jt["worldPos"][1], jt["worldPos"][2] },
+                jt.value("worldScale", 1.0f));
+        }
+        item.text->SetProximity(jt.value("proximity", false), jt.value("proximityRadius", 8.0f));
         texts_.push_back(std::move(item));
     }
     for ( auto& js : j.value("sprites", json::array()) ) {
@@ -335,6 +371,7 @@ void SDFManager::LoadScene() {
                 js.value("worldScale", 5.0f));
         }
         item.sprite->RefEdgeBias() = js.value("edgeBias", 0.5f);
+        item.sprite->SetProximity(js.value("proximity", false), js.value("proximityRadius", 8.0f));
         sprites_.push_back(std::move(item));
     }
     sceneLoaded_ = true;
@@ -426,9 +463,24 @@ void SDFManager::DrawDebugUI() {
                 char buf[512];
                 strcpy_s(buf, item.text->GetText().c_str());
                 if ( ImGui::InputText("本文", buf, sizeof(buf)) ) { item.text->SetText(buf); }
-                // 位置・サイズ
-                float pos[2] = { item.text->GetX(), item.text->GetY() };
-                if ( ImGui::DragFloat2("位置", pos, 1.0f) ) { item.text->SetPosition(pos[0], pos[1]); }
+                // 2D / 3D 切り替え（3D=ワールド空間に看板として置く）
+                bool is3D = item.text->Is3D();
+                if ( ImGui::Checkbox("3Dで表示（ワールドに看板として置く）", &is3D) ) {
+                    if ( is3D ) { item.text->SetTransform3D(item.text->RefWorldPos(), item.text->RefWorldScale()); }
+                    else        { item.text->SetScreenMode(); }
+                }
+                if ( is3D ) {
+                    ImGui::DragFloat3("ワールド位置", &item.text->RefWorldPos().x, 0.1f);
+                    ImGui::DragFloat("1行の高さ (m)", &item.text->RefWorldScale(), 0.05f, 0.05f, 20.0f);
+                    // 近接表示：プレイ中、プレイヤーが近くに来た時だけフェードインする
+                    ImGui::Checkbox("近づいた時だけ表示", &item.text->RefProximityEnabled());
+                    if ( item.text->RefProximityEnabled() ) {
+                        ImGui::DragFloat("表示距離 (m)", &item.text->RefProximityRadius(), 0.1f, 0.5f, 100.0f);
+                    }
+                } else {
+                    float pos[2] = { item.text->GetX(), item.text->GetY() };
+                    if ( ImGui::DragFloat2("位置", pos, 1.0f) ) { item.text->SetPosition(pos[0], pos[1]); }
+                }
                 float size = item.text->GetFontSize();
                 if ( ImGui::DragFloat("サイズ", &size, 1.0f, 4.0f, 512.0f) ) { item.text->SetFontSize(size); }
                 // 色・フチ・太さ
@@ -526,6 +578,11 @@ void SDFManager::DrawDebugUI() {
                     }
                     if ( ImGui::DragFloat("大きさ (高さ)", &item.sprite->RefWorldScale(), 0.1f, 0.1f, 100.0f) ) {
                         item.sprite->MarkDirty();
+                    }
+                    // 近接表示：プレイ中、プレイヤーが近くに来た時だけフェードインする
+                    ImGui::Checkbox("近づいた時だけ表示", &item.sprite->RefProximityEnabled());
+                    if ( item.sprite->RefProximityEnabled() ) {
+                        ImGui::DragFloat("表示距離 (m)", &item.sprite->RefProximityRadius(), 0.1f, 0.5f, 100.0f);
                     }
                 } else {
                     float pos[2] = { item.sprite->GetX(), item.sprite->GetY() };

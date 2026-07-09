@@ -5,6 +5,9 @@
 #include "engine/base/DirectXCommon.h"
 #include "engine/graphics/SrvManager.h"
 #include "engine/graphics/ResourceFactory.h"
+#include "engine/3d/obj/Obj3dCommon.h"
+#include "engine/camera/Camera.h"
+#include "engine/math/Matrix4x4.h"
 
 void SDFText::Initialize() {
     auto factory = ResourceFactory::GetInstance();
@@ -23,6 +26,17 @@ void SDFText::SetPosition(float x, float y) {
 }
 void SDFText::SetFontSize(float size) {
     if ( fontSize_ != size ) { fontSize_ = size; dirty_ = true; }
+}
+
+void SDFText::SetTransform3D(const Vector3& worldPos, float worldScale) {
+    use3D_ = true;
+    worldPos3D_ = worldPos;
+    worldScale3D_ = worldScale;
+    // ジオメトリはピクセル空間のまま共用し、3D化は行列側で行う（再構築不要）
+}
+
+void SDFText::SetScreenMode() {
+    use3D_ = false;
 }
 
 std::vector<uint32_t> SDFText::DecodeUTF8(const std::string& str) {
@@ -110,6 +124,16 @@ void SDFText::RebuildGeometry(const SDFAtlas& atlas) {
 
     if ( vertices.empty() ) return;
 
+    // 文字列全体のバウンズを計測（3D配置の中央揃えに使う）
+    boundsMinX_ = boundsMinY_ = 1e9f;
+    boundsMaxX_ = boundsMaxY_ = -1e9f;
+    for ( const Vertex& v : vertices ) {
+        boundsMinX_ = ( std::min )( boundsMinX_, v.x );
+        boundsMinY_ = ( std::min )( boundsMinY_, v.y );
+        boundsMaxX_ = ( std::max )( boundsMaxX_, v.x );
+        boundsMaxY_ = ( std::max )( boundsMaxY_, v.y );
+    }
+
     auto factory = ResourceFactory::GetInstance();
 
     size_t vbSize = vertices.size() * sizeof(Vertex);
@@ -134,29 +158,44 @@ void SDFText::RebuildGeometry(const SDFAtlas& atlas) {
     indexCount_ = static_cast<uint32_t>( indices.size() );
 }
 
-// 正射影行列とパラメータを CB へ転送
+// 変換行列（2D=正射影 / 3D=WVP）とパラメータを CB へ転送
 void SDFText::UpdateBuffers() {
     if ( transformData_ ) {
-        auto dxCommon = DirectXCommon::GetInstance();
-        float W = static_cast<float>( dxCommon->GetClientWidth() );
-        float H = static_cast<float>( dxCommon->GetClientHeight() );
-        std::memset(transformData_, 0, sizeof(TransformCB));
-        transformData_->mat[0] = 2.0f / W;   // x:[0,W] → [-1,1]
-        transformData_->mat[5] = -2.0f / H;  // y:[0,H] → [1,-1]
-        transformData_->mat[10] = 1.0f;
-        transformData_->mat[12] = -1.0f;
-        transformData_->mat[13] = 1.0f;
-        transformData_->mat[15] = 1.0f;
+        const Camera* camera = Obj3dCommon::GetInstance()->GetDefaultCamera();
+        if ( use3D_ && camera ) {
+            // 3D: ピクセル座標の文字列を「1行の高さ = worldScale3D_ (m)」に縮小し、
+            //     バウンズ中心が worldPos3D_ に来るよう平行移動してから、カメラのVPへ。
+            //     Yはスクリーン下向き→ワールド上向きなのでスケールの -k で反転する。
+            float k = ( fontSize_ > 0.0f ) ? ( worldScale3D_ / fontSize_ ) : 0.01f;
+            float cx = ( boundsMinX_ + boundsMaxX_ ) * 0.5f;
+            float cy = ( boundsMinY_ + boundsMaxY_ ) * 0.5f;
+            Matrix4x4 world = MatrixMath::Multiply(
+                MatrixMath::MakeScale({ k, -k, 1.0f }),
+                MatrixMath::MakeTranslate({ worldPos3D_.x - cx * k, worldPos3D_.y + cy * k, worldPos3D_.z }));
+            Matrix4x4 wvp = MatrixMath::Multiply(world, camera->GetViewProjectionMatrix());
+            std::memcpy(transformData_->mat, &wvp, sizeof(float) * 16);
+        } else {
+            auto dxCommon = DirectXCommon::GetInstance();
+            float W = static_cast<float>( dxCommon->GetClientWidth() );
+            float H = static_cast<float>( dxCommon->GetClientHeight() );
+            std::memset(transformData_, 0, sizeof(TransformCB));
+            transformData_->mat[0] = 2.0f / W;   // x:[0,W] → [-1,1]
+            transformData_->mat[5] = -2.0f / H;  // y:[0,H] → [1,-1]
+            transformData_->mat[10] = 1.0f;
+            transformData_->mat[12] = -1.0f;
+            transformData_->mat[13] = 1.0f;
+            transformData_->mat[15] = 1.0f;
+        }
     }
     if ( paramsData_ ) {
         paramsData_->textColor[0] = color_.x;
         paramsData_->textColor[1] = color_.y;
         paramsData_->textColor[2] = color_.z;
-        paramsData_->textColor[3] = color_.w;
+        paramsData_->textColor[3] = color_.w * drawAlpha_;         // 近接フェードを掛ける
         paramsData_->outlineColor[0] = outlineColor_.x;
         paramsData_->outlineColor[1] = outlineColor_.y;
         paramsData_->outlineColor[2] = outlineColor_.z;
-        paramsData_->outlineColor[3] = outlineColor_.w;
+        paramsData_->outlineColor[3] = outlineColor_.w * drawAlpha_;
         paramsData_->edgeWidth = edgeWidth_;
         paramsData_->outlineWidth = outlineWidth_;
         paramsData_->boldOffset = thickness_;

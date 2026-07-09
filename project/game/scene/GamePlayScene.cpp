@@ -32,6 +32,8 @@
 #include "Bloom.h"
 #include "engine/3d/model/Model.h"
 #include "engine/utils/EditorManager.h"
+#include "engine/sdf/SDFManager.h"
+#include "engine/sdf/SDFVolumeObject.h"
 #include "engine/utils/Level/BlenderImporter.h"
 #include "engine/graphics/DebugDraw.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
@@ -112,6 +114,15 @@ void GamePlayScene::LoadResources(){
 	// アニメーションデータ
 	testAnimation_ = LoadAnimationFromFile("resources/AnimatedCube", "AnimatedCube.gltf");
 	skinnedAnimTrack_.LoadFromJson("resources/human_anim.json");
+
+	// SDFボリューム（egg.obj → SDF3DPrintf.py で焼いた距離場）。ポリゴンは箱12枚だけで
+	// 形はレイマーチングが作る＝メッシュ不要の超軽量表示のデモ。看板の横に置く。
+	sdfEggObj_ = std::make_unique<SDFVolumeObject>();
+	if ( sdfEggObj_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
+		sdfEggObj_->SetTranslation({ 4.0f, 3.0f, 3.0f });
+		sdfEggObj_->SetScale(2.0f);
+		sdfEggObj_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // 卵のクリーム色
+	}
 }
 
 // メインカメラ／デバッグカメラの生成・登録
@@ -563,6 +574,17 @@ void GamePlayScene::UpdateSceneVisuals(){
 
 	if ( sprite_ ) { sprite_->Update(); }
 
+	// SDFボリューム（カメラ追従のCB更新）
+	if ( sdfEggObj_ ) { sdfEggObj_->Update(); }
+
+	// SDF看板の近接表示：プレイ中はプレイヤー位置を基準に「近づいた時だけ表示」が効く。
+	// エディット中は配置作業ができるよう常に全表示（Clear）。
+	if ( currentMode == EngineMode::Play && player_ ) {
+		SDFManager::GetInstance()->SetViewerPosition(player_->GetPosition());
+	} else {
+		SDFManager::GetInstance()->ClearViewerPosition();
+	}
+
 	// 卵保持数HUD：持っている卵＝緑で明るく / 空きスロット＝薄く。お腹の数はオレンジの小丸。
 	{
 		int held  = eggSystem_.HeldCount();
@@ -657,6 +679,9 @@ void GamePlayScene::Draw(){
 	// --- GPUパーティクル描画 ---
 	GPUParticleManager::GetInstance()->Draw(commandList);
 
+	// --- SDFボリューム（レイマーチング）---
+	//   専用PSOに切り替えるので、通常のObj3d描画が全部終わった後に描く
+	if ( sdfEggObj_ ) { sdfEggObj_->Draw(commandList); }
 
 	// 2. 【MRT終了】
 	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
@@ -681,6 +706,14 @@ void GamePlayScene::Draw(){
 	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
 
+	// 5.5 SDF（文字/画像）を最終画像に焼き込む → エディタの Game View にもそのまま映る。
+	//     Bloom無効時は合成RTを経由しないので、後でバックバッファへ直描きする
+	bool sdfBaked = false;
+	if ( Bloom::GetInstance()->IsEnabled() ) {
+		SDFManager::GetInstance()->DrawIntoTexture(commandList, Bloom::GetInstance()->GetCombineTexture());
+		sdfBaked = true;
+	}
+
 	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
 
@@ -701,7 +734,10 @@ void GamePlayScene::Draw(){
 
 	TextManager::GetInstance()->Draw();
 
-
+	// SDF 描画（Bloom無効で焼き込めなかった場合のみバックバッファへ直描き）
+	if ( !sdfBaked ) {
+		SDFManager::GetInstance()->Draw(commandList);
+	}
 }
 
 void GamePlayScene::DrawDebugUI(){

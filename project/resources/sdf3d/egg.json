@@ -1,0 +1,21 @@
+{
+  "model": "egg.obj",
+  "resolution": [
+    64,
+    64,
+    64
+  ],
+  "boxMin": [
+    -0.451527,
+    -0.65,
+    -0.451527
+  ],
+  "boxMax": [
+    0.451527,
+    0.65,
+    0.451527
+  ],
+  "marginRatio": 0.15,
+  "isWatertight": false,
+  "isNormalized": true
+}

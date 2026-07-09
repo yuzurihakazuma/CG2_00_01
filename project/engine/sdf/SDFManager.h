@@ -55,6 +55,12 @@ public:
     void SaveScene() const;
     void LoadScene();
 
+    // --- 近接表示の基準位置（プレイヤー）---
+    //   Play中にシーンから毎フレーム渡す。「近づいた時だけ表示」の3Dアイテムは
+    //   この位置との距離でフェードする。Edit中などは Clear で全表示に戻す。
+    void SetViewerPosition(const Vector3& pos) { viewerPos_ = pos; viewerValid_ = true; }
+    void ClearViewerPosition() { viewerValid_ = false; }
+
 private:
     SDFManager() = default;
     ~SDFManager() = default;
@@ -93,4 +99,8 @@ private:
 
     std::string scenePath_ = "resources/sdf/sdf_scene.json";
     bool sceneLoaded_ = false;
+
+    // --- 近接表示の基準（プレイヤー位置。Play中のみ有効）---
+    Vector3 viewerPos_ { 0.0f, 0.0f, 0.0f };
+    bool viewerValid_ = false;
 };

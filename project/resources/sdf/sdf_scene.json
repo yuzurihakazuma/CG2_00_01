@@ -1,14 +1,20 @@
 {
     "texts": [
         {
-            "atlas": "arial",
-            "text": "SDF System OK!",
-            "x": 60.0,
-            "y": 40.0,
-            "size": 64.0,
+            "atlas": "jpdot",
+            "text": "操作説明\nA/D : 移動   W/S : 奥・手前\nSPACE : ジャンプ（長押しでふんばり）\nE : 敵を飲み込む   左Ctrl : 卵を産む\nQ長押し : 構え→矢印で狙う→離して投げる",
+            "x": 100.0,
+            "y": 100.0,
+            "size": 48.0,
             "color": [ 1.0, 1.0, 1.0, 1.0 ],
-            "outlineWidth": 0.18,
-            "outlineColor": [ 0.0, 0.0, 0.0, 1.0 ]
+            "outlineWidth": 0.22,
+            "outlineColor": [ 0.06, 0.12, 0.06, 1.0 ],
+            "thickness": 0.02,
+            "use3D": true,
+            "worldPos": [ 0.0, 4.5, 3.0 ],
+            "worldScale": 0.45,
+            "proximity": true,
+            "proximityRadius": 8.0
         }
     ],
     "sprites": [
@@ -17,15 +23,17 @@
             "sprite": "star64",
             "x": 80.0,
             "y": 160.0,
-            "scale": 3.0,
+            "scale": 1.0,
             "color": [ 1.0, 1.0, 1.0, 1.0 ],
             "outlineWidth": 0.1,
             "outlineColor": [ 0.0, 0.0, 0.0, 1.0 ],
             "glowWidth": 0.25,
             "glowColor": [ 1.0, 0.9, 0.3, 1.0 ],
-            "use3D": false,
-            "worldPos": [ 0.0, 3.0, 5.0 ],
-            "worldScale": 5.0
+            "use3D": true,
+            "worldPos": [ 0.0, 6.2, 3.0 ],
+            "worldScale": 1.0,
+            "proximity": true,
+            "proximityRadius": 8.0
         }
     ]
 }
