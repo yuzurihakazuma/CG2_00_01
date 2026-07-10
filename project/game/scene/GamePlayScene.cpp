@@ -78,8 +78,11 @@ void GamePlayScene::LoadResources(){
 	model->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	model->LoadModel("human", "resources/human", "walk.gltf");
 	model->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
-	model->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // レール下の道（v2: 2m直線タイル）
-	model->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（断面を閉じる）
+	model->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
+	model->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
+	model->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
+	model->LoadModel("roadT",        "resources/road", "road_t.obj");        // 交差点ピース：T字路
+	model->LoadModel("roadCross",    "resources/road", "road_cross.obj");    // 交差点ピース：十字路
 	model->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
 
 	// 汎用パーティクル用の粒（"sphere" は敵と共有＋モンスターボール柄がデフォルトなので、
