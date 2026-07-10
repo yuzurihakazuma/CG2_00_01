@@ -9,24 +9,23 @@ class Camera;
 class SplineRail;
 
 // =====================================================================
-//  RoadMesh：レールの下に敷く「クラフト風の道メッシュ」の管理クラス。
-//   ・resources/road/ の 2m直線タイル(roadStraight)と終端キャップ(roadEnd)を
-//     レールに沿って並べる。緑線マーカーと違い Edit/Play どちらでも見せる
-//     "本番の見た目"（Play中は緑線が消え、この道だけが残る）
-//   ・T字路(road_t)・十字路(road_cross)のモデルも resources/road/ に変換済み。
-//     ジャンクションへの自動配置は将来対応（90°グリッド配置が前提のため）
-//   ・穴区間のスロットには敷かない＝落とし穴がそのまま見た目に出る
-//   ・非表示レール（連結用）はスキップ
-//   ・動くレールへは「基準位置 + animOffset」方式で毎フレーム追従する
-//  RailField から分離した理由：道は"見た目"の関心事で、レール実行データの
-//  管理とは独立に育つ（テクスチャ替え・装飾・種類追加など）ため。
+//  RoadMesh：レールの下に敷く「クラフト風の道」の管理クラス（道システム設計書 §4）。
+//   タイルを並べる方式から「掃引（スイープ）生成」へ刷新：
+//   ・レール1本 = 1メッシュ（= 1ドローコール）。SplineRail::FrameCache の
+//     フレーム（位置+right/up/tangent）に12頂点の断面プロファイルを掃引する
+//   ・曲率適応サンプリング：曲がりのきつい所だけリングを増やす
+//   ・内側折返しの溶接：急カーブの内側で面が裏返らない
+//   ・坂UV切替：|tangent.y|>0.40 で上面テクスチャを坂帯へ（ヒステリシス＋二重リング）
+//   ・穴区間には面を張らない＝落とし穴がそのまま見える
+//   ・非ループの両端に road_end ピースを自動配置
+//   ・動くレールへは「基準位置 + animOffset」で毎フレーム追従（再生成不要）
 // =====================================================================
 class RoadMesh {
 public:
     RoadMesh();
-    ~RoadMesh(); // unique_ptr<Obj3d> のため cpp 側で定義
+    ~RoadMesh(); // unique_ptr<Model>/<Obj3d> のため cpp 側で定義
 
-    // レールに沿ってタイルを敷き直す（RailField::Sync の直後に呼ぶ）
+    // レールに沿って道を生成し直す（RailField::Sync の直後に呼ぶ）
     void Build(const std::vector<SplineRail>& rails, Camera* camera);
 
     // 毎フレーム：動くレールへの追従＋カメラ行列の焼き直し（Edit/Play共通で呼ぶ）
@@ -34,17 +33,27 @@ public:
 
     void Draw() const;
 
-    int  TileCount() const { return ( int ) tiles_.size(); }
+    int  TileCount() const { return ( int ) roadObjs_.size() + ( int ) capObjs_.size(); }
     bool IsVisible() const { return visible_; }
     void SetVisible(bool v){ visible_ = v; } // デバッグUIから道のON/OFFを切り替える用
 
 private:
-    // タイルを1枚置く：p0（モデル原点＝接続面の下端中央）から p1 の方向へ向ける
-    void PlaceTile(Model* model, const std::vector<SplineRail>& rails, int railIdx,
-                   const Vector3& p0, const Vector3& p1, float zScale, Camera* camera);
+    // レール1本ぶんの掃引メッシュを生成して Model/Obj3d 化する
+    void BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera, uint32_t atlasSrv);
 
-    std::vector<std::unique_ptr<Obj3d>> tiles_; // 道タイルの実体
-    std::vector<int>     tileRail_;             // 各タイルが属するレール番号（動くレール追従用）
-    std::vector<Vector3> tileBase_;             // 各タイルの基準位置（animOffset=0換算）
-    bool visible_ = true;                       // 道の表示ON/OFF
+    // 終端キャップ（road_end ピース）を p0 から p1 の向きで置く
+    void PlaceEndCap(Model* model, const std::vector<SplineRail>& rails, int railIdx,
+                     const Vector3& p0, const Vector3& p1, Camera* camera);
+
+    // --- 掃引メッシュ（レール1本 = Model 1個 + Obj3d 1個）---
+    std::vector<std::unique_ptr<Model>> roadModels_;
+    std::vector<std::unique_ptr<Obj3d>> roadObjs_;
+    std::vector<int> roadRail_;                 // 対応レール番号（動くレール追従用）
+
+    // --- 終端キャップ（モデルピース）---
+    std::vector<std::unique_ptr<Obj3d>> capObjs_;
+    std::vector<int>     capRail_;
+    std::vector<Vector3> capBase_;              // 基準位置（animOffset=0換算）
+
+    bool visible_ = true;
 };

@@ -40,6 +40,10 @@ public:
 	void LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename);
 	// モデルの検索
 	Model* FindModel(const std::string& filePath);
+
+	// 実行時生成メッシュ用：ModelCommon を貸し出す（RoadMesh 等が自前の Model を
+	// InitializePrimitive で作る時に使う。所有権は渡さない）
+	ModelCommon* GetModelCommon() const { return modelCommon_.get(); }
 	
 
 private:

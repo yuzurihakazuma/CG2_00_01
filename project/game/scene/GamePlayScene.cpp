@@ -104,6 +104,9 @@ void GamePlayScene::LoadResources(){
 	textures_["noise0"]        = tex->Load("Resources/noise0.png");
 	textures_["noise1"]        = tex->Load("Resources/noise1.png");
 	textures_["gradationLine"] = tex->Load("Resources/gradationLine.png");
+	// 道アトラスの先読み：RoadMesh はレール編集のたび（=フレーム途中）に参照するので、
+	// ここでキャッシュに載せておく（実行中のテクスチャ読み込みはデバッグレイヤーが嫌うため）
+	textures_["roadAtlas"]     = tex->Load("resources/road/road_atlas.png");
 	textures_["skybox"]        = tex->LoadCube("resources/StandardCubeMap.dds");
 
 	// Skybox
