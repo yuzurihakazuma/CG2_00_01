@@ -12,9 +12,11 @@ namespace {
     // -1.0〜1.0 の簡易乱数（トレイルのばらつき用）
     float Rand11(){ return ( ( float ) std::rand() / RAND_MAX ) * 2.0f - 1.0f; }
 
-    // --- 産卵演出（出現エロージョン＋敵→卵モーフ＋クロスフェード）の定数 ---
-    const float kBirthFxDuration = 0.6f;  // 出現〜変形が終わるまでの秒数
-    const float kBirthFadeTime   = 0.15f; // 変形後、実体メッシュへクロスフェードする秒数
+    // --- 産卵演出（卵が芯から育つ出現エロージョン＋クロスフェード）の定数 ---
+    //   ※以前は「敵ボール→卵」のモーフを見せていたが、出現だけのシンプルな演出に変更
+    //     （敵の変換は踏みつけ時のSDF消滅演出＝CombatSystem 側が担当する）
+    const float kBirthFxDuration = 0.35f; // 卵が育ちきるまでの秒数
+    const float kBirthFadeTime   = 0.15f; // 育ちきった後、実体メッシュへクロスフェードする秒数
     const float kBirthFxScale    = 0.91f; // メッシュ卵(モデル高さ1.3×スケール0.7=0.91m)と同じ大きさ
     const float kBirthFullErode  = 0.5f * kBirthFxScale; // これだけ痩せると完全に消える量
     const Vector4 kBirthFxColor  = { 0.98f, 0.96f, 0.86f, 1.0f }; // 予備色（αはフェードで使う）
@@ -32,14 +34,12 @@ void EggSystem::Initialize(){
 }
 
 // 産卵演出のセットアップ。
-//   ベース＝敵ボール(enemyBall.sdf3d)、モーフ先＝卵(egg.sdf3d)。
-//   「飲み込んだ敵がぐにゃりと卵に変わる」コアループの変換をそのまま見せる。
+//   卵(egg.sdf3d)単体を読み込み、産む瞬間に「芯から育てて」出現させる。
+//   （旧実装の敵ボール→卵モーフは廃止。モーフ用の2ボリューム目も読まないぶん軽い）
 void EggSystem::InitializeBirthFx(ID3D12GraphicsCommandList* commandList){
     birthFx_ = std::make_unique<SDFVolumeObject>();
-    if ( birthFx_->Load("resources/sdf3d/enemyBall.sdf3d", commandList) ) {
-        birthFx_->LoadMorphTarget("resources/sdf3d/egg.sdf3d", commandList); // 失敗してもボール単体で動く
-    } else if ( !birthFx_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
-        birthFx_.reset(); // どちらも無ければ演出なし（従来のポン出しに自動フォールバック）
+    if ( !birthFx_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
+        birthFx_.reset(); // 無ければ演出なし（従来のポン出しに自動フォールバック）
         return;
     }
     birthFx_->SetScale(kBirthFxScale);
@@ -217,8 +217,8 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         eggs_.end());
 
     // --- 産卵演出の進行 ---
-    //   ①敵ボールが芯から育つ → ②卵へぐにゃり変形 → ③実体メッシュを出した上に
-    //   SDF卵を重ねたまま透明化（クロスフェード）→ 完全交代。
+    //   ①SDFの卵が芯から育つ → ②実体メッシュを出した上に SDF卵を重ねたまま
+    //   透明化（クロスフェード）→ 完全交代。
     //   パッと差し替えず重ねて溶かすので、質感の微差が切り替わりとして見えない。
     if ( birthTimer_ >= 0.0f && birthFx_ ) {
         // 対象の卵がまだ存在するか検証（満杯で割られた等でポインタが死ぬのを防ぐ）
@@ -226,35 +226,30 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
         for ( auto& e : eggs_ ) { if ( e.get() == birthEgg_ ) { exists = true; break; } }
 
         birthTimer_ += dt;
-        float tMorph = birthTimer_ / kBirthFxDuration;                        // 0〜1: 出現＋変形
-        float tFade  = ( birthTimer_ - kBirthFxDuration ) / kBirthFadeTime;   // 0〜1: クロスフェード
+        float tGrow = birthTimer_ / kBirthFxDuration;                         // 0〜1: 出現（芯から育つ）
+        float tFade = ( birthTimer_ - kBirthFxDuration ) / kBirthFadeTime;    // 0〜1: クロスフェード
 
         if ( !exists || !birthEgg_->IsHeld() || tFade >= 1.0f ) {
             // 演出終了（or 途中で投げられた/割られた）→ 完全に実体メッシュへ交代
             if ( exists ) { birthEgg_->SetVisualHidden(false); }
             birthEgg_   = nullptr;
             birthTimer_ = -1.0f;
-        } else if ( tMorph >= 1.0f ) {
-            // ③クロスフェード：実体メッシュを表示した上に、完成形のSDF卵を重ねて透明化していく
+        } else if ( tGrow >= 1.0f ) {
+            // ②クロスフェード：実体メッシュを表示した上に、育ちきったSDF卵を重ねて透明化していく
             birthEgg_->SetVisualHidden(false);
             Vector4 c = kBirthFxColor;
             c.w = 1.0f - std::clamp(tFade, 0.0f, 1.0f);
             birthFx_->SetColor(c);
             birthFx_->SetErode(0.0f);
-            birthFx_->SetMorphT(birthFx_->HasMorph() ? 1.0f : 0.0f);
             birthFx_->SetTranslation(birthEgg_->GetPosition());
             birthFx_->Update();
         } else {
-            // ①②タイムライン：前半20%で敵ボールが芯から育ち、残り80%でボール→卵へぐにゃり変形
-            float growPhase  = ( std::min )( tMorph / 0.2f, 1.0f );
-            float grow = 1.0f - ( 1.0f - growPhase ) * ( 1.0f - growPhase );           // 2次アウト
-            float morphPhase = std::clamp(( tMorph - 0.2f ) / 0.8f, 0.0f, 1.0f);
-            float morph = morphPhase * morphPhase * ( 3.0f - 2.0f * morphPhase );      // smoothstep
+            // ①出現：エロージョンを解きながら卵を芯から育てる
+            float grow = 1.0f - ( 1.0f - tGrow ) * ( 1.0f - tGrow ); // 2次アウト（最初勢いよく→ゆっくり整う）
 
             birthFx_->SetColor(kBirthFxColor); // α=1（次の産卵に備えて毎回リセット）
             birthFx_->SetTranslation(birthEgg_->GetPosition());
             birthFx_->SetErode(kBirthFullErode * ( 1.0f - grow ));
-            birthFx_->SetMorphT(birthFx_->HasMorph() ? morph : 0.0f);
             birthFx_->Update(); // カメラ行列＋CBを毎フレーム焼き直す
         }
     }

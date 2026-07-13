@@ -129,6 +129,9 @@ void GamePlayScene::LoadResources(){
 
 	// 産卵エロージョン演出（左Ctrlで産む瞬間、SDFの卵が芯から育って実体メッシュに交代）
 	eggSystem_.InitializeBirthFx(commandList);
+
+	// 敵のSDF消滅演出（踏みつけ/卵命中で倒すと、その場で敵ボールが芯まで溶けて消える）
+	combat_.InitializeDissolveFx(commandList);
 }
 
 // メインカメラ／デバッグカメラの生成・登録
@@ -711,7 +714,8 @@ void GamePlayScene::Draw(){
 	// --- SDFボリューム（レイマーチング）---
 	//   専用PSOに切り替えるので、通常のObj3d描画が全部終わった後に描く
 	if ( sdfEggObj_ ) { sdfEggObj_->Draw(commandList); }
-	eggSystem_.DrawBirthFx(commandList); // 産卵エロージョン演出中のSDF卵
+	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
+	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
 
 	// 2. 【MRT終了】
 	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
