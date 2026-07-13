@@ -40,6 +40,7 @@ public:
     const std::vector<int>& GetRailGroundTypes() const{ return data_->railGroundTypes; }
     const std::vector<std::vector<int>>& GetRailNodeHoles() const{ return data_->railNodeHoles; }
     const std::vector<int>& GetRailVisible() const{ return data_->railVisible; }
+    const std::vector<int>& GetRailRoadModes() const{ return data_->railRoadModes; }
     bool IsRailVisible(int rail) const;
     const std::vector<int>&   GetRailMotionTypes() const{ return data_->railMotionTypes; }
     const std::vector<float>& GetRailMotionPhases() const{ return data_->railMotionPhases; }
@@ -142,6 +143,29 @@ public:
     // 端点溶接（端点同士）では届かない「線の途中での合流」も繋げられる。
     void ConnectNearbyLines();
 
+    // ============================================================
+    // 自動スナップ接続（仕様書_自動レール接続 §1）
+    //   端点ドラッグ中に他レールの端点/本体を探し、マウスアップで自動接続する。
+    //   検出（Find〜）は変更なしの const、確定（Connect/Weld〜）は既存処理と同じ編集。
+    // ============================================================
+    struct SnapTarget {
+        bool    valid = false;
+        bool    isEndpoint = false; // true=端点同士（溶接） / false=本体の途中（T字連結）
+        int     rail = -1;          // 接続先レール
+        int     node = -1;          // isEndpoint 時の相手ノード（0 or 末尾）
+        int     seg  = -1;          // 本体連結時の相手セグメント番号
+        Vector3 pos {};             // スナップ後の端点位置
+    };
+    // rail の端点(front/back)から snapDistance 以内の接続候補を探す（端点同士を優先）
+    SnapTarget FindSnapTarget(int rail, bool front, float radius) const;
+    // 候補へ実際に接続する（isEndpoint→溶接 / それ以外→ConnectNearbyLines と同じ途中連結）
+    void ConnectToTarget(int rail, bool front, const SnapTarget& target);
+
+    // 自動スナップの設定（Global 設定。EditorManager のドラッグ処理と RoadMesh が参照）
+    bool  IsAutoSnap() const{ return railAutoSnap_; }
+    float GetSnapDistance() const{ return railSnapDistance_; }
+    int   GetJointVisible() const{ return railJointVisible_; } // 0=エディタのみ/1=常に/2=非表示
+
 private:
     // 編集対象（所有しない）。アドレスは LevelEditor の levelData_ メンバで安定。
     LevelData* data_ = nullptr;
@@ -178,6 +202,14 @@ private:
     bool  railNodeSnap_       = true; // 他レールの端点へ吸着
     float railNodeSnapRadius_ = 0.7f; // 吸着半径(m)
     bool  railFreehand_       = false; // ドラッグで一筆書き
+
+    // 自動スナップ接続（§5。プラレール風：近づけるだけでカチッと繋がる）
+    bool  railAutoSnap_      = true;  // 端点ドラッグで自動接続する
+    float railSnapDistance_  = 1.2f;  // 検出半径(m)。ランタイムの合流距離と同じ既定
+    int   railJointVisible_  = 1;     // ジョイント表示：0=エディタのみ / 1=常に / 2=非表示
+
+    // 接続一覧（接続タブ）で選択中の行（-1=なし）
+    int   selectedConnection_ = -1;
 
     // 値をグリッドに丸める（railSnap_ がOFFならそのまま）
     float SnapValue(float v) const;

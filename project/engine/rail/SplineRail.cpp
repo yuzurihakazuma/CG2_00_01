@@ -344,20 +344,42 @@ float SplineRail::GetClosestDistance(const Vector3& worldPos) const{
     return bestS;
 }
 
-// 指定距離(s)が「穴」区間か：最も近いノードが穴指定なら true。
-// ノード i は t=i に対応するので、その弧長距離 GetDistanceFromT(i) と比べて最近傍を探す。
-bool SplineRail::IsHoleAtDistance(float distance) const{
+// 穴フラグの連続ノード列を距離区間へ変換する（見た目と落下判定の共通ソース）。
+//   区間境界は隣接ノードとの中間点。従来の「最も近いノードが穴指定なら穴」判定と
+//   全く同じ範囲になる（＝この置き換えでゲームプレイは変わらない）。
+std::vector<SplineRail::HoleInterval> SplineRail::GetHoleIntervals() const{
+    std::vector<HoleInterval> out;
     int n = static_cast< int >( nodes.size() );
-    if ( n < 2 || nodeHole.empty() ) return false;
+    if ( n < 2 || nodeHole.empty() ) return out;
     int lim = std::min(n, static_cast< int >( nodeHole.size() ));
-    int   best = -1;
-    float bestDiff = 1e30f;
-    for ( int i = 0; i < lim; ++i ) {
-        float nodeDist = GetDistanceFromT(static_cast< float >( i ));
-        float diff = std::fabs(nodeDist - distance);
-        if ( diff < bestDiff ) { bestDiff = diff; best = i; }
+
+    // ノード i の弧長距離（t=i に対応）
+    auto nodeDist = [&](int i) -> float{ return GetDistanceFromT(static_cast< float >( i )); };
+
+    int runStart = -1;
+    for ( int i = 0; i <= lim; ++i ) {
+        bool hole = ( i < lim ) && ( nodeHole[i] != 0 );
+        if ( hole && runStart < 0 ) { runStart = i; }
+        if ( !hole && runStart >= 0 ) {
+            int runEnd = i - 1;
+            HoleInterval hv;
+            hv.d0 = ( runStart == 0 )      ? 0.0f
+                                           : ( nodeDist(runStart - 1) + nodeDist(runStart) ) * 0.5f;
+            hv.d1 = ( runEnd == lim - 1 && runEnd == n - 1 ) ? totalLength_
+                                           : ( nodeDist(runEnd) + nodeDist(runEnd + 1) ) * 0.5f;
+            if ( hv.d1 > hv.d0 ) { out.push_back(hv); }
+            runStart = -1;
+        }
     }
-    return best >= 0 && nodeHole[best] != 0;
+    return out;
+}
+
+// 指定距離(s)が「穴」区間か：GetHoleIntervals と同じ区間を参照する
+bool SplineRail::IsHoleAtDistance(float distance) const{
+    for ( const HoleInterval& hv : GetHoleIntervals() ) {
+        if ( distance >= hv.d0 && distance <= hv.d1 ) return true;
+    }
+    return false;
 }
 
 float SplineRail::GetDistanceFromT(float t) const{

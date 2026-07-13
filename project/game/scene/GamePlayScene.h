@@ -172,7 +172,8 @@ private: // メンバ変数
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;
 	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
-	void SyncRailsFromEditor();
+	//   simple=true はドラッグ中の軽量同期（道は簡易リボン・敵の再配置なし）
+	void SyncRailsFromEditor(bool simple = false);
 
 	// --- 敵（生成・更新・描画は EnemyManager へ分離）---
 	EnemyManager                 enemyMgr_;
@@ -182,6 +183,8 @@ private: // メンバ変数
 	// --- ヨッシーの卵（敵を飲み込む→保持→投げる。今は状態管理のみ）---
 	EggSystem eggSystem_;
 	int  lastMapLoadVersion_ = -1;                    // マップ読込を検知して敵配置を復元するため
+	float railSyncTimer_ = 0.0f;                      // ドラッグ中の道再生成を10Hzに間引くタイマー（§1）
+	bool  railFullSyncPending_ = false;               // ドラッグ終了後に本同期を1回行うフラグ（§1）
 
 	// --- ヒット時の手応え（ヒットストップ/シェイク/ポストエフェクト。処理は HitFeel へ分離）---
 	HitFeel hitFeel_;

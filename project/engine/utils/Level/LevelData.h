@@ -72,6 +72,10 @@ struct LevelData{
     // 各レールの表示フラグ（railLines と同じ並び）。1=表示 / 0=非表示（連結用の見えないレール）
     std::vector<int> railVisible;
 
+    // 各レールの道生成モード（railLines と同じ並び）。0=自動で道を敷く / 1=道なし
+    //   カメラ用・敵専用・演出用など「レールだけ欲しい」路線に使う（仕様書_残タスク §4）
+    std::vector<int> railRoadModes;
+
     // 各レールの動きの波形（railLines と同じ並び）
     //   0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動
     std::vector<int> railMotionTypes;

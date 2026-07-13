@@ -83,6 +83,7 @@ void GamePlayScene::LoadResources(){
 	model->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
 	model->LoadModel("roadT",        "resources/road", "road_t.obj");        // 交差点ピース：T字路
 	model->LoadModel("roadCross",    "resources/road", "road_cross.obj");    // 交差点ピース：十字路
+	model->LoadModel("roadJoint",    "resources/road", "road_joint.obj");    // 接続ノードの凸ジョイント（プラレール風）
 	model->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
 
 	// 汎用パーティクル用の粒（"sphere" は敵と共有＋モンスターボール柄がデフォルトなので、
@@ -253,10 +254,18 @@ void GamePlayScene::SetupGameplay(){
 
 // レールをエディタ最新へ作り直し、敵も配置し直す。
 //   レール本体・緑線・動きは RailField が担当。敵は RailField の責務外なので Sync 後に生成する。
-void GamePlayScene::SyncRailsFromEditor(){
+//   simple=true はドラッグ中の軽量同期：道は簡易リボンのみ・敵の張り直しや再生成は行わない
+//   （マウスアップ後に simple=false の本同期が1回走って最終形になる）
+void GamePlayScene::SyncRailsFromEditor(bool simple){
 	uint32_t whiteTex = 0;
 	auto itWhite = textures_.find("white");
 	if ( itWhite != textures_.end() ) { whiteTex = itWhite->second.srvIndex; }
+
+	if ( simple ) {
+		railField_.Sync(camera_.get(), whiteTex);                     // レール本体＋緑線
+		roadMesh_.Build(railField_.GetRails(), camera_.get(), true);  // 道は簡易プレビュー
+		return;
+	}
 
 	// --- 敵のピン留め準備：編集前のレールから各敵のワールド位置を覚えておく ---
 	//   敵は「レール番号＋距離(m)」で置かれているため、レールを編集すると全長が伸縮し、
@@ -341,9 +350,24 @@ void GamePlayScene::Update(){
 void GamePlayScene::SyncFromEditors(){
 	EditorManager* em = EditorManager::GetInstance();
 
-	// レールのライブ同期：エディタで編集されたら緑線とプレイヤー用データを即作り直す
-	if ( em->GetRailEditVersion() != railField_.Version() ) {
-		SyncRailsFromEditor();
+	// レールのライブ同期：エディタで編集されたら緑線とプレイヤー用データを作り直す。
+	//   ドラッグ中は「最大10回/秒の軽量同期」に間引き、マウスアップ後に本同期を1回行う（§1）
+	{
+		const bool dragging = em->IsRailDragging();
+		const bool changed = ( em->GetRailEditVersion() != railField_.Version() );
+		railSyncTimer_ += 1.0f / 60.0f;
+		if ( changed && dragging ) {
+			if ( railSyncTimer_ >= 0.1f ) { // 10Hz
+				railSyncTimer_ = 0.0f;
+				SyncRailsFromEditor(true);
+				railFullSyncPending_ = true; // ドラッグが終わったら本生成する
+			} else {
+				railFullSyncPending_ = true;
+			}
+		} else if ( !dragging && ( changed || railFullSyncPending_ ) ) {
+			railFullSyncPending_ = false;
+			SyncRailsFromEditor(false);
+		}
 	}
 
 	// マップが読み込まれたら、保存済みの敵配置をエディタへ復元する
@@ -534,6 +558,7 @@ void GamePlayScene::UpdateSceneVisuals(){
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 	if ( testObj_ ){ testObj_->Update(); }
 	railField_.UpdateMarkers(); // レール緑線（カメラ移動に追従）
+	roadMesh_.SetJointVisible(EditorManager::GetInstance()->GetEditorJointVisible()); // ジョイント表示モード（§5）
 	roadMesh_.Update(railField_.GetRails()); // 道メッシュ（動くレール追従＋カメラ追従）
 
 	// リングオーラ（UVスクロール）
