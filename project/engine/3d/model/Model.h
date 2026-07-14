@@ -89,6 +89,20 @@ public: // メンバ関数
 	void InitializePrimitive(ModelCommon* modelCommon, const ModelData& modelData);
 
 	// <summary>
+	/// 動的メッシュとして初期化：固定容量の頂点/インデックスバッファを一度だけ確保し Map を保持する。
+	/// 以後は UpdateMesh の memcpy と描画数更新だけで形を変えられる（毎フレームの作り直しゼロ）。
+	/// ※エンジンは毎フレーム WaitForGPU するシングルバッファ運用なので Map しっぱなし書き換えが安全
+	/// </summary>
+	void InitializeDynamic(ModelCommon* modelCommon, uint32_t vertexCapacity, uint32_t indexCapacity,
+	                       const std::string& textureFilePath);
+
+	// <summary>
+	/// 動的メッシュの内容を差し替える（容量超過時のみ2倍に伸ばして再確保）。
+	/// Draw より前（Update フェーズ）で呼ぶこと。空を渡すと何も描かれなくなる。
+	/// </summary>
+	void UpdateMesh(const std::vector<VertexData>& vertices, const std::vector<uint32_t>& indices);
+
+	// <summary>
 	/// リングモデルの初期化
 	/// </summary>
 	void InitializeRing(ModelCommon* modelCommon, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.2f);
@@ -165,6 +179,13 @@ private: // メンバ変数
 
 	// データを書き込むためのポインタ (Map用)
 	Material* materialData_ = nullptr;
+
+	// --- 動的メッシュ用（InitializeDynamic 時のみ使用）---
+	uint32_t vertexCapacity_ = 0;      // 確保済み頂点容量（0なら静的モデル）
+	uint32_t indexCapacity_  = 0;      // 確保済みインデックス容量
+	uint32_t drawIndexCount_ = 0;      // 実際に描画するインデックス数（静的は CreateBuffers が設定）
+	VertexData* vertexMap_ = nullptr;  // Map保持ポインタ（Unmapしない）
+	uint32_t*   indexMap_  = nullptr;
 
 	// テクスチャハンドル
 	D3D12_GPU_DESCRIPTOR_HANDLE textureHandle_ {};

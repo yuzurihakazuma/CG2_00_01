@@ -45,6 +45,10 @@ public:
     bool IsSwallowing() const{ return swallowing_; }
     bool IsConsumed()  const{ return consumed_; }         // 吸い込み完了（消してお腹+1）
 
+    // 見た目だけ非表示にする（舌で捕まえた瞬間、SDF溶解演出に差し替えるため使う。
+    //   position_/collider_ 等の内部状態はそのまま動き続ける＝実体は生きている）
+    void SetVisualHidden(bool hidden){ visualHidden_ = hidden; }
+
     const Vector3& GetPosition() const{ return position_; }
     float     GetRadius() const{ return radius_; }
     Collider* GetCollider(){ return &collider_; }
@@ -66,6 +70,7 @@ private:
     bool      consumed_   = false;        // 吸い込み完了（シーンが消してお腹を増やす）
     float     swallowT_   = 0.0f;         // 吸い込み経過(秒)
     Vector3   swallowStart_ { 0.0f, 0.0f, 0.0f }; // 吸い込み開始位置
+    bool      visualHidden_ = false;      // true の間は Draw をスキップ（SDF演出に差し替え中）
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };
     Vector3 rotation_ { 0.0f, 0.0f, 0.0f };

@@ -40,7 +40,10 @@ public:
 	void LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename);
 	// モデルの検索
 	Model* FindModel(const std::string& filePath);
-	
+
+	// 呼び出し側が独自の動的Modelを作る時に使う共有ModelCommon
+	ModelCommon* GetModelCommon() const { return modelCommon_.get(); }
+
 
 private:
 

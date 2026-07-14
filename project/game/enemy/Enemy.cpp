@@ -82,7 +82,7 @@ void Enemy::Update(const std::vector<SplineRail>& rails, float dt){
 }
 
 void Enemy::Draw(){
-    if ( alive_ && obj_ ) { // 吸い込み中も alive_ は true のまま → 縮む様子を描画する
+    if ( alive_ && obj_ && !visualHidden_ ) { // 吸い込み中も alive_ は true のまま → 縮む様子を描画する
         obj_->Draw();
     }
 }

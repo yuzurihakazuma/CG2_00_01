@@ -130,6 +130,9 @@ void GamePlayScene::LoadResources(){
 	// 産卵エロージョン演出（左Ctrlで産む瞬間、SDFの卵が芯から育って実体メッシュに交代）
 	eggSystem_.InitializeBirthFx(commandList);
 
+	// 舌で捕まえた敵がSDFで溶けて消える演出（食べる瞬間もSDF消滅で統一）
+	swallow_.InitializeEatFx(commandList);
+
 	// 敵のSDF消滅演出（踏みつけ/卵命中で倒すと、その場で敵ボールが芯まで溶けて消える）
 	combat_.InitializeDissolveFx(commandList);
 }
@@ -433,6 +436,7 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 		combat_.ClearEffects();
 		eggSystem_.Initialize();
 		aimThrow_.Reset(); // 構え状態を解除
+		swallow_.Reset();  // 舌アクションを解除（敵が作り直されるので target_ を確実に手放す）
 	}
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
@@ -469,8 +473,8 @@ void GamePlayScene::UpdatePlayMode(){
 	// 当たり判定＋踏みつけ
 	combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get());
 
-	// E=飲み込み / 左Ctrl=産卵（SwallowAbility へ分離。dt はクールタイム用）
-	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, dt);
+	// E=舌を伸ばして捕まえる / 左Ctrl=産卵（SwallowAbility へ分離。dt はクールタイム・舌アニメ用）
+	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get(), dt);
 
 	// Q長押しで構え→矢印で狙う→離して投げる（AimThrowController へ分離）
 	aimThrow_.Update(*player_, enemyMgr_, eggSystem_, camera_.get(), dt);
@@ -670,6 +674,7 @@ void GamePlayScene::Draw(){
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵
+	swallow_.Draw();                            // 舌（伸ばす/引き込む動作中だけ）
 
 	// レール経路の可視化マーカー（プレイヤーが通る道筋）
 	railField_.DrawMarkers();
@@ -716,6 +721,7 @@ void GamePlayScene::Draw(){
 	if ( sdfEggObj_ ) { sdfEggObj_->Draw(commandList); }
 	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
 	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
+	swallow_.DrawEatFx(commandList);       // 舌で捕まえた敵がSDFで溶けて消える演出
 
 	// 2. 【MRT終了】
 	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って

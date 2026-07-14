@@ -1,6 +1,7 @@
 #include "Model.h"
 // --- 標準ライブラリ ---
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -323,6 +324,8 @@ void Model::InitializeCylinder(ModelCommon* modelCommon, int subdivision, float 
 	CreateBuffers();
 }
 void Model::Draw(uint32_t instanceCount) {
+	// 描くものが無い（動的メッシュが空）なら何もしない
+	if ( drawIndexCount_ == 0 ) { return; }
 	// 1. コマンドリストを取得する
 	// ModelCommon経由でDirectXCommonから取得
 	ID3D12GraphicsCommandList* commandList = modelCommon_->GetDxCommon()->GetCommandList();
@@ -350,7 +353,7 @@ void Model::Draw(uint32_t instanceCount) {
 
 	// 6. 描画コマンドの発行
 	// インデックスを使って描画
-	commandList->DrawIndexedInstanced(static_cast< UINT >( modelData_.indices.size() ), instanceCount, 0, 0, 0);
+	commandList->DrawIndexedInstanced(drawIndexCount_, instanceCount, 0, 0, 0);
 
 
 }
@@ -391,15 +394,16 @@ void Model::SetTexture(const std::string& textureFilePath){
 }
 
 void Model::DrawOnly(uint32_t instanceCount){
+	if ( drawIndexCount_ == 0 ) { return; }
 	ID3D12GraphicsCommandList* commandList = modelCommon_->GetDxCommon()->GetCommandList();
 
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 	commandList->IASetIndexBuffer(&indexBufferView_);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	
+
 	// 描画 (テクスチャのセット処理は飛ばす)
-	commandList->DrawIndexedInstanced(static_cast< UINT >( modelData_.indices.size() ), instanceCount, 0, 0, 0);
+	commandList->DrawIndexedInstanced(drawIndexCount_, instanceCount, 0, 0, 0);
 }
 
 Node Model::ParseNode(const aiNode* node) {
@@ -674,4 +678,84 @@ void Model::CreateBuffers(){
 	materialData_->emissive = 0.0f;
 	materialData_->environmentCoefficient = 0.0f;
 
+	// 静的モデルの描画数はここで確定（Draw は drawIndexCount_ を参照する）
+	drawIndexCount_ = static_cast< uint32_t >( modelData_.indices.size() );
+
+}
+
+// 動的メッシュとして初期化：容量ぶんのバッファを一度だけ確保して Map を保持する
+void Model::InitializeDynamic(ModelCommon* modelCommon, uint32_t vertexCapacity, uint32_t indexCapacity,
+                              const std::string& textureFilePath){
+	modelCommon_ = modelCommon;
+
+	// テクスチャ未指定の保険（空パスのロードは起動時 assert になる）
+	modelData_.material.textureFilePath = textureFilePath.empty() ? "resources/uvChecker.png" : textureFilePath;
+
+	auto dxCommon = modelCommon_->GetDxCommon();
+	auto resourceFactory = dxCommon->GetResourceFactory();
+
+	// テクスチャ（呼び出し側が先読みしておくこと。ここではキャッシュヒット前提）
+	modelData_.material.textureIndex = TextureManager::GetInstance()->LoadTextureAndCreateSRV(
+		modelData_.material.textureFilePath,
+		dxCommon->GetCommandList()
+	).srvIndex;
+	textureHandle_ = dxCommon->GetSrvManager()->GetGPUDescriptorHandle(modelData_.material.textureIndex);
+
+	// 頂点/インデックスは容量ぶんを確保して Map しっぱなしにする
+	vertexCapacity_ = ( std::max )( vertexCapacity, 3u );
+	indexCapacity_  = ( std::max )( indexCapacity, 3u );
+
+	vertexResource_ = resourceFactory->CreateBufferResource(sizeof(VertexData) * vertexCapacity_);
+	assert(vertexResource_ != nullptr);
+	vertexResource_->Map(0, nullptr, reinterpret_cast< void** >( &vertexMap_ ));
+	vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
+	vertexBufferView_.SizeInBytes = UINT(sizeof(VertexData) * vertexCapacity_);
+	vertexBufferView_.StrideInBytes = sizeof(VertexData);
+
+	indexResource_ = resourceFactory->CreateBufferResource(sizeof(uint32_t) * indexCapacity_);
+	assert(indexResource_ != nullptr);
+	indexResource_->Map(0, nullptr, reinterpret_cast< void** >( &indexMap_ ));
+	indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
+	indexBufferView_.SizeInBytes = UINT(sizeof(uint32_t) * indexCapacity_);
+	indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
+
+	// マテリアル（静的パスと同じ既定値）
+	materialResource_ = resourceFactory->CreateBufferResource(sizeof(Material));
+	assert(materialResource_ != nullptr);
+	materialResource_->Map(0, nullptr, reinterpret_cast< void** >( &materialData_ ));
+	materialData_->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+	materialData_->enableLighting = true;
+	materialData_->uvTransform = MakeIdentity4x4();
+	materialData_->shininess = 32.0f;
+	materialData_->emissive = 0.0f;
+	materialData_->environmentCoefficient = 0.0f;
+
+	drawIndexCount_ = 0; // UpdateMesh されるまで何も描かない
+}
+
+// 動的メッシュの内容を差し替える（容量超過時のみ2倍に伸ばして再確保）
+void Model::UpdateMesh(const std::vector<VertexData>& vertices, const std::vector<uint32_t>& indices){
+	auto resourceFactory = modelCommon_->GetDxCommon()->GetResourceFactory();
+
+	// 容量超過は2倍ずつ伸ばして作り直す（稀。毎フレーム WaitForGPU 運用なのでフレーム間なら安全）
+	if ( vertices.size() > vertexCapacity_ ) {
+		while ( vertexCapacity_ < vertices.size() ) { vertexCapacity_ *= 2; }
+		vertexResource_ = resourceFactory->CreateBufferResource(sizeof(VertexData) * vertexCapacity_);
+		assert(vertexResource_ != nullptr);
+		vertexResource_->Map(0, nullptr, reinterpret_cast< void** >( &vertexMap_ ));
+		vertexBufferView_.BufferLocation = vertexResource_->GetGPUVirtualAddress();
+		vertexBufferView_.SizeInBytes = UINT(sizeof(VertexData) * vertexCapacity_);
+	}
+	if ( indices.size() > indexCapacity_ ) {
+		while ( indexCapacity_ < indices.size() ) { indexCapacity_ *= 2; }
+		indexResource_ = resourceFactory->CreateBufferResource(sizeof(uint32_t) * indexCapacity_);
+		assert(indexResource_ != nullptr);
+		indexResource_->Map(0, nullptr, reinterpret_cast< void** >( &indexMap_ ));
+		indexBufferView_.BufferLocation = indexResource_->GetGPUVirtualAddress();
+		indexBufferView_.SizeInBytes = UINT(sizeof(uint32_t) * indexCapacity_);
+	}
+
+	if ( !vertices.empty() ) { std::memcpy(vertexMap_, vertices.data(), sizeof(VertexData) * vertices.size()); }
+	if ( !indices.empty() )  { std::memcpy(indexMap_,  indices.data(),  sizeof(uint32_t)   * indices.size()); }
+	drawIndexCount_ = static_cast< uint32_t >( indices.size() );
 }
