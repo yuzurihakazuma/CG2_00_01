@@ -206,10 +206,15 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
     const auto& types   = em->GetEditorRailTypes();
     const auto& motions = em->GetEditorRailMotions();
 
+    // 線のつなぎ方（0=スプライン/1=直線）は距離テーブルの計測結果を変えるので、
+    // 必ず BuildDistanceTable より先に割り当てる
+    const auto& lineModes = em->GetEditorRailLineModes();
+
     rails_.clear();
-    for ( const auto& line : lines ) {
+    for ( size_t i = 0; i < lines.size(); ++i ) {
         SplineRail rail;
-        rail.nodes = line;
+        rail.nodes = lines[i];
+        rail.lineMode = ( i < lineModes.size() ) ? lineModes[i] : 0;
         rail.BuildDistanceTable();
         rails_.push_back(rail);
     }

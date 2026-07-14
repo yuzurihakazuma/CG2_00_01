@@ -90,6 +90,8 @@ public:
 	const std::vector<std::vector<int>>& GetEditorRailNodeHoles() const;
 	// 各レールの表示フラグ（1=表示/0=非表示）。railLines と同じ並び
 	const std::vector<int>& GetEditorRailVisible() const;
+	// 各レールの線のつなぎ方（0=スプライン/1=直線）。railLines と同じ並び
+	const std::vector<int>& GetEditorRailLineModes() const;
 	const std::vector<int>&   GetEditorRailMotionTypes() const;  // 動きの波形（0=sin/1=停止つき/2=円）
 	const std::vector<float>& GetEditorRailMotionPhases() const; // 動きの位相（0〜1）
 	const std::vector<int>&   GetEditorRailOneWay() const;       // 片方向（0=両/1=正/2=逆）

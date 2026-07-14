@@ -40,6 +40,7 @@ public:
     const std::vector<int>& GetRailGroundTypes() const{ return data_->railGroundTypes; }
     const std::vector<std::vector<int>>& GetRailNodeHoles() const{ return data_->railNodeHoles; }
     const std::vector<int>& GetRailVisible() const{ return data_->railVisible; }
+    const std::vector<int>& GetRailLineModes() const{ return data_->railLineModes; }
     bool IsRailVisible(int rail) const;
     const std::vector<int>&   GetRailMotionTypes() const{ return data_->railMotionTypes; }
     const std::vector<float>& GetRailMotionPhases() const{ return data_->railMotionPhases; }

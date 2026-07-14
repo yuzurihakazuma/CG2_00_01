@@ -573,6 +573,7 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
 	data_->railGroundTypes.push_back(0);
 	data_->railVisible.push_back(1);
+	data_->railLineModes.push_back(0);
 	data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	data_->railMotionTypes.push_back(0);
 	data_->railMotionPhases.push_back(0.0f);
@@ -617,6 +618,7 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railMotions.push_back(data_->railMotions[railIdx]);
 	data_->railGroundTypes.push_back(( railIdx < ( int ) data_->railGroundTypes.size() ) ? data_->railGroundTypes[railIdx] : 0);
 	data_->railVisible.push_back(( railIdx < ( int ) data_->railVisible.size() ) ? data_->railVisible[railIdx] : 1);
+	data_->railLineModes.push_back(( railIdx < ( int ) data_->railLineModes.size() ) ? data_->railLineModes[railIdx] : 0);
 	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
 	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	data_->railMotionTypes.push_back(( railIdx < ( int ) data_->railMotionTypes.size() ) ? data_->railMotionTypes[railIdx] : 0);
@@ -893,6 +895,9 @@ void RailEditor::DrawWindow(){
 	if ( data_->railVisible.size() != data_->railLines.size() ) {
 		data_->railVisible.resize(data_->railLines.size(), 1);
 	}
+	if ( data_->railLineModes.size() != data_->railLines.size() ) {
+		data_->railLineModes.resize(data_->railLines.size(), 0);
+	}
 	if ( data_->railTypes.size() != data_->railLines.size() ) {
 		data_->railTypes.resize(data_->railLines.size(), -1);
 	}
@@ -943,6 +948,8 @@ void RailEditor::DrawWindow(){
 				data_->railGroundTypes.erase(data_->railGroundTypes.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railVisible.size() )
 				data_->railVisible.erase(data_->railVisible.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railLineModes.size() )
+				data_->railLineModes.erase(data_->railLineModes.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railNodeHoles.size() )
 				data_->railNodeHoles.erase(data_->railNodeHoles.begin() + deleteRail);
 			if ( currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
@@ -1021,6 +1028,14 @@ void RailEditor::DrawWindow(){
 		}
 		ImGui::SameLine();
 		ImGui::TextDisabled(vis ? "(表示)" : "(非表示=連結用の見えないレール)");
+
+		// --- 線のつなぎ方（ノードの位置は同じで「つなぎ方」だけが変わる）---
+		//   スプライン=置いた点を全部通るなめらかな曲線 / 直線=点をそのまま直線でつなぐ（カクカク）
+		data_->railLineModes.resize(data_->railLines.size(), 0);
+		int& lm = data_->railLineModes[currentEditRailIndex_];
+		const char* lineModeLabels[] = { "スプライン (なめらか)", "直線 (カクカク)" };
+		ImGui::SetNextItemWidth(220.0f);
+		if ( ImGui::Combo("線のつなぎ方", &lm, lineModeLabels, 2) ) { ++railVersion_; }
 
 		// --- 片方向レール（逆走禁止。ジェットコースター区間など）---
 		data_->railOneWay.resize(data_->railLines.size(), 0);
@@ -1354,11 +1369,42 @@ void RailEditor::DrawWindow(){
 		static int   shapeDiv    = 4;
 		static float shapeRadius = 3.0f;
 		static float shapeStepH  = 1.0f;
+		static float shapeYawDeg = 0.0f;              // 生成する形の向き（0°=+X。90°=+Z奥）
+		static std::vector<Vector3> shapeBase;        // 回転前（+X向き）の形。向き変更の再適用に使う
+
+		// 形の各点を Y軸まわりに回す（0°=+X向き=従来どおり / 90°=+Z(奥) / ±180°=-X / -90°=-Z(手前)）
+		auto rotateShape = [](const std::vector<Vector3>& src, float yawDeg) -> std::vector<Vector3>{
+			float rad = yawDeg * 3.14159265f / 180.0f;
+			float c = std::cos(rad), s = std::sin(rad);
+			std::vector<Vector3> out;
+			out.reserve(src.size());
+			for ( const auto& p : src ) {
+				out.push_back({ p.x * c - p.z * s, p.y, p.x * s + p.z * c });
+			}
+			return out;
+			};
 
 		const char* shapeNames[] = { "直線", "L字", "円 (ループ)", "階段", "S字カーブ" };
 		ImGui::Text("形を選んでパラメータを決めて「生成」:");
 		ImGui::SetNextItemWidth(150.0f);
 		ImGui::Combo("形", &shapeType, shapeNames, IM_ARRAYSIZE(shapeNames));
+
+		// --- 向き：ドラッグで自由な角度＋ワンタッチの90°ボタン。配置待ち中の変更も即反映 ---
+		bool yawChanged = false;
+		ImGui::SetNextItemWidth(140.0f);
+		yawChanged |= ImGui::DragFloat("向き (°)", &shapeYawDeg, 1.0f, -180.0f, 180.0f, "%.0f");
+		ImGui::SameLine();
+		if ( ImGui::SmallButton("右+X") )   { shapeYawDeg = 0.0f;    yawChanged = true; }
+		ImGui::SameLine();
+		if ( ImGui::SmallButton("奥+Z") )   { shapeYawDeg = 90.0f;   yawChanged = true; }
+		ImGui::SameLine();
+		if ( ImGui::SmallButton("左-X") )   { shapeYawDeg = 180.0f;  yawChanged = true; }
+		ImGui::SameLine();
+		if ( ImGui::SmallButton("手前-Z") ) { shapeYawDeg = -90.0f;  yawChanged = true; }
+		// 配置待ちの形にも向きの変更をその場で反映（もう一度「生成」を押し直さなくてよい）
+		if ( yawChanged && HasPendingStamp() && !shapeBase.empty() ) {
+			pendingStamp_ = rotateShape(shapeBase, shapeYawDeg);
+		}
 
 		// 形ごとのパラメータ（必要なものだけ表示）
 		ImGui::PushItemWidth(140.0f);
@@ -1433,8 +1479,10 @@ void RailEditor::DrawWindow(){
 			}
 
 			if ( !line.empty() ) {
-				// すぐ路線にせず「配置待ち（スタンプ）」にする → Game Viewでクリックした場所に設置
-				pendingStamp_ = std::move(line);
+				// すぐ路線にせず「配置待ち（スタンプ）」にする → Game Viewでクリックした場所に設置。
+				// 回転前の形も控えておき、配置待ち中の「向き」変更に即反映できるようにする
+				shapeBase = line;
+				pendingStamp_ = rotateShape(shapeBase, shapeYawDeg);
 			}
 		}
 		if ( HasPendingStamp() ) {
@@ -1559,6 +1607,7 @@ void RailEditor::DrawWindow(){
 		data_->railMotions.push_back(Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
 		data_->railGroundTypes.push_back(0);
 		data_->railVisible.push_back(1);
+		data_->railLineModes.push_back(0);
 		data_->railNodeHoles.push_back(std::vector<int>());
 		currentEditRailIndex_ = ( int ) data_->railLines.size() - 1;
 		selectedRailNode_ = -1;

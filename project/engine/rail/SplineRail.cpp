@@ -31,6 +31,15 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
     Vector3 p1 = nodes[p1_index];
     Vector3 p2 = nodes[p2_index];
 
+    // 直線モード（カクカク）：制御点を使わず p1→p2 を線形補間するだけ。
+    //   ノードの位置はスプラインと同じで「つなぎ方」だけが変わる。
+    //   距離テーブル・等速移動・接続などの仕組みは共通のままそのまま働く。
+    if ( lineMode == 1 ) {
+        return { p1.x + ( p2.x - p1.x ) * localT + animOffset.x,
+                 p1.y + ( p2.y - p1.y ) * localT + animOffset.y,
+                 p1.z + ( p2.z - p1.z ) * localT + animOffset.z };
+    }
+
     // 端の制御点(p0,p3)は配列外なら「鏡映(reflection)」で補う。
     // 従来は端を同じ点にクランプしていたため端の接線が劣化し、向きがカクついた。
     // p0 = p1 を p2 の反対側へ折り返す / p3 = p2 を p1 の反対側へ折り返す

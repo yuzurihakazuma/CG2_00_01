@@ -72,6 +72,9 @@ struct LevelData{
     // 各レールの表示フラグ（railLines と同じ並び）。1=表示 / 0=非表示（連結用の見えないレール）
     std::vector<int> railVisible;
 
+    // 各レールの線のつなぎ方（railLines と同じ並び）。0=スプライン(なめらか) / 1=直線(カクカク)
+    std::vector<int> railLineModes;
+
     // 各レールの動きの波形（railLines と同じ並び）
     //   0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動
     std::vector<int> railMotionTypes;

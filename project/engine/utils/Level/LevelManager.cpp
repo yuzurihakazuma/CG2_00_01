@@ -77,6 +77,14 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     j["railVisible"] = visibleArray;
 
+    // 各レールの線のつなぎ方(0=スプライン/1=直線)。railLines と数を合わせて保存
+    json lineModeArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        int v = ( i < levelData.railLineModes.size() ) ? levelData.railLineModes[i] : 0;
+        lineModeArray.push_back(v);
+    }
+    j["railLineModes"] = lineModeArray;
+
     // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
     json motionTypeArray = json::array();
     json motionPhaseArray = json::array();
@@ -246,6 +254,13 @@ LevelData LevelManager::Load(const std::string& fileName){
         }
     }
 
+    // 線のつなぎ方を読み込む（0=スプライン/1=直線。キーが無い旧JSONは後段の resize で全て0=スプライン）
+    if ( j.contains("railLineModes") && j["railLineModes"].is_array() ) {
+        for ( const auto& v : j["railLineModes"] ) {
+            levelData.railLineModes.push_back(v.get<int>());
+        }
+    }
+
     // 動き波形/位相・片方向・速度倍率を読み込む（無ければ後段の resize でデフォルトが入る）
     if ( j.contains("railMotionTypes") && j["railMotionTypes"].is_array() ) {
         for ( const auto& v : j["railMotionTypes"] ) { levelData.railMotionTypes.push_back(v.get<int>()); }
@@ -309,6 +324,7 @@ LevelData LevelManager::Load(const std::string& fileName){
     levelData.railMotions.resize(levelData.railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
     levelData.railGroundTypes.resize(levelData.railLines.size(), 0);
     levelData.railVisible.resize(levelData.railLines.size(), 1);
+    levelData.railLineModes.resize(levelData.railLines.size(), 0);
     levelData.railMotionTypes.resize(levelData.railLines.size(), 0);
     levelData.railMotionPhases.resize(levelData.railLines.size(), 0.0f);
     levelData.railOneWay.resize(levelData.railLines.size(), 0);

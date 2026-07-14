@@ -917,6 +917,10 @@ const std::vector<int>& EditorManager::GetEditorRailVisible() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailVisible() : kEmpty;
 }
+const std::vector<int>& EditorManager::GetEditorRailLineModes() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailLineModes() : kEmpty;
+}
 const std::vector<int>& EditorManager::GetEditorRailMotionTypes() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailMotionTypes() : kEmpty;
