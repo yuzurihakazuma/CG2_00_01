@@ -800,6 +800,7 @@ void GamePlayScene::DrawDebugUI(){
 			roadMesh_.Build(railField_.GetRails(), camera_.get());
 		}
 		ImGui::Text("道メッシュ/ピース数: %d", roadMesh_.TileCount());
+		ImGui::Text("道の頂点数: %d / 三角形: %d", roadMesh_.VertexCount(), roadMesh_.TriangleCount());
 	}
 
 	// --- カメラ視点プリセット（レールを編集しやすく）---

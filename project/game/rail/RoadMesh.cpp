@@ -126,6 +126,8 @@ void RoadMesh::EmitMesh(const Model::ModelData& data, int followRail, Camera* ca
     s.model->UpdateMesh(data.vertices, data.indices);
     s.rail = followRail;
     s.isJoint = isJoint;
+    lastVertexCount_   += data.vertices.size();
+    lastTriangleCount_ += data.indices.size() / 3;
     // カリング無し（既定）：巻き順に依存せず、下から見上げても道が消えない。
     // 背面カリング（オプション）：オーバードロー削減。UIから即時切替できる
     s.obj->SetPipelineType(cullNone_ ? PipelineType::Object3D_CullNone : PipelineType::Object3D);
@@ -886,6 +888,8 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera, bool 
     slotsUsed_ = 0;
     piecesUsed_ = 0;
     jointsUsed_ = 0;
+    lastVertexCount_ = 0;
+    lastTriangleCount_ = 0;
     // 静的ピースのまとめメッシュ（容量は使い回す＝clearのみでヒープ再確保しない）
     bakeCaps_.vertices.clear();  bakeCaps_.indices.clear();
     bakeJoints_.vertices.clear(); bakeJoints_.indices.clear();

@@ -39,6 +39,10 @@ public:
     void Draw() const;
 
     int  TileCount() const { return ( int ) ( slotsUsed_ + piecesUsed_ + jointsUsed_ ); }
+
+    // 直近 Build の総頂点数/三角形数（負荷確認用。パフォーマンスパネルに表示する）
+    int  VertexCount() const { return ( int ) lastVertexCount_; }
+    int  TriangleCount() const { return ( int ) lastTriangleCount_; }
     bool IsVisible() const { return visible_; }
     void SetVisible(bool v){ visible_ = v; } // デバッグUIから道のON/OFFを切り替える用
 
@@ -139,6 +143,9 @@ private:
 
     float warnLength_ = 1.0f; // 穴の手前後に危険帯（赤ストライプ・上面のみ）を敷く長さ(m)
     bool  cullNone_   = true; // true=両面描画（従来） / false=背面カリング
+
+    size_t lastVertexCount_ = 0;   // 直近 Build の総頂点数（表示用）
+    size_t lastTriangleCount_ = 0; // 直近 Build の総三角形数（表示用）
 
     // 静的レールのピースをまとめるベイク先（Build 中だけ使い、最後に EmitMesh する）
     Model::ModelData bakeCaps_;   // 終端キャップ（road_end）
