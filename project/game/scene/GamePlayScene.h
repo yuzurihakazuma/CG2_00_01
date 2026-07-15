@@ -6,9 +6,8 @@
 #include "engine/3d/animation/Animation.h"
 #include "engine/3d/animation/CustomAnimation.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
-#include "engine/particle/GPUParticleEmitter.h"
 #include "engine/utils/EditorManager.h"  // EngineMode のために必要
-#include "InstancedGroup.h"
+#include "game/demo/DemoShowcase.h"
 
 #include "engine/rail/SplineRail.h"
 #include "game/rail/RailField.h"
@@ -26,7 +25,6 @@
 #include "game/egg/EggSystem.h"
 
 #include "Skybox.h"
-#include "HitEffect.h"
 #include "StompEffect.h"
 
 // --- 標準ライブラリ ---
@@ -103,13 +101,10 @@ private: // メンバ変数
 
 	// スプライト
 	std::vector<std::unique_ptr<Sprite>> sprites_;
-	std::unique_ptr<Sprite> sprite_ = nullptr;
 
 	// 卵保持数HUD（画面左上）：保持卵のスロット6個＋お腹にためた数の小さい丸（T-07）
 	std::vector<std::unique_ptr<Sprite>> eggHudSlots_;
 	std::vector<std::unique_ptr<Sprite>> bellyHudIcons_;
-
-	Vector2 spritePos_ = { 100.0f, 100.0f };
 
 	// テクスチャデータ
 	std::unordered_map<std::string, TextureData> textures_;
@@ -117,23 +112,13 @@ private: // メンバ変数
 	// デプスステンシル
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource_;
 
-	std::list<std::unique_ptr<HitEffect>> hitEffects_; // Spaceデモ用（当面シーンに残す）
-
 	std::string bgmFile_ = "resources/BGMDon.mp3";
 
-	
-	std::unique_ptr<Obj3d> testObj_ = nullptr;
-
-	
 	std::unique_ptr<Skybox> skybox_ = nullptr;
-	
-	
-	float dissolveThreshold_ = 0.0f; // ディゾルブエフェクトの進行度（0.0で通常、1.0で完全に消える）
-	
-	Animation testAnimation_;
-	// ブロックの一括描画用グループ
-	std::unique_ptr<InstancedGroup> blockGroup_ = nullptr;
-	std::vector<std::unique_ptr<Obj3d>> blocks_;
+
+	// --- エンジン機能の展示（回転キューブ・オーラ・ブロック群・SDF卵デモ・Space/Pデモ）---
+	//   ゲーム本編と無関係の見本一式。DemoShowcase に分離した（不要になったら丸ごと外せる）
+	DemoShowcase demo_;
 
 	std::unique_ptr<SkinnedObj3d> skinnedObj_ = nullptr;
 
@@ -141,24 +126,7 @@ private: // メンバ変数
 	CustomAnimationTrack skinnedAnimTrack_;
 	float skinnedAnimTime_ = 0.0f;
 
-	
-	// GPUパーティクルエミッター
-	GPUParticleEmitter emitter_;
-
-	// オーラ用のテクスチャやモデルを管理するオブジェクト
-	std::unique_ptr<Obj3d> auraObj_ = nullptr;
-
-	// UVスクロール用のタイマー変数
-	float auraUvScrollOffset_ = 0.0f;
-	
-
 	EngineMode prevMode_ = EngineMode::Edit;
-
-	// 一旦新しく作る円柱オーラ用オブジェクト
-	std::unique_ptr<Obj3d> auraCylinderObj_ = nullptr;
-
-	// 円柱オーラ用のUVスクロールタイマー
-	float auraCylinderScroll_ = 0.0f;
 
 	std::unique_ptr<Player> player_ = nullptr;
 
@@ -196,11 +164,6 @@ private: // メンバ変数
 
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;
-
-	// --- SDFボリューム描画のデモ（egg.obj を SDF化した .sdf3d をレイマーチングで表示）---
-	std::unique_ptr<SDFVolumeObject> sdfEggObj_;
-	bool  sdfErodeAuto_ = true;   // エロージョン自動アニメ（溶ける⇔生える）
-	float sdfErodeTime_ = 0.0f;
 
 	// --- 卵保持数の数字表示（SDFText。HUDアイコン列の右に「×N」）---
 	std::unique_ptr<SDFText> eggCountText_;

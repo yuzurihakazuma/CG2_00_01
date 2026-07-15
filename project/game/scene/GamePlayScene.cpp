@@ -122,19 +122,7 @@ void GamePlayScene::LoadResources(){
 	skybox_->Initialize("resources/StandardCubeMap.dds", commandList);
 
 	// アニメーションデータ
-	testAnimation_ = LoadAnimationFromFile("resources/AnimatedCube", "AnimatedCube.gltf");
 	skinnedAnimTrack_.LoadFromJson("resources/human_anim.json");
-
-	// SDFボリューム（egg.obj → SDF3DPrintf.py で焼いた距離場）。ポリゴンは箱12枚だけで
-	// 形はレイマーチングが作る＝メッシュ不要の超軽量表示のデモ。看板の横に置く。
-	sdfEggObj_ = std::make_unique<SDFVolumeObject>();
-	if ( sdfEggObj_->Load("resources/sdf3d/egg.sdf3d", commandList) ) {
-		sdfEggObj_->SetTranslation({ 4.0f, 3.0f, 3.0f });
-		sdfEggObj_->SetScale(2.0f);
-		sdfEggObj_->SetColor({ 0.98f, 0.96f, 0.86f, 1.0f }); // カラーボリュームが無い時の予備色
-		// モーフのデモ：スライダーで卵⇔敵ボールに変形できる
-		sdfEggObj_->LoadMorphTarget("resources/sdf3d/enemyBall.sdf3d", commandList);
-	}
 
 	// 産卵エロージョン演出（左Ctrlで産む瞬間、SDFの卵が芯から育って実体メッシュに交代）
 	eggSystem_.InitializeBirthFx(commandList);
@@ -159,42 +147,11 @@ void GamePlayScene::SetupCameras(){
 	EditorManager::GetInstance()->SetCamera(camera_.get());
 }
 
-// 装飾/デモ用オブジェクト（testObj・オーラ・円柱オーラ・スキンメッシュ）
+// 装飾/デモ用オブジェクト（展示物は DemoShowcase へ分離。ここに残るのはスキンメッシュのみ）
 void GamePlayScene::SetupDemoObjects(){
-	// 回転キューブ（ディゾルブ＋ブルーム）
-	testObj_ = Obj3d::Create("animatedCube");
-	if ( testObj_ ){
-		testObj_->SetEnvironmentMap(textures_["skybox"].srvIndex);
-		testObj_->SetPipelineType(PipelineType::Object3D_CullNone);
-		testObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
-		testObj_->SetNoiseTexture(textures_["noise0"].srvIndex);
-		testObj_->SetDissolveThreshold(0.0f);
-		Bloom::GetInstance()->SetTargetEmissivePower(&testObj_->GetModel()->GetMaterial()->emissive);
-		EditorManager::GetInstance()->SetGizmoTarget(testObj_.get()); // ギズモ操作対象
-	}
-
-	// リングオーラ（地面に広がる魔法陣風）
-	ModelManager::GetInstance()->CreateRingModel("auraRing", 32, 1.0f, 0.2f);
-	auraObj_ = Obj3d::Create("auraRing");
-	if ( auraObj_ ) {
-		auraObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
-		auraObj_->SetNoiseTexture(textures_["gradationLine"].srvIndex); // ディゾルブ無効化のダミー
-		auraObj_->GetModel()->GetMaterial()->enableLighting = 0;
-		auraObj_->SetRotation({ 1.5708f, 0.0f, 0.0f }); // X軸90度で地面に倒す
-		auraObj_->SetTranslation({ 0.0f, 0.1f, 5.0f });
-		auraObj_->SetPipelineType(PipelineType::Object3D_Additive);
-	}
-
-	// 円柱オーラ
-	ModelManager::GetInstance()->CreateCylinderModel("auraCylinderModel", 32, 1.5f, 4.0f);
-	auraCylinderObj_ = Obj3d::Create("auraCylinderModel");
-	if ( auraCylinderObj_ ) {
-		auraCylinderObj_->GetModel()->SetTexture(textures_["gradationLine"].srvIndex);
-		auraCylinderObj_->SetDissolveThreshold(-1.0f); // 透明化させない
-		auraCylinderObj_->GetModel()->GetMaterial()->enableLighting = 0;
-		auraCylinderObj_->SetTranslation({ -5.0f, 2.0f, 5.0f });
-		auraCylinderObj_->SetPipelineType(PipelineType::Object3D_Additive);
-	}
+	// エンジン機能の展示（回転キューブ・オーラ・SDF卵デモ等）。
+	// Obj3d::Create がデフォルトカメラを掴むため、必ず SetupCameras の後に初期化する
+	demo_.Initialize(DirectXCommon::GetInstance()->GetCommandList(), textures_);
 
 	// スキンメッシュ（プレイ中はプレイヤーの位置/向きに同期）
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
@@ -212,9 +169,6 @@ void GamePlayScene::SetupGameplay(){
 	// デプスステンシル
 	depthStencilResource_ = TextureManager::GetInstance()->CreateDepthStencilTextureResource(
 		windowProc->GetClientWidth(), windowProc->GetClientHeight());
-
-	// スプライト・ブロック群・GPUパーティクル
-	sprite_ = Sprite::Create(textures_["uvChecker"].srvIndex, spritePos_);
 
 	// 狙い用カーソル（構え中だけ表示。敵に重なると赤＝ロックオン。AimThrowController が所有）
 	aimThrow_.Initialize(textures_["circle2"].srvIndex);
@@ -240,17 +194,10 @@ void GamePlayScene::SetupGameplay(){
 	eggCountText_->SetColor({ 0.75f, 1.0f, 0.8f, 1.0f });
 	eggCountText_->SetOutlineWidth(0.22f);
 	eggCountText_->SetOutlineColor({ 0.05f, 0.12f, 0.05f, 1.0f });
-	blockGroup_ = std::make_unique<InstancedGroup>();
-	blockGroup_->Initialize("block", 10000);
-	blockGroup_->SetNoiseTexture(textures_["uvChecker"].srvIndex);
 
+	// GPUパーティクル基盤の初期化（エミッターのデモは DemoShowcase が持つ）
 	GPUParticleManager::GetInstance()->Initialize(
 		DirectXCommon::GetInstance(), SrvManager::GetInstance(), "resources/uvChecker.png");
-	GPUParticleEmitterData emitterData;
-	emitterData.position = { 0.0f, 0.0f, 0.0f };
-	emitterData.emitRate = 20.0f;
-	emitter_.SetData(emitterData);
-	EditorManager::GetInstance()->SetParticleEmitter(&emitter_);
 
 	// プレイヤー・敵エディタ
 	player_ = std::make_unique<Player>();
@@ -465,7 +412,7 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 		SyncRailsFromEditor();
 		if ( player_ ) { player_->Initialize(); player_->SetMovementLocked(false); }
 		camCtrl_.Reset(); // 向き切替トリガーの状態を初期化（前回プレイの向きを持ち越さない）
-		hitEffects_.clear();
+		demo_.OnPlayStart(); // デモの HitEffect を消す
 		combat_.ClearEffects();
 		eggSystem_.Initialize();
 		aimThrow_.Reset(); // 構え状態を解除
@@ -530,17 +477,8 @@ void GamePlayScene::UpdatePlayMode(){
 		hitFeel_.NotifyCameraOverridden(); // カメラ位置を上書きしたのでシェイクの自己相殺をリセット
 	}
 
-	// スペースキー：エフェクト発生＋BGM再生
-	if ( input->Triggerkey(DIK_SPACE) ) {
-		AudioManager::GetInstance()->PlayWave(bgmFile_);
-		auto newEffect = std::make_unique<HitEffect>();
-		newEffect->Initialize({ 5.0f, 0.0f, 5.0f }, camera_.get(), textures_["circle2"].srvIndex, textures_["skybox"].srvIndex);
-		hitEffects_.push_back(std::move(newEffect));
-	}
-	// パーティクル発生
-	if ( input->Triggerkey(DIK_P) ) {
-		ParticleManager::GetInstance()->Emit("Circle", { 0.0f, 0.0f, 0.0f }, 10);
-	}
+	// デモ入力（Space=BGM+HitEffect / P=パーティクル）と HitEffect の進行は DemoShowcase へ
+	demo_.UpdatePlay(input, camera_.get(), textures_, bgmFile_);
 
 	// アニメーションの進行
 	if ( skinnedObj_ && skinnedAnimTrack_.duration > 0.0f ) {
@@ -548,9 +486,7 @@ void GamePlayScene::UpdatePlayMode(){
 		if ( skinnedAnimTime_ > skinnedAnimTrack_.duration ) { skinnedAnimTime_ = 0.0f; }
 	}
 
-	// エフェクトの更新と死んだものの削除（stompEffect は timeScale 適用 dt → ヒットストップで一緒に止まる）
-	for ( auto& effect : hitEffects_ ) { effect->Update(); }
-	hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e){ return e->IsDead(); });
+	// エフェクトの更新（stompEffect は timeScale 適用 dt → ヒットストップで一緒に止まる）
 	combat_.UpdateEffects(dt); // 踏みつけ/命中の立体エフェクト
 }
 
@@ -574,14 +510,6 @@ void GamePlayScene::UpdateSceneVisuals(){
 	// カメラ演出ゾーンの可視化（球=発動範囲 / 白い箱=カメラ位置の目安。編集中も見える）
 	camCtrl_.DrawZoneMarkers(railField_.GetRails());
 
-	// 円柱オーラ（UVスクロール）
-	if ( auraCylinderObj_ ) {
-		auraCylinderScroll_ += 1.0f * ( 1.0f / 60.0f );
-		if ( auraCylinderScroll_ > 1.0f ) { auraCylinderScroll_ -= 1.0f; }
-		auraCylinderObj_->GetModel()->GetMaterial()->uvTransform = MakeTranslate({ 0.0f, auraCylinderScroll_, 0.0f });
-		auraCylinderObj_->Update();
-	}
-
 	// タイトルへ戻る
 	if ( input->Triggerkey(DIK_T) ) {
 		SceneManager::GetInstance()->ChangeScene(std::make_unique<TitleScene>());
@@ -589,18 +517,9 @@ void GamePlayScene::UpdateSceneVisuals(){
 
 	// 3Dオブジェクト・レールマーカーの行列更新
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
-	if ( testObj_ ){ testObj_->Update(); }
 	railField_.UpdateMarkers(); // レール緑線（カメラ移動に追従）
 	roadMesh_.SetJointVisible(EditorManager::GetInstance()->GetEditorJointVisible()); // ジョイント表示モード（§5）
 	roadMesh_.Update(railField_.GetRails()); // 道メッシュ（動くレール追従＋カメラ追従）
-
-	// リングオーラ（UVスクロール）
-	if ( auraObj_ ) {
-		auraUvScrollOffset_ += 1.0f * ( 1.0f / 60.0f );
-		if ( auraUvScrollOffset_ > 1.0f ) { auraUvScrollOffset_ -= 1.0f; }
-		auraObj_->GetModel()->GetMaterial()->uvTransform = MakeTranslate({ 0.0f, auraUvScrollOffset_, 0.0f });
-		auraObj_->Update();
-	}
 
 	// スキンメッシュ（プレイ中はプレイヤーの位置/向きに同期）
 	if ( skinnedObj_ ) {
@@ -627,19 +546,6 @@ void GamePlayScene::UpdateSceneVisuals(){
 		skinnedObj_->SetRotation(rot);
 		skinnedObj_->SetScale(scale);
 		skinnedObj_->Update();
-	}
-
-	if ( sprite_ ) { sprite_->Update(); }
-
-	// SDFボリューム（カメラ追従のCB更新＋エロージョン自動デモ）
-	if ( sdfEggObj_ ) {
-		if ( sdfErodeAuto_ ) {
-			// 溶けて消える(erode→1.0) ⇔ 芯から生える(→0.0) をゆっくり繰り返す
-			sdfErodeTime_ += 1.0f / 60.0f;
-			float w = 0.5f * ( 1.0f - std::cos(sdfErodeTime_ * 1.2f) ); // 0→1→0
-			sdfEggObj_->SetErode(w);
-		}
-		sdfEggObj_->Update();
 	}
 
 	// SDF看板の近接表示：プレイ中はプレイヤー位置を基準に「近づいた時だけ表示」が効く。
@@ -674,16 +580,12 @@ void GamePlayScene::UpdateSceneVisuals(){
 	}
 
 	PostEffect::GetInstance()->Update();
-	for ( auto& block : blocks_ ) { block->Update(); }
 
 	// パーティクル
 	ParticleManager::GetInstance()->Update(camera_.get());
-	if ( input->Triggerkey(DIK_G) ){
-		GPUParticleManager::GetInstance()->Update(1.0f / 60.0f, camera_.get());
-	}
-	emitter_.Update(1.0f / 60.0f);
 
-	if ( blockGroup_ ) { blockGroup_->Update(blocks_); }
+	// 展示物（オーラ・回転キューブ・SDF卵・ブロック群・GPUパーティクル）の見た目更新
+	demo_.UpdateVisuals(input, camera_.get());
 }
 
 
@@ -705,7 +607,7 @@ void GamePlayScene::Draw(){
 
 	// 1. 先に「不透明」なものを全部描き切る！！！
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
-	if ( testObj_ ){ testObj_->Draw(); }
+	demo_.DrawOpaque();                         // 展示物（回転キューブ）
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵
@@ -722,8 +624,8 @@ void GamePlayScene::Draw(){
 
 	EditorManager::GetInstance()->Draw();
 
-	// --- インスタンシングの3D描画 ---
-	if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
+	// --- インスタンシングの3D描画（展示物：ブロック一括）---
+	demo_.DrawInstanced(camera_.get());
 
 	/*if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
@@ -732,22 +634,7 @@ void GamePlayScene::Draw(){
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 	// ⭕️ 3. 最後に「透明・加算合成」のものを描く！！！（順番超大事）
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-	if ( auraCylinderObj_ ) {
-		auraCylinderObj_->Draw();
-	}
-
-	if ( auraObj_ ) {
-		auraObj_->Draw();
-	}
-
-	// --- インスタンシングの3D描画 ---
-	//if ( blockGroup_ ) { blockGroup_->Draw(camera_.get()); }
-
-
-
-	for ( auto& effect : hitEffects_ ) {
-		effect->Draw();
-	}
+	demo_.DrawAdditive(); // 展示物（オーラ2種＋SpaceデモのHitEffect）
 	combat_.Draw(); // 踏みつけ/命中の立体エフェクト
 
 	// --- パーティクル描画 ---
@@ -759,7 +646,7 @@ void GamePlayScene::Draw(){
 
 	// --- SDFボリューム（レイマーチング）---
 	//   専用PSOに切り替えるので、通常のObj3d描画が全部終わった後に描く
-	if ( sdfEggObj_ ) { sdfEggObj_->Draw(commandList); }
+	demo_.DrawSdf(commandList);            // 展示物（SDF卵のエロージョン/モーフデモ）
 	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
 	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
 	swallow_.DrawEatFx(commandList);       // 舌で捕まえた敵がSDFで溶けて消える演出
@@ -836,26 +723,8 @@ void GamePlayScene::DrawDebugUI(){
 
 	TextManager::GetInstance()->DrawDebugUI();
 
-	// SDFボリューム（卵）のエロージョン操作パネル
-	ImGui::Begin("SDF卵 (エロージョン)");
-	if ( sdfEggObj_ && sdfEggObj_->IsLoaded() ) {
-		ImGui::TextDisabled("距離場に足す量で形が痩せる/太る（SDFだけの演出）");
-		ImGui::Checkbox("自動アニメ（溶ける⇔生える）", &sdfErodeAuto_);
-		if ( sdfErodeAuto_ ) {
-			ImGui::TextDisabled("erode: %.2f m", sdfEggObj_->RefErode());
-		} else {
-			ImGui::SliderFloat("erode (m)", &sdfEggObj_->RefErode(), -0.3f, 1.2f);
-		}
-		ImGui::DragFloat3("位置", &sdfEggObj_->RefTranslation().x, 0.1f);
-		ImGui::DragFloat("スケール", &sdfEggObj_->RefScale(), 0.05f, 0.2f, 10.0f);
-		if ( sdfEggObj_->HasMorph() ) {
-			// 距離場のlerpによる連続変形（0=卵 / 1=敵ボール。中間も破綻しない）
-			ImGui::SliderFloat("モーフ (卵→ボール)", &sdfEggObj_->RefMorphT(), 0.0f, 1.0f);
-		}
-	} else {
-		ImGui::TextDisabled("resources/sdf3d/egg.sdf3d が読み込まれていません");
-	}
-	ImGui::End();
+	// 展示物のパネル（SDF卵のエロージョン操作）
+	demo_.DrawImGui();
 
 	// ※ヨッシーHUD（おなか/たまご数・操作説明の仮表示）は一旦削除した。
 	//   本実装のUI（スプライト等）を作る時に復活させる。

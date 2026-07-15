@@ -41,15 +41,12 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
     const float W = ( float ) WindowProc::GetInstance()->GetClientWidth();
     const float H = ( float ) WindowProc::GetInstance()->GetClientHeight();
 
-    // ワールド点 → スクリーン画素（行ベクトル v*VP）。カメラ後方なら false。
-    auto project = [&](const Vector3& w, float& px, float& py) -> bool {
-        const Matrix4x4& vp = camera->GetViewProjectionMatrix();
-        float cw = w.x * vp.m[0][3] + w.y * vp.m[1][3] + w.z * vp.m[2][3] + vp.m[3][3];
-        if ( cw <= 0.0001f ) return false;
-        float sx = ( w.x * vp.m[0][0] + w.y * vp.m[1][0] + w.z * vp.m[2][0] + vp.m[3][0] ) / cw;
-        float sy = ( w.x * vp.m[0][1] + w.y * vp.m[1][1] + w.z * vp.m[2][1] + vp.m[3][1] ) / cw;
-        px = ( sx * 0.5f + 0.5f ) * W;
-        py = ( 1.0f - ( sy * 0.5f + 0.5f ) ) * H;
+    // ワールド点 → スクリーン画素。NDC計算は MatrixMath::WorldToNdc に一本化（カメラ後方なら false）
+    auto project = [&](const Vector3& worldPos, float& px, float& py) -> bool {
+        Vector2 ndc;
+        if ( !WorldToNdc(worldPos, camera->GetViewProjectionMatrix(), ndc) ) return false;
+        px = ( ndc.x * 0.5f + 0.5f ) * W;
+        py = ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * H;
         return true;
         };
 
@@ -111,16 +108,12 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
         DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
     } else {
         // 未ロック：カーソルの画面位置を奥へアンプロジェクトした方向へ投げる（奥に投げ込める）。
+        // NDC→ワールドの逆投影は MatrixMath::NdcToWorld に一本化
         Matrix4x4 invVP = Inverse(camera->GetViewProjectionMatrix());
         float ndcX = cursorX_ / W * 2.0f - 1.0f;
         float ndcY = 1.0f - cursorY_ / H * 2.0f;
-        auto unproj = [&](float z) -> Vector3 {
-            float ow = ndcX * invVP.m[0][3] + ndcY * invVP.m[1][3] + z * invVP.m[2][3] + invVP.m[3][3];
-            return { ( ndcX * invVP.m[0][0] + ndcY * invVP.m[1][0] + z * invVP.m[2][0] + invVP.m[3][0] ) / ow,
-                     ( ndcX * invVP.m[0][1] + ndcY * invVP.m[1][1] + z * invVP.m[2][1] + invVP.m[3][1] ) / ow,
-                     ( ndcX * invVP.m[0][2] + ndcY * invVP.m[1][2] + z * invVP.m[2][2] + invVP.m[3][2] ) / ow };
-            };
-        Vector3 nearP = unproj(0.0f), farP = unproj(1.0f);
+        Vector3 nearP = NdcToWorld(ndcX, ndcY, 0.0f, invVP);
+        Vector3 farP  = NdcToWorld(ndcX, ndcY, 1.0f, invVP);
         Vector3 ray = { farP.x - nearP.x, farP.y - nearP.y, farP.z - nearP.z };
         float rl = Length(ray);
         if ( rl > 1e-4f ) throwDir = { ray.x / rl, ray.y / rl, ray.z / rl };

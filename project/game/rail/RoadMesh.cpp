@@ -7,34 +7,29 @@
 #include "engine/graphics/TextureManager.h"
 #include "engine/graphics/PipelineManager.h"
 #include "engine/utils/EditorManager.h"
+#include "engine/math/VectorMath.h"
 
 #include <cmath>
 #include <algorithm>
 #include <array>
 
+using namespace VectorMath;
+
 namespace {
 
-// --- ベクトル補助（このファイル内だけで使う）---
-inline Vector3 RM_Add(const Vector3& a, const Vector3& b){ return { a.x + b.x, a.y + b.y, a.z + b.z }; }
-inline Vector3 RM_Sub(const Vector3& a, const Vector3& b){ return { a.x - b.x, a.y - b.y, a.z - b.z }; }
-inline Vector3 RM_Scale(const Vector3& a, float s){ return { a.x * s, a.y * s, a.z * s }; }
-inline float   RM_Dot(const Vector3& a, const Vector3& b){ return a.x * b.x + a.y * b.y + a.z * b.z; }
-inline float   RM_Len(const Vector3& v){ return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
-inline Vector3 RM_Normalize(const Vector3& v){
-    float l = RM_Len(v);
-    if ( l < 1e-6f ) return { 0.0f, 1.0f, 0.0f };
-    return { v.x / l, v.y / l, v.z / l };
-}
+// --- ベクトル補助 ---
+//   汎用の加減算/内積/長さ/正規化は VectorMath に一本化した。ここに残すのは
+//   道生成に固有の「水平射影」「左方向」「小数部」の3つだけ
 // 水平（XZ）へ射影して正規化。ほぼ真上/真下なら false
-inline bool RM_Horizontal(const Vector3& v, Vector3& out){
+inline bool ToHorizontal(const Vector3& v, Vector3& out){
     float l = std::sqrt(v.x * v.x + v.z * v.z);
     if ( l < 0.35f ) return false; // 急勾配すぎてジャンクションの水平方向が定まらない
     out = { v.x / l, 0.0f, v.z / l };
     return true;
 }
 // 水平方向 d の「左」（角度ソートのCCWと整合する側）
-inline Vector3 RM_Left(const Vector3& d){ return { -d.z, 0.0f, d.x }; }
-inline float   RM_Frac(float x){ return x - std::floor(x); }
+inline Vector3 LeftOf(const Vector3& d){ return { -d.z, 0.0f, d.x }; }
+inline float   Fract(float x){ return x - std::floor(x); }
 
 // --- 断面プロファイル（設計書 §4 の12頂点。lat=right方向, h=up方向）---
 //   同じ位置でも法線/UVが違う点は別頂点（ハードエッジ）。
@@ -91,7 +86,7 @@ const float kArm         = 1.0f;                  // 掃引コネクタが両側
 
 // マイター交点：N + t*di + w*Li = N + s*dj - w*Lj を XZ で解く（t, s を返す）
 bool SolveMiter(const Vector3& di, const Vector3& dj, float w, float& t, float& s){
-    Vector3 Li = RM_Left(di), Lj = RM_Left(dj);
+    Vector3 Li = LeftOf(di), Lj = LeftOf(dj);
     float bx = -w * ( Li.x + Lj.x );
     float bz = -w * ( Li.z + Lj.z );
     float det = di.x * ( -dj.z ) - ( -dj.x ) * di.z;
@@ -181,7 +176,7 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
 
         for ( float s = kWalkStep; s < len; s += kWalkStep ) {
             SplineRail::RailFrame f = rail.GetFrameAtDistance(s);
-            float c = std::clamp(RM_Dot(prevTan, f.tangent), -1.0f, 1.0f);
+            float c = std::clamp(Dot(prevTan, f.tangent), -1.0f, 1.0f);
             accumAngle += std::acos(c);
             prevTan = f.tangent;
             sinceLast += kWalkStep;
@@ -254,12 +249,12 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
         SplineRail::RailFrame f = rail.GetFrameAtDistance(ring.s);
         for ( int k = 0; k < 12; ++k ) {
             const ProfileV& pv = kProfile[k];
-            Vector3 pos = RM_Add(f.position,
-                RM_Add(RM_Scale(f.right, pv.lat), RM_Scale(f.up, pv.h + kTopOffset)));
+            Vector3 pos = Add(f.position,
+                Add(Multiply(f.right, pv.lat), Multiply(f.up, pv.h + kTopOffset)));
 
             // 内側折返しの溶接：急カーブの内側で「前のリングより後ろ」に来たら前の位置に留める
             if ( !simple && hasPrev &&
-                 RM_Dot({ pos.x - prevPos[k].x, pos.y - prevPos[k].y, pos.z - prevPos[k].z },
+                 Dot({ pos.x - prevPos[k].x, pos.y - prevPos[k].y, pos.z - prevPos[k].z },
                         f.tangent) < 0.0f ) {
                 pos = prevPos[k];
             }
@@ -274,7 +269,7 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
 
             Model::VertexData vert {};
             vert.position = { pos.x, pos.y, pos.z, 1.0f };
-            vert.normal = RM_Normalize(RM_Add(RM_Scale(f.right, pv.nr), RM_Scale(f.up, pv.nu)));
+            vert.normal = Normalize(Add(Multiply(f.right, pv.nr), Multiply(f.up, pv.nu)));
             vert.texcoord = { ring.s * kUvPerMeter, v };
             data.vertices.push_back(vert);
         }
@@ -318,7 +313,7 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
     //   見えて穴と認識できなかった。切り口を暗くすることで「落ちる」と直感できるようにする
     auto emitDarkCap = [&](size_t ringIdx, float facing){
         SplineRail::RailFrame f = rail.GetFrameAtDistance(rings[ringIdx].s);
-        Vector3 nrm = RM_Scale(f.tangent, facing);
+        Vector3 nrm = Multiply(f.tangent, facing);
         uint32_t base = static_cast<uint32_t>( data.vertices.size() );
         for ( int k = 0; k < 6; ++k ) {
             const ProfileV& pv = kProfile[kOutline[k]];
@@ -433,9 +428,9 @@ void RoadMesh::PlaceJointPiece(const std::vector<SplineRail>& rails, int railIdx
 void RoadMesh::PlaceJoints(const std::vector<SplineRail>& rails, const Junction& junc, Camera* camera){
     if ( junc.arms.size() == 2 ) {
         // 2本の溶接：ノード中央に1個。向きは2方向の二等分線
-        Vector3 bi = RM_Add(junc.arms[0].dir, junc.arms[1].dir);
-        if ( RM_Len(bi) < 0.1f ) { bi = RM_Left(junc.arms[0].dir); } // ほぼ一直線→横向き
-        bi = RM_Normalize(bi);
+        Vector3 bi = Add(junc.arms[0].dir, junc.arms[1].dir);
+        if ( Length(bi) < 0.1f ) { bi = LeftOf(junc.arms[0].dir); } // ほぼ一直線→横向き
+        bi = Normalize(bi);
         PlaceJointPiece(rails, junc.followRail, junc.center, std::atan2(bi.x, bi.z), camera);
         return;
     }
@@ -503,16 +498,16 @@ void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Ju
     for ( int i = 0; i < n; ++i ) {
         const Arm& arm = junc.arms[i];
         geo[i].frame = rails[arm.rail].GetFrameAtDistance(arm.cutS);
-        geo[i].leftSign = ( RM_Dot(geo[i].frame.right, RM_Left(arm.dir)) >= 0.0f ) ? 1.0f : -1.0f;
+        geo[i].leftSign = ( Dot(geo[i].frame.right, LeftOf(arm.dir)) >= 0.0f ) ? 1.0f : -1.0f;
     }
 
     // 腕 i の入口断面上の点（lat = 左方向を+とした符号付き幅、h = 断面高さ）
     //   入口はレールの実フレームから取る → 掃引側の入口リングと完全一致（継ぎ目ゼロ）
     auto entryPoint = [&](int i, float lat, float h) -> Vector3{
         const ArmGeo& g = geo[i];
-        return RM_Add(g.frame.position,
-                      RM_Add(RM_Scale(g.frame.right, g.leftSign * lat),
-                             RM_Scale(g.frame.up, h + kTopOffset)));
+        return Add(g.frame.position,
+                      Add(Multiply(g.frame.right, g.leftSign * lat),
+                             Multiply(g.frame.up, h + kTopOffset)));
     };
 
     // ウェッジ (i → j) の境界点列。幅 w・高さ h。mode: 0=マイター / 1=直進 / 2=円弧
@@ -525,8 +520,8 @@ void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Ju
         if ( mode == 0 ) {
             float t = 0.0f, s = 0.0f;
             if ( SolveMiter(junc.arms[i].dir, junc.arms[j].dir, w, t, s) && t > 0.0f && s > 0.0f ) {
-                Vector3 C = RM_Add(N, RM_Add(RM_Scale(junc.arms[i].dir, t),
-                                             RM_Scale(RM_Left(junc.arms[i].dir), w)));
+                Vector3 C = Add(N, Add(Multiply(junc.arms[i].dir, t),
+                                             Multiply(LeftOf(junc.arms[i].dir), w)));
                 path.push_back({ C.x, y, C.z });
             }
         } else if ( mode == 2 ) {
@@ -563,18 +558,18 @@ void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Ju
     // 上面/底面の平面マッピング（アトラスの無地帯へ。REPEATで破綻しないよう帯内でwrap）
     auto topUV = [&](const Vector3& p, float& u, float& v){
         u = ( p.x - N.x ) * kUvPerMeter;
-        v = 0.89f + RM_Frac(( p.z - N.z ) * kUvPerMeter) * 0.09f;
+        v = 0.89f + Fract(( p.z - N.z ) * kUvPerMeter) * 0.09f;
     };
     auto bottomUV = [&](const Vector3& p, float& u, float& v){
         u = ( p.x - N.x ) * kUvPerMeter;
-        v = 0.4727f + RM_Frac(( p.z - N.z ) * kUvPerMeter) * ( 0.5273f - 0.4727f );
+        v = 0.4727f + Fract(( p.z - N.z ) * kUvPerMeter) * ( 0.5273f - 0.4727f );
     };
     // 点pの「外向き水平方向」（ノード中心から離れる向き）
     auto outward = [&](const Vector3& p) -> Vector3{
         Vector3 o = { p.x - N.x, 0.0f, p.z - N.z };
-        float l = RM_Len(o);
+        float l = Length(o);
         if ( l < 1e-4f ) return { 1.0f, 0.0f, 0.0f };
-        return RM_Scale(o, 1.0f / l);
+        return Multiply(o, 1.0f / l);
     };
 
     // 各ウェッジのモードと円弧分割数を先に決める（内外の点列数を一致させるため）
@@ -625,14 +620,14 @@ void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Ju
         float accum = 0.0f;
         std::vector<float> us(cnt, 0.0f);
         for ( size_t m = 1; m < cnt; ++m ) {
-            accum += RM_Len(RM_Sub(pout[m], pout[m - 1]));
+            accum += Length(Subtract(pout[m], pout[m - 1]));
             us[m] = accum * kUvPerMeter;
         }
 
         for ( size_t m = 0; m + 1 < cnt; ++m ) {
             // ベベル（上0.7422 / 下0.7070。法線= 外向き0.64 + 上0.77）
-            Vector3 n0 = RM_Normalize(RM_Add(RM_Scale(outward(pout[m]), 0.64f), Vector3 { 0.0f, 0.77f, 0.0f }));
-            Vector3 n1 = RM_Normalize(RM_Add(RM_Scale(outward(pout[m + 1]), 0.64f), Vector3 { 0.0f, 0.77f, 0.0f }));
+            Vector3 n0 = Normalize(Add(Multiply(outward(pout[m]), 0.64f), Vector3 { 0.0f, 0.77f, 0.0f }));
+            Vector3 n1 = Normalize(Add(Multiply(outward(pout[m + 1]), 0.64f), Vector3 { 0.0f, 0.77f, 0.0f }));
             uint32_t i0 = pushV(pin[m],      n0, us[m],     0.7422f);
             uint32_t i1 = pushV(pin[m + 1],  n1, us[m + 1], 0.7422f);
             uint32_t o0 = pushV(pout[m],     n0, us[m],     0.7070f);
@@ -705,13 +700,13 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
 
             // ノードから出ていく方向（水平射影）
             Vector3 aDirRaw = front ? a.GetTangentByDistance(0.0f)
-                                    : RM_Scale(a.GetTangentByDistance(a.GetLength()), -1.0f);
+                                    : Multiply(a.GetTangentByDistance(a.GetLength()), -1.0f);
             Vector3 bDirRaw = bFront ? b.GetTangentByDistance(0.0f)
-                                     : RM_Scale(b.GetTangentByDistance(b.GetLength()), -1.0f);
+                                     : Multiply(b.GetTangentByDistance(b.GetLength()), -1.0f);
             Vector3 aDir, bDir;
-            if ( !RM_Horizontal(aDirRaw, aDir) || !RM_Horizontal(bDirRaw, bDir) ) continue;
+            if ( !ToHorizontal(aDirRaw, aDir) || !ToHorizontal(bDirRaw, bDir) ) continue;
 
-            float d = RM_Dot(aDir, bDir);
+            float d = Dot(aDir, bDir);
             if ( d <= kStraightDot ) continue; // ほぼ一直線＝突き合わせのままで綺麗
 
             if ( d <= kGentleDot ) {
@@ -770,16 +765,16 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
             Vector3 m1raw = rails[i].GetTangentByDistance(bp.distance);
             bool tFront = bp.targetDist < rails[j].GetLength() * 0.5f;
             Vector3 brRaw = tFront ? rails[j].GetTangentByDistance(0.0f)
-                                   : RM_Scale(rails[j].GetTangentByDistance(rails[j].GetLength()), -1.0f);
+                                   : Multiply(rails[j].GetTangentByDistance(rails[j].GetLength()), -1.0f);
             Vector3 m1, br;
-            if ( !RM_Horizontal(m1raw, m1) || !RM_Horizontal(brRaw, br) ) continue;
-            if ( std::abs(RM_Dot(m1, br)) > 0.985f ) continue; // 支線が本線とほぼ平行→パッチが潰れる
+            if ( !ToHorizontal(m1raw, m1) || !ToHorizontal(brRaw, br) ) continue;
+            if ( std::abs(Dot(m1, br)) > 0.985f ) continue; // 支線が本線とほぼ平行→パッチが潰れる
 
             Junction junc;
             junc.center = rails[i].GetPositionByDistance(bp.distance);
             junc.followRail = i;
             junc.arms.push_back({ i, bp.distance, 0.0f, kTCutMin, true,  m1 });
-            junc.arms.push_back({ i, bp.distance, 0.0f, kTCutMin, false, RM_Scale(m1, -1.0f) });
+            junc.arms.push_back({ i, bp.distance, 0.0f, kTCutMin, false, Multiply(m1, -1.0f) });
             junc.arms.push_back({ j, tFront ? 0.0f : rails[j].GetLength(), 0.0f, kTCutMin, tFront, br });
             juncs.push_back(junc);
         }
@@ -836,7 +831,7 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
                 if ( !inBox(boxes[j], p) ) continue; // 相手の範囲外なら最近点計算もしない
                 float cd = rails[j].GetClosestDistance(p);
                 Vector3 q = rails[j].GetPositionByDistance(cd);
-                if ( RM_Len(RM_Sub(q, p)) > 0.9f ) continue;
+                if ( Length(Subtract(q, p)) > 0.9f ) continue;
 
                 // 端の近くは溶接/分岐の領分（二重配置を防ぐ）
                 if ( s < 1.5f || s > lenI - 1.5f || cd < 1.5f || cd > lenJ - 1.5f ) continue;
@@ -848,16 +843,16 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
                     if ( t < 0.0f || t > lenI ) continue;
                     Vector3 pp = rails[i].GetPositionByDistance(t);
                     float ccd = rails[j].GetClosestDistance(pp);
-                    float dd = RM_Len(RM_Sub(rails[j].GetPositionByDistance(ccd), pp));
+                    float dd = Length(Subtract(rails[j].GetPositionByDistance(ccd), pp));
                     if ( dd < bestD ) { bestD = dd; bestS = t; }
                 }
                 float sC = bestS;
                 float cdC = rails[j].GetClosestDistance(rails[i].GetPositionByDistance(sC));
 
                 Vector3 A1, B1;
-                if ( !RM_Horizontal(rails[i].GetTangentByDistance(sC), A1) ) continue;
-                if ( !RM_Horizontal(rails[j].GetTangentByDistance(cdC), B1) ) continue;
-                if ( std::abs(RM_Dot(A1, B1)) > 0.95f ) continue; // ほぼ平行＝交差にならない
+                if ( !ToHorizontal(rails[i].GetTangentByDistance(sC), A1) ) continue;
+                if ( !ToHorizontal(rails[j].GetTangentByDistance(cdC), B1) ) continue;
+                if ( std::abs(Dot(A1, B1)) > 0.95f ) continue; // ほぼ平行＝交差にならない
 
                 Vector3 pi = rails[i].GetPositionByDistance(sC);
                 Vector3 qj = rails[j].GetPositionByDistance(cdC);
@@ -866,9 +861,9 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
                 junc.center = { ( pi.x + qj.x ) * 0.5f, ( pi.y + qj.y ) * 0.5f, ( pi.z + qj.z ) * 0.5f };
                 junc.followRail = i;
                 junc.arms.push_back({ i, sC,  0.0f, kTCutMin, true,  A1 });
-                junc.arms.push_back({ i, sC,  0.0f, kTCutMin, false, RM_Scale(A1, -1.0f) });
+                junc.arms.push_back({ i, sC,  0.0f, kTCutMin, false, Multiply(A1, -1.0f) });
                 junc.arms.push_back({ j, cdC, 0.0f, kTCutMin, true,  B1 });
-                junc.arms.push_back({ j, cdC, 0.0f, kTCutMin, false, RM_Scale(B1, -1.0f) });
+                junc.arms.push_back({ j, cdC, 0.0f, kTCutMin, false, Multiply(B1, -1.0f) });
                 juncs.push_back(junc);
                 lastPlaced = sC;
             }

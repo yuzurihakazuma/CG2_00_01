@@ -43,4 +43,12 @@ namespace MatrixMath {
 	Matrix4x4 Orthographic(float left, float top, float right, float bottom, float nearClip, float farClip);
 	Matrix4x4 PerspectiveFov(float fovY, float aspectRatio, float nearClip, float farClip);
 	Matrix4x4 Viewport(float left, float top, float width, float height, float minDepth, float maxDepth);
+
+	// ---------------------------------------------
+	// 画面投影（world↔NDC。狙いカーソル・エディタのノード描画など画面系の共通処理）
+	// ---------------------------------------------
+	// ワールド点 → NDC(-1..1)。カメラの後方にある場合は false（行ベクトル・v*VP 規約）
+	bool WorldToNdc(const Vector3& world, const Matrix4x4& viewProj, Vector2& outNdc);
+	// NDC(-1..1, z=0..1) → ワールド点（invViewProj = Inverse(viewProj) を渡す）
+	Vector3 NdcToWorld(float ndcX, float ndcY, float ndcZ, const Matrix4x4& invViewProj);
 }

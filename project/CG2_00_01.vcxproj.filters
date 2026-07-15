@@ -336,6 +336,9 @@
     <ClCompile Include="engine\sdf\SDFVolumeObject.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="game\demo\DemoShowcase.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="game\rail\RoadMesh.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -670,6 +673,9 @@
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="engine\sdf\SDFVolumeObject.h">
+      <Filter>ソース ファイル\ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="game\demo\DemoShowcase.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\rail\RoadMesh.h">

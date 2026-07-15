@@ -1,11 +1,10 @@
 #include "SplineRail.h"
+#include "engine/math/VectorMath.h"
 #include <cmath>
 #include <algorithm>
 
-// --- ベクトルの長さを求める補助関数 ---
-inline float Length(const Vector3& v){
-    return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-}
+// 共通の数学関数（Length/Cross/Dot/Lerp/NormalizeSafe）は VectorMath に一本化した
+using namespace VectorMath;
 
 // ========================================================
 // 追加: 指定したt（進行度）における座標を計算して返す関数
@@ -125,23 +124,7 @@ void SplineRail::BuildDistanceTable(){
     BuildFrameCache();
 }
 
-namespace {
-    // FrameCache 用のベクトル補助（このファイル内だけで使う）
-    inline Vector3 FC_Cross(const Vector3& a, const Vector3& b){
-        return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
-    }
-    inline float FC_Dot(const Vector3& a, const Vector3& b){
-        return a.x * b.x + a.y * b.y + a.z * b.z;
-    }
-    inline Vector3 FC_Normalize(const Vector3& v){
-        float l = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-        if ( l < 1e-6f ) return { 1.0f, 0.0f, 0.0f };
-        return { v.x / l, v.y / l, v.z / l };
-    }
-    inline Vector3 FC_Lerp(const Vector3& a, const Vector3& b, float t){
-        return { a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t };
-    }
-}
+
 
 // FrameCache の構築：0.25m刻みで RMF（平行移動フレーム）を運ぶ。
 //   right(0) = normalize(cross(worldUp, T))
@@ -161,39 +144,39 @@ void SplineRail::BuildFrameCache(){
 
         RailFrame f;
         f.position = GetPositionByDistance(d);
-        f.tangent  = FC_Normalize(GetTangentByDistance(d));
+        f.tangent  = NormalizeSafe(GetTangentByDistance(d), { 1.0f, 0.0f, 0.0f });
         const Vector3& T = f.tangent;
 
         Vector3 r;
         if ( i == 0 ) {
-            r = FC_Cross(worldUp, T);
-            if ( FC_Dot(r, r) < 1e-8f ) { r = FC_Cross({ 0.0f, 0.0f, 1.0f }, T); } // 真上向きの保険
-            r = FC_Normalize(r);
+            r = Cross(worldUp, T);
+            if ( Dot(r, r) < 1e-8f ) { r = Cross({ 0.0f, 0.0f, 1.0f }, T); } // 真上向きの保険
+            r = NormalizeSafe(r, { 1.0f, 0.0f, 0.0f });
         } else {
             // RMF: 前フレームの right を現在の接線に直交化して運ぶ
-            r = { prevRight.x - T.x * FC_Dot(prevRight, T),
-                  prevRight.y - T.y * FC_Dot(prevRight, T),
-                  prevRight.z - T.z * FC_Dot(prevRight, T) };
-            if ( FC_Dot(r, r) < 1e-8f ) {
-                r = FC_Cross(worldUp, T);
-                if ( FC_Dot(r, r) < 1e-8f ) { r = FC_Cross({ 0.0f, 0.0f, 1.0f }, T); }
+            r = { prevRight.x - T.x * Dot(prevRight, T),
+                  prevRight.y - T.y * Dot(prevRight, T),
+                  prevRight.z - T.z * Dot(prevRight, T) };
+            if ( Dot(r, r) < 1e-8f ) {
+                r = Cross(worldUp, T);
+                if ( Dot(r, r) < 1e-8f ) { r = Cross({ 0.0f, 0.0f, 1.0f }, T); }
             }
-            r = FC_Normalize(r);
+            r = NormalizeSafe(r, { 1.0f, 0.0f, 0.0f });
 
             // ロール回復：接線が水平寄りなら理想の right（水平）へ少しずつ戻す
             if ( std::abs(T.y) < 0.7f ) {
-                Vector3 ideal = FC_Cross(worldUp, T);
-                if ( FC_Dot(ideal, ideal) > 1e-8f ) {
-                    ideal = FC_Normalize(ideal);
-                    if ( FC_Dot(ideal, r) < 0.0f ) { ideal = { -ideal.x, -ideal.y, -ideal.z }; } // 反転側へ回復しない
-                    r = FC_Normalize(FC_Lerp(r, ideal, 0.15f));
+                Vector3 ideal = Cross(worldUp, T);
+                if ( Dot(ideal, ideal) > 1e-8f ) {
+                    ideal = NormalizeSafe(ideal, { 1.0f, 0.0f, 0.0f });
+                    if ( Dot(ideal, r) < 0.0f ) { ideal = { -ideal.x, -ideal.y, -ideal.z }; } // 反転側へ回復しない
+                    r = NormalizeSafe(Lerp(r, ideal, 0.15f), { 1.0f, 0.0f, 0.0f });
                 }
             }
         }
         prevRight = r;
 
         f.right = r;
-        f.up = FC_Normalize(FC_Cross(T, r));
+        f.up = NormalizeSafe(Cross(T, r), { 1.0f, 0.0f, 0.0f });
         frameCache_.push_back(f);
     }
 }
@@ -204,11 +187,11 @@ SplineRail::RailFrame SplineRail::GetFrameAtDistance(float distance) const{
         // フォールバック：キャッシュ未構築時は都度計算（RMFなしの簡易フレーム）
         RailFrame f;
         f.position = GetPositionByDistance(distance);
-        f.tangent  = FC_Normalize(GetTangentByDistance(distance));
-        Vector3 r = FC_Cross({ 0.0f, 1.0f, 0.0f }, f.tangent);
-        if ( FC_Dot(r, r) < 1e-8f ) { r = FC_Cross({ 0.0f, 0.0f, 1.0f }, f.tangent); }
-        f.right = FC_Normalize(r);
-        f.up = FC_Normalize(FC_Cross(f.tangent, f.right));
+        f.tangent  = NormalizeSafe(GetTangentByDistance(distance), { 1.0f, 0.0f, 0.0f });
+        Vector3 r = Cross({ 0.0f, 1.0f, 0.0f }, f.tangent);
+        if ( Dot(r, r) < 1e-8f ) { r = Cross({ 0.0f, 0.0f, 1.0f }, f.tangent); }
+        f.right = NormalizeSafe(r, { 1.0f, 0.0f, 0.0f });
+        f.up = NormalizeSafe(Cross(f.tangent, f.right), { 1.0f, 0.0f, 0.0f });
         return f;
     }
 
@@ -220,10 +203,10 @@ SplineRail::RailFrame SplineRail::GetFrameAtDistance(float distance) const{
     const RailFrame& a = frameCache_[i0];
     const RailFrame& b = frameCache_[i0 + 1];
     RailFrame f;
-    f.position = FC_Lerp(a.position, b.position, t);
-    f.tangent  = FC_Normalize(FC_Lerp(a.tangent, b.tangent, t));
-    f.right    = FC_Normalize(FC_Lerp(a.right, b.right, t));
-    f.up       = FC_Normalize(FC_Cross(f.tangent, f.right)); // 補間後も直交を保証
+    f.position = Lerp(a.position, b.position, t);
+    f.tangent  = NormalizeSafe(Lerp(a.tangent, b.tangent, t), { 1.0f, 0.0f, 0.0f });
+    f.right    = NormalizeSafe(Lerp(a.right, b.right, t), { 1.0f, 0.0f, 0.0f });
+    f.up       = NormalizeSafe(Cross(f.tangent, f.right), { 1.0f, 0.0f, 0.0f }); // 補間後も直交を保証
     return f;
 }
 

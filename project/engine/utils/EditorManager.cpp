@@ -430,14 +430,12 @@ void EditorManager::Update(){
             ImVec2 mouse = ImGui::GetMousePos();
             const bool gizmoActive = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
 
-            // world→screen 投影（カメラ後方は false）
-            auto project = [&]( const Vector3& p, ImVec2& out ) -> bool {
-                float cw = p.x * vp.m[0][3] + p.y * vp.m[1][3] + p.z * vp.m[2][3] + vp.m[3][3];
-                if ( cw <= 0.0001f ) return false;
-                float cx = p.x * vp.m[0][0] + p.y * vp.m[1][0] + p.z * vp.m[2][0] + vp.m[3][0];
-                float cy = p.x * vp.m[0][1] + p.y * vp.m[1][1] + p.z * vp.m[2][1] + vp.m[3][1];
-                out.x = imgMin.x + ( cx / cw * 0.5f + 0.5f ) * imgSize.x;
-                out.y = imgMin.y + ( 1.0f - ( cy / cw * 0.5f + 0.5f ) ) * imgSize.y;
+            // world→screen 投影（カメラ後方は false）。NDC計算は MatrixMath::WorldToNdc に一本化
+            auto project = [&]( const Vector3& worldPos, ImVec2& out ) -> bool {
+                Vector2 ndc;
+                if ( !MatrixMath::WorldToNdc(worldPos, vp, ndc) ) return false;
+                out.x = imgMin.x + ( ndc.x * 0.5f + 0.5f ) * imgSize.x;
+                out.y = imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * imgSize.y;
                 return true;
                 };
             // mouse→地面(Y=配置高さ) のワールド点

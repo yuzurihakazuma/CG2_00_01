@@ -15,6 +15,10 @@ namespace VectorMath {
 		return v * scalar;
 	}
 
+	Vector3 Multiply(const Vector3& v, float scalar) {
+		return v * scalar;
+	}
+
 	float Dot(const Vector3& v1, const Vector3& v2) {
 		return (v1.x * v2.x + v1.y * v2.y + v1.z * v2.z);
 	}
@@ -31,12 +35,28 @@ namespace VectorMath {
 		return std::sqrt(Dot(v, v));
 	}
 
+	float LengthSq(const Vector3& v) {
+		return Dot(v, v);
+	}
+
 	Vector3 Normalize(const Vector3& v) {
 		float len = Length(v);
 		if (len != 0.0f) {
 			return v / len;
 		}
 		return v;
+	}
+
+	Vector3 NormalizeSafe(const Vector3& v, const Vector3& fallback) {
+		float len = Length(v);
+		if (len < 1e-6f) {
+			return fallback;
+		}
+		return v / len;
+	}
+
+	Vector3 Lerp(const Vector3& a, const Vector3& b, float t) {
+		return a + (b - a) * t;
 	}
 
 	Vector3 CatmullRom(const Vector3& p0, const Vector3& p1, const Vector3& p2, const Vector3& p3, float t){
