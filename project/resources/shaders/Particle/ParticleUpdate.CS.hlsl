@@ -14,6 +14,13 @@ struct GPUParticleData
 // u0: 読み書き可能なパーティクルバッファ
 RWStructuredBuffer<GPUParticleData> gParticles : register(u0);
 
+// u1: FreeList本体（空きインデックスを積むスタック）
+RWStructuredBuffer<uint> gFreeList : register(u1);
+
+// u2: FreeListの先頭位置（スタックトップ。[0]の1要素だけ使う）
+//     値は「最後の有効要素のインデックス」。-1 なら空きなし。
+RWStructuredBuffer<int> gFreeListIndex : register(u2);
+
 // b0: 更新用定数バッファ
 cbuffer UpdateCB : register(b0)
 {
@@ -35,10 +42,27 @@ void main(uint3 id : SV_DispatchThreadID)
     // 時間を進める
     gParticles[i].currentTime += deltaTime;
 
-    // 寿命を超えたら死亡
+    // 寿命を超えたら死亡 → 自分のインデックスを FreeList に返却（使い回しの核心）
     if (gParticles[i].currentTime >= gParticles[i].lifeTime)
     {
         gParticles[i].alive = 0;
+        gParticles[i].scale = 0.0f; // 念のため見えなくしておく
+
+        // スタックトップを1つ進めて、空いた場所に自分のインデックスを置く。
+        // InterlockedAdd で「加算前の値」を受け取るので、
+        // 複数スレッドが同時に死んでも別々の場所に書き込める。
+        int freeListIndex;
+        InterlockedAdd(gFreeListIndex[0], 1, freeListIndex);
+        if ((freeListIndex + 1) < (int) maxParticles)
+        {
+            gFreeList[freeListIndex + 1] = i;
+        }
+        else
+        {
+            // 理論上ここには来ない（FreeListが最大数を超えることはない）が、
+            // 万一あふれたらカウンターを戻して整合性を保つ
+            InterlockedAdd(gFreeListIndex[0], -1);
+        }
         return;
     }
 

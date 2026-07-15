@@ -38,8 +38,12 @@ public:
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> CreateCustomObject3DPipeline(const std::wstring& psPath);
 
 
-	// Computeパイプラインをセット
+	// Computeパイプラインをセット（Update用）
 	void SetGPUParticleComputePipeline(ID3D12GraphicsCommandList* commandList);
+	// FreeList初期化用Computeパイプラインをセット
+	void SetGPUParticleInitPipeline(ID3D12GraphicsCommandList* commandList);
+	// パーティクル発生用Computeパイプラインをセット
+	void SetGPUParticleEmitPipeline(ID3D12GraphicsCommandList* commandList);
 	// Draw用パイプラインをセット
 	void SetGPUParticleDrawPipeline(ID3D12GraphicsCommandList* commandList);
 
@@ -130,8 +134,11 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> postEffectPipelineStates_[14];
 
 	// GPUパーティクルのComputeシェーダー用の変数
+	// （ルートシグネチャは Init / Emit / Update の3つのCSで共通）
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleComputeRootSignature_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleComputePipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleComputePipelineState_; // Update用
+	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleInitPipelineState_;    // FreeList初期化用
+	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleEmitPipelineState_;    // 発生用
 
 	// GPUパーティクルのDrawシェーダー用の変数
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleDrawRootSignature_;

@@ -374,10 +374,10 @@ void GamePlayScene::Update(){
 
 	PostEffect::GetInstance()->Update();
 
-	if ( input->Triggerkey(DIK_G) ){
-		// GPUパーティクル更新（デルタタイム基準）
-		GPUParticleManager::GetInstance()->Update(Time::GetInstance()->GetDeltaTime(), camera_.get());
-	}
+	// GPUパーティクル更新（毎フレーム）
+	// deltaTime とカメラ行列をCBへ書き込む。寿命が毎フレーム進むことで
+	// 死亡したパーティクルのインデックスが FreeList に返却され、使い回しが機能する
+	GPUParticleManager::GetInstance()->Update(Time::GetInstance()->GetDeltaTime(), camera_.get());
 
 	emitter_.Update(Time::GetInstance()->GetDeltaTime());
 }

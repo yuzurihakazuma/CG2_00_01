@@ -30,6 +30,12 @@ struct GPUParticleUpdateCB{
     float    pad;
 };
 
+// 発生用Computeシェーダーに渡す定数バッファ (ParticleEmit.CS.hlsl の EmitCB)
+struct GPUParticleEmitCB{
+    uint32_t emitCount; // このフレームに発生させる数
+    float    pad[3];
+};
+
 // 描画時にVSに渡すカメラ行列
 struct GPUParticleCameraCB{
     Matrix4x4 view;
@@ -80,6 +86,11 @@ public:
     uint32_t GetMaxParticles() const{ return kMaxParticles; }
     uint32_t GetTotalEmitted() const{ return totalEmitted_; }
 
+    // FreeList の空きスロット数（GPUから読み戻した実測値。1フレーム遅れ）
+    int32_t GetFreeCount() const{
+        return freeListReadbackData_ ? ( *freeListReadbackData_ + 1 ) : 0;
+    }
+
 private:
     GPUParticleManager() = default;
     ~GPUParticleManager() = default;
@@ -87,11 +98,18 @@ private:
     GPUParticleManager& operator=(const GPUParticleManager&) = delete;
 
     void CreateParticleBuffer();   // UAVバッファ作成
+    void CreateFreeListBuffers();  // FreeList用バッファ作成 (gFreeList / gFreeListIndex)
     void CreateConstantBuffers();  // CB作成
     void CreateVertexBuffer();     // 板ポリ作成
 
-    // 発生キューをGPUに転送する (Dispatch内で呼ぶ)
-    void UploadEmitQueue(ID3D12GraphicsCommandList* commandList);
+    // 全Computeシェーダー共通のルートバインド (Dispatch内で使う)
+    void BindComputeRoots(ID3D12GraphicsCommandList* commandList);
+
+    // FreeListの初期化Dispatch (最初のフレームに1回だけ実行)
+    void DispatchInit(ID3D12GraphicsCommandList* commandList);
+
+    // 発生キューをGPUに転送し、Emit CSで FreeList から空きを取り出して発生させる
+    void DispatchEmit(ID3D12GraphicsCommandList* commandList);
 
 private:
     DirectXCommon* dxCommon_ = nullptr;
@@ -102,13 +120,32 @@ private:
     uint32_t uavIndex_ = 0; // Compute時に使うUAVのインデックス
     uint32_t srvIndex_ = 0; // Draw時に使うSRVのインデックス
 
-    // Emit用のUploadバッファ (CPU→GPU転送に使う)
+    // Emit用のUploadバッファ (CPUが発生リクエストを書き、Emit CSが t0 で読む)
     Microsoft::WRL::ComPtr<ID3D12Resource> emitUploadBuffer_;
     GPUParticleData* emitUploadData_ = nullptr; // Mapしたポインタ
+    uint32_t emitRequestSrvIndex_ = 0;          // Emit CSに渡すSRVのインデックス
+
+    // ===== FreeList（パーティクルの使い回し）用バッファ =====
+    // gFreeList: 空きインデックスを積むスタック本体 (uint × kMaxParticles)
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListBuffer_;
+    uint32_t freeListUavIndex_ = 0;
+    // gFreeListIndex: スタックトップ (int × 1)。-1 なら空きなし
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexBuffer_;
+    uint32_t freeListIndexUavIndex_ = 0;
+    // FreeListの初期化Dispatchを実行済みか
+    bool freeListInitialized_ = false;
+
+    // 空きスロット数の読み戻し用 (Readback Heap。デバッグ表示に使う)
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListReadbackBuffer_;
+    int32_t* freeListReadbackData_ = nullptr;
 
     // 定数バッファ
     Microsoft::WRL::ComPtr<ID3D12Resource> updateCBResource_;
     GPUParticleUpdateCB* updateCBData_ = nullptr;
+
+    // 発生用CB (emitCount)
+    Microsoft::WRL::ComPtr<ID3D12Resource> emitCBResource_;
+    GPUParticleEmitCB* emitCBData_ = nullptr;
 
     Microsoft::WRL::ComPtr<ID3D12Resource> cameraCBResource_;
     GPUParticleCameraCB* cameraCBData_ = nullptr;
@@ -127,10 +164,9 @@ private:
     // 1フレームに発生できる最大数
     static constexpr uint32_t kMaxEmitPerFrame = 1000;
 
-    // Emit用 (スロット番号 + データ のペア)
-    struct EmitEntry { uint32_t slot; GPUParticleData data; };
-    std::vector<EmitEntry> emitQueue_;
-    uint32_t nextFreeSlot_ = 0; // 循環インデックス
+    // Emit用の発生リクエストキュー
+    // （書き込み先スロットはCPUでは決めない。GPUのEmit CSが FreeList から取り出す）
+    std::vector<GPUParticleData> emitQueue_;
 
 	// 初期化用バッファ (全パーティクルをalive=0で初期化するための一時バッファ)
     Microsoft::WRL::ComPtr<ID3D12Resource> initBuffer_;
