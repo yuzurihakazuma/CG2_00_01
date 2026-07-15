@@ -22,44 +22,7 @@
         }
     ],
     "name": "",
-    "objects": [
-        {
-            "rotation": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "scale": [
-                1.0,
-                1.0,
-                1.0
-            ],
-            "translation": [
-                12.0,
-                0.0,
-                0.0
-            ],
-            "type": "block"
-        },
-        {
-            "rotation": [
-                0.0,
-                0.0,
-                0.0
-            ],
-            "scale": [
-                1.0,
-                1.0,
-                1.0
-            ],
-            "translation": [
-                8.0,
-                0.0,
-                0.0
-            ],
-            "type": "block"
-        }
-    ],
+    "objects": [],
     "railGroundTypes": [
         0,
         1,

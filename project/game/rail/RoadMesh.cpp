@@ -66,8 +66,11 @@ const float kSlopeIn    = 0.45f;                            // 坂UVに入る |t
 const float kSlopeOut   = 0.35f;                            // 坂UVから抜ける（下側）
 const float kTopOffset  = -0.30f;                           // 断面高さへの加算。上面(0.25)がレールの5cm下に来る
 const float kUvPerMeter = 1.0f / 2.0f;                      // u = 距離 / 2m（ピースとテクスチャ周期を共有）
-const float kWarnLength = 1.0f;                             // 穴の手前後に危険帯を敷く長さ(m)
 const float kSimpleStep = 1.0f;                             // 簡易ビルド（ドラッグ中）のリング間隔(m)
+const float kDarkV      = 0.465f;                           // アトラスの黒帯の中央（穴の奈落フタ用）
+
+// 切り口フタ用：断面の外周をなす6頂点（プロファイル番号。凸六角形）
+const int kOutline[6] = { 0, 1, 3, 5, 7, 9 };
 
 // --- ジャンクション（GUIDE_ジャンクション生成）---
 const float kHalfWidth   = 1.00f;                 // 道の半幅 W
@@ -76,8 +79,11 @@ const float kTopH        = 0.25f;                 // 上面の断面高さ
 const float kBevelH      = 0.15f;                 // ベベル下端の断面高さ
 const float kMiterMargin = 0.15f;                 // マイター交点から入口までの余白
 const float kTCutMin     = 0.35f;                 // t_cut の最低値
-const float kMiterMaxDeg = 175.0f;                // これ未満はマイター
-const float kArcMinDeg   = 185.0f;                // これ超は外周円弧
+const float kTCutMax     = 2.0f;                  // t_cut の絶対上限。角度が175°に近づくとマイター交点距離が
+                                                  // 数学的に爆発する（t=W/tan((180°-φ)/2)）ため、巨大パッチが
+                                                  // 道の下や横にはみ出すのを物理的に止める
+const float kMiterMaxDeg = 165.0f;                // これ未満はマイター（165°〜195°は「ほぼ直進」でパッチ不要）
+const float kArcMinDeg   = 195.0f;                // これ超は外周円弧
 const float kArcStepDeg  = 12.0f;                 // 円弧の刻み
 const float kGentleDot   = -0.866f;               // 2本溶接: dot<=これ(150°以上) → 掃引コネクタ担当
 const float kStraightDot = -0.996f;               // ほぼ一直線: 何もしない（突き合わせ）
@@ -101,7 +107,8 @@ RoadMesh::RoadMesh() = default;
 RoadMesh::~RoadMesh() = default;
 
 // 生成済みメッシュを空きスロットへ書き込む（スロット不足時のみ新規確保）
-void RoadMesh::EmitMesh(const Model::ModelData& data, int followRail, Camera* camera, uint32_t atlasSrv){
+void RoadMesh::EmitMesh(const Model::ModelData& data, int followRail, Camera* camera, uint32_t atlasSrv,
+                        bool isJoint){
     if ( data.vertices.empty() || data.indices.empty() ) return;
 
     if ( slotsUsed_ == slots_.size() ) {
@@ -113,31 +120,42 @@ void RoadMesh::EmitMesh(const Model::ModelData& data, int followRail, Camera* ca
         slot->model->SetTexture(atlasSrv);
         slot->obj = std::make_unique<Obj3d>();
         slot->obj->Initialize(slot->model.get());
-        // カリング無し：巻き順に依存せず、ジャンプ中に下から見上げても道が消えない
-        slot->obj->SetPipelineType(PipelineType::Object3D_CullNone);
         slots_.push_back(std::move(slot));
     }
     MeshSlot& s = *slots_[slotsUsed_++];
     s.model->UpdateMesh(data.vertices, data.indices);
     s.rail = followRail;
+    s.isJoint = isJoint;
+    // カリング無し（既定）：巻き順に依存せず、下から見上げても道が消えない。
+    // 背面カリング（オプション）：オーバードロー削減。UIから即時切替できる
+    s.obj->SetPipelineType(cullNone_ ? PipelineType::Object3D_CullNone : PipelineType::Object3D);
     s.obj->SetCamera(camera);
     s.obj->SetTranslation({ 0.0f, 0.0f, 0.0f });
     s.obj->Update();
 }
 
+// 背面カリングの切替（既存スロットにも即時反映）
+void RoadMesh::SetCullNone(bool cullNone){
+    if ( cullNone_ == cullNone ) return;
+    cullNone_ = cullNone;
+    for ( auto& slot : slots_ ) {
+        slot->obj->SetPipelineType(cullNone_ ? PipelineType::Object3D_CullNone : PipelineType::Object3D);
+    }
+}
+
 // レール1本ぶんの掃引メッシュを生成する
 void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera, uint32_t atlasSrv,
-                             const std::vector<Cut>& cuts, bool simple){
+                             const std::vector<Cut>& cuts, bool simple, bool capFront, bool capBack){
     const float len = rail.GetLength();
 
     const std::vector<SplineRail::HoleInterval> holes =
         simple ? std::vector<SplineRail::HoleInterval>{} : rail.GetHoleIntervals();
 
-    // 距離 s が危険帯（穴の手前後 kWarnLength）か
+    // 距離 s が危険帯（穴の手前後 warnLength_）か
     auto dangerAt = [&](float s) -> bool{
         for ( const auto& h : holes ) {
-            if ( ( s >= h.d0 - kWarnLength && s <= h.d0 + 1e-4f ) ||
-                 ( s >= h.d1 - 1e-4f && s <= h.d1 + kWarnLength ) ) return true;
+            if ( ( s >= h.d0 - warnLength_ && s <= h.d0 + 1e-4f ) ||
+                 ( s >= h.d1 - 1e-4f && s <= h.d1 + warnLength_ ) ) return true;
         }
         return false;
     };
@@ -196,7 +214,7 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
             if ( c.s1 > 0.0f && c.s1 < len ) forced.push_back({ c.s1, false });
         }
         for ( const auto& h : holes ) {
-            float w0 = h.d0 - kWarnLength, w1 = h.d1 + kWarnLength;
+            float w0 = h.d0 - warnLength_, w1 = h.d1 + warnLength_;
             if ( w0 > 0.0f && w0 < len )     forced.push_back({ w0, true });  // 危険帯に入る（v切替）
             if ( h.d0 > 0.0f && h.d0 < len ) forced.push_back({ h.d0, false });
             if ( h.d1 > 0.0f && h.d1 < len ) forced.push_back({ h.d1, false });
@@ -225,6 +243,7 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
     // --- 2. 頂点生成（フレーム×断面プロファイル。内側折返しは前リングへ溶接）---
     Model::ModelData data;
     data.vertices.reserve(rings.size() * 12);
+    std::vector<std::array<Vector3, 12>> ringPos(rings.size()); // 奈落フタ生成用に溶接後の位置を保存
 
     Vector3 prevPos[12] {};
     bool hasPrev = false;
@@ -243,10 +262,11 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
                 pos = prevPos[k];
             }
             prevPos[k] = pos;
+            ringPos[ri][k] = pos;
 
             float v = pv.v;
             if ( k == 4 || k == 5 ) {
-                if ( ring.danger )      { v = kDangerV[k - 4]; } // 危険帯（穴の手前後）が最優先
+                if ( ring.danger )      { v = kDangerV[k - 4]; } // 危険帯（穴の手前後・上面のみ）
                 else if ( ring.slope )  { v = kSlopeV[k - 4]; }  // 坂帯
             }
 
@@ -291,15 +311,94 @@ void RoadMesh::BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera
         }
     }
 
+    // --- 5. 穴の切り口に「奈落フタ」を張る（アトラスの黒帯＝暗色）---
+    //   以前は road_end の丸キャップで塞いでいたが、緑の丸い端が「地面が続いている」ように
+    //   見えて穴と認識できなかった。切り口を暗くすることで「落ちる」と直感できるようにする
+    auto emitDarkCap = [&](size_t ringIdx, float facing){
+        SplineRail::RailFrame f = rail.GetFrameAtDistance(rings[ringIdx].s);
+        Vector3 nrm = RM_Scale(f.tangent, facing);
+        uint32_t base = static_cast<uint32_t>( data.vertices.size() );
+        for ( int k = 0; k < 6; ++k ) {
+            const ProfileV& pv = kProfile[kOutline[k]];
+            Model::VertexData vert {};
+            const Vector3& pos = ringPos[ringIdx][kOutline[k]];
+            vert.position = { pos.x, pos.y, pos.z, 1.0f };
+            vert.normal = nrm;
+            vert.texcoord = { 0.10f + ( pv.lat + 1.0f ) * 0.15f, kDarkV }; // v固定＝黒帯（奈落色）
+            data.vertices.push_back(vert);
+        }
+        for ( uint32_t t = 1; t <= 4; ++t ) {
+            data.indices.push_back(base);
+            data.indices.push_back(base + t);
+            data.indices.push_back(base + t + 1);
+        }
+    };
+    if ( !simple ) {
+        // 穴区間の始まり/終わりのリング（Degenを透過して隣がDrawのところ）にフタ
+        for ( size_t i = 0; i < segs.size(); ++i ) {
+            if ( segs[i] != Seg::Hole ) continue;
+            size_t prev = i;
+            while ( prev > 0 && segs[prev - 1] == Seg::Degen ) { --prev; }
+            if ( prev > 0 && segs[prev - 1] == Seg::Draw ) { emitDarkCap(i, +1.0f); }
+            size_t next = i;
+            while ( next + 1 < segs.size() && segs[next + 1] == Seg::Degen ) { ++next; }
+            if ( next + 1 < segs.size() ? segs[next + 1] == Seg::Draw : false ) { emitDarkCap(i + 1, -1.0f); }
+        }
+        // レールの自由端（未接続の端）にも同じ平らなフタ。
+        //   端の区間が穴/ジャンクション(Cut)なら面が無いのでフタも不要（自動スキップ）
+        if ( capFront && !segs.empty() && segs.front() == Seg::Draw ) {
+            emitDarkCap(0, -1.0f); // 始端：外向き＝-tangent
+        }
+        if ( capBack && !segs.empty() && segs.back() == Seg::Draw ) {
+            emitDarkCap(rings.size() - 1, +1.0f); // 終端：外向き＝+tangent
+        }
+    }
+
     if ( data.vertices.empty() || data.indices.empty() ) return;
     EmitMesh(data, railIdx, camera, atlasSrv);
 }
 
-// ピース（road_end / road_joint）を1個置く。Obj3d はプールを使い回す
+// ピースモデルの頂点を 回転(pitch→yaw)＋平行移動 してベイク先へ焼き込む。
+//   全ピースがアトラス共有なので、1つの動的メッシュにまとめれば合計1ドローコールで済む。
+//   回転は Obj3d の MakeAffine（行ベクトル・Rx→Ry 順）と同じ結果になるよう展開している
+void RoadMesh::AppendPieceBake(Model* model, const Vector3& pos, float yaw, float pitch,
+                               Model::ModelData& out) const{
+    if ( !model ) return;
+    const Model::ModelData& src = model->GetModelData();
+    const float cy = std::cos(yaw),  sy = std::sin(yaw);
+    const float cx = std::cos(pitch), sx = std::sin(pitch);
+    auto rotate = [&](const Vector3& v) -> Vector3{
+        // Rx(pitch): (x, y·c - z·s, y·s + z·c) → Ry(yaw): (x·c + z·s, y, -x·s + z·c)
+        Vector3 a = { v.x, v.y * cx - v.z * sx, v.y * sx + v.z * cx };
+        return { a.x * cy + a.z * sy, a.y, -a.x * sy + a.z * cy };
+    };
+    uint32_t base = static_cast<uint32_t>( out.vertices.size() );
+    for ( const auto& sv : src.vertices ) {
+        Model::VertexData v = sv;
+        Vector3 p = rotate({ sv.position.x, sv.position.y, sv.position.z });
+        v.position = { p.x + pos.x, p.y + pos.y, p.z + pos.z, 1.0f };
+        v.normal = rotate(sv.normal);
+        out.vertices.push_back(v);
+    }
+    for ( uint32_t idx : src.indices ) { out.indices.push_back(base + idx); }
+}
+
+// ピース（road_end / road_joint）を1個置く。
+//   静的レール → ベイク先メッシュへ焼き込み（DC削減。動かないので焼いて問題ない）
+//   動くレール → Obj3d プールを使い回し（animOffset 追従が必要なため個別のまま）
 void RoadMesh::PlacePiece(Model* model, std::vector<std::unique_ptr<PieceSlot>>& pool, size_t& used,
                           int railIdx, const std::vector<SplineRail>& rails,
                           const Vector3& pos, float yaw, float pitch, Camera* camera){
     if ( !model ) return;
+    Vector3 p = { pos.x, pos.y + kTopOffset, pos.z }; // 上面(0.25)がレールの5cm下に来る高さ
+
+    const bool moving = ( railIdx >= 0 && railIdx < ( int ) rails.size() && rails[railIdx].HasMotion() );
+    if ( !moving ) {
+        // 静的：まとめメッシュへベイク（ジョイントは表示切替があるので別メッシュ）
+        AppendPieceBake(model, p, yaw, pitch, ( &pool == &joints_ ) ? bakeJoints_ : bakeCaps_);
+        return;
+    }
+
     if ( used == pool.size() ) {
         auto slot = std::make_unique<PieceSlot>();
         slot->obj = std::make_unique<Obj3d>();
@@ -309,27 +408,13 @@ void RoadMesh::PlacePiece(Model* model, std::vector<std::unique_ptr<PieceSlot>>&
     PieceSlot& s = *pool[used++];
     s.obj->SetModel(model);
     s.obj->SetCamera(camera);
-    Vector3 p = { pos.x, pos.y + kTopOffset, pos.z }; // 上面(0.25)がレールの5cm下に来る高さ
     s.obj->SetScale({ 1.0f, 1.0f, 1.0f });
     s.obj->SetTranslation(p);
     s.obj->SetRotation({ pitch, yaw, 0.0f });
     s.obj->Update();
     s.rail = railIdx;
-    const Vector3& off = ( railIdx >= 0 && railIdx < ( int ) rails.size() )
-                       ? rails[railIdx].animOffset : Vector3 { 0.0f, 0.0f, 0.0f };
+    const Vector3& off = rails[railIdx].animOffset;
     s.base = { p.x - off.x, p.y - off.y, p.z - off.z };
-}
-
-// 終端キャップ（road_end ピース）を p0 から p1 の向きに置く（原点=接続面の下端中央）
-void RoadMesh::PlaceEndCap(Model* model, const std::vector<SplineRail>& rails, int railIdx,
-                           const Vector3& p0, const Vector3& p1, Camera* camera){
-    Vector3 d = RM_Sub(p1, p0);
-    float dl = RM_Len(d);
-    if ( dl < 1e-4f ) return;
-    Vector3 dir = RM_Scale(d, 1.0f / dl);
-    float yaw   = std::atan2(dir.x, dir.z);
-    float pitch = -std::asin(std::clamp(dir.y, -1.0f, 1.0f));
-    PlacePiece(model, pieces_, piecesUsed_, railIdx, rails, p0, yaw, pitch, camera);
 }
 
 // ジョイント（road_joint）を1個置く。railPos はレール高さの位置（道上面+5mm に載せる）
@@ -390,9 +475,11 @@ void RoadMesh::ComputeArmCuts(const std::vector<SplineRail>& rails, Junction& ju
     for ( int i = 0; i < n; ++i ) {
         Arm& arm = junc.arms[i];
         float len = rails[arm.rail].GetLength();
-        // レールが短い場合は入り込みすぎない（反対側の端やノードを越えない）
+        // レールが短い場合は入り込みすぎない（反対側の端やノードを越えない）＋
+        // 絶対上限 kTCutMax で巨大パッチを禁止（ゆるい角度でのマイター爆発対策）
         float avail = arm.forward ? ( len - arm.nodeS ) : arm.nodeS;
-        arm.tCut = std::clamp(tcut[i], kTCutMin, ( std::max )( kTCutMin, avail * 0.45f ));
+        float upper = ( std::min )( kTCutMax, ( std::max )( kTCutMin, avail * 0.45f ) );
+        arm.tCut = std::clamp(tcut[i], kTCutMin, upper);
         arm.cutS = arm.forward ? ( arm.nodeS + arm.tCut ) : ( arm.nodeS - arm.tCut );
 
         float c0 = ( std::min )( arm.nodeS, arm.cutS );
@@ -697,16 +784,54 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
     }
 
     // --- C) 本体×本体の交差（乗り換えポイント）：4方向パッチ ---
+    //   総当たり（レール対 × 0.5m歩き × 最近点計算）は本数×総延長で急激に重くなるため、
+    //   レール毎のAABB（交差しきい値ぶん膨らませたもの）で二段階に間引く：
+    //     1. AABB同士が重ならないレール対は丸ごとスキップ
+    //     2. 歩いている点が相手のAABBの外なら最近点計算をスキップ
+    struct RailBox { Vector3 mn, mx; bool valid = false; };
+    std::vector<RailBox> boxes(n);
+    for ( int i = 0; i < n; ++i ) {
+        if ( !roadUsable(i) || rails[i].HasMotion() ) continue;
+        RailBox& b = boxes[i];
+        b.mn = { 1e30f, 1e30f, 1e30f };
+        b.mx = { -1e30f, -1e30f, -1e30f };
+        float len = rails[i].GetLength();
+        for ( float s = 0.0f; ; s += 1.0f ) {
+            Vector3 p = rails[i].GetPositionByDistance(( std::min )( s, len ));
+            b.mn.x = ( std::min )( b.mn.x, p.x ); b.mx.x = ( std::max )( b.mx.x, p.x );
+            b.mn.y = ( std::min )( b.mn.y, p.y ); b.mx.y = ( std::max )( b.mx.y, p.y );
+            b.mn.z = ( std::min )( b.mn.z, p.z ); b.mx.z = ( std::max )( b.mx.z, p.z );
+            if ( s >= len ) break;
+        }
+        const float kInflate = 1.0f; // 交差しきい値0.9m＋余白
+        b.mn.x -= kInflate; b.mn.y -= kInflate; b.mn.z -= kInflate;
+        b.mx.x += kInflate; b.mx.y += kInflate; b.mx.z += kInflate;
+        b.valid = true;
+    }
+    auto boxOverlap = [](const RailBox& a, const RailBox& b) -> bool{
+        return a.mn.x <= b.mx.x && a.mx.x >= b.mn.x &&
+               a.mn.y <= b.mx.y && a.mx.y >= b.mn.y &&
+               a.mn.z <= b.mx.z && a.mx.z >= b.mn.z;
+    };
+    auto inBox = [](const RailBox& b, const Vector3& p) -> bool{
+        return p.x >= b.mn.x && p.x <= b.mx.x &&
+               p.y >= b.mn.y && p.y <= b.mx.y &&
+               p.z >= b.mn.z && p.z <= b.mx.z;
+    };
+
     for ( int i = 0; i < n; ++i ) {
         if ( !roadUsable(i) ) continue;
         for ( int j = i + 1; j < n; ++j ) {
             if ( !roadUsable(j) ) continue;
             if ( rails[i].HasMotion() || rails[j].HasMotion() ) continue; // 動くレール同士の交差は追従できない
+            if ( !boxes[i].valid || !boxes[j].valid ) continue;
+            if ( !boxOverlap(boxes[i], boxes[j]) ) continue; // 遠いレール対は歩かずスキップ
 
             float lenI = rails[i].GetLength(), lenJ = rails[j].GetLength();
             float lastPlaced = -1e9f;
             for ( float s = 0.0f; s <= lenI; s += 0.5f ) {
                 Vector3 p = rails[i].GetPositionByDistance(s);
+                if ( !inBox(boxes[j], p) ) continue; // 相手の範囲外なら最近点計算もしない
                 float cd = rails[j].GetClosestDistance(p);
                 Vector3 q = rails[j].GetPositionByDistance(cd);
                 if ( RM_Len(RM_Sub(q, p)) > 0.9f ) continue;
@@ -761,10 +886,12 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera, bool 
     slotsUsed_ = 0;
     piecesUsed_ = 0;
     jointsUsed_ = 0;
+    // 静的ピースのまとめメッシュ（容量は使い回す＝clearのみでヒープ再確保しない）
+    bakeCaps_.vertices.clear();  bakeCaps_.indices.clear();
+    bakeJoints_.vertices.clear(); bakeJoints_.indices.clear();
 
     // アトラス（GamePlayScene::LoadResources で先読み済み＝ここではキャッシュが返るだけ）
     uint32_t atlasSrv = TextureManager::GetInstance()->Load("resources/road/road_atlas.png").srvIndex;
-    Model* endModel = ModelManager::GetInstance()->FindModel("roadEnd");
 
     const int n = static_cast<int>( rails.size() );
     auto roadUsable = [&](int idx) -> bool{
@@ -779,62 +906,25 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera, bool 
     for ( int railIdx = 0; railIdx < n; ++railIdx ) {
         if ( !roadUsable(railIdx) ) continue;
         const SplineRail& rail = rails[railIdx];
-        float len = rail.GetLength();
+
+        // 自由端（未接続 or 相手が道なしレール）はフタが必要。
+        //   ※丸い road_end モデルの配置は廃止：端だけ形が変わって違和感が出るため、
+        //     穴の切り口と同じ「平らな暗色フタ」で統一する（BuildRailMesh 内で生成。
+        //     端がジャンクションや穴に食われている場合は自動でスキップされる）
+        bool capFront = false, capBack = false;
+        if ( !simple && !rail.isLoop ) {
+            capFront = ( rail.frontConnIndex < 0 || !roadUsable(rail.frontConnIndex) );
+            capBack  = ( rail.backConnIndex < 0  || !roadUsable(rail.backConnIndex) );
+        }
 
         // 掃引メッシュ本体（ジャンクションの切り詰め範囲は張らない）
-        BuildRailMesh(rail, railIdx, camera, atlasSrv, cuts[railIdx], simple);
+        BuildRailMesh(rail, railIdx, camera, atlasSrv, cuts[railIdx], simple, capFront, capBack);
+    }
 
-        if ( simple ) continue; // 簡易ビルドはキャップ類を省略（マウスアップ後の本生成で付く）
-
-        const std::vector<SplineRail::HoleInterval> holes = rail.GetHoleIntervals();
-        auto endInCut = [&](float s) -> bool{
-            for ( const Cut& c : cuts[railIdx] ) {
-                if ( s >= c.s0 - 0.01f && s <= c.s1 + 0.01f ) return true;
-            }
-            return false;
-        };
-        auto endInHole = [&](float s) -> bool{
-            for ( const auto& h : holes ) {
-                if ( s >= h.d0 - 0.01f && s <= h.d1 + 0.01f ) return true;
-            }
-            return false;
-        };
-
-        // --- 穴の両端に road_end を自動配置（仕様書_穴区間 §2-2）---
-        //   手前側(d0)は +tangent 向き / 奥側(d1)は -tangent 向き（開口が道側を向く）
-        if ( endModel ) {
-            for ( const auto& h : holes ) {
-                if ( h.d0 > 0.05f && !endInCut(h.d0) ) {
-                    SplineRail::RailFrame f = rail.GetFrameAtDistance(h.d0);
-                    PlaceEndCap(endModel, rails, railIdx, f.position, RM_Add(f.position, f.tangent), camera);
-                }
-                if ( h.d1 < len - 0.05f && !endInCut(h.d1) ) {
-                    SplineRail::RailFrame f = rail.GetFrameAtDistance(h.d1);
-                    PlaceEndCap(endModel, rails, railIdx, f.position, RM_Sub(f.position, f.tangent), camera);
-                }
-            }
-        }
-
-        // --- 終端キャップ：非ループの「自由端」だけに置く ---
-        //   溶接済みの端は隣の道と繋がるのでキャップ不要。ただし相手が「道なし」レールなら
-        //   実質自由端なのでキャップを付ける（§4）。穴に食われた端にも付けない
-        if ( !rail.isLoop && endModel ) {
-            const float kProbe = ( std::min )( 1.0f, len * 0.5f );
-            bool backFree  = ( rail.backConnIndex < 0 || !roadUsable(rail.backConnIndex) );
-            bool frontFree = ( rail.frontConnIndex < 0 || !roadUsable(rail.frontConnIndex) );
-            if ( backFree && !endInCut(len) && !endInHole(len) ) {
-                Vector3 e1  = rail.GetPositionByDistance(len);
-                Vector3 e1b = rail.GetPositionByDistance(len - kProbe);
-                PlaceEndCap(endModel, rails, railIdx, e1,
-                    { e1.x * 2.0f - e1b.x, e1.y * 2.0f - e1b.y, e1.z * 2.0f - e1b.z }, camera);
-            }
-            if ( frontFree && !endInCut(0.0f) && !endInHole(0.0f) ) {
-                Vector3 e0  = rail.GetPositionByDistance(0.0f);
-                Vector3 e0b = rail.GetPositionByDistance(kProbe);
-                PlaceEndCap(endModel, rails, railIdx, e0,
-                    { e0.x * 2.0f - e0b.x, e0.y * 2.0f - e0b.y, e0.z * 2.0f - e0b.z }, camera);
-            }
-        }
+    // 静的レールのピース（キャップ/ジョイント）をそれぞれ1メッシュにまとめて出す（DC削減）
+    if ( !simple ) {
+        EmitMesh(bakeCaps_,   -1, camera, atlasSrv, false);
+        EmitMesh(bakeJoints_, -1, camera, atlasSrv, true);
     }
 
     // 余ったスロットは空メッシュにして描かない（バッファは保持＝次の編集で使い回す）
@@ -871,12 +961,16 @@ void RoadMesh::Update(const std::vector<SplineRail>& rails){
 
 void RoadMesh::Draw() const{
     if ( !visible_ ) return;
-    for ( size_t k = 0; k < slotsUsed_; ++k )  { slots_[k]->obj->Draw(); }
-    for ( size_t k = 0; k < piecesUsed_; ++k ) { pieces_[k]->obj->Draw(); }
 
     // ジョイントは表示モードに従う（0=エディタのみ / 1=常に / 2=非表示）
     bool showJoints = ( jointVisible_ == 1 ) ||
                       ( jointVisible_ == 0 && EditorManager::GetInstance()->GetMode() == EngineMode::Edit );
+
+    for ( size_t k = 0; k < slotsUsed_; ++k ) {
+        if ( slots_[k]->isJoint && !showJoints ) continue; // ジョイントのまとめメッシュ
+        slots_[k]->obj->Draw();
+    }
+    for ( size_t k = 0; k < piecesUsed_; ++k ) { pieces_[k]->obj->Draw(); }
     if ( showJoints ) {
         for ( size_t k = 0; k < jointsUsed_; ++k ) { joints_[k]->obj->Draw(); }
     }

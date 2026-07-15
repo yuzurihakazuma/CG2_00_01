@@ -119,6 +119,9 @@ public: // メンバ関数
 
 	Material* GetMaterial(){ return materialData_; }
 
+	// CPU側モデルデータの参照（RoadMesh のピースベイク等、頂点を焼き込む用途）
+	const ModelData& GetModelData() const{ return modelData_; }
+
 	const Node& GetRootNode() const { return modelData_.rootNode; }
 
 	const std::map<std::string, Matrix4x4>& GetInverseBindPoseMap() const {

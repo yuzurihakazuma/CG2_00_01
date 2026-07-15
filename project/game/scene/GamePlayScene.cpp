@@ -774,6 +774,34 @@ void GamePlayScene::DrawDebugUI(){
 	ImGui::Text("マーカー数: %d", railField_.MarkerCount());
 	if ( ImGui::Button("マーカー再構築") ) { railField_.RebuildMarkers(); }
 
+	// --- 道の設定（危険帯の長さ／両面描画／再生成）---
+	ImGui::Separator();
+	ImGui::TextDisabled("道の設定:");
+	{
+		bool roadVisible = roadMesh_.IsVisible();
+		if ( ImGui::Checkbox("道を表示", &roadVisible) ) { roadMesh_.SetVisible(roadVisible); }
+
+		bool cullNone = roadMesh_.IsCullNone();
+		if ( ImGui::Checkbox("両面描画（OFF=背面カリングで軽量化）", &cullNone) ) {
+			roadMesh_.SetCullNone(cullNone); // 即時反映（再生成不要）
+		}
+
+		float warn = roadMesh_.GetWarnLength();
+		ImGui::SetNextItemWidth(160.0f);
+		if ( ImGui::SliderFloat("危険帯の長さ(m)", &warn, 0.5f, 5.0f, "%.1f") ) {
+			roadMesh_.SetWarnLength(warn);
+		}
+		// スライダーを離した時に道を作り直して反映（ドラッグ中の連続再生成はしない）
+		if ( ImGui::IsItemDeactivatedAfterEdit() ) {
+			roadMesh_.Build(railField_.GetRails(), camera_.get());
+		}
+		ImGui::SameLine();
+		if ( ImGui::Button("道を再生成") ) {
+			roadMesh_.Build(railField_.GetRails(), camera_.get());
+		}
+		ImGui::Text("道メッシュ/ピース数: %d", roadMesh_.TileCount());
+	}
+
 	// --- カメラ視点プリセット（レールを編集しやすく）---
 	ImGui::Separator();
 	ImGui::TextDisabled("カメラ視点プリセット:");

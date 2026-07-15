@@ -45,6 +45,15 @@ public:
     // ジョイント（road_joint）の表示：0=エディタのみ / 1=常に / 2=非表示
     void SetJointVisible(int mode){ jointVisible_ = mode; }
 
+    // 穴の警告帯（赤ストライプ）を敷く長さ(m)。変更後は Build で反映
+    void  SetWarnLength(float m){ warnLength_ = m; }
+    float GetWarnLength() const{ return warnLength_; }
+
+    // 背面カリングの切替（true=両面描画・従来 / false=背面カリングでオーバードロー削減）。
+    // 既存スロットにも即時反映される（再生成不要）
+    void SetCullNone(bool cullNone);
+    bool IsCullNone() const{ return cullNone_; }
+
 private:
     // 掃引をスキップする区間（ジャンクションパッチに譲る範囲）
     struct Cut { float s0, s1; };
@@ -69,6 +78,7 @@ private:
         std::unique_ptr<Model> model;
         std::unique_ptr<Obj3d> obj;
         int rail = -1;
+        bool isJoint = false; // ジョイントのベイクメッシュ（表示モードで描画を切替）
     };
     // --- ピース（road_end / road_joint）スロット。Obj3d を使い回す ---
     struct PieceSlot {
@@ -78,7 +88,13 @@ private:
     };
 
     // 生成済みメッシュを空きスロットへ書き込む（スロットが足りなければ1個だけ確保）
-    void EmitMesh(const Model::ModelData& data, int followRail, Camera* camera, uint32_t atlasSrv);
+    void EmitMesh(const Model::ModelData& data, int followRail, Camera* camera, uint32_t atlasSrv,
+                  bool isJoint = false);
+
+    // ピースモデルを回転+平行移動してベイク先メッシュへ焼き込む（静的レール用のDC削減。
+    // 全ピースがアトラス共有なので、1つの動的メッシュにまとめて1ドローコールで描ける）
+    void AppendPieceBake(Model* model, const Vector3& pos, float yaw, float pitch,
+                         Model::ModelData& out) const;
 
     // ジャンクション検出（溶接/T字/十字）＋パッチ生成＋切り詰め範囲の登録
     void CollectJunctions(const std::vector<SplineRail>& rails, Camera* camera, uint32_t atlasSrv,
@@ -92,18 +108,16 @@ private:
     void BuildJunctionPatch(const std::vector<SplineRail>& rails, const Junction& junc,
                             Camera* camera, uint32_t atlasSrv);
 
-    // レール1本ぶんの掃引メッシュを生成する（cuts の区間は張らない）
+    // レール1本ぶんの掃引メッシュを生成する（cuts の区間は張らない）。
+    //   capFront/capBack: 自由端に平らな暗色フタを張る（丸い road_end の代わり）
     void BuildRailMesh(const SplineRail& rail, int railIdx, Camera* camera, uint32_t atlasSrv,
-                       const std::vector<Cut>& cuts, bool simple);
+                       const std::vector<Cut>& cuts, bool simple,
+                       bool capFront = false, bool capBack = false);
 
     // ピース（road_end / road_joint）を1個置く
     void PlacePiece(Model* model, std::vector<std::unique_ptr<PieceSlot>>& pool, size_t& used,
                     int railIdx, const std::vector<SplineRail>& rails,
                     const Vector3& pos, float yaw, float pitch, Camera* camera);
-
-    // 終端キャップ（road_end）を p0 から p1 の向きで置く
-    void PlaceEndCap(Model* model, const std::vector<SplineRail>& rails, int railIdx,
-                     const Vector3& p0, const Vector3& p1, Camera* camera);
 
     // ジャンクションのジョイント（road_joint）配置
     void PlaceJoints(const std::vector<SplineRail>& rails, const Junction& junc, Camera* camera);
@@ -122,4 +136,11 @@ private:
 
     bool visible_ = true;
     int  jointVisible_ = 1; // 0=エディタのみ / 1=常に / 2=非表示
+
+    float warnLength_ = 1.0f; // 穴の手前後に危険帯（赤ストライプ・上面のみ）を敷く長さ(m)
+    bool  cullNone_   = true; // true=両面描画（従来） / false=背面カリング
+
+    // 静的レールのピースをまとめるベイク先（Build 中だけ使い、最後に EmitMesh する）
+    Model::ModelData bakeCaps_;   // 終端キャップ（road_end）
+    Model::ModelData bakeJoints_; // ジョイント（road_joint）
 };
