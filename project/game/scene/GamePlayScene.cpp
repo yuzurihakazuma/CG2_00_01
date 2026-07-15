@@ -72,27 +72,27 @@ void GamePlayScene::LoadResources(){
 	AudioManager::GetInstance()->LoadWave("resources/se/eggBreak.wav");
 
 	// モデル
-	ModelManager* model = ModelManager::GetInstance();
-	model->LoadModel("fence", "resources", "fence.obj");
-	model->LoadModel("grass", "resources", "terrain.obj");
-	model->LoadModel("block", "resources/block", "block.obj");
-	model->CreateSphereModel("sphere", 16);
-	model->CreatePlaneModel("plane");
-	model->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
-	model->LoadModel("human", "resources/human", "walk.gltf");
-	model->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
-	model->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
-	model->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
-	model->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
-	model->LoadModel("roadT",        "resources/road", "road_t.obj");        // 交差点ピース：T字路
-	model->LoadModel("roadCross",    "resources/road", "road_cross.obj");    // 交差点ピース：十字路
-	model->LoadModel("roadJoint",    "resources/road", "road_joint.obj");    // 接続ノードの凸ジョイント（プラレール風）
-	model->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
+	ModelManager* modelManager = ModelManager::GetInstance();
+	modelManager->LoadModel("fence", "resources", "fence.obj");
+	modelManager->LoadModel("grass", "resources", "terrain.obj");
+	modelManager->LoadModel("block", "resources/block", "block.obj");
+	modelManager->CreateSphereModel("sphere", 16);
+	modelManager->CreatePlaneModel("plane");
+	modelManager->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
+	modelManager->LoadModel("human", "resources/human", "walk.gltf");
+	modelManager->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
+	modelManager->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
+	modelManager->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
+	modelManager->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
+	modelManager->LoadModel("roadT",        "resources/road", "road_t.obj");        // 交差点ピース：T字路
+	modelManager->LoadModel("roadCross",    "resources/road", "road_cross.obj");    // 交差点ピース：十字路
+	modelManager->LoadModel("roadJoint",    "resources/road", "road_joint.obj");    // 接続ノードの凸ジョイント（プラレール風）
+	modelManager->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
 
 	// 汎用パーティクル用の粒（"sphere" は敵と共有＋モンスターボール柄がデフォルトなので、
 	//   色を付けるだけの粒には専用の白い球を使う。これも手作りモデル＋既存の白テクスチャだけで完結）。
-	model->CreateSphereModel("fxSphere", 8);
-	if ( auto* fxModel = model->FindModel("fxSphere") ) {
+	modelManager->CreateSphereModel("fxSphere", 8);
+	if ( auto* fxModel = modelManager->FindModel("fxSphere") ) {
 		fxModel->SetTexture("resources/block/white1x1.png");
 	}
 
@@ -102,19 +102,19 @@ void GamePlayScene::LoadResources(){
 	//    EggSystem 側で実体(Obj3d)の小球として描画する（StompEffect と同じ確実に見える方式）。
 
 	// テクスチャ（短縮版 Load：commandList を渡さなくてよい）
-	TextureManager* tex = TextureManager::GetInstance();
-	textures_["uvChecker"]     = tex->Load("resources/uvChecker.png");
-	textures_["monsterBall"]   = tex->Load("resources/monsterBall.png");
-	textures_["fence"]         = tex->Load("resources/fence.png");
-	textures_["circle"]        = tex->Load("resources/circle.png");
-	textures_["circle2"]       = tex->Load("resources/circle2.png");
-	textures_["noise0"]        = tex->Load("Resources/noise0.png");
-	textures_["noise1"]        = tex->Load("Resources/noise1.png");
-	textures_["gradationLine"] = tex->Load("Resources/gradationLine.png");
+	TextureManager* textureManager = TextureManager::GetInstance();
+	textures_["uvChecker"]     = textureManager->Load("resources/uvChecker.png");
+	textures_["monsterBall"]   = textureManager->Load("resources/monsterBall.png");
+	textures_["fence"]         = textureManager->Load("resources/fence.png");
+	textures_["circle"]        = textureManager->Load("resources/circle.png");
+	textures_["circle2"]       = textureManager->Load("resources/circle2.png");
+	textures_["noise0"]        = textureManager->Load("Resources/noise0.png");
+	textures_["noise1"]        = textureManager->Load("Resources/noise1.png");
+	textures_["gradationLine"] = textureManager->Load("Resources/gradationLine.png");
 	// 道アトラスの先読み：RoadMesh はレール編集のたび（=フレーム途中）に参照するので、
 	// ここでキャッシュに載せておく（実行中のテクスチャ読み込みはデバッグレイヤーが嫌うため）
-	textures_["roadAtlas"]     = tex->Load("resources/road/road_atlas.png");
-	textures_["skybox"]        = tex->LoadCube("resources/StandardCubeMap.dds");
+	textures_["roadAtlas"]     = textureManager->Load("resources/road/road_atlas.png");
+	textures_["skybox"]        = textureManager->LoadCube("resources/StandardCubeMap.dds");
 
 	// Skybox
 	Obj3dCommon::GetInstance()->SetEnvironmentTexture(textures_["skybox"].srvIndex);
@@ -177,13 +177,13 @@ void GamePlayScene::SetupGameplay(){
 	eggHudSlots_.clear();
 	bellyHudIcons_.clear();
 	for ( int i = 0; i < EggSystem::kMaxEggs; ++i ) {
-		auto s = Sprite::Create(textures_["circle2"].srvIndex, { 36.0f + i * 42.0f, 34.0f });
-		s->SetSize({ 32.0f, 32.0f });
-		eggHudSlots_.push_back(std::move(s));
+		auto slotSprite = Sprite::Create(textures_["circle2"].srvIndex, { 36.0f + i * 42.0f, 34.0f });
+		slotSprite->SetSize({ 32.0f, 32.0f });
+		eggHudSlots_.push_back(std::move(slotSprite));
 
-		auto b = Sprite::Create(textures_["circle2"].srvIndex, { 36.0f + i * 42.0f, 72.0f });
-		b->SetSize({ 16.0f, 16.0f });
-		bellyHudIcons_.push_back(std::move(b));
+		auto bellyIcon = Sprite::Create(textures_["circle2"].srvIndex, { 36.0f + i * 42.0f, 72.0f });
+		bellyIcon->SetSize({ 16.0f, 16.0f });
+		bellyHudIcons_.push_back(std::move(bellyIcon));
 	}
 
 	// 卵保持数の数字（SDFText。アイコン列の右に「×N（＋お腹）」。小さくてもフチ付きで潰れない）
@@ -212,14 +212,14 @@ void GamePlayScene::SetupGameplay(){
 	//   ノードグラフから接続すると、プレイ中の挙動をリアルタイムに動かせる。
 	//   ※ポインタ登録なので、シーン終了時（Finalize）に必ず解除する。
 	{
-		EditorManager* em = EditorManager::GetInstance();
-		em->ClearNodeGameValues(); // シーン再初期化時の二重登録防止
-		em->RegisterNodeGameValue("プレイヤー移動速度",   player_->MoveSpeedPtr(),  0.5f, 20.0f);
-		em->RegisterNodeGameValue("ジャンプ力",           player_->JumpPowerPtr(),  1.0f, 20.0f);
-		em->RegisterNodeGameValue("卵の投げ初速",         aimThrow_.ThrowSpeedNormalPtr(), 1.0f, 40.0f);
-		em->RegisterNodeGameValue("ロックオン投げ初速",   aimThrow_.ThrowSpeedLockPtr(),   1.0f, 60.0f);
-		em->RegisterNodeGameValue("飲み込みの届く距離",   swallow_.SwallowReachPtr(), 0.5f, 10.0f);
-		em->RegisterNodeGameValue("飲み込みクールタイム", swallow_.SwallowCooldownPtr(), 0.0f, 2.0f);
+		EditorManager* editorManager = EditorManager::GetInstance();
+		editorManager->ClearNodeGameValues(); // シーン再初期化時の二重登録防止
+		editorManager->RegisterNodeGameValue("プレイヤー移動速度",   player_->MoveSpeedPtr(),  0.5f, 20.0f);
+		editorManager->RegisterNodeGameValue("ジャンプ力",           player_->JumpPowerPtr(),  1.0f, 20.0f);
+		editorManager->RegisterNodeGameValue("卵の投げ初速",         aimThrow_.ThrowSpeedNormalPtr(), 1.0f, 40.0f);
+		editorManager->RegisterNodeGameValue("ロックオン投げ初速",   aimThrow_.ThrowSpeedLockPtr(),   1.0f, 60.0f);
+		editorManager->RegisterNodeGameValue("飲み込みの届く距離",   swallow_.SwallowReachPtr(), 0.5f, 10.0f);
+		editorManager->RegisterNodeGameValue("飲み込みクールタイム", swallow_.SwallowCooldownPtr(), 0.0f, 2.0f);
 	}
 
 	// レール可視化用モデル（通常=緑 / 穴=赤 の2モデル。マテリアルはモデル単位で共有のため別モデルが必要）
@@ -258,11 +258,11 @@ void GamePlayScene::SyncRailsFromEditor(bool simple){
 	std::vector<char>    oldEnemyValid;
 	if ( enemyEditor_ && !mapLoadPending ) {
 		const auto& oldRails = railField_.GetRails();
-		for ( const auto& s : enemyEditor_->GetSpawnDatas() ) {
-			bool ok = ( s.railIndex >= 0 && s.railIndex < ( int ) oldRails.size()
-			            && oldRails[s.railIndex].nodes.size() >= 2 );
-			oldEnemyValid.push_back(ok ? 1 : 0);
-			oldEnemyPos.push_back(ok ? oldRails[s.railIndex].GetPositionByDistance(s.distance)
+		for ( const auto& spawnData : enemyEditor_->GetSpawnDatas() ) {
+			bool railValid = ( spawnData.railIndex >= 0 && spawnData.railIndex < ( int ) oldRails.size()
+			            && oldRails[spawnData.railIndex].nodes.size() >= 2 );
+			oldEnemyValid.push_back(railValid ? 1 : 0);
+			oldEnemyPos.push_back(railValid ? oldRails[spawnData.railIndex].GetPositionByDistance(spawnData.distance)
 			                         : Vector3 { 0.0f, 0.0f, 0.0f });
 		}
 	}
@@ -273,19 +273,19 @@ void GamePlayScene::SyncRailsFromEditor(bool simple){
 	// --- 敵のピン留め：編集後のレール上で「元のワールド位置の最寄り点」へ距離を張り直す ---
 	//   路線まるごと移動なら一緒に付いていき、形の部分編集なら他の敵は動かない。
 	if ( enemyEditor_ && !mapLoadPending ) {
-		auto& datas = enemyEditor_->MutableSpawnDatas();
+		auto& spawnDatas = enemyEditor_->MutableSpawnDatas();
 		const auto& newRails = railField_.GetRails();
-		for ( size_t i = 0; i < datas.size() && i < oldEnemyValid.size(); ++i ) {
+		for ( size_t i = 0; i < spawnDatas.size() && i < oldEnemyValid.size(); ++i ) {
 			if ( !oldEnemyValid[i] ) continue;
-			auto& s = datas[i];
-			if ( s.railIndex < 0 || s.railIndex >= ( int ) newRails.size() ) continue;
-			if ( newRails[s.railIndex].nodes.size() < 2 ) continue;
-			s.distance = newRails[s.railIndex].GetClosestDistance(oldEnemyPos[i]);
+			auto& spawnData = spawnDatas[i];
+			if ( spawnData.railIndex < 0 || spawnData.railIndex >= ( int ) newRails.size() ) continue;
+			if ( newRails[spawnData.railIndex].nodes.size() < 2 ) continue;
+			spawnData.distance = newRails[spawnData.railIndex].GetClosestDistance(oldEnemyPos[i]);
 		}
 		// マップ保存用データにも張り直した距離を反映（保存した時に位置がズレないように）
 		std::vector<LevelEnemyData> save;
-		for ( const auto& s : datas ) {
-			save.push_back({ static_cast<int>( s.type ), s.railIndex, s.distance, s.patrol ? 1 : 0 });
+		for ( const auto& spawnData : spawnDatas ) {
+			save.push_back({ static_cast<int>( spawnData.type ), spawnData.railIndex, spawnData.distance, spawnData.patrol ? 1 : 0 });
 		}
 		EditorManager::GetInstance()->SetEditorEnemyData(save);
 	}
@@ -327,13 +327,13 @@ void GamePlayScene::Update(){
 
 // エディタ側の編集（レール／敵配置／Blenderカメラ要求）を検知してシーンへ反映する。
 void GamePlayScene::SyncFromEditors(){
-	EditorManager* em = EditorManager::GetInstance();
+	EditorManager* editorManager = EditorManager::GetInstance();
 
 	// レールのライブ同期：エディタで編集されたら緑線とプレイヤー用データを作り直す。
 	//   ドラッグ中は「最大10回/秒の軽量同期」に間引き、マウスアップ後に本同期を1回行う（§1）
 	{
-		const bool dragging = em->IsRailDragging();
-		const bool changed = ( em->GetRailEditVersion() != railField_.Version() );
+		const bool dragging = editorManager->IsRailDragging();
+		const bool changed = ( editorManager->GetRailEditVersion() != railField_.Version() );
 		railSyncTimer_ += 1.0f / 60.0f;
 		if ( changed && dragging ) {
 			if ( railSyncTimer_ >= 0.1f ) { // 10Hz
@@ -351,17 +351,17 @@ void GamePlayScene::SyncFromEditors(){
 
 	// マップが読み込まれたら、保存済みの敵配置をエディタへ復元する
 	if ( enemyEditor_ ) {
-		int mlv = em->GetMapLoadVersion();
-		if ( mlv != lastMapLoadVersion_ ) {
-			lastMapLoadVersion_ = mlv;
-			const auto& saved = em->GetEditorEnemyData();
+		int mapLoadVersion = editorManager->GetMapLoadVersion();
+		if ( mapLoadVersion != lastMapLoadVersion_ ) {
+			lastMapLoadVersion_ = mapLoadVersion;
+			const auto& saved = editorManager->GetEditorEnemyData();
 			// マップに敵データがある時だけ復元。無い時は今の配置を保持（リリースでも最低1体出す）。
 			if ( !saved.empty() ) {
-				std::vector<EnemySpawnData> datas;
-				for ( const auto& e : saved ) {
-					datas.push_back({ static_cast<EnemyType>( e.type ), e.railIndex, e.distance, e.patrol != 0 });
+				std::vector<EnemySpawnData> spawnDatas;
+				for ( const auto& enemyData : saved ) {
+					spawnDatas.push_back({ static_cast<EnemyType>( enemyData.type ), enemyData.railIndex, enemyData.distance, enemyData.patrol != 0 });
 				}
-				enemyEditor_->SetSpawnDatas(datas); // changed_ が立つ → 下で SpawnEnemies される
+				enemyEditor_->SetSpawnDatas(spawnDatas); // changed_ が立つ → 下で SpawnEnemies される
 			}
 		}
 	}
@@ -369,28 +369,28 @@ void GamePlayScene::SyncFromEditors(){
 	// 敵配置エディタで追加・削除・編集があったら即リスポーン＆保存用データへ反映
 	if ( enemyEditor_ && enemyEditor_->ConsumeChanged() ) {
 		std::vector<LevelEnemyData> save;
-		for ( const auto& s : enemyEditor_->GetSpawnDatas() ) {
-			save.push_back({ static_cast<int>( s.type ), s.railIndex, s.distance, s.patrol ? 1 : 0 });
+		for ( const auto& spawnData : enemyEditor_->GetSpawnDatas() ) {
+			save.push_back({ static_cast<int>( spawnData.type ), spawnData.railIndex, spawnData.distance, spawnData.patrol ? 1 : 0 });
 		}
-		em->SetEditorEnemyData(save);
+		editorManager->SetEditorEnemyData(save);
 		SpawnEnemies();
 	}
 
 	// Blenderインポータからの「カメラに適用」要求を反映
-	if ( BlenderImporter* importer = em->GetBlenderImporter() ) {
-		Vector3 blCamPos, blCamRot;
-		if ( importer->ConsumeCameraRequest(blCamPos, blCamRot) ) {
-			camera_->SetTranslation(blCamPos);
-			camera_->SetRotation(blCamRot);
+	if ( BlenderImporter* importer = editorManager->GetBlenderImporter() ) {
+		Vector3 blenderCamPos, blenderCamRot;
+		if ( importer->ConsumeCameraRequest(blenderCamPos, blenderCamRot) ) {
+			camera_->SetTranslation(blenderCamPos);
+			camera_->SetRotation(blenderCamRot);
 		}
 	}
 
 	// カメラエディタからの「この画角をプレビュー」要求を反映（メインカメラをその画角へ）
-	if ( em->GetLevelEditor() ) {
-		Vector3 pvPos, pvRot;
-		if ( em->GetLevelEditor()->GetRailEditor()->ConsumeCameraPreviewRequest(pvPos, pvRot) ) {
-			camera_->SetTranslation(pvPos);
-			camera_->SetRotation(pvRot);
+	if ( editorManager->GetLevelEditor() ) {
+		Vector3 previewPos, previewRot;
+		if ( editorManager->GetLevelEditor()->GetRailEditor()->ConsumeCameraPreviewRequest(previewPos, previewRot) ) {
+			camera_->SetTranslation(previewPos);
+			camera_->SetRotation(previewRot);
 		}
 	}
 }
@@ -433,19 +433,19 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 // プレイ中（時間が動いている時）のゲーム進行。
 void GamePlayScene::UpdatePlayMode(){
 	Input* input = Input::GetInstance();
-	float dt = Time::GetInstance()->GetDeltaTime();
+	float deltaTime = Time::GetInstance()->GetDeltaTime();
 
 	// 動くレール → プレイヤー → 敵 の順で更新（位置の整合のため）
-	railField_.UpdateMotion(dt);
+	railField_.UpdateMotion(deltaTime);
 	if ( player_ ) {
 		// カメラの向きを渡す：向き切替（180°回り込み等）の後も「Dで画面の右へ」進めるように、
 		// プレイヤー側でキー→ワールド方向の割り当てを回す
 		player_->SetCameraYaw(camera_->GetRotation().y);
 		player_->Update(railField_.GetRails());
 	}
-	Vector3 ppos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
+	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
 	// 敵の移動＋吸い込みTick。吸い込み完了 → お腹に+1（口元で緑がふわっと）
-	enemyMgr_.Update(railField_.GetRails(), ppos, dt, [&](const Vector3& pos){
+	enemyMgr_.Update(railField_.GetRails(), playerPos, deltaTime, [&](const Vector3& pos){
 		eggSystem_.AddToBelly();
 		eggSystem_.SpawnSwallowFx(pos);
 	});
@@ -453,18 +453,18 @@ void GamePlayScene::UpdatePlayMode(){
 	// 当たり判定＋踏みつけ
 	combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get());
 
-	// E=舌を伸ばして捕まえる / 左Ctrl=産卵（SwallowAbility へ分離。dt はクールタイム・舌アニメ用）
-	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get(), dt);
+	// E=舌を伸ばして捕まえる / 左Ctrl=産卵（SwallowAbility へ分離。deltaTime はクールタイム・舌アニメ用）
+	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get(), deltaTime);
 
 	// Q長押しで構え→矢印で狙う→離して投げる（AimThrowController へ分離）
-	aimThrow_.Update(*player_, enemyMgr_, eggSystem_, camera_.get(), dt);
+	aimThrow_.Update(*player_, enemyMgr_, eggSystem_, camera_.get(), deltaTime);
 
 	// 卵の追従・飛行・割れの更新
 	if ( player_ ) {
-		Vector3 ppos2 = player_->GetPosition();
+		Vector3 currentPlayerPos = player_->GetPosition();
 		float yaw = player_->GetRotation().y;
 		Vector3 facing = { std::sin(yaw), 0.0f, std::cos(yaw) };
-		eggSystem_.Update(ppos2, facing, dt);
+		eggSystem_.Update(currentPlayerPos, facing, deltaTime);
 	}
 
 	// ゴール判定＋ゴールマーカー（StageFlow へ分離）
@@ -473,7 +473,7 @@ void GamePlayScene::UpdatePlayMode(){
 	// プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン）
 	if ( player_ ) {
 		camCtrl_.Update(camera_.get(), player_->GetPosition(), railField_.GetRails(),
-			debugCamera_ && debugCamera_->IsActive(), dt);
+			debugCamera_ && debugCamera_->IsActive(), deltaTime);
 		hitFeel_.NotifyCameraOverridden(); // カメラ位置を上書きしたのでシェイクの自己相殺をリセット
 	}
 
@@ -486,8 +486,8 @@ void GamePlayScene::UpdatePlayMode(){
 		if ( skinnedAnimTime_ > skinnedAnimTrack_.duration ) { skinnedAnimTime_ = 0.0f; }
 	}
 
-	// エフェクトの更新（stompEffect は timeScale 適用 dt → ヒットストップで一緒に止まる）
-	combat_.UpdateEffects(dt); // 踏みつけ/命中の立体エフェクト
+	// エフェクトの更新（stompEffect は timeScale 適用 deltaTime → ヒットストップで一緒に止まる）
+	combat_.UpdateEffects(deltaTime); // 踏みつけ/命中の立体エフェクト
 }
 
 
@@ -503,8 +503,8 @@ void GamePlayScene::UpdateSceneVisuals(){
 	//   デバッグカメラを動かした時に敵が古い行列のまま描かれ、画面に貼り付いて付いてくる。
 	//   dt=0 で呼ぶのでパトロール等の移動は起きない（位置はレール上の現在距離のまま）。
 	if ( currentMode != EngineMode::Play ) {
-		Vector3 pp = player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f };
-		enemyMgr_.Update(railField_.GetRails(), pp, 0.0f, nullptr);
+		Vector3 playerPos = player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f };
+		enemyMgr_.Update(railField_.GetRails(), playerPos, 0.0f, nullptr);
 	}
 
 	// カメラ演出ゾーンの可視化（球=発動範囲 / 白い箱=カメラ位置の目安。編集中も見える）
@@ -532,13 +532,13 @@ void GamePlayScene::UpdateSceneVisuals(){
 			// Editモード：スタート地点のレール上に立たせて表示（スポーンプレビュー）。
 			//   起動直後から「どこから始まるか」が一目で分かる。レール編集にも毎フレーム追従する。
 			const auto& rails = railField_.GetRails();
-			int sr = railField_.GetStartRail();
-			if ( sr >= 0 && sr < ( int ) rails.size() && rails[sr].nodes.size() >= 2 ) {
-				float sd = railField_.GetStartDistance();
-				pos = rails[sr].GetPositionByDistance(sd);
-				Vector3 tan = rails[sr].GetTangentByDistance(sd);
-				if ( std::abs(tan.x) > 1e-4f || std::abs(tan.z) > 1e-4f ) {
-					rot.y = std::atan2(tan.x, tan.z); // レールの進行方向を向かせる
+			int startRail = railField_.GetStartRail();
+			if ( startRail >= 0 && startRail < ( int ) rails.size() && rails[startRail].nodes.size() >= 2 ) {
+				float startDistance = railField_.GetStartDistance();
+				pos = rails[startRail].GetPositionByDistance(startDistance);
+				Vector3 tangent = rails[startRail].GetTangentByDistance(startDistance);
+				if ( std::abs(tangent.x) > 1e-4f || std::abs(tangent.z) > 1e-4f ) {
+					rot.y = std::atan2(tangent.x, tangent.z); // レールの進行方向を向かせる
 				}
 			}
 		}
@@ -573,9 +573,9 @@ void GamePlayScene::UpdateSceneVisuals(){
 		}
 		// 数字表示：「×保持数」＋お腹にいる分は「（＋n）」
 		if ( eggCountText_ ) {
-			std::string s = "×" + std::to_string(held);
-			if ( belly > 0 ) { s += "（＋" + std::to_string(belly) + "）"; }
-			eggCountText_->SetText(s);
+			std::string countText = "×" + std::to_string(held);
+			if ( belly > 0 ) { countText += "（＋" + std::to_string(belly) + "）"; }
+			eggCountText_->SetText(countText);
 		}
 	}
 
@@ -696,8 +696,8 @@ void GamePlayScene::Draw(){
 
 	// 卵保持数HUD（プレイ中のみ。エディット中は編集の邪魔になるので出さない）
 	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Play ) {
-		for ( auto& s : eggHudSlots_ )   { s->Draw(); }
-		for ( auto& s : bellyHudIcons_ ) { s->Draw(); }
+		for ( auto& slotSprite : eggHudSlots_ )   { slotSprite->Draw(); }
+		for ( auto& bellyIcon : bellyHudIcons_ ) { bellyIcon->Draw(); }
 		// 保持数の数字（SDFText。スプライトと同じターゲットへ描く）
 		if ( eggCountText_ ) {
 			SDFManager::GetInstance()->DrawTextItem(commandList, *eggCountText_, "jpdot");
@@ -756,10 +756,10 @@ void GamePlayScene::DrawDebugUI(){
 			roadMesh_.SetCullNone(cullNone); // 即時反映（再生成不要）
 		}
 
-		float warn = roadMesh_.GetWarnLength();
+		float warnLength = roadMesh_.GetWarnLength();
 		ImGui::SetNextItemWidth(160.0f);
-		if ( ImGui::SliderFloat("危険帯の長さ(m)", &warn, 0.5f, 5.0f, "%.1f") ) {
-			roadMesh_.SetWarnLength(warn);
+		if ( ImGui::SliderFloat("危険帯の長さ(m)", &warnLength, 0.5f, 5.0f, "%.1f") ) {
+			roadMesh_.SetWarnLength(warnLength);
 		}
 		// スライダーを離した時に道を作り直して反映（ドラッグ中の連続再生成はしない）
 		if ( ImGui::IsItemDeactivatedAfterEdit() ) {
@@ -778,25 +778,25 @@ void GamePlayScene::DrawDebugUI(){
 	ImGui::TextDisabled("カメラ視点プリセット:");
 	if ( ImGui::Button("トップビュー（真上から）") && camera_ ) {
 		// レール全体のXZ範囲を求めて、真上から全体が収まる高さに置く
-		bool has = false;
+		bool hasBounds = false;
 		float minx = 0, maxx = 0, miny = 0, maxy = 0, minz = 0, maxz = 0;
 		for ( const auto& rail : railField_.GetRails() ) {
-			for ( const auto& n : rail.nodes ) {
-				if ( !has ) { minx = maxx = n.x; miny = maxy = n.y; minz = maxz = n.z; has = true; } else {
-					if ( n.x < minx ) minx = n.x; if ( n.x > maxx ) maxx = n.x;
-					if ( n.y < miny ) miny = n.y; if ( n.y > maxy ) maxy = n.y;
-					if ( n.z < minz ) minz = n.z; if ( n.z > maxz ) maxz = n.z;
+			for ( const auto& node : rail.nodes ) {
+				if ( !hasBounds ) { minx = maxx = node.x; miny = maxy = node.y; minz = maxz = node.z; hasBounds = true; } else {
+					if ( node.x < minx ) minx = node.x; if ( node.x > maxx ) maxx = node.x;
+					if ( node.y < miny ) miny = node.y; if ( node.y > maxy ) maxy = node.y;
+					if ( node.z < minz ) minz = node.z; if ( node.z > maxz ) maxz = node.z;
 				}
 			}
 		}
-		float cx = 0, cy = 0, cz = 0, ext = 10.0f;
-		if ( has ) {
-			cx = ( minx + maxx ) * 0.5f; cy = ( miny + maxy ) * 0.5f; cz = ( minz + maxz ) * 0.5f;
-			float ex = maxx - minx, ez = maxz - minz;
-			ext = ( ex > ez ) ? ex : ez;
+		float centerX = 0, centerY = 0, centerZ = 0, extent = 10.0f;
+		if ( hasBounds ) {
+			centerX = ( minx + maxx ) * 0.5f; centerY = ( miny + maxy ) * 0.5f; centerZ = ( minz + maxz ) * 0.5f;
+			float extentX = maxx - minx, extentZ = maxz - minz;
+			extent = ( extentX > extentZ ) ? extentX : extentZ;
 		}
-		float dist = ext * 1.5f + 8.0f; // 全体が画面に収まる高さ（足りなければホイールでズーム）
-		camera_->SetTranslation({ cx, cy + dist, cz });
+		float cameraHeight = extent * 1.5f + 8.0f; // 全体が画面に収まる高さ（足りなければホイールでズーム）
+		camera_->SetTranslation({ centerX, centerY + cameraHeight, centerZ });
 		camera_->SetRotation({ 1.5707964f, 0.0f, 0.0f }); // pitch 90°=真下を向く（X=右, Z=上）
 	}
 	ImGui::SameLine();

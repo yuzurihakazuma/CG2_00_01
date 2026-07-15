@@ -16,10 +16,10 @@ void Egg::Update(float dt){
     case EggState::Held: {
         // 生まれた所(プレイヤー付近)から目標スロットへ滑らかに寄る＝「生まれて後ろに並ぶ＆追従」。
         //   状態を分けず、毎フレーム目標へイージングで近づくだけ（生まれた直後も移動中も同じ処理）。
-        float k = ( std::min )( 8.0f * dt, 1.0f ); // ()でwindows.hのminマクロ展開を防ぐ
-        pos_.x += ( target_.x - pos_.x ) * k;
-        pos_.y += ( target_.y - pos_.y ) * k;
-        pos_.z += ( target_.z - pos_.z ) * k;
+        float easeFactor = ( std::min )( 8.0f * dt, 1.0f ); // ()でwindows.hのminマクロ展開を防ぐ
+        pos_.x += ( target_.x - pos_.x ) * easeFactor;
+        pos_.y += ( target_.y - pos_.y ) * easeFactor;
+        pos_.z += ( target_.z - pos_.z ) * easeFactor;
         break;
     }
     case EggState::Flying:
@@ -49,9 +49,9 @@ void Egg::Update(float dt){
     if ( obj_ ) {
         // 生まれた直後は小さく→通常サイズへ膨らむ（ポンッと出る演出）
         float born = 1.0f - ( bornTimer_ / 0.25f ); // 0→1
-        float s = 0.3f + 0.7f * std::clamp(born, 0.0f, 1.0f);
+        float growScale = 0.3f + 0.7f * std::clamp(born, 0.0f, 1.0f);
         obj_->SetTranslation(pos_);
-        obj_->SetScale({ baseScale_.x * s, baseScale_.y * s, baseScale_.z * s });
+        obj_->SetScale({ baseScale_.x * growScale, baseScale_.y * growScale, baseScale_.z * growScale });
         obj_->SetRotation({ 0.0f, spinAngle_, 0.0f });
         obj_->Update();
     }

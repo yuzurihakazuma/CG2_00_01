@@ -68,17 +68,17 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
     auto findCatchable = [&]() -> Enemy* {
         Enemy* found = nullptr;
         float bestDist = swallowReach_; // 舌の届く範囲（ノードエディタから調整可）
-        for ( auto& e : enemies.GetEnemies() ) {
-            if ( !e->IsAlive() ) continue;
-            Vector3 to = e->GetPosition() - playerPos;
-            float d = Length(to);
-            if ( d >= bestDist ) continue;
+        for ( auto& enemy : enemies.GetEnemies() ) {
+            if ( !enemy->IsAlive() ) continue;
+            Vector3 toEnemy = enemy->GetPosition() - playerPos;
+            float distance = Length(toEnemy);
+            if ( distance >= bestDist ) continue;
 
             // 前方チェック：水平方向の内積で「ほぼ横〜後ろ」を弾く（cos≒0.2 → 前方約±78°）
-            float horiz = std::sqrt(to.x * to.x + to.z * to.z);
-            if ( horiz > 1e-4f && ( to.x * facing.x + to.z * facing.z ) / horiz < 0.2f ) continue;
+            float horizontalDist = std::sqrt(toEnemy.x * toEnemy.x + toEnemy.z * toEnemy.z);
+            if ( horizontalDist > 1e-4f && ( toEnemy.x * facing.x + toEnemy.z * facing.z ) / horizontalDist < 0.2f ) continue;
 
-            bestDist = d; found = e.get();
+            bestDist = distance; found = enemy.get();
         }
         return found;
         };
@@ -222,9 +222,9 @@ void SwallowAbility::UpdateTongueMesh(const Vector3& mouth, const Vector3& tip, 
     Vector3 dir = tip - mouth;
     float len = Length(dir);
     if ( len < 1e-4f ) {
-        static const std::vector<Model::VertexData> kEmptyV;
-        static const std::vector<uint32_t> kEmptyI;
-        tongueModel_->UpdateMesh(kEmptyV, kEmptyI);
+        static const std::vector<Model::VertexData> kEmptyVertices;
+        static const std::vector<uint32_t> kEmptyIndices;
+        tongueModel_->UpdateMesh(kEmptyVertices, kEmptyIndices);
     } else {
         dir = dir / len;
 
@@ -235,28 +235,28 @@ void SwallowAbility::UpdateTongueMesh(const Vector3& mouth, const Vector3& tip, 
         right = Normalize(right);
         Vector3 up = Normalize(Cross(dir, right));
 
-        Model::ModelData data;
-        auto quad = [&](const Vector3& widthAxis, const Vector3& n){
-            uint32_t base = static_cast<uint32_t>( data.vertices.size() );
+        Model::ModelData meshData;
+        auto quad = [&](const Vector3& widthAxis, const Vector3& normal){
+            uint32_t base = static_cast<uint32_t>( meshData.vertices.size() );
             Vector3 corners[4] = {
                 mouth - widthAxis * kTongueHalfWidth, mouth + widthAxis * kTongueHalfWidth,
                 tip   + widthAxis * kTongueHalfWidth, tip   - widthAxis * kTongueHalfWidth,
             };
             const Vector2 uv[4] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
             for ( int k = 0; k < 4; ++k ) {
-                Model::VertexData v {};
-                v.position = { corners[k].x, corners[k].y, corners[k].z, 1.0f };
-                v.normal = n;
-                v.texcoord = uv[k];
-                data.vertices.push_back(v);
+                Model::VertexData vertex {};
+                vertex.position = { corners[k].x, corners[k].y, corners[k].z, 1.0f };
+                vertex.normal = normal;
+                vertex.texcoord = uv[k];
+                meshData.vertices.push_back(vertex);
             }
-            data.indices.push_back(base); data.indices.push_back(base + 1); data.indices.push_back(base + 2);
-            data.indices.push_back(base); data.indices.push_back(base + 2); data.indices.push_back(base + 3);
+            meshData.indices.push_back(base); meshData.indices.push_back(base + 1); meshData.indices.push_back(base + 2);
+            meshData.indices.push_back(base); meshData.indices.push_back(base + 2); meshData.indices.push_back(base + 3);
         };
         quad(right, up); // 縦リボン
         quad(up, right); // 横リボン（2枚で十字断面 → どの角度から見ても線に見えない）
 
-        tongueModel_->UpdateMesh(data.vertices, data.indices);
+        tongueModel_->UpdateMesh(meshData.vertices, meshData.indices);
     }
 
     tongueObj_->SetCamera(camera);

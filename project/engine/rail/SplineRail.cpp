@@ -80,10 +80,10 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
 //   ※どうしても縦にしたい/横にしたい時はエディタの 横/縦 ボタンで手動指定できる
 void SplineRail::AutoDetectType(){
     if ( nodes.size() < 2 ) { type = RailType::Horizontal; return; }
-    float dx = nodes.back().x - nodes.front().x;
-    float dz = nodes.back().z - nodes.front().z;
+    float deltaX = nodes.back().x - nodes.front().x;
+    float deltaZ = nodes.back().z - nodes.front().z;
     const float kVerticalBias = 1.5f; // 縦判定に必要な Z/X 比
-    type = ( std::abs(dz) > std::abs(dx) * kVerticalBias ) ? RailType::Vertical : RailType::Horizontal;
+    type = ( std::abs(deltaZ) > std::abs(deltaX) * kVerticalBias ) ? RailType::Vertical : RailType::Horizontal;
 }
 
 // ① レールの長さを計測してテーブルを作る
@@ -140,44 +140,44 @@ void SplineRail::BuildFrameCache(){
 
     Vector3 prevRight { 1.0f, 0.0f, 0.0f };
     for ( int i = 0; i < count; ++i ) {
-        float d = ( std::min )( i * kFrameStep, totalLength_ );
+        float frameDistance = ( std::min )( i * kFrameStep, totalLength_ );
 
-        RailFrame f;
-        f.position = GetPositionByDistance(d);
-        f.tangent  = NormalizeSafe(GetTangentByDistance(d), { 1.0f, 0.0f, 0.0f });
-        const Vector3& T = f.tangent;
+        RailFrame frame;
+        frame.position = GetPositionByDistance(frameDistance);
+        frame.tangent  = NormalizeSafe(GetTangentByDistance(frameDistance), { 1.0f, 0.0f, 0.0f });
+        const Vector3& T = frame.tangent;
 
-        Vector3 r;
+        Vector3 right;
         if ( i == 0 ) {
-            r = Cross(worldUp, T);
-            if ( Dot(r, r) < 1e-8f ) { r = Cross({ 0.0f, 0.0f, 1.0f }, T); } // 真上向きの保険
-            r = NormalizeSafe(r, { 1.0f, 0.0f, 0.0f });
+            right = Cross(worldUp, T);
+            if ( Dot(right, right) < 1e-8f ) { right = Cross({ 0.0f, 0.0f, 1.0f }, T); } // 真上向きの保険
+            right = NormalizeSafe(right, { 1.0f, 0.0f, 0.0f });
         } else {
             // RMF: 前フレームの right を現在の接線に直交化して運ぶ
-            r = { prevRight.x - T.x * Dot(prevRight, T),
+            right = { prevRight.x - T.x * Dot(prevRight, T),
                   prevRight.y - T.y * Dot(prevRight, T),
                   prevRight.z - T.z * Dot(prevRight, T) };
-            if ( Dot(r, r) < 1e-8f ) {
-                r = Cross(worldUp, T);
-                if ( Dot(r, r) < 1e-8f ) { r = Cross({ 0.0f, 0.0f, 1.0f }, T); }
+            if ( Dot(right, right) < 1e-8f ) {
+                right = Cross(worldUp, T);
+                if ( Dot(right, right) < 1e-8f ) { right = Cross({ 0.0f, 0.0f, 1.0f }, T); }
             }
-            r = NormalizeSafe(r, { 1.0f, 0.0f, 0.0f });
+            right = NormalizeSafe(right, { 1.0f, 0.0f, 0.0f });
 
             // ロール回復：接線が水平寄りなら理想の right（水平）へ少しずつ戻す
             if ( std::abs(T.y) < 0.7f ) {
                 Vector3 ideal = Cross(worldUp, T);
                 if ( Dot(ideal, ideal) > 1e-8f ) {
                     ideal = NormalizeSafe(ideal, { 1.0f, 0.0f, 0.0f });
-                    if ( Dot(ideal, r) < 0.0f ) { ideal = { -ideal.x, -ideal.y, -ideal.z }; } // 反転側へ回復しない
-                    r = NormalizeSafe(Lerp(r, ideal, 0.15f), { 1.0f, 0.0f, 0.0f });
+                    if ( Dot(ideal, right) < 0.0f ) { ideal = { -ideal.x, -ideal.y, -ideal.z }; } // 反転側へ回復しない
+                    right = NormalizeSafe(Lerp(right, ideal, 0.15f), { 1.0f, 0.0f, 0.0f });
                 }
             }
         }
-        prevRight = r;
+        prevRight = right;
 
-        f.right = r;
-        f.up = NormalizeSafe(Cross(T, r), { 1.0f, 0.0f, 0.0f });
-        frameCache_.push_back(f);
+        frame.right = right;
+        frame.up = NormalizeSafe(Cross(T, right), { 1.0f, 0.0f, 0.0f });
+        frameCache_.push_back(frame);
     }
 }
 
@@ -185,29 +185,29 @@ void SplineRail::BuildFrameCache(){
 SplineRail::RailFrame SplineRail::GetFrameAtDistance(float distance) const{
     if ( frameCache_.size() < 2 ) {
         // フォールバック：キャッシュ未構築時は都度計算（RMFなしの簡易フレーム）
-        RailFrame f;
-        f.position = GetPositionByDistance(distance);
-        f.tangent  = NormalizeSafe(GetTangentByDistance(distance), { 1.0f, 0.0f, 0.0f });
-        Vector3 r = Cross({ 0.0f, 1.0f, 0.0f }, f.tangent);
-        if ( Dot(r, r) < 1e-8f ) { r = Cross({ 0.0f, 0.0f, 1.0f }, f.tangent); }
-        f.right = NormalizeSafe(r, { 1.0f, 0.0f, 0.0f });
-        f.up = NormalizeSafe(Cross(f.tangent, f.right), { 1.0f, 0.0f, 0.0f });
-        return f;
+        RailFrame fallbackFrame;
+        fallbackFrame.position = GetPositionByDistance(distance);
+        fallbackFrame.tangent  = NormalizeSafe(GetTangentByDistance(distance), { 1.0f, 0.0f, 0.0f });
+        Vector3 right = Cross({ 0.0f, 1.0f, 0.0f }, fallbackFrame.tangent);
+        if ( Dot(right, right) < 1e-8f ) { right = Cross({ 0.0f, 0.0f, 1.0f }, fallbackFrame.tangent); }
+        fallbackFrame.right = NormalizeSafe(right, { 1.0f, 0.0f, 0.0f });
+        fallbackFrame.up = NormalizeSafe(Cross(fallbackFrame.tangent, fallbackFrame.right), { 1.0f, 0.0f, 0.0f });
+        return fallbackFrame;
     }
 
-    float d = std::clamp(distance, 0.0f, totalLength_);
-    float fi = d / kFrameStep;
-    int i0 = ( std::min )( static_cast< int >( fi ), static_cast< int >( frameCache_.size() ) - 2 );
-    float t = std::clamp(fi - i0, 0.0f, 1.0f);
+    float clampedDistance = std::clamp(distance, 0.0f, totalLength_);
+    float frameIndexFloat = clampedDistance / kFrameStep;
+    int baseIndex = ( std::min )( static_cast< int >( frameIndexFloat ), static_cast< int >( frameCache_.size() ) - 2 );
+    float t = std::clamp(frameIndexFloat - baseIndex, 0.0f, 1.0f);
 
-    const RailFrame& a = frameCache_[i0];
-    const RailFrame& b = frameCache_[i0 + 1];
-    RailFrame f;
-    f.position = Lerp(a.position, b.position, t);
-    f.tangent  = NormalizeSafe(Lerp(a.tangent, b.tangent, t), { 1.0f, 0.0f, 0.0f });
-    f.right    = NormalizeSafe(Lerp(a.right, b.right, t), { 1.0f, 0.0f, 0.0f });
-    f.up       = NormalizeSafe(Cross(f.tangent, f.right), { 1.0f, 0.0f, 0.0f }); // 補間後も直交を保証
-    return f;
+    const RailFrame& frameA = frameCache_[baseIndex];
+    const RailFrame& frameB = frameCache_[baseIndex + 1];
+    RailFrame frame;
+    frame.position = Lerp(frameA.position, frameB.position, t);
+    frame.tangent  = NormalizeSafe(Lerp(frameA.tangent, frameB.tangent, t), { 1.0f, 0.0f, 0.0f });
+    frame.right    = NormalizeSafe(Lerp(frameA.right, frameB.right, t), { 1.0f, 0.0f, 0.0f });
+    frame.up       = NormalizeSafe(Cross(frame.tangent, frame.right), { 1.0f, 0.0f, 0.0f }); // 補間後も直交を保証
+    return frame;
 }
 
 // ② 進んだ距離から「t」を求める（これが等速移動の要！）
@@ -218,14 +218,14 @@ float SplineRail::GetTFromDistance(float targetDistance) const{
 
     // 二分探索：targetDistance 以上になる最初の位置を探す（テーブルは昇順）
     auto it = std::lower_bound(distanceTable_.begin(), distanceTable_.end(), targetDistance);
-    size_t hi = static_cast< size_t >( it - distanceTable_.begin() );
-    if ( hi == 0 ) return tTable_.front();
-    size_t lo = hi - 1;
+    size_t upperIndex = static_cast< size_t >( it - distanceTable_.begin() );
+    if ( upperIndex == 0 ) return tTable_.front();
+    size_t lowerIndex = upperIndex - 1;
 
     // 挟んだ2点を線形補間して正確な t を割り出す
-    float segmentDist = distanceTable_[hi] - distanceTable_[lo];
-    float ratio = ( segmentDist > 0.0f ) ? ( targetDistance - distanceTable_[lo] ) / segmentDist : 0.0f;
-    return tTable_[lo] + ( tTable_[hi] - tTable_[lo] ) * ratio;
+    float segmentDist = distanceTable_[upperIndex] - distanceTable_[lowerIndex];
+    float ratio = ( segmentDist > 0.0f ) ? ( targetDistance - distanceTable_[lowerIndex] ) / segmentDist : 0.0f;
+    return tTable_[lowerIndex] + ( tTable_[upperIndex] - tTable_[lowerIndex] ) * ratio;
 }
 
 Vector3 SplineRail::EvaluateTangent(float t) const{
@@ -267,32 +267,32 @@ Vector3 SplineRail::GetPositionByDistance(float distance) const{
 
 // 距離 s における進行方向（距離空間で前後をサンプルするので端でも反転しない）
 Vector3 SplineRail::GetTangentByDistance(float distance) const{
-    const float ds = 0.1f; // 前後 10cm を見て向きを求める
-    float s1 = distance - ds;
-    float s2 = distance + ds;
+    const float sampleOffset = 0.1f; // 前後 10cm を見て向きを求める
+    float distBehind = distance - sampleOffset;
+    float distAhead = distance + sampleOffset;
 
-    if ( isLoop && totalLength_ > ds * 4.0f ) {
+    if ( isLoop && totalLength_ > sampleOffset * 4.0f ) {
         // ループは継ぎ目をまたいでラップしてサンプル（シームでも向きが滑らか）
-        auto wrap = [&](float s) -> float{
-            while ( s < 0.0f )          s += totalLength_;
-            while ( s > totalLength_ )  s -= totalLength_;
-            return s;
+        auto wrap = [&](float dist) -> float{
+            while ( dist < 0.0f )          dist += totalLength_;
+            while ( dist > totalLength_ )  dist -= totalLength_;
+            return dist;
             };
-        Vector3 a = GetPositionByDistance(wrap(s1));
-        Vector3 b = GetPositionByDistance(wrap(s2));
-        Vector3 dir = { b.x - a.x, b.y - a.y, b.z - a.z };
+        Vector3 posBehind = GetPositionByDistance(wrap(distBehind));
+        Vector3 posAhead = GetPositionByDistance(wrap(distAhead));
+        Vector3 dir = { posAhead.x - posBehind.x, posAhead.y - posBehind.y, posAhead.z - posBehind.z };
         float len = Length(dir);
         if ( len > 0.0f ) { dir.x /= len; dir.y /= len; dir.z /= len; } else { dir = { 0.0f, 0.0f, 1.0f }; }
         return dir;
     }
 
-    if ( s1 < 0.0f ) s1 = 0.0f;
-    if ( s2 > totalLength_ ) s2 = totalLength_;
-    if ( s2 - s1 < 1e-5f ) return { 0.0f, 0.0f, 1.0f };
+    if ( distBehind < 0.0f ) distBehind = 0.0f;
+    if ( distAhead > totalLength_ ) distAhead = totalLength_;
+    if ( distAhead - distBehind < 1e-5f ) return { 0.0f, 0.0f, 1.0f };
 
-    Vector3 a = GetPositionByDistance(s1);
-    Vector3 b = GetPositionByDistance(s2);
-    Vector3 dir = { b.x - a.x, b.y - a.y, b.z - a.z };
+    Vector3 posBehind = GetPositionByDistance(distBehind);
+    Vector3 posAhead = GetPositionByDistance(distAhead);
+    Vector3 dir = { posAhead.x - posBehind.x, posAhead.y - posBehind.y, posAhead.z - posBehind.z };
     float len = Length(dir);
     if ( len > 0.0f ) { dir.x /= len; dir.y /= len; dir.z /= len; } else { dir = { 0.0f, 0.0f, 1.0f }; }
     return dir;
@@ -303,73 +303,73 @@ Vector3 SplineRail::GetTangentByDistance(float distance) const{
 //   （全サンプル線形走査だとレール数×サンプル数で毎フレーム効いてくる）
 float SplineRail::GetClosestDistance(const Vector3& worldPos) const{
     if ( distanceTable_.empty() ) return 0.0f;
-    const int n = ( int ) distanceTable_.size();
+    const int sampleCount = ( int ) distanceTable_.size();
 
     // 1. 粗い走査：8個おきにサンプルして最も近い大まかな位置を見つける
     const int stride = 8;
     float bestDistSq = 1e30f;
-    int   bestI = 0;
-    for ( int i = 0; i < n; i += stride ) {
-        Vector3 p = EvaluatePosition(tTable_[i]);
-        float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
-        float d2 = dx * dx + dy * dy + dz * dz;
-        if ( d2 < bestDistSq ) { bestDistSq = d2; bestI = i; }
+    int   bestIndex = 0;
+    for ( int i = 0; i < sampleCount; i += stride ) {
+        Vector3 samplePos = EvaluatePosition(tTable_[i]);
+        float dx = samplePos.x - worldPos.x, dy = samplePos.y - worldPos.y, dz = samplePos.z - worldPos.z;
+        float distSq = dx * dx + dy * dy + dz * dz;
+        if ( distSq < bestDistSq ) { bestDistSq = distSq; bestIndex = i; }
     }
     // 末尾も必ず見る（stride の切り捨てで漏れないように）
     {
-        Vector3 p = EvaluatePosition(tTable_[n - 1]);
-        float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
-        float d2 = dx * dx + dy * dy + dz * dz;
-        if ( d2 < bestDistSq ) { bestDistSq = d2; bestI = n - 1; }
+        Vector3 samplePos = EvaluatePosition(tTable_[sampleCount - 1]);
+        float dx = samplePos.x - worldPos.x, dy = samplePos.y - worldPos.y, dz = samplePos.z - worldPos.z;
+        float distSq = dx * dx + dy * dy + dz * dz;
+        if ( distSq < bestDistSq ) { bestDistSq = distSq; bestIndex = sampleCount - 1; }
     }
 
     // 2. 細かい走査：粗い最良点の前後 1 ストライドぶんだけ全サンプル確認
-    int lo = std::max(0, bestI - stride);
-    int hi = std::min(n - 1, bestI + stride);
-    float bestS = distanceTable_[bestI];
-    for ( int i = lo; i <= hi; ++i ) {
-        Vector3 p = EvaluatePosition(tTable_[i]);
-        float dx = p.x - worldPos.x, dy = p.y - worldPos.y, dz = p.z - worldPos.z;
-        float d2 = dx * dx + dy * dy + dz * dz;
-        if ( d2 < bestDistSq ) { bestDistSq = d2; bestS = distanceTable_[i]; }
+    int fineStart = std::max(0, bestIndex - stride);
+    int fineEnd = std::min(sampleCount - 1, bestIndex + stride);
+    float bestRailDistance = distanceTable_[bestIndex];
+    for ( int i = fineStart; i <= fineEnd; ++i ) {
+        Vector3 samplePos = EvaluatePosition(tTable_[i]);
+        float dx = samplePos.x - worldPos.x, dy = samplePos.y - worldPos.y, dz = samplePos.z - worldPos.z;
+        float distSq = dx * dx + dy * dy + dz * dz;
+        if ( distSq < bestDistSq ) { bestDistSq = distSq; bestRailDistance = distanceTable_[i]; }
     }
-    return bestS;
+    return bestRailDistance;
 }
 
 // 穴フラグの連続ノード列を距離区間へ変換する（見た目と落下判定の共通ソース）。
 //   区間境界は隣接ノードとの中間点。従来の「最も近いノードが穴指定なら穴」判定と
 //   全く同じ範囲になる（＝この置き換えでゲームプレイは変わらない）。
 std::vector<SplineRail::HoleInterval> SplineRail::GetHoleIntervals() const{
-    std::vector<HoleInterval> out;
-    int n = static_cast< int >( nodes.size() );
-    if ( n < 2 || nodeHole.empty() ) return out;
-    int lim = std::min(n, static_cast< int >( nodeHole.size() ));
+    std::vector<HoleInterval> intervals;
+    int nodeCount = static_cast< int >( nodes.size() );
+    if ( nodeCount < 2 || nodeHole.empty() ) return intervals;
+    int flagCount = std::min(nodeCount, static_cast< int >( nodeHole.size() ));
 
     // ノード i の弧長距離（t=i に対応）
     auto nodeDist = [&](int i) -> float{ return GetDistanceFromT(static_cast< float >( i )); };
 
     int runStart = -1;
-    for ( int i = 0; i <= lim; ++i ) {
-        bool hole = ( i < lim ) && ( nodeHole[i] != 0 );
+    for ( int i = 0; i <= flagCount; ++i ) {
+        bool hole = ( i < flagCount ) && ( nodeHole[i] != 0 );
         if ( hole && runStart < 0 ) { runStart = i; }
         if ( !hole && runStart >= 0 ) {
             int runEnd = i - 1;
-            HoleInterval hv;
-            hv.d0 = ( runStart == 0 )      ? 0.0f
+            HoleInterval interval;
+            interval.d0 = ( runStart == 0 )      ? 0.0f
                                            : ( nodeDist(runStart - 1) + nodeDist(runStart) ) * 0.5f;
-            hv.d1 = ( runEnd == lim - 1 && runEnd == n - 1 ) ? totalLength_
+            interval.d1 = ( runEnd == flagCount - 1 && runEnd == nodeCount - 1 ) ? totalLength_
                                            : ( nodeDist(runEnd) + nodeDist(runEnd + 1) ) * 0.5f;
-            if ( hv.d1 > hv.d0 ) { out.push_back(hv); }
+            if ( interval.d1 > interval.d0 ) { intervals.push_back(interval); }
             runStart = -1;
         }
     }
-    return out;
+    return intervals;
 }
 
 // 指定距離(s)が「穴」区間か：GetHoleIntervals と同じ区間を参照する
 bool SplineRail::IsHoleAtDistance(float distance) const{
-    for ( const HoleInterval& hv : GetHoleIntervals() ) {
-        if ( distance >= hv.d0 && distance <= hv.d1 ) return true;
+    for ( const HoleInterval& interval : GetHoleIntervals() ) {
+        if ( distance >= interval.d0 && distance <= interval.d1 ) return true;
     }
     return false;
 }
@@ -381,11 +381,11 @@ float SplineRail::GetDistanceFromT(float t) const{
 
     // 二分探索：t 以上になる最初の位置を探す
     auto it = std::lower_bound(tTable_.begin(), tTable_.end(), t);
-    size_t hi = static_cast< size_t >( it - tTable_.begin() );
-    if ( hi == 0 ) return distanceTable_.front();
-    size_t lo = hi - 1;
+    size_t upperIndex = static_cast< size_t >( it - tTable_.begin() );
+    if ( upperIndex == 0 ) return distanceTable_.front();
+    size_t lowerIndex = upperIndex - 1;
 
-    float segT = tTable_[hi] - tTable_[lo];
-    float ratio = ( segT > 0.0f ) ? ( t - tTable_[lo] ) / segT : 0.0f;
-    return distanceTable_[lo] + ( distanceTable_[hi] - distanceTable_[lo] ) * ratio;
+    float segmentT = tTable_[upperIndex] - tTable_[lowerIndex];
+    float ratio = ( segmentT > 0.0f ) ? ( t - tTable_[lowerIndex] ) / segmentT : 0.0f;
+    return distanceTable_[lowerIndex] + ( distanceTable_[upperIndex] - distanceTable_[lowerIndex] ) * ratio;
 }

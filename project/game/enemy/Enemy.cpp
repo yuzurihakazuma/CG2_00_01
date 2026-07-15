@@ -52,24 +52,24 @@ void Enemy::Update(const std::vector<SplineRail>& rails, float dt){
     const SplineRail& rail = rails[railIndex_];
     if ( rail.nodes.size() < 2 ) return;
 
-    const float len = rail.GetLength();
+    const float railLength = rail.GetLength();
 
     // パトロールONの敵だけレール上を往復（端で折り返す）。OFFは置いた場所に留まる。
     if ( patrol_ ) {
         distance_ += dir_ * speed_ * dt;
     }
     // レール編集で全長が縮んだ時も範囲内に収める（OFFの敵も対象）
-    if ( distance_ > len )  { distance_ = len;  dir_ = -1.0f; }
+    if ( distance_ > railLength )  { distance_ = railLength;  dir_ = -1.0f; }
     if ( distance_ < 0.0f ) { distance_ = 0.0f; dir_ = 1.0f; }
 
     // 位置：レール面の上に半径ぶん乗せる
-    Vector3 p = rail.GetPositionByDistance(distance_);
-    position_ = { p.x, p.y + radius_, p.z };
+    Vector3 railPos = rail.GetPositionByDistance(distance_);
+    position_ = { railPos.x, railPos.y + radius_, railPos.z };
 
     // 進行方向を向く
-    Vector3 tan = rail.GetTangentByDistance(distance_);
-    if ( std::abs(tan.x) > 1e-4f || std::abs(tan.z) > 1e-4f ) {
-        rotation_.y = std::atan2(tan.x * dir_, tan.z * dir_);
+    Vector3 tangent = rail.GetTangentByDistance(distance_);
+    if ( std::abs(tangent.x) > 1e-4f || std::abs(tangent.z) > 1e-4f ) {
+        rotation_.y = std::atan2(tangent.x * dir_, tangent.z * dir_);
     }
 
     // 当たり判定と見た目を追従
@@ -98,9 +98,9 @@ void Enemy::StartSwallow(){
 // 吸い込み中の更新：プレイヤーの口元へ寄りながらスケールを 1→0 へ縮める。
 void Enemy::TickSwallow(const Vector3& playerPos, float dt){
     if ( !swallowing_ ) return;
-    const float dur = 0.35f;
+    const float duration = 0.35f;
     swallowT_ += dt;
-    float t = swallowT_ / dur;
+    float t = swallowT_ / duration;
     if ( t > 1.0f ) t = 1.0f;
 
     // 口元へ近づく（少し上）
@@ -111,11 +111,11 @@ void Enemy::TickSwallow(const Vector3& playerPos, float dt){
         swallowStart_.z + ( mouth.z - swallowStart_.z ) * t
     };
 
-    float s = radius_ * ( 1.0f - t ); // どんどん小さく
+    float shrinkScale = radius_ * ( 1.0f - t ); // どんどん小さく
     collider_.SetCenter(position_);
     if ( obj_ ) {
         obj_->SetTranslation(position_);
-        obj_->SetScale({ s, s, s });
+        obj_->SetScale({ shrinkScale, shrinkScale, shrinkScale });
         obj_->SetRotation(rotation_);
         obj_->Update();
     }

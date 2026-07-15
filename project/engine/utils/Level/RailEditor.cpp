@@ -8,23 +8,23 @@
 #include "engine/utils/ImGuiManager.h"
 #include "engine/base/Input.h"
 
-static bool RailLinesEqual(const std::vector<std::vector<Vector3>>& a,
-                           const std::vector<std::vector<Vector3>>& b){
-	if ( a.size() != b.size() ) return false;
-	for ( size_t i = 0; i < a.size(); ++i ) {
-		if ( a[i].size() != b[i].size() ) return false;
-		for ( size_t j = 0; j < a[i].size(); ++j ) {
-			if ( a[i][j].x != b[i][j].x || a[i][j].y != b[i][j].y || a[i][j].z != b[i][j].z ) return false;
+static bool RailLinesEqual(const std::vector<std::vector<Vector3>>& lhs,
+                           const std::vector<std::vector<Vector3>>& rhs){
+	if ( lhs.size() != rhs.size() ) return false;
+	for ( size_t i = 0; i < lhs.size(); ++i ) {
+		if ( lhs[i].size() != rhs[i].size() ) return false;
+		for ( size_t j = 0; j < lhs[i].size(); ++j ) {
+			if ( lhs[i][j].x != rhs[i][j].x || lhs[i][j].y != rhs[i][j].y || lhs[i][j].z != rhs[i][j].z ) return false;
 		}
 	}
 	return true;
 }
 
 // 動くレール設定(Vector4)の一致判定（Vector4 に operator== が無いので手動）
-static bool MotionsEqual(const std::vector<Vector4>& a, const std::vector<Vector4>& b){
-	if ( a.size() != b.size() ) return false;
-	for ( size_t i = 0; i < a.size(); ++i ) {
-		if ( a[i].x != b[i].x || a[i].y != b[i].y || a[i].z != b[i].z || a[i].w != b[i].w ) return false;
+static bool MotionsEqual(const std::vector<Vector4>& lhs, const std::vector<Vector4>& rhs){
+	if ( lhs.size() != rhs.size() ) return false;
+	for ( size_t i = 0; i < lhs.size(); ++i ) {
+		if ( lhs[i].x != rhs[i].x || lhs[i].y != rhs[i].y || lhs[i].z != rhs[i].z || lhs[i].w != rhs[i].w ) return false;
 	}
 	return true;
 }

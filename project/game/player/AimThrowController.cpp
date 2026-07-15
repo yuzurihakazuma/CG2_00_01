@@ -36,17 +36,17 @@ void AimThrowController::Initialize(uint32_t cursorTexSrv){
 void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem& eggs, Camera* camera, float dt){
     if ( !camera ) return;
     Input* input = Input::GetInstance();
-    Vector3 ppos = player.GetPosition();
+    Vector3 playerPos = player.GetPosition();
 
-    const float W = ( float ) WindowProc::GetInstance()->GetClientWidth();
-    const float H = ( float ) WindowProc::GetInstance()->GetClientHeight();
+    const float screenWidth = ( float ) WindowProc::GetInstance()->GetClientWidth();
+    const float screenHeight = ( float ) WindowProc::GetInstance()->GetClientHeight();
 
     // ワールド点 → スクリーン画素。NDC計算は MatrixMath::WorldToNdc に一本化（カメラ後方なら false）
-    auto project = [&](const Vector3& worldPos, float& px, float& py) -> bool {
+    auto project = [&](const Vector3& worldPos, float& screenX, float& screenY) -> bool {
         Vector2 ndc;
         if ( !WorldToNdc(worldPos, camera->GetViewProjectionMatrix(), ndc) ) return false;
-        px = ( ndc.x * 0.5f + 0.5f ) * W;
-        py = ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * H;
+        screenX = ( ndc.x * 0.5f + 0.5f ) * screenWidth;
+        screenY = ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * screenHeight;
         return true;
         };
 
@@ -56,11 +56,11 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
             state_ = State::Aiming;
             // 構え中も移動・ジャンプ・踏ん張りは受け付ける（狙いは矢印キーで別操作なので競合しない）
             // カーソルの初期位置：プレイヤーの少し前方上をスクリーン投影（無理なら画面中央）
-            float px, py;
+            float projectedX, projectedY;
             Vector3 facing = { std::sin(player.GetRotation().y), 0.0f, std::cos(player.GetRotation().y) };
-            Vector3 ahead = { ppos.x + facing.x * 5.0f, ppos.y + 1.0f, ppos.z + facing.z * 5.0f };
-            if ( project(ahead, px, py) ) { cursorX_ = px; cursorY_ = py; }
-            else { cursorX_ = W * 0.5f; cursorY_ = H * 0.45f; }
+            Vector3 ahead = { playerPos.x + facing.x * 5.0f, playerPos.y + 1.0f, playerPos.z + facing.z * 5.0f };
+            if ( project(ahead, projectedX, projectedY) ) { cursorX_ = projectedX; cursorY_ = projectedY; }
+            else { cursorX_ = screenWidth * 0.5f; cursorY_ = screenHeight * 0.45f; }
             // ★1f点滅対策：入場フレームのうちにカーソル位置を確定（return せず下の処理へ落ちる）
             if ( cursorSprite_ ) { cursorSprite_->SetPosition({ cursorX_, cursorY_ }); cursorSprite_->Update(); }
         } else {
@@ -75,48 +75,48 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
     if ( input->Pushkey(DIK_DOWN) )  cursorY_ += kCursorSpeed * dt;
     if ( input->Pushkey(DIK_LEFT) )  cursorX_ -= kCursorSpeed * dt;
     if ( input->Pushkey(DIK_RIGHT) ) cursorX_ += kCursorSpeed * dt;
-    cursorX_ = std::clamp(cursorX_, 0.0f, W);
-    cursorY_ = std::clamp(cursorY_, 0.0f, H);
+    cursorX_ = std::clamp(cursorX_, 0.0f, screenWidth);
+    cursorY_ = std::clamp(cursorY_, 0.0f, screenHeight);
 
     // --- ロックオン対象を探す：カーソル(自由位置)に画面上で一番近い敵（吸いつき無し）---
     Enemy* lockEnemy = nullptr;
-    float  bestPix = 1e9f, bestEx = 0.0f, bestEy = 0.0f;
-    for ( auto& e : enemies.GetEnemies() ) {
-        if ( !e->IsAlive() ) continue;
-        float ex, ey;
-        if ( !project(e->GetPosition(), ex, ey) ) continue; // 後方は対象外
-        float dpix = std::sqrt(( ex - cursorX_ ) * ( ex - cursorX_ ) + ( ey - cursorY_ ) * ( ey - cursorY_ ));
-        if ( dpix < bestPix ) { bestPix = dpix; lockEnemy = e.get(); bestEx = ex; bestEy = ey; }
+    float  bestPixelDist = 1e9f, bestEnemyX = 0.0f, bestEnemyY = 0.0f;
+    for ( auto& enemy : enemies.GetEnemies() ) {
+        if ( !enemy->IsAlive() ) continue;
+        float enemyScreenX, enemyScreenY;
+        if ( !project(enemy->GetPosition(), enemyScreenX, enemyScreenY) ) continue; // 後方は対象外
+        float pixelDist = std::sqrt(( enemyScreenX - cursorX_ ) * ( enemyScreenX - cursorX_ ) + ( enemyScreenY - cursorY_ ) * ( enemyScreenY - cursorY_ ));
+        if ( pixelDist < bestPixelDist ) { bestPixelDist = pixelDist; lockEnemy = enemy.get(); bestEnemyX = enemyScreenX; bestEnemyY = enemyScreenY; }
     }
-    float lockThresh = aimLocked_ ? 120.0f : 80.0f; // 粘り（付く<外れる）
-    aimLocked_ = ( lockEnemy != nullptr && bestPix < lockThresh );
+    float lockThreshold = aimLocked_ ? 120.0f : 80.0f; // 粘り（付く<外れる）
+    aimLocked_ = ( lockEnemy != nullptr && bestPixelDist < lockThreshold );
 
-    Vector3 origin = { ppos.x, ppos.y + 0.5f, ppos.z };
+    Vector3 origin = { playerPos.x, playerPos.y + 0.5f, playerPos.z };
     Vector3 throwDir = { 0.0f, 0.0f, 1.0f };
     float   throwSpeed = throwSpeedNormal_;  // 通常の投げ速度（ノードエディタから調整可）
-    float   dispX = cursorX_, dispY = cursorY_;
+    float   displayX = cursorX_, displayY = cursorY_;
     Vector3 cursorWorld;         // 狙い線の先端（奥に追従させる）
 
     if ( aimLocked_ ) {
         // ロック中：その敵へ。命中しやすいよう速度を上げる。カーソルは敵にピタッと合わせる。
-        dispX = bestEx; dispY = bestEy;
+        displayX = bestEnemyX; displayY = bestEnemyY;
         cursorWorld = lockEnemy->GetPosition();
-        Vector3 t = cursorWorld - origin;
-        float d = Length(t);
-        if ( d > 1e-4f ) throwDir = { t.x / d, t.y / d, t.z / d };
+        Vector3 toTarget = cursorWorld - origin;
+        float targetDist = Length(toTarget);
+        if ( targetDist > 1e-4f ) throwDir = { toTarget.x / targetDist, toTarget.y / targetDist, toTarget.z / targetDist };
         throwSpeed = throwSpeedLock_; // ★敵ロック時は速く（ノードエディタから調整可）
         DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
     } else {
         // 未ロック：カーソルの画面位置を奥へアンプロジェクトした方向へ投げる（奥に投げ込める）。
         // NDC→ワールドの逆投影は MatrixMath::NdcToWorld に一本化
         Matrix4x4 invVP = Inverse(camera->GetViewProjectionMatrix());
-        float ndcX = cursorX_ / W * 2.0f - 1.0f;
-        float ndcY = 1.0f - cursorY_ / H * 2.0f;
-        Vector3 nearP = NdcToWorld(ndcX, ndcY, 0.0f, invVP);
-        Vector3 farP  = NdcToWorld(ndcX, ndcY, 1.0f, invVP);
-        Vector3 ray = { farP.x - nearP.x, farP.y - nearP.y, farP.z - nearP.z };
-        float rl = Length(ray);
-        if ( rl > 1e-4f ) throwDir = { ray.x / rl, ray.y / rl, ray.z / rl };
+        float ndcX = cursorX_ / screenWidth * 2.0f - 1.0f;
+        float ndcY = 1.0f - cursorY_ / screenHeight * 2.0f;
+        Vector3 nearPoint = NdcToWorld(ndcX, ndcY, 0.0f, invVP);
+        Vector3 farPoint  = NdcToWorld(ndcX, ndcY, 1.0f, invVP);
+        Vector3 ray = { farPoint.x - nearPoint.x, farPoint.y - nearPoint.y, farPoint.z - nearPoint.z };
+        float rayLength = Length(ray);
+        if ( rayLength > 1e-4f ) throwDir = { ray.x / rayLength, ray.y / rayLength, ray.z / rayLength };
         // 狙い線の先端＝カーソル方向の少し奥（奥に動かすと線もそちらへ追従する）
         cursorWorld = { origin.x + throwDir.x * 12.0f, origin.y + throwDir.y * 12.0f, origin.z + throwDir.z * 12.0f };
     }
@@ -128,16 +128,16 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
     pulseT_ += dt;
     float pulse = 1.0f + 0.10f * std::sin(pulseT_ * 9.0f); // ふわふわ脈動して目を引く
     if ( cursorSprite_ ) {
-        cursorSprite_->SetPosition({ dispX, dispY });
-        float base = aimLocked_ ? 68.0f : 52.0f;
-        cursorSprite_->SetSize({ base * pulse, base * pulse });
+        cursorSprite_->SetPosition({ displayX, displayY });
+        float baseSize = aimLocked_ ? 68.0f : 52.0f;
+        cursorSprite_->SetSize({ baseSize * pulse, baseSize * pulse });
         cursorSprite_->SetColor(aimLocked_ ? Vector4{ 1.0f, 0.25f, 0.2f, 1.0f }    // ロック=赤
                                            : Vector4{ 1.0f, 0.95f, 0.35f, 0.95f }); // 通常=黄
         cursorSprite_->Update();
     }
     // ロックオンリング：ロック中の敵の周りでゆっくり回りながら収縮（「捕まえてる」感）
     if ( lockRingSprite_ && aimLocked_ ) {
-        lockRingSprite_->SetPosition({ dispX, dispY });
+        lockRingSprite_->SetPosition({ displayX, displayY });
         float ring = 104.0f + 10.0f * std::sin(pulseT_ * 6.0f);
         lockRingSprite_->SetSize({ ring, ring });
         lockRingSprite_->SetRotation(pulseT_ * 2.5f);
@@ -151,10 +151,10 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
         // 投げる方向へプレイヤーの向きも合わせる（水平成分のyaw）
         if ( std::abs(throwDir.x) > 1e-4f || std::abs(throwDir.z) > 1e-4f ) {
             float yaw = std::atan2(throwDir.x, throwDir.z);
-            Vector3 r = player.GetRotation();
-            player.SetRotation({ r.x, yaw, r.z });
+            Vector3 rotation = player.GetRotation();
+            player.SetRotation({ rotation.x, yaw, rotation.z });
         }
-        if ( eggs.TryThrow(ppos, throwDir, throwSpeed) ) {
+        if ( eggs.TryThrow(playerPos, throwDir, throwSpeed) ) {
             AudioManager::GetInstance()->PlayWave("resources/se/eggThrow.wav", false, 0.55f); // 投擲音
         }
         state_ = State::Idle;

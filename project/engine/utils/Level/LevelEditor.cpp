@@ -39,14 +39,14 @@ void LevelEditor::Initialize(){
 void LevelEditor::ScanMaps(){
 	mapList_.clear();
 	namespace fs = std::filesystem;
-	std::error_code ec;
+	std::error_code errorCode;
 	const fs::path dir("resources/map");
-	if ( !fs::exists(dir, ec) ) return;
-	for ( const auto& entry : fs::directory_iterator(dir, ec) ) {
+	if ( !fs::exists(dir, errorCode) ) return;
+	for ( const auto& entry : fs::directory_iterator(dir, errorCode) ) {
 		if ( !entry.is_regular_file() ) continue;
 		std::string ext = entry.path().extension().string();
 		std::transform(ext.begin(), ext.end(), ext.begin(),
-			[](unsigned char c){ return ( char ) std::tolower(c); });
+			[](unsigned char character){ return ( char ) std::tolower(character); });
 		if ( ext != ".json" ) continue;
 		mapList_.push_back(entry.path().filename().string());
 	}
@@ -119,26 +119,26 @@ void LevelEditor::ScanAssets(){
 	assetList_.clear();
 
 	namespace fs = std::filesystem;
-	std::error_code ec;
+	std::error_code errorCode;
 	const fs::path root("resources");
-	if ( !fs::exists(root, ec) ) return;
+	if ( !fs::exists(root, errorCode) ) return;
 
-	for ( const auto& entry : fs::recursive_directory_iterator(root, ec) ) {
+	for ( const auto& entry : fs::recursive_directory_iterator(root, errorCode) ) {
 		if ( !entry.is_regular_file() ) continue;
 		std::string ext = entry.path().extension().string();
 		std::transform(ext.begin(), ext.end(), ext.begin(),
-			[](unsigned char c){ return ( char ) std::tolower(c); });
+			[](unsigned char character){ return ( char ) std::tolower(character); });
 		if ( ext != ".obj" && ext != ".gltf" ) continue;
 
 		AssetEntry asset;
 		asset.name = entry.path().stem().string();
 		asset.dir = entry.path().parent_path().generic_string();
 		asset.file = entry.path().filename().string();
-		asset.display = fs::relative(entry.path(), root, ec).generic_string();
+		asset.display = fs::relative(entry.path(), root, errorCode).generic_string();
 		assetList_.push_back(asset);
 	}
 	std::sort(assetList_.begin(), assetList_.end(),
-		[](const AssetEntry& a, const AssetEntry& b){ return a.display < b.display; });
+		[](const AssetEntry& assetA, const AssetEntry& assetB){ return assetA.display < assetB.display; });
 }
 
 // モデルが未ロードならアセット一覧から探してロードする

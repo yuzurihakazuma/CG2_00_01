@@ -21,18 +21,18 @@ void EnemyManager::Spawn(const std::vector<EnemySpawnData>& spawns, const std::v
 // 移動＋吸い込みTick＋消化（完了で onConsumed を呼んで削除）
 void EnemyManager::Update(const std::vector<SplineRail>& rails, const Vector3& playerPos, float dt,
                           const std::function<void(const Vector3&)>& onConsumed){
-    for ( auto& e : enemies_ ) {
-        if ( e->IsSwallowing() ) { e->TickSwallow(playerPos, dt); } // 縮みながらプレイヤーへ吸い込まれる
-        else { e->Update(rails, dt); }
+    for ( auto& enemy : enemies_ ) {
+        if ( enemy->IsSwallowing() ) { enemy->TickSwallow(playerPos, dt); } // 縮みながらプレイヤーへ吸い込まれる
+        else { enemy->Update(rails, dt); }
     }
     // 吸い込み完了 → 通知（お腹+1・演出はシーン側）してから消す
-    for ( auto& e : enemies_ ) {
-        if ( e->IsConsumed() && onConsumed ) { onConsumed(e->GetPosition()); }
+    for ( auto& enemy : enemies_ ) {
+        if ( enemy->IsConsumed() && onConsumed ) { onConsumed(enemy->GetPosition()); }
     }
     enemies_.erase(std::remove_if(enemies_.begin(), enemies_.end(),
-        [](const std::unique_ptr<Enemy>& e){ return e->IsConsumed(); }), enemies_.end());
+        [](const std::unique_ptr<Enemy>& enemy){ return enemy->IsConsumed(); }), enemies_.end());
 }
 
 void EnemyManager::Draw(){
-    for ( auto& e : enemies_ ) { e->Draw(); }
+    for ( auto& enemy : enemies_ ) { enemy->Draw(); }
 }

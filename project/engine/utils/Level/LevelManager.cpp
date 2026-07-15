@@ -6,8 +6,8 @@
 using json = nlohmann::json;
 
 void LevelManager::Save(const std::string& fileName, const LevelData& levelData){
-    json j;
-    j["name"] = levelData.name;
+    json rootJson;
+    rootJson["name"] = levelData.name;
 
     // オブジェクトのリストをJSONの配列に変換する
     json objectsArray = json::array();
@@ -32,66 +32,66 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         }
         linesArray.push_back(railArray);
     }
-    j["railLines"] = linesArray;
+    rootJson["railLines"] = linesArray;
 
     // 各レールのタイプ（-1=自動 / 0=横 / 1=縦）。railLines と数を合わせて保存
     json typesArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        int t = ( i < levelData.railTypes.size() ) ? levelData.railTypes[i] : -1;
-        typesArray.push_back(t);
+        int railType = ( i < levelData.railTypes.size() ) ? levelData.railTypes[i] : -1;
+        typesArray.push_back(railType);
     }
-    j["railTypes"] = typesArray;
+    rootJson["railTypes"] = typesArray;
 
     // 各レールの動き [振幅x, 振幅y, 振幅z, 周期]。railLines と数を合わせて保存
     json motionsArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        Vector4 m = ( i < levelData.railMotions.size() ) ? levelData.railMotions[i] : Vector4 { 0.0f, 0.0f, 0.0f, 2.0f };
-        motionsArray.push_back({ m.x, m.y, m.z, m.w });
+        Vector4 motion = ( i < levelData.railMotions.size() ) ? levelData.railMotions[i] : Vector4 { 0.0f, 0.0f, 0.0f, 2.0f };
+        motionsArray.push_back({ motion.x, motion.y, motion.z, motion.w });
     }
-    j["railMotions"] = motionsArray;
+    rootJson["railMotions"] = motionsArray;
 
     // 各レールの地面タイプ(0=Safe/1=Gap/2=NoGround)。railLines と数を合わせて保存
     json groundArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        int g = ( i < levelData.railGroundTypes.size() ) ? levelData.railGroundTypes[i] : 0;
-        groundArray.push_back(g);
+        int groundType = ( i < levelData.railGroundTypes.size() ) ? levelData.railGroundTypes[i] : 0;
+        groundArray.push_back(groundType);
     }
-    j["railGroundTypes"] = groundArray;
+    rootJson["railGroundTypes"] = groundArray;
 
     // 各レールのノード単位の穴指定（外=レール / 内=ノード・1=穴）
     json holesArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        json rh = json::array();
+        json holeArray = json::array();
         if ( i < levelData.railNodeHoles.size() ) {
-            for ( int v : levelData.railNodeHoles[i] ) rh.push_back(v);
+            for ( int holeFlag : levelData.railNodeHoles[i] ) holeArray.push_back(holeFlag);
         }
-        holesArray.push_back(rh);
+        holesArray.push_back(holeArray);
     }
-    j["railNodeHoles"] = holesArray;
+    rootJson["railNodeHoles"] = holesArray;
 
     // 各レールの表示フラグ(1=表示/0=非表示)。railLines と数を合わせて保存
     json visibleArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        int v = ( i < levelData.railVisible.size() ) ? levelData.railVisible[i] : 1;
-        visibleArray.push_back(v);
+        int visibleFlag = ( i < levelData.railVisible.size() ) ? levelData.railVisible[i] : 1;
+        visibleArray.push_back(visibleFlag);
     }
-    j["railVisible"] = visibleArray;
+    rootJson["railVisible"] = visibleArray;
 
     // 各レールの線のつなぎ方(0=スプライン/1=直線)。railLines と数を合わせて保存
     json lineModeArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        int v = ( i < levelData.railLineModes.size() ) ? levelData.railLineModes[i] : 0;
-        lineModeArray.push_back(v);
+        int lineMode = ( i < levelData.railLineModes.size() ) ? levelData.railLineModes[i] : 0;
+        lineModeArray.push_back(lineMode);
     }
-    j["railLineModes"] = lineModeArray;
+    rootJson["railLineModes"] = lineModeArray;
 
     // 各レールの道生成モード(0=自動/1=なし)。railLines と数を合わせて保存
     json roadModeArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
-        int v = ( i < levelData.railRoadModes.size() ) ? levelData.railRoadModes[i] : 0;
-        roadModeArray.push_back(v);
+        int roadMode = ( i < levelData.railRoadModes.size() ) ? levelData.railRoadModes[i] : 0;
+        roadModeArray.push_back(roadMode);
     }
-    j["railRoadModes"] = roadModeArray;
+    rootJson["railRoadModes"] = roadModeArray;
 
     // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
     json motionTypeArray = json::array();
@@ -104,51 +104,51 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         oneWayArray.push_back(( i < levelData.railOneWay.size() ) ? levelData.railOneWay[i] : 0);
         speedMulArray.push_back(( i < levelData.railSpeedMuls.size() ) ? levelData.railSpeedMuls[i] : 1.0f);
     }
-    j["railMotionTypes"]  = motionTypeArray;
-    j["railMotionPhases"] = motionPhaseArray;
-    j["railOneWay"]       = oneWayArray;
-    j["railSpeedMuls"]    = speedMulArray;
+    rootJson["railMotionTypes"]  = motionTypeArray;
+    rootJson["railMotionPhases"] = motionPhaseArray;
+    rootJson["railOneWay"]       = oneWayArray;
+    rootJson["railSpeedMuls"]    = speedMulArray;
 
     // スタート/ゴール地点
-    j["startRailIndex"] = levelData.startRailIndex;
-    j["startNodeIndex"] = levelData.startNodeIndex;
-    j["goalRailIndex"]  = levelData.goalRailIndex;
-    j["goalNodeIndex"]  = levelData.goalNodeIndex;
+    rootJson["startRailIndex"] = levelData.startRailIndex;
+    rootJson["startNodeIndex"] = levelData.startNodeIndex;
+    rootJson["goalRailIndex"]  = levelData.goalRailIndex;
+    rootJson["goalNodeIndex"]  = levelData.goalNodeIndex;
 
     // カメラ演出ゾーン
     json camArray = json::array();
-    for ( const auto& z : levelData.cameraZones ) {
+    for ( const auto& zone : levelData.cameraZones ) {
         camArray.push_back({
-            { "railIndex", z.railIndex }, { "nodeIndex", z.nodeIndex },
-            { "radius", z.radius },
-            { "mode", z.mode },
-            { "offset", { z.offset.x, z.offset.y, z.offset.z } },
-            { "yawDeg", z.yawDeg }, { "dist", z.dist }, { "height", z.height },
-            { "revert", z.revert }, { "freeze", z.freeze },
-            { "fovDeg", z.fovDeg },
+            { "railIndex", zone.railIndex }, { "nodeIndex", zone.nodeIndex },
+            { "radius", zone.radius },
+            { "mode", zone.mode },
+            { "offset", { zone.offset.x, zone.offset.y, zone.offset.z } },
+            { "yawDeg", zone.yawDeg }, { "dist", zone.dist }, { "height", zone.height },
+            { "revert", zone.revert }, { "freeze", zone.freeze },
+            { "fovDeg", zone.fovDeg },
         });
     }
-    j["cameraZones"] = camArray;
+    rootJson["cameraZones"] = camArray;
 
     // 敵の配置 [type, railIndex, distance]
     json enemiesArray = json::array();
-    for ( const auto& e : levelData.enemies ) {
-        json je;
-        je["type"]      = e.type;
-        je["railIndex"] = e.railIndex;
-        je["distance"]  = e.distance;
-        je["patrol"]    = e.patrol;
-        enemiesArray.push_back(je);
+    for ( const auto& enemy : levelData.enemies ) {
+        json enemyJson;
+        enemyJson["type"]      = enemy.type;
+        enemyJson["railIndex"] = enemy.railIndex;
+        enemyJson["distance"]  = enemy.distance;
+        enemyJson["patrol"]    = enemy.patrol;
+        enemiesArray.push_back(enemyJson);
     }
-    j["enemies"] = enemiesArray;
+    rootJson["enemies"] = enemiesArray;
 
-    j["objects"] = objectsArray;
+    rootJson["objects"] = objectsArray;
 
     // ファイルに書き込み
     std::ofstream file(fileName);
     if ( file.is_open() ) {
         // dump(4) は見やすくするためにインデント（空白）を4つ入れる設定です
-        file << j.dump(4);
+        file << rootJson.dump(4);
         file.close();
     }
 }
@@ -162,15 +162,15 @@ LevelData LevelManager::Load(const std::string& fileName){
         return levelData;
     }
 
-    json j;
-    file >> j;
+    json rootJson;
+    file >> rootJson;
 
     // マップ名の読み込み（無い場合は "Unknown" にする）
-    levelData.name = j.value("name", "Unknown");
+    levelData.name = rootJson.value("name", "Unknown");
 
     // オブジェクトの配列を読み込む
-    if ( j.contains("objects") && j["objects"].is_array() ) {
-        for ( const auto& jsonObj : j["objects"] ) {
+    if ( rootJson.contains("objects") && rootJson["objects"].is_array() ) {
+        for ( const auto& jsonObj : rootJson["objects"] ) {
             LevelObjectData obj;
             obj.type = jsonObj.value("type", "unknown");
 
@@ -197,8 +197,8 @@ LevelData LevelManager::Load(const std::string& fileName){
     }
 
     // ★複数レールの配列を読み込む
-    if ( j.contains("railLines") && j["railLines"].is_array() ) {
-        for ( const auto& lineObj : j["railLines"] ) {
+    if ( rootJson.contains("railLines") && rootJson["railLines"].is_array() ) {
+        for ( const auto& lineObj : rootJson["railLines"] ) {
             std::vector<Vector3> line;
             for ( const auto& posObj : lineObj ) {
                 Vector3 pos;
@@ -209,9 +209,9 @@ LevelData LevelManager::Load(const std::string& fileName){
         }
     }
     // ★古いセーブデータ互換用（昔の railNodes があった場合）
-    else if ( j.contains("railNodes") && j["railNodes"].is_array() ) {
+    else if ( rootJson.contains("railNodes") && rootJson["railNodes"].is_array() ) {
         std::vector<Vector3> line;
-        for ( const auto& posObj : j["railNodes"] ) {
+        for ( const auto& posObj : rootJson["railNodes"] ) {
             Vector3 pos;
             pos.x = posObj[0]; pos.y = posObj[1]; pos.z = posObj[2];
             line.push_back(pos);
@@ -220,112 +220,112 @@ LevelData LevelManager::Load(const std::string& fileName){
     }
 
     // レールのタイプを読み込む（-1=自動 / 0=横 / 1=縦）
-    if ( j.contains("railTypes") && j["railTypes"].is_array() ) {
-        for ( const auto& t : j["railTypes"] ) {
-            levelData.railTypes.push_back(t.get<int>());
+    if ( rootJson.contains("railTypes") && rootJson["railTypes"].is_array() ) {
+        for ( const auto& railTypeJson : rootJson["railTypes"] ) {
+            levelData.railTypes.push_back(railTypeJson.get<int>());
         }
     }
 
     // レールの動きを読み込む [振幅x, 振幅y, 振幅z, 周期]
-    if ( j.contains("railMotions") && j["railMotions"].is_array() ) {
-        for ( const auto& m : j["railMotions"] ) {
+    if ( rootJson.contains("railMotions") && rootJson["railMotions"].is_array() ) {
+        for ( const auto& motionJson : rootJson["railMotions"] ) {
             Vector4 motion { 0.0f, 0.0f, 0.0f, 2.0f };
-            if ( m.is_array() && m.size() >= 4 ) {
-                motion.x = m[0]; motion.y = m[1]; motion.z = m[2]; motion.w = m[3];
+            if ( motionJson.is_array() && motionJson.size() >= 4 ) {
+                motion.x = motionJson[0]; motion.y = motionJson[1]; motion.z = motionJson[2]; motion.w = motionJson[3];
             }
             levelData.railMotions.push_back(motion);
         }
     }
 
     // 地面タイプを読み込む（0=Safe/1=Gap/2=NoGround。無ければデフォルト0=Safe）
-    if ( j.contains("railGroundTypes") && j["railGroundTypes"].is_array() ) {
-        for ( const auto& g : j["railGroundTypes"] ) {
-            levelData.railGroundTypes.push_back(g.get<int>());
+    if ( rootJson.contains("railGroundTypes") && rootJson["railGroundTypes"].is_array() ) {
+        for ( const auto& groundTypeJson : rootJson["railGroundTypes"] ) {
+            levelData.railGroundTypes.push_back(groundTypeJson.get<int>());
         }
     }
 
     // ノード単位の穴指定を読み込む（外=レール / 内=ノード）
-    if ( j.contains("railNodeHoles") && j["railNodeHoles"].is_array() ) {
-        for ( const auto& rh : j["railNodeHoles"] ) {
+    if ( rootJson.contains("railNodeHoles") && rootJson["railNodeHoles"].is_array() ) {
+        for ( const auto& holeArrayJson : rootJson["railNodeHoles"] ) {
             std::vector<int> holes;
-            if ( rh.is_array() ) {
-                for ( const auto& v : rh ) holes.push_back(v.get<int>());
+            if ( holeArrayJson.is_array() ) {
+                for ( const auto& holeJson : holeArrayJson ) holes.push_back(holeJson.get<int>());
             }
             levelData.railNodeHoles.push_back(holes);
         }
     }
 
     // 表示フラグを読み込む（1=表示/0=非表示。無ければデフォルト1=表示）
-    if ( j.contains("railVisible") && j["railVisible"].is_array() ) {
-        for ( const auto& v : j["railVisible"] ) {
-            levelData.railVisible.push_back(v.get<int>());
+    if ( rootJson.contains("railVisible") && rootJson["railVisible"].is_array() ) {
+        for ( const auto& visibleJson : rootJson["railVisible"] ) {
+            levelData.railVisible.push_back(visibleJson.get<int>());
         }
     }
 
     // 線のつなぎ方を読み込む（0=スプライン/1=直線。キーが無い旧JSONは後段の resize で全て0=スプライン）
-    if ( j.contains("railLineModes") && j["railLineModes"].is_array() ) {
-        for ( const auto& v : j["railLineModes"] ) {
-            levelData.railLineModes.push_back(v.get<int>());
+    if ( rootJson.contains("railLineModes") && rootJson["railLineModes"].is_array() ) {
+        for ( const auto& lineModeJson : rootJson["railLineModes"] ) {
+            levelData.railLineModes.push_back(lineModeJson.get<int>());
         }
     }
 
     // 道生成モードを読み込む（0=自動/1=なし。キーが無い旧JSONは後段の resize で全て0=自動になる）
-    if ( j.contains("railRoadModes") && j["railRoadModes"].is_array() ) {
-        for ( const auto& v : j["railRoadModes"] ) {
-            levelData.railRoadModes.push_back(v.get<int>());
+    if ( rootJson.contains("railRoadModes") && rootJson["railRoadModes"].is_array() ) {
+        for ( const auto& roadModeJson : rootJson["railRoadModes"] ) {
+            levelData.railRoadModes.push_back(roadModeJson.get<int>());
         }
     }
 
     // 動き波形/位相・片方向・速度倍率を読み込む（無ければ後段の resize でデフォルトが入る）
-    if ( j.contains("railMotionTypes") && j["railMotionTypes"].is_array() ) {
-        for ( const auto& v : j["railMotionTypes"] ) { levelData.railMotionTypes.push_back(v.get<int>()); }
+    if ( rootJson.contains("railMotionTypes") && rootJson["railMotionTypes"].is_array() ) {
+        for ( const auto& motionTypeJson : rootJson["railMotionTypes"] ) { levelData.railMotionTypes.push_back(motionTypeJson.get<int>()); }
     }
-    if ( j.contains("railMotionPhases") && j["railMotionPhases"].is_array() ) {
-        for ( const auto& v : j["railMotionPhases"] ) { levelData.railMotionPhases.push_back(v.get<float>()); }
+    if ( rootJson.contains("railMotionPhases") && rootJson["railMotionPhases"].is_array() ) {
+        for ( const auto& motionPhaseJson : rootJson["railMotionPhases"] ) { levelData.railMotionPhases.push_back(motionPhaseJson.get<float>()); }
     }
-    if ( j.contains("railOneWay") && j["railOneWay"].is_array() ) {
-        for ( const auto& v : j["railOneWay"] ) { levelData.railOneWay.push_back(v.get<int>()); }
+    if ( rootJson.contains("railOneWay") && rootJson["railOneWay"].is_array() ) {
+        for ( const auto& oneWayJson : rootJson["railOneWay"] ) { levelData.railOneWay.push_back(oneWayJson.get<int>()); }
     }
-    if ( j.contains("railSpeedMuls") && j["railSpeedMuls"].is_array() ) {
-        for ( const auto& v : j["railSpeedMuls"] ) { levelData.railSpeedMuls.push_back(v.get<float>()); }
+    if ( rootJson.contains("railSpeedMuls") && rootJson["railSpeedMuls"].is_array() ) {
+        for ( const auto& speedMulJson : rootJson["railSpeedMuls"] ) { levelData.railSpeedMuls.push_back(speedMulJson.get<float>()); }
     }
 
     // スタート/ゴール地点（無ければデフォルト：スタート=レール0ノード0 / ゴール=未設定）
-    levelData.startRailIndex = j.value("startRailIndex", 0);
-    levelData.startNodeIndex = j.value("startNodeIndex", 0);
-    levelData.goalRailIndex  = j.value("goalRailIndex", -1);
-    levelData.goalNodeIndex  = j.value("goalNodeIndex", 0);
+    levelData.startRailIndex = rootJson.value("startRailIndex", 0);
+    levelData.startNodeIndex = rootJson.value("startNodeIndex", 0);
+    levelData.goalRailIndex  = rootJson.value("goalRailIndex", -1);
+    levelData.goalNodeIndex  = rootJson.value("goalNodeIndex", 0);
 
     // カメラ演出ゾーン
-    if ( j.contains("cameraZones") && j["cameraZones"].is_array() ) {
-        for ( const auto& jz : j["cameraZones"] ) {
-            LevelCameraZone z;
-            z.railIndex = jz.value("railIndex", 0);
-            z.nodeIndex = jz.value("nodeIndex", 0);
-            z.radius    = jz.value("radius", 4.0f);
-            z.mode      = jz.value("mode", 0); // 旧データ（modeなし）は固定カメラ扱い
-            if ( jz.contains("offset") && jz["offset"].is_array() && jz["offset"].size() >= 3 ) {
-                z.offset = { jz["offset"][0], jz["offset"][1], jz["offset"][2] };
+    if ( rootJson.contains("cameraZones") && rootJson["cameraZones"].is_array() ) {
+        for ( const auto& zoneJson : rootJson["cameraZones"] ) {
+            LevelCameraZone zone;
+            zone.railIndex = zoneJson.value("railIndex", 0);
+            zone.nodeIndex = zoneJson.value("nodeIndex", 0);
+            zone.radius    = zoneJson.value("radius", 4.0f);
+            zone.mode      = zoneJson.value("mode", 0); // 旧データ（modeなし）は固定カメラ扱い
+            if ( zoneJson.contains("offset") && zoneJson["offset"].is_array() && zoneJson["offset"].size() >= 3 ) {
+                zone.offset = { zoneJson["offset"][0], zoneJson["offset"][1], zoneJson["offset"][2] };
             }
-            z.yawDeg = jz.value("yawDeg", 180.0f);
-            z.dist   = jz.value("dist", 10.0f);
-            z.height = jz.value("height", 3.5f);
-            z.revert = jz.value("revert", 0); // 旧データは維持(0)扱い
-            z.freeze = jz.value("freeze", 0); // 旧データは止めない(0)扱い
-            z.fovDeg = jz.value("fovDeg", 45.0f);
-            levelData.cameraZones.push_back(z);
+            zone.yawDeg = zoneJson.value("yawDeg", 180.0f);
+            zone.dist   = zoneJson.value("dist", 10.0f);
+            zone.height = zoneJson.value("height", 3.5f);
+            zone.revert = zoneJson.value("revert", 0); // 旧データは維持(0)扱い
+            zone.freeze = zoneJson.value("freeze", 0); // 旧データは止めない(0)扱い
+            zone.fovDeg = zoneJson.value("fovDeg", 45.0f);
+            levelData.cameraZones.push_back(zone);
         }
     }
 
     // 敵の配置を読み込む [type, railIndex, distance]
-    if ( j.contains("enemies") && j["enemies"].is_array() ) {
-        for ( const auto& je : j["enemies"] ) {
-            LevelEnemyData e;
-            e.type      = je.value("type", 0);
-            e.railIndex = je.value("railIndex", 0);
-            e.distance  = je.value("distance", 0.0f);
-            e.patrol    = je.value("patrol", 0); // 旧データは0=動かない
-            levelData.enemies.push_back(e);
+    if ( rootJson.contains("enemies") && rootJson["enemies"].is_array() ) {
+        for ( const auto& enemyJson : rootJson["enemies"] ) {
+            LevelEnemyData enemy;
+            enemy.type      = enemyJson.value("type", 0);
+            enemy.railIndex = enemyJson.value("railIndex", 0);
+            enemy.distance  = enemyJson.value("distance", 0.0f);
+            enemy.patrol    = enemyJson.value("patrol", 0); // 旧データは0=動かない
+            levelData.enemies.push_back(enemy);
         }
     }
 

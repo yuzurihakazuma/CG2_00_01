@@ -111,7 +111,7 @@ void DemoShowcase::UpdatePlay(Input* input, Camera* camera,
 
     // エフェクトの更新と死んだものの削除
     for ( auto& effect : hitEffects_ ) { effect->Update(); }
-    hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& e){ return e->IsDead(); });
+    hitEffects_.remove_if([](const std::unique_ptr<HitEffect>& effect){ return effect->IsDead(); });
 }
 
 // モード問わず毎フレームの見た目更新
