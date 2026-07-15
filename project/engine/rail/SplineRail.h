@@ -37,6 +37,11 @@ public:
     // ============================================================
     int lineMode = 0;
 
+    // 道生成モード（仕様書_残タスク §4）：0=自動で道を敷く / 1=道なし
+    //   「なし」のレールは道メッシュ・ジャンクション・ジョイントの対象外になる
+    //   （カメラ用レール・敵専用レール・演出用の見えないレール向け）
+    int roadMode = 0;
+
     // front→back ベクトルの主軸からタイプを自動判定（|X|>=|Z|→横／それ以外→縦）
     void AutoDetectType();
 
@@ -81,6 +86,30 @@ public:
     // 指定ワールド座標に最も近いレール上の距離 s を返す（スナップ／分岐検出用）
     float GetClosestDistance(const Vector3& worldPos) const;
 
+    // ============================================================
+    // 【道システム】RailFrame / FrameCache（設計書 §3）
+    //   道メッシュ・プレイヤー・敵・カメラが「同じ位置と向き」を共有するための
+    //   フレーム（位置＋right/up/tangent）。0.25m刻みで事前計算してテーブル化し、
+    //   実行時は線形補間で引くだけ（毎回のスプライン計算より約3.5倍速い）。
+    //   向きは RMF（平行移動フレーム）＋ロール回復で、急カーブでもねじれない。
+    //   ※位置は animOffset を含まない基準位置（動くレールは利用側で offset を足す）
+    // ============================================================
+    struct RailFrame {
+        Vector3 position { 0.0f, 0.0f, 0.0f };
+        Vector3 right    { 1.0f, 0.0f, 0.0f };
+        Vector3 up       { 0.0f, 1.0f, 0.0f };
+        Vector3 tangent  { 0.0f, 0.0f, 1.0f };
+    };
+
+    // 距離 d のフレームを返す（テーブルを線形補間。未構築なら都度計算にフォールバック）
+    RailFrame GetFrameAtDistance(float distance) const;
+
+    // FrameCache の構築（BuildDistanceTable の最後で自動的に呼ばれる）
+    void BuildFrameCache();
+
+    std::vector<RailFrame> frameCache_;
+    static constexpr float kFrameStep = 0.25f; // テーブルの刻み(m)
+
     // ⑤ 終端の接続情報（インデックスで管理・距離チェック不要）
     int  frontConnIndex = -1;    // front端の接続先レール番号 (-1=なし)
     bool frontConnToFront = true;  // true=接続先のfront, false=back
@@ -103,7 +132,18 @@ public:
     // ============================================================
     std::vector<int> nodeHole;
 
-    // 指定距離(s)が「穴」区間か？（最も近いノードが穴指定なら true）
+    // ============================================================
+    // 穴の「距離区間」API（仕様書_穴区間の見た目生成 §1-1）。
+    //   nodeHole の連続フラグ列を [d0, d1] のレール距離区間へ変換して返す。
+    //   区間の境界は隣接ノードとの中間点（従来の「最も近いノードが穴」判定と
+    //   完全に同じ範囲になる）。端のノードが穴なら 0 / GetLength() まで広がる。
+    //   落下判定・道メッシュ・マーカーの全てがこの区間を共通参照する（ズレ防止）。
+    //   ソート済み・重なりなし。
+    // ============================================================
+    struct HoleInterval { float d0, d1; };
+    std::vector<HoleInterval> GetHoleIntervals() const;
+
+    // 指定距離(s)が「穴」区間か？（GetHoleIntervals と同じ区間を参照）
     bool IsHoleAtDistance(float distance) const;
 
     // ============================================================

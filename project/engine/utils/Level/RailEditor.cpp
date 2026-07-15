@@ -574,6 +574,7 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railGroundTypes.push_back(0);
 	data_->railVisible.push_back(1);
 	data_->railLineModes.push_back(0);
+	data_->railRoadModes.push_back(0);
 	data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	data_->railMotionTypes.push_back(0);
 	data_->railMotionPhases.push_back(0.0f);
@@ -619,6 +620,7 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railGroundTypes.push_back(( railIdx < ( int ) data_->railGroundTypes.size() ) ? data_->railGroundTypes[railIdx] : 0);
 	data_->railVisible.push_back(( railIdx < ( int ) data_->railVisible.size() ) ? data_->railVisible[railIdx] : 1);
 	data_->railLineModes.push_back(( railIdx < ( int ) data_->railLineModes.size() ) ? data_->railLineModes[railIdx] : 0);
+	data_->railRoadModes.push_back(( railIdx < ( int ) data_->railRoadModes.size() ) ? data_->railRoadModes[railIdx] : 0);
 	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
 	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	data_->railMotionTypes.push_back(( railIdx < ( int ) data_->railMotionTypes.size() ) ? data_->railMotionTypes[railIdx] : 0);
@@ -681,6 +683,13 @@ void RailEditor::ConnectNearbyLines(){
 				shared = tline[bSeg + 1];
 			} else {
 				tline.insert(tline.begin() + bSeg + 1, bPt); // 線の途中に共有ノードを足す
+				// 穴配列も同じ位置へ挿入（同期しないと既存の穴指定が後ろへズレる）
+				if ( bRail < ( int ) data_->railNodeHoles.size() ) {
+					auto& holes = data_->railNodeHoles[bRail];
+					holes.resize(tline.size() - 1, 0);
+					int at = std::clamp(bSeg + 1, 0, ( int ) holes.size());
+					holes.insert(holes.begin() + at, 0);
+				}
 			}
 
 			// 自分の端点をその共有点へ寄せる
@@ -695,6 +704,112 @@ void RailEditor::ConnectNearbyLines(){
 		selectedRailNode_ = -1;
 		RebuildRailPoints();
 	}
+}
+
+// ============================================================
+// 自動スナップ接続（仕様書_自動レール接続 §1）
+// ============================================================
+
+// rail の端点(front/back)から radius 以内の接続候補を探す（変更はしない）。
+//   (a) 他レールの端点（→溶接） (b) 他レール本体の最近点（→T字連結）。両方あれば近い方を優先
+RailEditor::SnapTarget RailEditor::FindSnapTarget(int rail, bool front, float radius) const{
+	SnapTarget best;
+	const auto& lines = data_->railLines;
+	if ( rail < 0 || rail >= ( int ) lines.size() || lines[rail].size() < 2 ) return best;
+	Vector3 ep = front ? lines[rail].front() : lines[rail].back();
+
+	auto dist3 = [](const Vector3& p, const Vector3& q) -> float{
+		float dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z;
+		return std::sqrt(dx * dx + dy * dy + dz * dz);
+		};
+
+	float bestDist = radius;
+	for ( size_t b = 0; b < lines.size(); ++b ) {
+		if ( ( int ) b == rail ) continue;
+		if ( lines[b].size() < 2 ) continue;
+
+		// (a) 端点同士（溶接候補）
+		const int endNodes[2] = { 0, ( int ) lines[b].size() - 1 };
+		for ( int en : endNodes ) {
+			float dd = dist3(lines[b][en], ep);
+			if ( dd < bestDist ) {
+				bestDist = dd;
+				best.valid = true;
+				best.isEndpoint = true;
+				best.rail = ( int ) b;
+				best.node = en;
+				best.seg = -1;
+				best.pos = lines[b][en];
+			}
+		}
+
+		// (b) 本体の最近点（T字連結候補。ConnectNearbyLines と同じ線分投影）
+		for ( size_t s = 0; s + 1 < lines[b].size(); ++s ) {
+			const Vector3& p0 = lines[b][s];
+			const Vector3& p1 = lines[b][s + 1];
+			Vector3 d = { p1.x - p0.x, p1.y - p0.y, p1.z - p0.z };
+			float len2 = d.x * d.x + d.y * d.y + d.z * d.z;
+			float t = ( len2 > 1e-6f )
+				? ( ( ep.x - p0.x ) * d.x + ( ep.y - p0.y ) * d.y + ( ep.z - p0.z ) * d.z ) / len2
+				: 0.0f;
+			t = std::clamp(t, 0.0f, 1.0f);
+			Vector3 cp = { p0.x + d.x * t, p0.y + d.y * t, p0.z + d.z * t };
+			float dd = dist3(cp, ep);
+			if ( dd < bestDist ) {
+				bestDist = dd;
+				best.valid = true;
+				best.isEndpoint = false;
+				best.rail = ( int ) b;
+				best.node = -1;
+				best.seg = ( int ) s;
+				best.pos = cp;
+			}
+		}
+	}
+	return best;
+}
+
+// スナップ候補へ実際に接続する（ドロップ確定）。
+//   端点同士→ドラッグ中の端点を相手の位置へ吸着（相手は動かさない＝片側スナップ）
+//   本体の途中→相手レールへ共有ノードを挿入して自分の端点を寄せる（ConnectNearbyLines と同じ）
+void RailEditor::ConnectToTarget(int rail, bool front, const SnapTarget& target){
+	if ( !target.valid ) return;
+	auto& lines = data_->railLines;
+	if ( rail < 0 || rail >= ( int ) lines.size() || lines[rail].size() < 2 ) return;
+	if ( target.rail < 0 || target.rail >= ( int ) lines.size() ) return;
+
+	Vector3 shared = target.pos;
+
+	if ( !target.isEndpoint ) {
+		// 相手レールの最近点が既存ノードに近ければそれを共有点に、なければ挿入する
+		const float kSnapNode = 0.25f; // ConnectNearbyLines と同じ
+		auto& tline = lines[target.rail];
+		int seg = std::clamp(target.seg, 0, ( int ) tline.size() - 2);
+		auto dist3 = [](const Vector3& p, const Vector3& q) -> float{
+			float dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z;
+			return std::sqrt(dx * dx + dy * dy + dz * dz);
+			};
+		if ( dist3(target.pos, tline[seg]) <= kSnapNode ) {
+			shared = tline[seg];
+		} else if ( dist3(target.pos, tline[seg + 1]) <= kSnapNode ) {
+			shared = tline[seg + 1];
+		} else {
+			tline.insert(tline.begin() + seg + 1, target.pos);
+			// 穴配列も同じ位置へ挿入（同期しないと既存の穴指定が後ろへズレる）
+			if ( target.rail < ( int ) data_->railNodeHoles.size() ) {
+				auto& holes = data_->railNodeHoles[target.rail];
+				holes.resize(tline.size() - 1, 0); // 念のため挿入前サイズへ整える
+				int at = std::clamp(seg + 1, 0, ( int ) holes.size());
+				holes.insert(holes.begin() + at, 0);
+			}
+		}
+	}
+
+	// 自分の端点を共有点へ吸着
+	if ( front ) lines[rail].front() = shared;
+	else         lines[rail].back()  = shared;
+
+	RebuildRailPoints(); // 世代を進めて道・マーカー・接続の再構築を促す
 }
 
 bool RailEditor::GetNodePosOf(int rail, int node, Vector3& out) const{
@@ -898,6 +1013,9 @@ void RailEditor::DrawWindow(){
 	if ( data_->railLineModes.size() != data_->railLines.size() ) {
 		data_->railLineModes.resize(data_->railLines.size(), 0);
 	}
+	if ( data_->railRoadModes.size() != data_->railLines.size() ) {
+		data_->railRoadModes.resize(data_->railLines.size(), 0);
+	}
 	if ( data_->railTypes.size() != data_->railLines.size() ) {
 		data_->railTypes.resize(data_->railLines.size(), -1);
 	}
@@ -928,6 +1046,20 @@ void RailEditor::DrawWindow(){
 			if ( ImGui::SmallButton("複製") ) { duplicateRail = i; }
 			ImGui::SameLine();
 			if ( ImGui::SmallButton("削除") ) { deleteRail = i; }
+			// 道の生成トグル（§4：0=自動で道を敷く / 1=道なし）
+			ImGui::SameLine();
+			{
+				bool road = ( i < ( int ) data_->railRoadModes.size() ) ? ( data_->railRoadModes[i] == 0 ) : true;
+				if ( ImGui::Checkbox("道", &road) ) {
+					if ( i < ( int ) data_->railRoadModes.size() ) {
+						data_->railRoadModes[i] = road ? 0 : 1;
+						++railVersion_; // 道メッシュ・ジョイントの即時再生成トリガー
+					}
+				}
+				if ( ImGui::IsItemHovered() ) {
+					ImGui::SetTooltip("このレールの下に道を生成するか（OFF=レールだけ。カメラ/敵/演出用）");
+				}
+			}
 			if ( !IsRailReachable(i) ) {
 				ImGui::SameLine();
 				ImGui::TextColored(ImVec4(0.85f, 0.45f, 1.0f, 1.0f), "×通れない");
@@ -950,6 +1082,8 @@ void RailEditor::DrawWindow(){
 				data_->railVisible.erase(data_->railVisible.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railLineModes.size() )
 				data_->railLineModes.erase(data_->railLineModes.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railRoadModes.size() )
+				data_->railRoadModes.erase(data_->railRoadModes.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railNodeHoles.size() )
 				data_->railNodeHoles.erase(data_->railNodeHoles.begin() + deleteRail);
 			if ( currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
@@ -1158,6 +1292,18 @@ void RailEditor::DrawWindow(){
 		ConnectNearbyLines();
 	}
 	ImGui::TextDisabled("※端点が他レールの近く(約1.2m)にあれば、その線の途中に共有ノードを足して連結");
+
+	// --- 自動スナップ接続の設定（§5。プラレール風：端点ドラッグで自動接続）---
+	ImGui::Checkbox("自動スナップ（端点ドラッグで自動接続）", &railAutoSnap_);
+	if ( railAutoSnap_ ) {
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::SliderFloat("スナップ距離(m)", &railSnapDistance_, 0.3f, 3.0f, "%.1f");
+	}
+	{
+		const char* jointModes[] = { "エディタのみ", "常に表示", "非表示" };
+		ImGui::SetNextItemWidth(140.0f);
+		ImGui::Combo("ジョイント表示", &railJointVisible_, jointModes, 3);
+	}
 	ImGui::Separator();
 
 	// --- 形を整えるツール（ワンクリックで 直線 / カーブ / なめらか化）---
@@ -1664,6 +1810,100 @@ void RailEditor::DrawWindow(){
 
 	ImGui::EndTabItem();
 	} // 作成タブ
+
+	// =====================================================================
+	//  接続タブ（§5 管理UI）：溶接/T字の接続一覧・選択ハイライト・切断
+	//   接続はレール座標から毎回導出する（保存しない派生データ）
+	// =====================================================================
+	if ( ImGui::BeginTabItem("接続 (Joints)") ) {
+		const auto& lines = data_->railLines;
+		auto dist3 = [](const Vector3& p, const Vector3& q) -> float{
+			float dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z;
+			return std::sqrt(dx * dx + dy * dy + dz * dz);
+			};
+		const float kConn = 0.7f; // ランタイム(BuildRailConnections)の接続判定と同じ
+
+		// 接続の導出：端点↔端点=溶接 / 端点↔他レール本体のノード上=T字
+		struct Conn { bool isWeld; int railA; bool frontA; int railB; int nodeB; Vector3 pos; };
+		std::vector<Conn> conns;
+		for ( size_t a = 0; a < lines.size(); ++a ) {
+			if ( lines[a].size() < 2 ) continue;
+			for ( int fs = 0; fs < 2; ++fs ) {
+				bool front = ( fs == 0 );
+				Vector3 ep = front ? lines[a].front() : lines[a].back();
+				// 溶接（端点同士）。ペア重複を避けるため相手は a より後ろだけ見る
+				bool found = false;
+				for ( size_t b = a + 1; b < lines.size() && !found; ++b ) {
+					if ( lines[b].size() < 2 ) continue;
+					const int ends[2] = { 0, ( int ) lines[b].size() - 1 };
+					for ( int en : ends ) {
+						if ( dist3(ep, lines[b][en]) < kConn ) {
+							conns.push_back({ true, ( int ) a, front, ( int ) b, en, ep });
+							found = true;
+							break;
+						}
+					}
+				}
+				if ( found ) continue;
+				// T字（端点が他レールの途中ノードの上にある）
+				for ( size_t b = 0; b < lines.size() && !found; ++b ) {
+					if ( b == a || lines[b].size() < 3 ) continue;
+					for ( int nn = 1; nn + 1 < ( int ) lines[b].size(); ++nn ) {
+						if ( dist3(ep, lines[b][nn]) < kConn ) {
+							conns.push_back({ false, ( int ) a, front, ( int ) b, nn, ep });
+							found = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		ImGui::Text("接続一覧（%d件）:", ( int ) conns.size());
+		ImGui::TextDisabled("※行クリックで該当ノードを選択ハイライト。切断で 0.3m 離す（Ctrl+Zで戻せる）");
+		int disconnect = -1;
+		for ( int ci = 0; ci < ( int ) conns.size(); ++ci ) {
+			const Conn& c = conns[ci];
+			ImGui::PushID(1000 + ci);
+			char label[96];
+			snprintf(label, sizeof(label), "%s  路線%d(%s) ↔ 路線%d%s",
+				c.isWeld ? "溶接" : "T字",
+				c.railA, c.frontA ? "先頭" : "末尾",
+				c.railB, c.isWeld ? ( c.nodeB == 0 ? "(先頭)" : "(末尾)" ) : "(途中)");
+			if ( ImGui::Selectable(label, selectedConnection_ == ci, 0, ImVec2(250.0f, 0.0f)) ) {
+				selectedConnection_ = ci;
+				// 該当ノードを選択（GameView のノードハイライトに乗る）
+				SetCurrentRail(c.railA);
+				SelectSingleNode(c.railA, c.frontA ? 0 : ( int ) lines[c.railA].size() - 1);
+			}
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("切断") ) { disconnect = ci; }
+			ImGui::PopID();
+		}
+
+		// 切断：端点を自レールの内側へ 0.3m 引っ込める（即再スナップの無限ループ防止距離）
+		if ( disconnect >= 0 && disconnect < ( int ) conns.size() ) {
+			const Conn& c = conns[disconnect];
+			auto pullBack = [&](int rail, bool front){
+				auto& line = data_->railLines[rail];
+				if ( line.size() < 2 ) return;
+				Vector3& ep   = front ? line.front() : line.back();
+				Vector3& next = front ? line[1] : line[line.size() - 2];
+				Vector3 d = { next.x - ep.x, next.y - ep.y, next.z - ep.z };
+				float l = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+				if ( l < 1e-4f ) return;
+				const float kSep = 0.3f;
+				ep = { ep.x + d.x / l * kSep, ep.y + d.y / l * kSep, ep.z + d.z / l * kSep };
+			};
+			pullBack(c.railA, c.frontA);
+			if ( c.isWeld ) { pullBack(c.railB, c.nodeB == 0); } // 溶接は両側を離す
+			selectedConnection_ = -1;
+			RebuildRailPoints(); // 道・パッチ・ジョイントの再生成（履歴は CommitIfStable が拾う）
+		}
+
+		ImGui::EndTabItem();
+	}
+
 	ImGui::EndTabBar();
 	}
 	ImGui::End();

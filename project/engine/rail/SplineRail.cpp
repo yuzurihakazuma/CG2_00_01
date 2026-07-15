@@ -120,6 +120,111 @@ void SplineRail::BuildDistanceTable(){
 
         prevPos = currentPos;
     }
+
+    // 距離テーブルが更新されたらフレームテーブルも作り直す（道システムの土台）
+    BuildFrameCache();
+}
+
+namespace {
+    // FrameCache 用のベクトル補助（このファイル内だけで使う）
+    inline Vector3 FC_Cross(const Vector3& a, const Vector3& b){
+        return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
+    }
+    inline float FC_Dot(const Vector3& a, const Vector3& b){
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
+    inline Vector3 FC_Normalize(const Vector3& v){
+        float l = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        if ( l < 1e-6f ) return { 1.0f, 0.0f, 0.0f };
+        return { v.x / l, v.y / l, v.z / l };
+    }
+    inline Vector3 FC_Lerp(const Vector3& a, const Vector3& b, float t){
+        return { a.x + ( b.x - a.x ) * t, a.y + ( b.y - a.y ) * t, a.z + ( b.z - a.z ) * t };
+    }
+}
+
+// FrameCache の構築：0.25m刻みで RMF（平行移動フレーム）を運ぶ。
+//   right(0) = normalize(cross(worldUp, T))
+//   right(i) = 前の right を現在の接線に直交化（ねじれ最小）
+//   接線が水平寄り(|T.y|<0.7)の間は「理想のright（水平）」へ15%/stepだけ戻す（ロール回復）
+void SplineRail::BuildFrameCache(){
+    frameCache_.clear();
+    if ( nodes.size() < 2 || totalLength_ <= 0.0f ) return;
+
+    const Vector3 worldUp = { 0.0f, 1.0f, 0.0f };
+    const int count = static_cast< int >( totalLength_ / kFrameStep ) + 2; // 終端を必ず含む
+    frameCache_.reserve(count);
+
+    Vector3 prevRight { 1.0f, 0.0f, 0.0f };
+    for ( int i = 0; i < count; ++i ) {
+        float d = ( std::min )( i * kFrameStep, totalLength_ );
+
+        RailFrame f;
+        f.position = GetPositionByDistance(d);
+        f.tangent  = FC_Normalize(GetTangentByDistance(d));
+        const Vector3& T = f.tangent;
+
+        Vector3 r;
+        if ( i == 0 ) {
+            r = FC_Cross(worldUp, T);
+            if ( FC_Dot(r, r) < 1e-8f ) { r = FC_Cross({ 0.0f, 0.0f, 1.0f }, T); } // 真上向きの保険
+            r = FC_Normalize(r);
+        } else {
+            // RMF: 前フレームの right を現在の接線に直交化して運ぶ
+            r = { prevRight.x - T.x * FC_Dot(prevRight, T),
+                  prevRight.y - T.y * FC_Dot(prevRight, T),
+                  prevRight.z - T.z * FC_Dot(prevRight, T) };
+            if ( FC_Dot(r, r) < 1e-8f ) {
+                r = FC_Cross(worldUp, T);
+                if ( FC_Dot(r, r) < 1e-8f ) { r = FC_Cross({ 0.0f, 0.0f, 1.0f }, T); }
+            }
+            r = FC_Normalize(r);
+
+            // ロール回復：接線が水平寄りなら理想の right（水平）へ少しずつ戻す
+            if ( std::abs(T.y) < 0.7f ) {
+                Vector3 ideal = FC_Cross(worldUp, T);
+                if ( FC_Dot(ideal, ideal) > 1e-8f ) {
+                    ideal = FC_Normalize(ideal);
+                    if ( FC_Dot(ideal, r) < 0.0f ) { ideal = { -ideal.x, -ideal.y, -ideal.z }; } // 反転側へ回復しない
+                    r = FC_Normalize(FC_Lerp(r, ideal, 0.15f));
+                }
+            }
+        }
+        prevRight = r;
+
+        f.right = r;
+        f.up = FC_Normalize(FC_Cross(T, r));
+        frameCache_.push_back(f);
+    }
+}
+
+// 距離 d のフレームを取得（テーブルの線形補間＋再正規化）
+SplineRail::RailFrame SplineRail::GetFrameAtDistance(float distance) const{
+    if ( frameCache_.size() < 2 ) {
+        // フォールバック：キャッシュ未構築時は都度計算（RMFなしの簡易フレーム）
+        RailFrame f;
+        f.position = GetPositionByDistance(distance);
+        f.tangent  = FC_Normalize(GetTangentByDistance(distance));
+        Vector3 r = FC_Cross({ 0.0f, 1.0f, 0.0f }, f.tangent);
+        if ( FC_Dot(r, r) < 1e-8f ) { r = FC_Cross({ 0.0f, 0.0f, 1.0f }, f.tangent); }
+        f.right = FC_Normalize(r);
+        f.up = FC_Normalize(FC_Cross(f.tangent, f.right));
+        return f;
+    }
+
+    float d = std::clamp(distance, 0.0f, totalLength_);
+    float fi = d / kFrameStep;
+    int i0 = ( std::min )( static_cast< int >( fi ), static_cast< int >( frameCache_.size() ) - 2 );
+    float t = std::clamp(fi - i0, 0.0f, 1.0f);
+
+    const RailFrame& a = frameCache_[i0];
+    const RailFrame& b = frameCache_[i0 + 1];
+    RailFrame f;
+    f.position = FC_Lerp(a.position, b.position, t);
+    f.tangent  = FC_Normalize(FC_Lerp(a.tangent, b.tangent, t));
+    f.right    = FC_Normalize(FC_Lerp(a.right, b.right, t));
+    f.up       = FC_Normalize(FC_Cross(f.tangent, f.right)); // 補間後も直交を保証
+    return f;
 }
 
 // ② 進んだ距離から「t」を求める（これが等速移動の要！）
@@ -248,20 +353,42 @@ float SplineRail::GetClosestDistance(const Vector3& worldPos) const{
     return bestS;
 }
 
-// 指定距離(s)が「穴」区間か：最も近いノードが穴指定なら true。
-// ノード i は t=i に対応するので、その弧長距離 GetDistanceFromT(i) と比べて最近傍を探す。
-bool SplineRail::IsHoleAtDistance(float distance) const{
+// 穴フラグの連続ノード列を距離区間へ変換する（見た目と落下判定の共通ソース）。
+//   区間境界は隣接ノードとの中間点。従来の「最も近いノードが穴指定なら穴」判定と
+//   全く同じ範囲になる（＝この置き換えでゲームプレイは変わらない）。
+std::vector<SplineRail::HoleInterval> SplineRail::GetHoleIntervals() const{
+    std::vector<HoleInterval> out;
     int n = static_cast< int >( nodes.size() );
-    if ( n < 2 || nodeHole.empty() ) return false;
+    if ( n < 2 || nodeHole.empty() ) return out;
     int lim = std::min(n, static_cast< int >( nodeHole.size() ));
-    int   best = -1;
-    float bestDiff = 1e30f;
-    for ( int i = 0; i < lim; ++i ) {
-        float nodeDist = GetDistanceFromT(static_cast< float >( i ));
-        float diff = std::fabs(nodeDist - distance);
-        if ( diff < bestDiff ) { bestDiff = diff; best = i; }
+
+    // ノード i の弧長距離（t=i に対応）
+    auto nodeDist = [&](int i) -> float{ return GetDistanceFromT(static_cast< float >( i )); };
+
+    int runStart = -1;
+    for ( int i = 0; i <= lim; ++i ) {
+        bool hole = ( i < lim ) && ( nodeHole[i] != 0 );
+        if ( hole && runStart < 0 ) { runStart = i; }
+        if ( !hole && runStart >= 0 ) {
+            int runEnd = i - 1;
+            HoleInterval hv;
+            hv.d0 = ( runStart == 0 )      ? 0.0f
+                                           : ( nodeDist(runStart - 1) + nodeDist(runStart) ) * 0.5f;
+            hv.d1 = ( runEnd == lim - 1 && runEnd == n - 1 ) ? totalLength_
+                                           : ( nodeDist(runEnd) + nodeDist(runEnd + 1) ) * 0.5f;
+            if ( hv.d1 > hv.d0 ) { out.push_back(hv); }
+            runStart = -1;
+        }
     }
-    return best >= 0 && nodeHole[best] != 0;
+    return out;
+}
+
+// 指定距離(s)が「穴」区間か：GetHoleIntervals と同じ区間を参照する
+bool SplineRail::IsHoleAtDistance(float distance) const{
+    for ( const HoleInterval& hv : GetHoleIntervals() ) {
+        if ( distance >= hv.d0 && distance <= hv.d1 ) return true;
+    }
+    return false;
 }
 
 float SplineRail::GetDistanceFromT(float t) const{

@@ -3,6 +3,7 @@
 #include <vector>
 #include "engine/math/struct.h" // Vector3
 #include "engine/utils/Level/LevelData.h" // LevelEnemyData
+#include "engine/utils/Level/RailEditor.h" // SnapTarget（自動スナップ接続 §5）
 
 class LevelEditor;
 class BlenderImporter;
@@ -92,6 +93,12 @@ public:
 	const std::vector<int>& GetEditorRailVisible() const;
 	// 各レールの線のつなぎ方（0=スプライン/1=直線）。railLines と同じ並び
 	const std::vector<int>& GetEditorRailLineModes() const;
+	// 各レールの道生成モード（0=自動/1=なし）。railLines と同じ並び（§4）
+	const std::vector<int>& GetEditorRailRoadModes() const;
+	// ジョイント表示モード（0=エディタのみ/1=常に/2=非表示。RoadMesh が参照）
+	int GetEditorJointVisible() const;
+	// レールノードをギズモ/フリーハンドでドラッグ中か（ドラッグ中は道の再生成を間引く）
+	bool IsRailDragging() const{ return railSelDragging_ || railFreehandStroking_; }
 	const std::vector<int>&   GetEditorRailMotionTypes() const;  // 動きの波形（0=sin/1=停止つき/2=円）
 	const std::vector<float>& GetEditorRailMotionPhases() const; // 動きの位相（0〜1）
 	const std::vector<int>&   GetEditorRailOneWay() const;       // 片方向（0=両/1=正/2=逆）
@@ -183,6 +190,11 @@ private:
     float railRubberStartY_ = 0.0f;
     Vector3 railSelPivot_ { 0.0f, 0.0f, 0.0f }; // 選択ギズモのピボット（ドラッグ中は保持）
     bool  railSelDragging_ = false;             // ギズモで選択群を移動中か
+
+    // 自動スナップ接続（§5）：端点ドラッグ中の接続候補（緑プレビュー→マウスアップで確定）
+    RailEditor::SnapTarget railSnapCandidate_ {};
+    int   railSnapDragRail_  = -1;   // ドラッグ中の端点が属するレール（-1=候補なし）
+    bool  railSnapDragFront_ = true; // ドラッグ中の端点が先頭側か
 
     // エディタ有り(USE_IMGUI)＝編集モードから開始。リリース＝エディタが無いので
     // いきなりプレイモードで開始し、プレイヤーが動けて敵も出る状態にする。

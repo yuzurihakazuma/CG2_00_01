@@ -91,7 +91,7 @@ public: // メンバ関数
 	// <summary>
 	/// 動的メッシュとして初期化：固定容量の頂点/インデックスバッファを一度だけ確保し Map を保持する。
 	/// 以後は UpdateMesh の memcpy と描画数更新だけで形を変えられる（毎フレームの作り直しゼロ）。
-	/// ※エンジンは毎フレーム WaitForGPU するシングルバッファ運用なので Map しっぱなし書き換えが安全
+	/// ※エンジンは毎フレーム WaitForGPU するシングルバッファ運用なので Map しっぱなし書き換えが公認パターン（DebugDraw と同方式）
 	/// </summary>
 	void InitializeDynamic(ModelCommon* modelCommon, uint32_t vertexCapacity, uint32_t indexCapacity,
 	                       const std::string& textureFilePath);
@@ -118,6 +118,9 @@ public: // メンバ関数
 	void Draw(uint32_t instanceCount = 1);
 
 	Material* GetMaterial(){ return materialData_; }
+
+	// CPU側モデルデータの参照（RoadMesh のピースベイク等、頂点を焼き込む用途）
+	const ModelData& GetModelData() const{ return modelData_; }
 
 	const Node& GetRootNode() const { return modelData_.rootNode; }
 

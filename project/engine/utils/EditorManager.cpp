@@ -370,10 +370,37 @@ void EditorManager::Update(){
                         }
                     }
                     railSelPivot_ = np;
+
+                    // --- 自動スナップ候補の検出（§5：端点1個をドラッグしている時だけ）---
+                    railSnapCandidate_.valid = false;
+                    railSnapDragRail_ = -1;
+                    if ( re->IsAutoSnap() && sel.size() == 1 && !fineDrag ) {
+                        int nodeCount = re->GetNodeCountOf(sel[0].rail);
+                        bool isFront = ( sel[0].node == 0 );
+                        bool isBack  = ( sel[0].node == nodeCount - 1 );
+                        if ( nodeCount >= 2 && ( isFront || isBack ) ) {
+                            RailEditor::SnapTarget cand =
+                                re->FindSnapTarget(sel[0].rail, isFront, re->GetSnapDistance());
+                            if ( cand.valid ) {
+                                railSnapCandidate_ = cand;
+                                railSnapDragRail_  = sel[0].rail;
+                                railSnapDragFront_ = isFront;
+                            }
+                        }
+                    }
                 } else {
+                    // ドラッグ終了エッジ：スナップ候補が生きていれば接続を確定する（§5）
+                    if ( railSelDragging_ && railSnapCandidate_.valid && railSnapDragRail_ >= 0 ) {
+                        re->ConnectToTarget(railSnapDragRail_, railSnapDragFront_, railSnapCandidate_);
+                        // 直後の DrawWindow 冒頭 CommitIfStable がドラッグ＋接続を1履歴にまとめる
+                    }
+                    railSnapCandidate_.valid = false;
+                    railSnapDragRail_ = -1;
                     railSelDragging_ = false;
                 }
             } else {
+                railSnapCandidate_.valid = false;
+                railSnapDragRail_ = -1;
                 railSelDragging_ = false;
             }
         }
@@ -767,6 +794,35 @@ void EditorManager::Update(){
             { Vector3 p; ImVec2 s;
               if ( hoverIdx >= 0 && re->GetNodePosOf(hoverRail, hoverIdx, p) && project(p, s) )
                   dl->AddCircle(s, 9.5f, IM_COL32(255, 235, 80, 255), 0, 2.0f); }
+            // 自動スナップのプレビュー（§5）：候補があれば接続先を緑ハイライト＋端点ゴースト
+            if ( railSnapCandidate_.valid && railSnapDragRail_ >= 0 ) {
+                Vector3 dragP;
+                int dragNode = railSnapDragFront_ ? 0 : re->GetNodeCountOf(railSnapDragRail_) - 1;
+                ImVec2 sFrom, sTo;
+                bool okTo = project(railSnapCandidate_.pos, sTo);
+                if ( okTo ) {
+                    // スナップ後の位置に緑のゴースト（二重丸）＋ドラッグ中端点から緑の線
+                    if ( re->GetNodePosOf(railSnapDragRail_, dragNode, dragP) && project(dragP, sFrom) ) {
+                        dl->AddLine(sFrom, sTo, IM_COL32(60, 255, 120, 200), 2.0f);
+                    }
+                    dl->AddCircleFilled(sTo, 5.0f, IM_COL32(60, 255, 120, 120));
+                    dl->AddCircle(sTo, 9.0f, IM_COL32(60, 255, 120, 255), 0, 2.5f);
+                }
+                // 接続先レールの該当付近を緑でハイライト（端点 or セグメント両端）
+                if ( railSnapCandidate_.isEndpoint ) {
+                    Vector3 p; ImVec2 s;
+                    if ( re->GetNodePosOf(railSnapCandidate_.rail, railSnapCandidate_.node, p) && project(p, s) ) {
+                        dl->AddCircle(s, 12.0f, IM_COL32(60, 255, 120, 180), 0, 2.0f);
+                    }
+                } else {
+                    Vector3 a, b; ImVec2 sa, sb;
+                    if ( re->GetNodePosOf(railSnapCandidate_.rail, railSnapCandidate_.seg, a) &&
+                         re->GetNodePosOf(railSnapCandidate_.rail, railSnapCandidate_.seg + 1, b) &&
+                         project(a, sa) && project(b, sb) ) {
+                        dl->AddLine(sa, sb, IM_COL32(60, 255, 120, 180), 4.0f);
+                    }
+                }
+            }
             // 配置ゴースト（マウス追加モードで、ノード/線分に当たっていない時）
             //   ・マウス直下の地面点（生の位置）に細い十字
             //   ・実際に置かれる位置（吸着後）に青い丸
@@ -920,6 +976,13 @@ const std::vector<int>& EditorManager::GetEditorRailVisible() const{
 const std::vector<int>& EditorManager::GetEditorRailLineModes() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailLineModes() : kEmpty;
+}
+const std::vector<int>& EditorManager::GetEditorRailRoadModes() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailRoadModes() : kEmpty;
+}
+int EditorManager::GetEditorJointVisible() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetJointVisible() : 1;
 }
 const std::vector<int>& EditorManager::GetEditorRailMotionTypes() const{
     static const std::vector<int> kEmpty;

@@ -1,6 +1,7 @@
 #pragma once
 #include "engine/rail/SplineRail.h"
 #include "engine/math/struct.h"
+#include "engine/3d/model/Model.h"
 #include <vector>
 #include <memory>
 #include <cstdint>
@@ -36,7 +37,7 @@ public:
     const std::vector<SplineRail>& GetRails() const { return rails_; }
 
     int  Version() const { return lastVersion_; }       // 直近に同期したエディタの編集世代
-    int  MarkerCount() const { return ( int ) markers_.size(); }
+    int  MarkerCount() const { return ( int ) markerSlotsUsed_; }
     bool ShowMarkers() const { return showMarkers_; }
     void SetShowMarkers(bool v) { showMarkers_ = v; }
 
@@ -55,9 +56,19 @@ private:
     void UpdateMarkerPositions(); // マーカー位置 = 基準位置 + そのレールの animOffset
 
     std::vector<SplineRail> rails_;                    // 実行用レール本体
-    std::vector<std::unique_ptr<Obj3d>> markers_;      // 緑線マーカー（細いバーの集合）
-    std::vector<int>     markerRail_;                  // 各マーカーが属するレール番号
-    std::vector<Vector3> markerBase_;                  // 各マーカーの基準位置（オフセット0換算）
+
+    // 緑線マーカー：レール1本 = リボンメッシュ1個（穴があるレールは赤リボンをもう1個）。
+    //   0.5m毎の Obj3d 群をやめ、固定容量の動的バッファを使い回す
+    //   （ドローコールが約220→レール本数になり、編集中の Obj3d 生成もゼロ）
+    struct MarkerSlot {
+        std::unique_ptr<Model> model;
+        std::unique_ptr<Obj3d> obj;
+        int rail = -1;
+    };
+    // 生成したリボンを空きスロットへ書き込む（不足時のみ新規確保）
+    void EmitMarker(const Model::ModelData& data, int railIdx, const Vector4& color);
+    std::vector<std::unique_ptr<MarkerSlot>> markerSlots_;
+    size_t markerSlotsUsed_ = 0;
 
     float    animTime_ = 0.0f;     // 動くレール用の経過時間
     int      lastVersion_ = -1;    // 直近に同期したエディタ編集世代

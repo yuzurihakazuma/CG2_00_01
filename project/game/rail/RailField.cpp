@@ -5,6 +5,7 @@
 #include "engine/3d/model/ModelManager.h"
 #include "engine/camera/Camera.h"
 #include "engine/utils/EditorManager.h"
+#include "engine/graphics/PipelineManager.h"
 
 #include <cmath>
 #include <algorithm>
@@ -243,10 +244,11 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
 
     BuildRailConnections(rails_); // 接続・分岐・ループ（動くレールは静的連結から除外）
 
-    // 地面タイプ・穴・表示フラグ・片方向・速度倍率を割当
+    // 地面タイプ・穴・表示フラグ・道モード・片方向・速度倍率を割当
     const auto& grounds  = em->GetEditorRailGroundTypes();
     const auto& holes    = em->GetEditorRailNodeHoles();
     const auto& visible  = em->GetEditorRailVisible();
+    const auto& roadMode = em->GetEditorRailRoadModes();
     const auto& oneWays  = em->GetEditorRailOneWay();
     const auto& spdMuls  = em->GetEditorRailSpeedMuls();
     for ( size_t i = 0; i < rails_.size(); ++i ) {
@@ -255,6 +257,7 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
         if ( i < holes.size() ) rails_[i].nodeHole = holes[i];
         else                    rails_[i].nodeHole.clear();
         rails_[i].visible  = ( i < visible.size() ) ? ( visible[i] != 0 ) : true;
+        rails_[i].roadMode = ( i < roadMode.size() ) ? roadMode[i] : 0;
         rails_[i].oneWay   = ( i < oneWays.size() ) ? oneWays[i] : 0;
         rails_[i].speedMul = ( i < spdMuls.size() && spdMuls[i] > 0.05f ) ? spdMuls[i] : 1.0f;
     }
@@ -327,51 +330,67 @@ void RailField::ResetMotion(){
     UpdateMarkerPositions();
 }
 
-// マーカー位置 = 基準位置 + そのレールの animOffset
+// マーカー位置 = リボンはワールド座標で焼いてあるので、レールの animOffset ぶんだけ平行移動
 void RailField::UpdateMarkerPositions(){
-    for ( size_t k = 0; k < markers_.size(); ++k ) {
-        if ( k >= markerRail_.size() || k >= markerBase_.size() ) break;
-        int ri = markerRail_[k];
-        if ( ri < 0 || ri >= ( int ) rails_.size() ) continue;
-        const Vector3& off  = rails_[ri].animOffset;
-        const Vector3& base = markerBase_[k];
-        markers_[k]->SetTranslation({ base.x + off.x, base.y + off.y, base.z + off.z });
+    for ( size_t k = 0; k < markerSlotsUsed_; ++k ) {
+        MarkerSlot& s = *markerSlots_[k];
+        if ( s.rail < 0 || s.rail >= ( int ) rails_.size() ) continue;
+        s.obj->SetTranslation(rails_[s.rail].animOffset);
     }
 }
 
 void RailField::UpdateMarkers(){
-    for ( auto& marker : markers_ ) { marker->Update(); }
+    for ( size_t k = 0; k < markerSlotsUsed_; ++k ) { markerSlots_[k]->obj->Update(); }
 }
 
 void RailField::DrawMarkers() const{
     if ( !showMarkers_ ) return;
-    for ( const auto& marker : markers_ ) { marker->Draw(); }
+    for ( size_t k = 0; k < markerSlotsUsed_; ++k ) { markerSlots_[k]->obj->Draw(); }
 }
 
 void RailField::RebuildMarkers(){
     BuildMarkers();
 }
 
-// rails_ を距離で細かくサンプルし、隣り合う点を「細いバー」で繋いで経路を可視化する。
-//   通常区間=緑モデル / 穴区間=赤モデル（マテリアルはモデル単位で共有のため色はモデルに1回設定）。
-void RailField::BuildMarkers(){
-    markers_.clear();
-    markerRail_.clear();
-    markerBase_.clear();
+// 生成したリボンを空きスロットへ書き込む（スロット不足時のみ新規確保）
+void RailField::EmitMarker(const Model::ModelData& data, int railIdx, const Vector4& color){
+    if ( data.vertices.empty() || data.indices.empty() ) return;
 
-    Model* segModel  = ModelManager::GetInstance()->FindModel("railLineCube");
-    Model* holeModel = ModelManager::GetInstance()->FindModel("railLineCubeHole");
-    if ( segModel == nullptr ) { return; }
-    if ( holeModel == nullptr ) { holeModel = segModel; }
+    if ( markerSlotsUsed_ == markerSlots_.size() ) {
+        auto slot = std::make_unique<MarkerSlot>();
+        slot->model = std::make_unique<Model>();
+        // 白テクスチャ（GamePlayScene が先読み済み）＋マテリアル色で単色の線にする
+        slot->model->InitializeDynamic(ModelManager::GetInstance()->GetModelCommon(),
+                                       4096, 12288, "resources/block/white1x1.png");
+        slot->obj = std::make_unique<Obj3d>();
+        slot->obj->Initialize(slot->model.get());
+        slot->obj->SetPipelineType(PipelineType::Object3D_CullNone);
+        markerSlots_.push_back(std::move(slot));
+    }
+    MarkerSlot& s = *markerSlots_[markerSlotsUsed_++];
+    s.model->UpdateMesh(data.vertices, data.indices);
+    if ( whiteTexIndex_ != 0 ) { s.model->SetTexture(whiteTexIndex_); }
+    if ( s.model->GetMaterial() ) {
+        s.model->GetMaterial()->color = color;
+        s.model->GetMaterial()->enableLighting = 0;
+    }
+    s.rail = railIdx;
+    s.obj->SetCamera(camera_);
+    s.obj->SetTranslation({ 0.0f, 0.0f, 0.0f });
+    s.obj->Update();
+}
+
+// rails_ を距離でサンプルし、レール1本＝1本の細いリボンで経路を可視化する。
+//   通常区間=緑リボン / 穴区間=赤リボン（レール毎に最大2メッシュ・2ドローコール）。
+//   断面は「横リボン＋縦リボン」の十字型で、どの方向から見ても線に見える。
+void RailField::BuildMarkers(){
+    markerSlotsUsed_ = 0;
 
     const float spacing   = 0.5f;
     const float thickness = 0.08f;
+    const float half      = thickness * 0.5f;
     const Vector4 lineColor = { 0.2f, 1.0f, 0.35f, 1.0f }; // 通常区間：明るい緑
     const Vector4 holeColor = { 1.0f, 0.2f, 0.15f, 1.0f }; // 穴区間：赤
-
-    if ( whiteTexIndex_ != 0 ) { segModel->SetTexture(whiteTexIndex_); holeModel->SetTexture(whiteTexIndex_); }
-    if ( segModel->GetMaterial() )  { segModel->GetMaterial()->color = lineColor;  segModel->GetMaterial()->enableLighting = 0; }
-    if ( holeModel->GetMaterial() ) { holeModel->GetMaterial()->color = holeColor; holeModel->GetMaterial()->enableLighting = 0; }
 
     for ( int railIdx = 0; railIdx < ( int ) rails_.size(); ++railIdx ) {
         const SplineRail& rail = rails_[railIdx];
@@ -379,38 +398,65 @@ void RailField::BuildMarkers(){
         if ( len <= 0.0f || rail.nodes.size() < 2 ) { continue; }
         if ( !rail.visible ) { continue; } // 非表示レール（連結用）は緑線を描かない
 
-        Vector3 prev = rail.GetPositionByDistance(0.0f);
+        const auto holes = rail.GetHoleIntervals();
+        auto isHoleMid = [&](float s) -> bool{
+            for ( const auto& h : holes ) { if ( s >= h.d0 && s <= h.d1 ) return true; }
+            return false;
+        };
+
+        Model::ModelData lineData, holeData;
+
+        // 1セグメント（十字リボン2枚=4三角形）を対象メッシュへ追加する
+        auto emitSeg = [&](Model::ModelData& out, const SplineRail::RailFrame& f0,
+                           const SplineRail::RailFrame& f1){
+            auto quad = [&](const Vector3& a0, const Vector3& a1, const Vector3& b1, const Vector3& b0,
+                            const Vector3& nrm){
+                uint32_t base = static_cast<uint32_t>( out.vertices.size() );
+                const Vector3 ps[4] = { a0, a1, b1, b0 };
+                const Vector2 uv[4] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+                for ( int k = 0; k < 4; ++k ) {
+                    Model::VertexData v {};
+                    v.position = { ps[k].x, ps[k].y, ps[k].z, 1.0f };
+                    v.normal = nrm;
+                    v.texcoord = uv[k];
+                    out.vertices.push_back(v);
+                }
+                out.indices.push_back(base); out.indices.push_back(base + 1); out.indices.push_back(base + 2);
+                out.indices.push_back(base); out.indices.push_back(base + 2); out.indices.push_back(base + 3);
+            };
+            auto off = [&](const SplineRail::RailFrame& f, const Vector3& axis, float sgn) -> Vector3{
+                return { f.position.x + axis.x * sgn, f.position.y + axis.y * sgn, f.position.z + axis.z * sgn };
+            };
+            Vector3 r0 = { f0.right.x * half, f0.right.y * half, f0.right.z * half };
+            Vector3 r1 = { f1.right.x * half, f1.right.y * half, f1.right.z * half };
+            Vector3 u0 = { f0.up.x * half, f0.up.y * half, f0.up.z * half };
+            Vector3 u1 = { f1.up.x * half, f1.up.y * half, f1.up.z * half };
+            // 横リボン（法線=up）と縦リボン（法線=right）の十字
+            quad(off(f0, r0, -1.0f), off(f0, r0, +1.0f), off(f1, r1, +1.0f), off(f1, r1, -1.0f), f0.up);
+            quad(off(f0, u0, -1.0f), off(f0, u0, +1.0f), off(f1, u1, +1.0f), off(f1, u1, -1.0f), f0.right);
+        };
+
+        SplineRail::RailFrame prev = rail.GetFrameAtDistance(0.0f);
+        float prevS = 0.0f;
         for ( float s = spacing; s <= len + 0.001f; s += spacing ) {
             float ss = ( s > len ) ? len : s;
-            Vector3 cur = rail.GetPositionByDistance(ss);
-
-            Vector3 d = { cur.x - prev.x, cur.y - prev.y, cur.z - prev.z };
-            float segLen = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
-            if ( segLen > 1e-4f ) {
-                Vector3 dir = { d.x / segLen, d.y / segLen, d.z / segLen };
-                float yaw   = std::atan2(dir.x, dir.z);
-                float dyC   = std::clamp(dir.y, -1.0f, 1.0f);
-                float pitch = -std::asin(dyC);
-
-                float midS = ss - spacing * 0.5f;
-                if ( midS < 0.0f ) midS = 0.0f;
-                bool isHole = rail.IsHoleAtDistance(midS);
-
-                auto box = std::make_unique<Obj3d>();
-                box->Initialize(isHole ? holeModel : segModel);
-                box->SetCamera(camera_);
-                box->SetScale({ thickness, thickness, segLen });
-                Vector3 markerPos = { ( prev.x + cur.x ) * 0.5f, ( prev.y + cur.y ) * 0.5f, ( prev.z + cur.z ) * 0.5f };
-                box->SetTranslation(markerPos);
-                box->SetRotation({ pitch, yaw, 0.0f });
-                box->Update();
-                markers_.push_back(std::move(box));
-                markerRail_.push_back(railIdx);
-                markerBase_.push_back({ markerPos.x - rail.animOffset.x,
-                                        markerPos.y - rail.animOffset.y,
-                                        markerPos.z - rail.animOffset.z });
+            SplineRail::RailFrame cur = rail.GetFrameAtDistance(ss);
+            if ( ss - prevS > 1e-4f ) {
+                float midS = ( prevS + ss ) * 0.5f;
+                emitSeg(isHoleMid(midS) ? holeData : lineData, prev, cur);
             }
             prev = cur;
+            prevS = ss;
         }
+
+        EmitMarker(lineData, railIdx, lineColor);
+        EmitMarker(holeData, railIdx, holeColor);
+    }
+
+    // 余ったスロットは空にして描かない（バッファは使い回す）
+    static const std::vector<Model::VertexData> kEmptyV;
+    static const std::vector<uint32_t> kEmptyI;
+    for ( size_t k = markerSlotsUsed_; k < markerSlots_.size(); ++k ) {
+        markerSlots_[k]->model->UpdateMesh(kEmptyV, kEmptyI);
     }
 }

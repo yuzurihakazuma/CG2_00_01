@@ -201,6 +201,11 @@ void Model::InitializePrimitive(ModelCommon* modelCommon, const ModelData& model
 	this->modelCommon_ = modelCommon;
 	this->modelData_ = modelData;
 
+	// テクスチャ未指定の保険（CreateBuffers はパスを無条件に読むため、
+	// 空のまま渡されると空パスのロードで assert してしまう。後で SetTexture で差し替え可能）
+	if ( modelData_.material.textureFilePath.empty() ) {
+		modelData_.material.textureFilePath = "resources/uvChecker.png";
+	}
 
 	CreateBuffers();
 }

@@ -81,6 +81,12 @@ void GamePlayScene::LoadResources(){
 	model->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	model->LoadModel("human", "resources/human", "walk.gltf");
 	model->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
+	model->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
+	model->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
+	model->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
+	model->LoadModel("roadT",        "resources/road", "road_t.obj");        // 交差点ピース：T字路
+	model->LoadModel("roadCross",    "resources/road", "road_cross.obj");    // 交差点ピース：十字路
+	model->LoadModel("roadJoint",    "resources/road", "road_joint.obj");    // 接続ノードの凸ジョイント（プラレール風）
 	model->CreateEggShellModel("eggShell", 0.3f);        // 卵の殻の欠片（頂点から手作り＝エンジン側で完結。割れ演出用）
 
 	// 汎用パーティクル用の粒（"sphere" は敵と共有＋モンスターボール柄がデフォルトなので、
@@ -105,6 +111,9 @@ void GamePlayScene::LoadResources(){
 	textures_["noise0"]        = tex->Load("Resources/noise0.png");
 	textures_["noise1"]        = tex->Load("Resources/noise1.png");
 	textures_["gradationLine"] = tex->Load("Resources/gradationLine.png");
+	// 道アトラスの先読み：RoadMesh はレール編集のたび（=フレーム途中）に参照するので、
+	// ここでキャッシュに載せておく（実行中のテクスチャ読み込みはデバッグレイヤーが嫌うため）
+	textures_["roadAtlas"]     = tex->Load("resources/road/road_atlas.png");
 	textures_["skybox"]        = tex->LoadCube("resources/StandardCubeMap.dds");
 
 	// Skybox
@@ -277,10 +286,18 @@ void GamePlayScene::SetupGameplay(){
 
 // レールをエディタ最新へ作り直し、敵も配置し直す。
 //   レール本体・緑線・動きは RailField が担当。敵は RailField の責務外なので Sync 後に生成する。
-void GamePlayScene::SyncRailsFromEditor(){
+//   simple=true はドラッグ中の軽量同期：道は簡易リボンのみ・敵の張り直しや再生成は行わない
+//   （マウスアップ後に simple=false の本同期が1回走って最終形になる）
+void GamePlayScene::SyncRailsFromEditor(bool simple){
 	uint32_t whiteTex = 0;
 	auto itWhite = textures_.find("white");
 	if ( itWhite != textures_.end() ) { whiteTex = itWhite->second.srvIndex; }
+
+	if ( simple ) {
+		railField_.Sync(camera_.get(), whiteTex);                     // レール本体＋緑線
+		roadMesh_.Build(railField_.GetRails(), camera_.get(), true);  // 道は簡易プレビュー
+		return;
+	}
 
 	// --- 敵のピン留め準備：編集前のレールから各敵のワールド位置を覚えておく ---
 	//   敵は「レール番号＋距離(m)」で置かれているため、レールを編集すると全長が伸縮し、
@@ -304,6 +321,7 @@ void GamePlayScene::SyncRailsFromEditor(){
 	}
 
 	railField_.Sync(camera_.get(), whiteTex); // レール本体＋緑線を作り直す
+	roadMesh_.Build(railField_.GetRails(), camera_.get()); // レール下の道メッシュも敷き直す
 
 	// --- 敵のピン留め：編集後のレール上で「元のワールド位置の最寄り点」へ距離を張り直す ---
 	//   路線まるごと移動なら一緒に付いていき、形の部分編集なら他の敵は動かない。
@@ -364,9 +382,24 @@ void GamePlayScene::Update(){
 void GamePlayScene::SyncFromEditors(){
 	EditorManager* em = EditorManager::GetInstance();
 
-	// レールのライブ同期：エディタで編集されたら緑線とプレイヤー用データを即作り直す
-	if ( em->GetRailEditVersion() != railField_.Version() ) {
-		SyncRailsFromEditor();
+	// レールのライブ同期：エディタで編集されたら緑線とプレイヤー用データを作り直す。
+	//   ドラッグ中は「最大10回/秒の軽量同期」に間引き、マウスアップ後に本同期を1回行う（§1）
+	{
+		const bool dragging = em->IsRailDragging();
+		const bool changed = ( em->GetRailEditVersion() != railField_.Version() );
+		railSyncTimer_ += 1.0f / 60.0f;
+		if ( changed && dragging ) {
+			if ( railSyncTimer_ >= 0.1f ) { // 10Hz
+				railSyncTimer_ = 0.0f;
+				SyncRailsFromEditor(true);
+				railFullSyncPending_ = true; // ドラッグが終わったら本生成する
+			} else {
+				railFullSyncPending_ = true;
+			}
+		} else if ( !dragging && ( changed || railFullSyncPending_ ) ) {
+			railFullSyncPending_ = false;
+			SyncRailsFromEditor(false);
+		}
 	}
 
 	// マップが読み込まれたら、保存済みの敵配置をエディタへ復元する
@@ -558,6 +591,8 @@ void GamePlayScene::UpdateSceneVisuals(){
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 	if ( testObj_ ){ testObj_->Update(); }
 	railField_.UpdateMarkers(); // レール緑線（カメラ移動に追従）
+	roadMesh_.SetJointVisible(EditorManager::GetInstance()->GetEditorJointVisible()); // ジョイント表示モード（§5）
+	roadMesh_.Update(railField_.GetRails()); // 道メッシュ（動くレール追従＋カメラ追従）
 
 	// リングオーラ（UVスクロール）
 	if ( auraObj_ ) {
@@ -676,8 +711,14 @@ void GamePlayScene::Draw(){
 	eggSystem_.Draw();                          // ヨッシーの卵
 	swallow_.Draw();                            // 舌（伸ばす/引き込む動作中だけ）
 
-	// レール経路の可視化マーカー（プレイヤーが通る道筋）
-	railField_.DrawMarkers();
+	// レール下の道メッシュ（クラフト風の地面）。Edit/Play どちらでも見える「本番の見た目」
+	roadMesh_.Draw();
+
+	// レール経路の緑線マーカーは「エディット中だけ」表示する。
+	//   Play開始やリリース版（初期モードがPlay）ではレールの線が全て消え、道メッシュだけが残る。
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit ) {
+		railField_.DrawMarkers();
+	}
 
 	EditorManager::GetInstance()->Draw();
 
@@ -833,6 +874,35 @@ void GamePlayScene::DrawDebugUI(){
 	camCtrl_.DrawDebugUI();
 	ImGui::Text("マーカー数: %d", railField_.MarkerCount());
 	if ( ImGui::Button("マーカー再構築") ) { railField_.RebuildMarkers(); }
+
+	// --- 道の設定（危険帯の長さ／両面描画／再生成）---
+	ImGui::Separator();
+	ImGui::TextDisabled("道の設定:");
+	{
+		bool roadVisible = roadMesh_.IsVisible();
+		if ( ImGui::Checkbox("道を表示", &roadVisible) ) { roadMesh_.SetVisible(roadVisible); }
+
+		bool cullNone = roadMesh_.IsCullNone();
+		if ( ImGui::Checkbox("両面描画（OFF=背面カリングで軽量化）", &cullNone) ) {
+			roadMesh_.SetCullNone(cullNone); // 即時反映（再生成不要）
+		}
+
+		float warn = roadMesh_.GetWarnLength();
+		ImGui::SetNextItemWidth(160.0f);
+		if ( ImGui::SliderFloat("危険帯の長さ(m)", &warn, 0.5f, 5.0f, "%.1f") ) {
+			roadMesh_.SetWarnLength(warn);
+		}
+		// スライダーを離した時に道を作り直して反映（ドラッグ中の連続再生成はしない）
+		if ( ImGui::IsItemDeactivatedAfterEdit() ) {
+			roadMesh_.Build(railField_.GetRails(), camera_.get());
+		}
+		ImGui::SameLine();
+		if ( ImGui::Button("道を再生成") ) {
+			roadMesh_.Build(railField_.GetRails(), camera_.get());
+		}
+		ImGui::Text("道メッシュ/ピース数: %d", roadMesh_.TileCount());
+		ImGui::Text("道の頂点数: %d / 三角形: %d", roadMesh_.VertexCount(), roadMesh_.TriangleCount());
+	}
 
 	// --- カメラ視点プリセット（レールを編集しやすく）---
 	ImGui::Separator();

@@ -41,7 +41,8 @@ public:
 	// モデルの検索
 	Model* FindModel(const std::string& filePath);
 
-	// 呼び出し側が独自の動的Modelを作る時に使う共有ModelCommon
+	// 実行時生成メッシュ用：ModelCommon を貸し出す（RoadMesh・舌など呼び出し側が
+	// 自前の Model を作る時に使う。所有権は渡さない）
 	ModelCommon* GetModelCommon() const { return modelCommon_.get(); }
 
 
