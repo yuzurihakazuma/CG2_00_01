@@ -195,6 +195,7 @@ private:
     RailEditor::SnapTarget railSnapCandidate_ {};
     int   railSnapDragRail_  = -1;   // ドラッグ中の端点が属するレール（-1=候補なし）
     bool  railSnapDragFront_ = true; // ドラッグ中の端点が先頭側か
+    bool  railSnapHeightGap_ = false; // 候補が「真上から見れば近いが高さだけズレている」相手か
 
     // エディタ有り(USE_IMGUI)＝編集モードから開始。リリース＝エディタが無いので
     // いきなりプレイモードで開始し、プレイヤーが動けて敵も出る状態にする。

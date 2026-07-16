@@ -373,6 +373,7 @@ void EditorManager::Update(){
 
                     // --- 自動スナップ候補の検出（§5：端点1個をドラッグしている時だけ）---
                     railSnapCandidate_.valid = false;
+                    railSnapHeightGap_ = false;
                     railSnapDragRail_ = -1;
                     if ( railEditor->IsAutoSnap() && sel.size() == 1 && !fineDrag ) {
                         int nodeCount = railEditor->GetNodeCountOf(sel[0].rail);
@@ -381,8 +382,17 @@ void EditorManager::Update(){
                         if ( nodeCount >= 2 && ( isFront || isBack ) ) {
                             RailEditor::SnapTarget candidate =
                                 railEditor->FindSnapTarget(sel[0].rail, isFront, railEditor->GetSnapDistance());
+                            bool heightGap = false;
+                            if ( !candidate.valid ) {
+                                // 3D距離では届かないが、真上から見れば近い相手（高さだけ合っていない）。
+                                // 「近づけたのに繋がらない」の理由表示と高さ合わせスナップの両方に使う
+                                candidate = railEditor->FindSnapTargetXZ(
+                                    sel[0].rail, isFront, railEditor->GetSnapDistance());
+                                heightGap = candidate.valid;
+                            }
                             if ( candidate.valid ) {
                                 railSnapCandidate_ = candidate;
+                                railSnapHeightGap_ = heightGap;
                                 railSnapDragRail_  = sel[0].rail;
                                 railSnapDragFront_ = isFront;
                             }
@@ -390,16 +400,20 @@ void EditorManager::Update(){
                     }
                 } else {
                     // ドラッグ終了エッジ：スナップ候補が生きていれば接続を確定する（§5）
-                    if ( railSelDragging_ && railSnapCandidate_.valid && railSnapDragRail_ >= 0 ) {
+                    //   高さ違いの候補は「高さも自動で合わせる」ONの時だけ（OFF=立体交差を作れる）
+                    if ( railSelDragging_ && railSnapCandidate_.valid && railSnapDragRail_ >= 0
+                      && ( !railSnapHeightGap_ || railEditor->IsSnapMatchHeight() ) ) {
                         railEditor->ConnectToTarget(railSnapDragRail_, railSnapDragFront_, railSnapCandidate_);
                         // 直後の DrawWindow 冒頭 CommitIfStable がドラッグ＋接続を1履歴にまとめる
                     }
                     railSnapCandidate_.valid = false;
+                    railSnapHeightGap_ = false;
                     railSnapDragRail_ = -1;
                     railSelDragging_ = false;
                 }
             } else {
                 railSnapCandidate_.valid = false;
+                railSnapHeightGap_ = false;
                 railSnapDragRail_ = -1;
                 railSelDragging_ = false;
             }
@@ -686,16 +700,101 @@ void EditorManager::Update(){
                     }
                 }
 
-                // 到達できないレールの中央に補足を出す（なぜ紫なのかが一目で分かる）
-                if ( railVisible && !reachable && nodeCount >= 2 ) {
+                // レール中央に接続状況の補足を出す：
+                //   通れない → 紫の「未接続」／ 繋がっている → 水色で相手と種類（例: R2溶接 R4交差）
+                if ( railVisible && nodeCount >= 2 ) {
                     Vector3 midNodePos;
-                    if ( railEditor->GetNodePosOf(rr, nodeCount / 2, midNodePos) ) {
-                        ImVec2 sm;
-                        if ( project(midNodePos, sm) ) {
+                    ImVec2 sm;
+                    if ( railEditor->GetNodePosOf(rr, nodeCount / 2, midNodePos) && project(midNodePos, sm) ) {
+                        if ( !reachable ) {
                             dl->AddText({ sm.x + 8.0f, sm.y - 8.0f }, IM_COL32(220, 120, 255, 255), "未接続 (通れない)");
+                        }
+                        // 接続の要約（選択中のレールだけ表示＝画面が文字だらけにならないように）
+                        if ( rr == railEditor->GetCurrentRailIndex() ) {
+                            const auto& conns = railEditor->GetRailConnections(rr);
+                            if ( !conns.empty() ) {
+                                const char* typeNames[] = { "溶接", "T字", "交差" };
+                                std::string summary;
+                                int shown = 0;
+                                for ( const auto& conn : conns ) {
+                                    if ( shown >= 4 ) { summary += " …"; break; }
+                                    if ( shown > 0 ) summary += " ";
+                                    summary += "R" + std::to_string(conn.otherRail) + typeNames[std::clamp(conn.type, 0, 2)];
+                                    ++shown;
+                                }
+                                dl->AddText({ sm.x + 8.0f, sm.y + 6.0f }, IM_COL32(120, 220, 255, 255), summary.c_str());
+                            }
                         }
                     }
                 }
+                // --- 接続/交差ポイントのマーク（全レール常時表示）---
+                //   溶接=緑の二重丸 / T字=黄 / 交差=水色。「どこで繋がっているか」が見た瞬間に分かる。
+                //   座標の数字は選択中のレールに関係する点だけ（画面が文字だらけにならないように）
+                if ( railVisible ) {
+                    for ( const auto& conn : railEditor->GetRailConnections(rr) ) {
+                        if ( conn.otherRail < rr ) continue; // 相手側の走査と二重に描かない
+                        ImVec2 sc;
+                        if ( !project(conn.pos, sc) ) continue;
+                        ImU32 markColor = ( conn.type == 0 ) ? IM_COL32(80, 255, 140, 235)   // 溶接=緑
+                                        : ( conn.type == 1 ) ? IM_COL32(255, 200, 60, 235)   // T字=黄
+                                                             : IM_COL32(120, 220, 255, 235); // 交差=水色
+                        dl->AddCircleFilled(sc, 4.5f, markColor);
+                        dl->AddCircle(sc, 8.5f, markColor, 0, 2.0f);
+                        bool related = ( rr == railEditor->GetCurrentRailIndex()
+                                      || conn.otherRail == railEditor->GetCurrentRailIndex() );
+                        if ( related ) {
+                            char coordText[64];
+                            snprintf(coordText, sizeof(coordText), "(%.1f, %.1f, %.1f)",
+                                     conn.pos.x, conn.pos.y, conn.pos.z);
+                            dl->AddText({ sc.x + 10.0f, sc.y - 4.0f }, markColor, coordText);
+                        }
+                    }
+
+                    // --- 繋がっていない端点の警告（全レール常時）---
+                    //   赤いリング＋「未」で「この端はどこにも繋がっていない」が一目で分かる。
+                    //   ループ（先頭=末尾）はそもそも端が無いので出さない
+                    Vector3 frontPos, backPos;
+                    bool isLoopRail = railEditor->GetNodePosOf(rr, 0, frontPos)
+                                   && railEditor->GetNodePosOf(rr, nodeCount - 1, backPos)
+                                   && nodeCount >= 3
+                                   && ( std::abs(frontPos.x - backPos.x) + std::abs(frontPos.y - backPos.y)
+                                      + std::abs(frontPos.z - backPos.z) ) < 0.7f;
+                    if ( !isLoopRail ) {
+                        for ( int endSide = 0; endSide < 2; ++endSide ) {
+                            bool isFront = ( endSide == 0 );
+                            if ( railEditor->IsRailEndConnected(rr, isFront) ) continue; // 繋がっている端はOK
+                            Vector3 endPos;
+                            if ( !railEditor->GetNodePosOf(rr, isFront ? 0 : nodeCount - 1, endPos) ) continue;
+                            ImVec2 se;
+                            if ( !project(endPos, se) ) continue;
+                            dl->AddCircle(se, 10.0f, IM_COL32(255, 80, 70, 235), 0, 2.5f);
+                            dl->AddCircle(se, 14.0f, IM_COL32(255, 80, 70, 120), 0, 1.5f);
+                            dl->AddText({ se.x + 12.0f, se.y - 6.0f }, IM_COL32(255, 110, 100, 235), "未");
+                        }
+                    }
+                }
+            }
+
+            // --- 凡例：マークの意味を Game View の左下に常時表示 ---
+            //   初めて触る人でも「丸や色が何を意味するか」が画面内で完結して分かるように
+            {
+                float legendY = imgMin.y + imgSize.y - 22.0f;
+                float legendX = imgMin.x + 10.0f;
+                dl->AddRectFilled({ legendX - 6.0f, legendY - 5.0f },
+                                  { legendX + 470.0f, legendY + 17.0f }, IM_COL32(0, 0, 0, 110), 4.0f);
+                auto legendItem = [&](ImU32 color, const char* label, bool filled){
+                    if ( filled ) { dl->AddCircleFilled({ legendX + 5.0f, legendY + 6.0f }, 4.5f, color); }
+                    else          { dl->AddCircle({ legendX + 5.0f, legendY + 6.0f }, 5.5f, color, 0, 2.0f); }
+                    dl->AddText({ legendX + 13.0f, legendY }, IM_COL32(235, 235, 235, 255), label);
+                    legendX += 13.0f + ImGui::CalcTextSize(label).x + 14.0f;
+                };
+                legendItem(IM_COL32(80, 255, 140, 235),  "溶接", true);
+                legendItem(IM_COL32(255, 200, 60, 235),  "T字", true);
+                legendItem(IM_COL32(120, 220, 255, 235), "交差", true);
+                legendItem(IM_COL32(255, 80, 70, 235),   "未接続の端", false);
+                dl->AddText({ legendX, legendY }, IM_COL32(220, 120, 255, 255), "紫の線=通れない路線");
+                legendX += ImGui::CalcTextSize("紫の線=通れない路線").x + 14.0f;
+                dl->AddText({ legendX, legendY }, IM_COL32(255, 90, 80, 255), "赤い線=穴");
             }
 
             // --- ジャンプ予測：Gap レールの未接続の端から弾道（放物線）を点線で描く ---
@@ -792,32 +891,71 @@ void EditorManager::Update(){
             { Vector3 p; ImVec2 s;
               if ( hoverIdx >= 0 && railEditor->GetNodePosOf(hoverRail, hoverIdx, p) && project(p, s) )
                   dl->AddCircle(s, 9.5f, IM_COL32(255, 235, 80, 255), 0, 2.0f); }
-            // 自動スナップのプレビュー（§5）：候補があれば接続先を緑ハイライト＋端点ゴースト
+            // 自動スナップのプレビュー（§5）：候補があれば接続先をハイライト＋端点ゴースト
+            //   緑=そのまま繋がる ／ オレンジ=真上から見れば近いが高さだけズレている
+            //   （高さズレはパース付きの3Dビューではほぼ見えないので、点線＋数字で理由を出す）
             if ( railSnapCandidate_.valid && railSnapDragRail_ >= 0 ) {
-                Vector3 dragP;
+                const bool heightGap   = railSnapHeightGap_;
+                const bool willConnect = !heightGap || railEditor->IsSnapMatchHeight();
+                const ImU32 colLine = heightGap ? IM_COL32(255, 170, 40, 210) : IM_COL32(60, 255, 120, 200);
+                const ImU32 colMark = heightGap ? IM_COL32(255, 170, 40, 255) : IM_COL32(60, 255, 120, 255);
+                const ImU32 colFill = heightGap ? IM_COL32(255, 170, 40, 110) : IM_COL32(60, 255, 120, 120);
+
+                // 画面上の点線（高さのズレ＝縦方向のギャップを見せる用）
+                auto dashedLine = [&](ImVec2 a, ImVec2 b, ImU32 col, float thickness){
+                    float ddx = b.x - a.x, ddy = b.y - a.y;
+                    float len = std::sqrt(ddx * ddx + ddy * ddy);
+                    if ( len < 1.0f ) return;
+                    float ux = ddx / len, uy = ddy / len;
+                    const float dash = 7.0f, gap = 5.0f;
+                    for ( float d = 0.0f; d < len; d += dash + gap ) {
+                        float e = ( std::min )( d + dash, len );
+                        dl->AddLine({ a.x + ux * d, a.y + uy * d },
+                                    { a.x + ux * e, a.y + uy * e }, col, thickness);
+                    }
+                };
+
+                Vector3 dragP {};
                 int dragNode = railSnapDragFront_ ? 0 : railEditor->GetNodeCountOf(railSnapDragRail_) - 1;
                 ImVec2 sFrom, sTo;
-                bool okTo = project(railSnapCandidate_.pos, sTo);
+                bool okFrom = railEditor->GetNodePosOf(railSnapDragRail_, dragNode, dragP) && project(dragP, sFrom);
+                bool okTo   = project(railSnapCandidate_.pos, sTo);
                 if ( okTo ) {
-                    // スナップ後の位置に緑のゴースト（二重丸）＋ドラッグ中端点から緑の線
-                    if ( railEditor->GetNodePosOf(railSnapDragRail_, dragNode, dragP) && project(dragP, sFrom) ) {
-                        dl->AddLine(sFrom, sTo, IM_COL32(60, 255, 120, 200), 2.0f);
+                    // スナップ後の位置にゴースト（二重丸）＋ドラッグ中端点からの線
+                    if ( okFrom ) {
+                        if ( heightGap ) dashedLine(sFrom, sTo, colLine, 2.0f);
+                        else             dl->AddLine(sFrom, sTo, colLine, 2.0f);
                     }
-                    dl->AddCircleFilled(sTo, 5.0f, IM_COL32(60, 255, 120, 120));
-                    dl->AddCircle(sTo, 9.0f, IM_COL32(60, 255, 120, 255), 0, 2.5f);
+                    dl->AddCircleFilled(sTo, 5.0f, colFill);
+                    dl->AddCircle(sTo, 9.0f, colMark, 0, 2.5f);
+                    // 高さ違いの時は「なぜ繋がらないか／離すとどうなるか」を数字で出す
+                    if ( heightGap && okFrom ) {
+                        float heightDiff = railSnapCandidate_.pos.y - dragP.y;
+                        char gapText[96];
+                        snprintf(gapText, sizeof(gapText),
+                                 willConnect ? "高さ差 %+.1fm（離すと高さを合わせて接続）"
+                                             : "高さ差 %+.1fm（高さ合わせOFF：接続しません）",
+                                 heightDiff);
+                        ImVec2 mid { ( sFrom.x + sTo.x ) * 0.5f + 12.0f, ( sFrom.y + sTo.y ) * 0.5f - 8.0f };
+                        ImVec2 ts = ImGui::CalcTextSize(gapText);
+                        dl->AddRectFilled({ mid.x - 4.0f, mid.y - 3.0f },
+                                          { mid.x + ts.x + 4.0f, mid.y + ts.y + 3.0f },
+                                          IM_COL32(0, 0, 0, 150), 3.0f);
+                        dl->AddText(mid, colMark, gapText);
+                    }
                 }
-                // 接続先レールの該当付近を緑でハイライト（端点 or セグメント両端）
+                // 接続先レールの該当付近をハイライト（端点 or セグメント両端）
                 if ( railSnapCandidate_.isEndpoint ) {
                     Vector3 p; ImVec2 s;
                     if ( railEditor->GetNodePosOf(railSnapCandidate_.rail, railSnapCandidate_.node, p) && project(p, s) ) {
-                        dl->AddCircle(s, 12.0f, IM_COL32(60, 255, 120, 180), 0, 2.0f);
+                        dl->AddCircle(s, 12.0f, colLine, 0, 2.0f);
                     }
                 } else {
                     Vector3 a, b; ImVec2 sa, sb;
                     if ( railEditor->GetNodePosOf(railSnapCandidate_.rail, railSnapCandidate_.seg, a) &&
                          railEditor->GetNodePosOf(railSnapCandidate_.rail, railSnapCandidate_.seg + 1, b) &&
                          project(a, sa) && project(b, sb) ) {
-                        dl->AddLine(sa, sb, IM_COL32(60, 255, 120, 180), 4.0f);
+                        dl->AddLine(sa, sb, colLine, 4.0f);
                     }
                 }
             }

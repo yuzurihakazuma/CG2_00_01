@@ -123,6 +123,18 @@ public:
     //   ループ（先頭と末尾がくっついたレール）は端が無い扱いで true を返す。
     bool IsRailEndConnected(int rail, bool front) const;
 
+    // ============================================================
+    // レール同士の接続情報（GameViewの補足コメント・接続情報パネル用）。
+    //   どのレールと「溶接/T字/交差」していて、その座標はどこかが分かる。
+    //   railVersion_ でキャッシュするので毎フレーム呼んでも軽い。
+    // ============================================================
+    struct RailConnectionInfo {
+        int     type = 0;      // 0=溶接(端点同士) / 1=T字(端点→相手の途中) / 2=交差(本体×本体)
+        int     otherRail = -1; // 相手レール番号
+        Vector3 pos {};         // 接続/交差しているワールド座標
+    };
+    const std::vector<RailConnectionInfo>& GetRailConnections(int rail) const;
+
     // レール末端からのジャンプ弾道を予測し、着地できるレール番号を返す（-1=届かない）。
     //   outArc に軌跡が入るので Game View で弧を描ける。useFlutter=ふんばり滞空込み。
     //   物理定数は Player と同じ値を使う（実装内のコメント参照）。
@@ -159,12 +171,18 @@ public:
     };
     // rail の端点(front/back)から snapDistance 以内の接続候補を探す（端点同士を優先）
     SnapTarget FindSnapTarget(int rail, bool front, float radius) const;
+    // FindSnapTarget の「真上から見た距離(XZ)」版。3D距離では拾えない
+    // 「位置は合っているのに高さだけズレている」相手を見つける（高さ合わせスナップ用）。
+    //   maxYDiff: 高さ差の上限。別の階のレールを誤って拾わないための保険
+    SnapTarget FindSnapTargetXZ(int rail, bool front, float radiusXZ, float maxYDiff = 5.0f) const;
     // 候補へ実際に接続する（isEndpoint→溶接 / それ以外→ConnectNearbyLines と同じ途中連結）
+    //   pos は相手側の点なので、高さ違いの候補でも端点のYが相手に一致する
     void ConnectToTarget(int rail, bool front, const SnapTarget& target);
 
     // 自動スナップの設定（Global 設定。EditorManager のドラッグ処理と RoadMesh が参照）
     bool  IsAutoSnap() const{ return railAutoSnap_; }
     float GetSnapDistance() const{ return railSnapDistance_; }
+    bool  IsSnapMatchHeight() const{ return railSnapMatchHeight_; } // 高さ違いでもXZが近ければ合わせて接続
     int   GetJointVisible() const{ return railJointVisible_; } // 0=エディタのみ/1=常に/2=非表示
 
 private:
@@ -207,6 +225,7 @@ private:
     // 自動スナップ接続（§5。プラレール風：近づけるだけでカチッと繋がる）
     bool  railAutoSnap_      = true;  // 端点ドラッグで自動接続する
     float railSnapDistance_  = 1.2f;  // 検出半径(m)。ランタイムの合流距離と同じ既定
+    bool  railSnapMatchHeight_ = true; // 真上から見て近ければ高さを相手に合わせて接続（OFF=立体交差用）
     int   railJointVisible_  = 1;     // ジョイント表示：0=エディタのみ / 1=常に / 2=非表示
 
     // 接続一覧（接続タブ）で選択中の行（-1=なし）
@@ -223,6 +242,11 @@ private:
     mutable int reachCacheVersion_ = -1;
     mutable std::vector<uint8_t> reachable_;
     void EnsureReachableCache() const;
+
+    // 接続情報のキャッシュ（railVersion_ が変わった時だけ全ペア走査で作り直す）
+    mutable int connCacheVersion_ = -1;
+    mutable std::vector<std::vector<RailConnectionInfo>> connCache_;
+    void EnsureConnectionCache() const;
 
     // 前のノードから相対(dx,dy,dz)に新ノードを追加（方向ボタン用・スナップ適用）
     void AppendRailNodeRelative(float dx, float dy, float dz);

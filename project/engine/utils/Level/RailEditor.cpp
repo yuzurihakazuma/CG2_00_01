@@ -410,6 +410,109 @@ int RailEditor::PredictJumpLanding(int rail, bool front, bool useFlutter,
 	return -1;
 }
 
+// ============================================================
+// 接続情報キャッシュ：どのレールと 溶接/T字/交差 していて座標はどこか。
+//   railVersion_ が変わった時だけ全ペア走査で作り直す（表示専用の派生データ）
+// ============================================================
+void RailEditor::EnsureConnectionCache() const{
+	if ( connCacheVersion_ == railVersion_ ) return;
+	connCacheVersion_ = railVersion_;
+
+	const auto& lines = data_->railLines;
+	const int railCount = ( int ) lines.size();
+	connCache_.assign(railCount, {});
+
+	auto dist3 = [](const Vector3& p, const Vector3& q) -> float{
+		float dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z;
+		return std::sqrt(dx * dx + dy * dy + dz * dz);
+		};
+	// 点 point から線分 segA-segB への最近点
+	auto closestOnSegment = [](const Vector3& point, const Vector3& segA, const Vector3& segB) -> Vector3{
+		Vector3 seg = { segB.x - segA.x, segB.y - segA.y, segB.z - segA.z };
+		float lenSq = seg.x * seg.x + seg.y * seg.y + seg.z * seg.z;
+		float t = ( lenSq > 1e-6f )
+			? ( ( point.x - segA.x ) * seg.x + ( point.y - segA.y ) * seg.y + ( point.z - segA.z ) * seg.z ) / lenSq
+			: 0.0f;
+		t = std::clamp(t, 0.0f, 1.0f);
+		return { segA.x + seg.x * t, segA.y + seg.y * t, segA.z + seg.z * t };
+		};
+	// 既に同じ相手との接続が near にあるか（溶接とT字/交差の二重登録防止）
+	auto alreadyNear = [&](int rail, int other, const Vector3& pos) -> bool{
+		for ( const auto& info : connCache_[rail] ) {
+			if ( info.otherRail == other && dist3(info.pos, pos) < 1.5f ) return true;
+		}
+		return false;
+		};
+	auto addBoth = [&](int railA, int railB, int type, const Vector3& pos){
+		if ( !alreadyNear(railA, railB, pos) ) connCache_[railA].push_back({ type, railB, pos });
+		if ( !alreadyNear(railB, railA, pos) ) connCache_[railB].push_back({ type, railA, pos });
+		};
+
+	const float kWeldDist  = 0.7f; // 実行時の溶接/連結判定と同じ
+	const float kCrossDist = 0.9f; // 実行時の交差乗り換え判定と同じ
+
+	for ( int a = 0; a < railCount; ++a ) {
+		if ( lines[a].size() < 2 ) continue;
+		for ( int b = a + 1; b < railCount; ++b ) {
+			if ( lines[b].size() < 2 ) continue;
+
+			// --- 溶接（端点同士）---
+			const Vector3* endsA[2] = { &lines[a].front(), &lines[a].back() };
+			const Vector3* endsB[2] = { &lines[b].front(), &lines[b].back() };
+			for ( const Vector3* endA : endsA ) {
+				for ( const Vector3* endB : endsB ) {
+					if ( dist3(*endA, *endB) < kWeldDist ) {
+						Vector3 mid = { ( endA->x + endB->x ) * 0.5f, ( endA->y + endB->y ) * 0.5f,
+						                ( endA->z + endB->z ) * 0.5f };
+						addBoth(a, b, 0, mid);
+					}
+				}
+			}
+
+			// --- T字（片方の端点 → 相手の本体）---
+			auto checkTJoin = [&](int endRail, int bodyRail){
+				const Vector3 ends[2] = { lines[endRail].front(), lines[endRail].back() };
+				for ( const Vector3& endPos : ends ) {
+					for ( size_t seg = 0; seg + 1 < lines[bodyRail].size(); ++seg ) {
+						Vector3 onBody = closestOnSegment(endPos, lines[bodyRail][seg], lines[bodyRail][seg + 1]);
+						if ( dist3(onBody, endPos) < kWeldDist ) {
+							addBoth(endRail, bodyRail, 1, onBody);
+							break;
+						}
+					}
+				}
+				};
+			checkTJoin(a, b);
+			checkTJoin(b, a);
+
+			// --- 交差（本体×本体。端の近くは溶接/T字の領分なので除外）---
+			for ( size_t segA = 0; segA + 1 < lines[a].size(); ++segA ) {
+				for ( size_t segB = 0; segB + 1 < lines[b].size(); ++segB ) {
+					// 線分Aの中点から線分Bへの最近点で近さを判定（表示用の近似で十分）
+					Vector3 midA = { ( lines[a][segA].x + lines[a][segA + 1].x ) * 0.5f,
+					                 ( lines[a][segA].y + lines[a][segA + 1].y ) * 0.5f,
+					                 ( lines[a][segA].z + lines[a][segA + 1].z ) * 0.5f };
+					Vector3 onB = closestOnSegment(midA, lines[b][segB], lines[b][segB + 1]);
+					if ( dist3(onB, midA) >= kCrossDist ) continue;
+					Vector3 crossPos = { ( midA.x + onB.x ) * 0.5f, ( midA.y + onB.y ) * 0.5f,
+					                     ( midA.z + onB.z ) * 0.5f };
+					// 端点の近くは溶接/T字として登録済みのはず（alreadyNear が二重登録を防ぐ）
+					if ( dist3(crossPos, lines[a].front()) < 1.0f || dist3(crossPos, lines[a].back()) < 1.0f ) continue;
+					if ( dist3(crossPos, lines[b].front()) < 1.0f || dist3(crossPos, lines[b].back()) < 1.0f ) continue;
+					addBoth(a, b, 2, crossPos);
+				}
+			}
+		}
+	}
+}
+
+const std::vector<RailEditor::RailConnectionInfo>& RailEditor::GetRailConnections(int rail) const{
+	static const std::vector<RailConnectionInfo> kEmpty;
+	EnsureConnectionCache();
+	if ( rail < 0 || rail >= ( int ) connCache_.size() ) return kEmpty;
+	return connCache_[rail];
+}
+
 // 到達可否キャッシュ：railVersion_ が変わった時だけ BFS で作り直す
 void RailEditor::EnsureReachableCache() const{
 	if ( reachCacheVersion_ == railVersion_ ) return;
@@ -769,6 +872,71 @@ RailEditor::SnapTarget RailEditor::FindSnapTarget(int rail, bool front, float ra
 	return best;
 }
 
+// FindSnapTarget の XZ 版：真上から見た距離だけで候補を探す。
+//   3D距離の FindSnapTarget では「位置は重ねたのに高さだけ 1.2m 以上ズレている」相手を
+//   拾えず黙って失敗する。こちらは高さ差を maxYDiff まで許容して拾い、
+//   返す pos は相手側の点なので ConnectToTarget へ渡せば端点のYも相手に一致する。
+RailEditor::SnapTarget RailEditor::FindSnapTargetXZ(int rail, bool front, float radiusXZ, float maxYDiff) const{
+	SnapTarget best;
+	const auto& lines = data_->railLines;
+	if ( rail < 0 || rail >= ( int ) lines.size() || lines[rail].size() < 2 ) return best;
+	Vector3 ep = front ? lines[rail].front() : lines[rail].back();
+
+	auto distXZ = [](const Vector3& p, const Vector3& q) -> float{
+		float dx = p.x - q.x, dz = p.z - q.z;
+		return std::sqrt(dx * dx + dz * dz);
+		};
+
+	float bestDist = radiusXZ;
+	for ( size_t b = 0; b < lines.size(); ++b ) {
+		if ( ( int ) b == rail ) continue;
+		if ( lines[b].size() < 2 ) continue;
+
+		// (a) 端点同士（溶接候補）
+		const int endNodes[2] = { 0, ( int ) lines[b].size() - 1 };
+		for ( int en : endNodes ) {
+			if ( std::abs(lines[b][en].y - ep.y) > maxYDiff ) continue;
+			float dd = distXZ(lines[b][en], ep);
+			if ( dd < bestDist ) {
+				bestDist = dd;
+				best.valid = true;
+				best.isEndpoint = true;
+				best.rail = ( int ) b;
+				best.node = en;
+				best.seg = -1;
+				best.pos = lines[b][en];
+			}
+		}
+
+		// (b) 本体の最近点（T字連結候補）：XZ 平面で線分へ投影し、Yは線分上の高さを使う
+		for ( size_t s = 0; s + 1 < lines[b].size(); ++s ) {
+			const Vector3& p0 = lines[b][s];
+			const Vector3& p1 = lines[b][s + 1];
+			float dx = p1.x - p0.x, dz = p1.z - p0.z;
+			float len2 = dx * dx + dz * dz;
+			float t = ( len2 > 1e-6f )
+				? ( ( ep.x - p0.x ) * dx + ( ep.z - p0.z ) * dz ) / len2
+				: 0.0f;
+			t = std::clamp(t, 0.0f, 1.0f);
+			Vector3 cp = { p0.x + ( p1.x - p0.x ) * t,
+			               p0.y + ( p1.y - p0.y ) * t,
+			               p0.z + ( p1.z - p0.z ) * t };
+			if ( std::abs(cp.y - ep.y) > maxYDiff ) continue;
+			float dd = distXZ(cp, ep);
+			if ( dd < bestDist ) {
+				bestDist = dd;
+				best.valid = true;
+				best.isEndpoint = false;
+				best.rail = ( int ) b;
+				best.node = -1;
+				best.seg = ( int ) s;
+				best.pos = cp;
+			}
+		}
+	}
+	return best;
+}
+
 // スナップ候補へ実際に接続する（ドロップ確定）。
 //   端点同士→ドラッグ中の端点を相手の位置へ吸着（相手は動かさない＝片側スナップ）
 //   本体の途中→相手レールへ共有ノードを挿入して自分の端点を寄せる（ConnectNearbyLines と同じ）
@@ -1064,6 +1232,20 @@ void RailEditor::DrawWindow(){
 				ImGui::SameLine();
 				ImGui::TextColored(ImVec4(0.85f, 0.45f, 1.0f, 1.0f), "×通れない");
 			}
+			// 接続の要約（溶接/T字/交差の件数）。詳細は選択して下の「接続情報」で見る
+			{
+				const auto& conns = GetRailConnections(i);
+				if ( !conns.empty() ) {
+					int weldCount = 0, tJoinCount = 0, crossCount = 0;
+					for ( const auto& c : conns ) {
+						if ( c.type == 0 ) ++weldCount;
+						else if ( c.type == 1 ) ++tJoinCount;
+						else ++crossCount;
+					}
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.5f, 0.9f, 1.0f, 1.0f), "溶%d T%d 交%d", weldCount, tJoinCount, crossCount);
+				}
+			}
 			ImGui::PopID();
 		}
 
@@ -1162,6 +1344,48 @@ void RailEditor::DrawWindow(){
 		}
 		ImGui::SameLine();
 		ImGui::TextDisabled(vis ? "(表示)" : "(非表示=連結用の見えないレール)");
+
+		// --- 接続情報：このレールがどのレールと繋がる/交差するか（座標付き）---
+		//   「通れない」の理由調査や、意図しない接続・交差の発見に使う
+		{
+			const auto& conns = GetRailConnections(currentEditRailIndex_);
+			ImGui::TextDisabled("接続情報（%d件）:", ( int ) conns.size());
+			if ( conns.empty() ) {
+				ImGui::TextColored(ImVec4(0.85f, 0.45f, 1.0f, 1.0f),
+					"  どのレールとも繋がっていません（未接続）");
+			}
+			const char* typeNames[] = { "溶接", "T字", "交差" };
+			for ( const auto& conn : conns ) {
+				ImGui::BulletText("%s: 路線%d と @ (%.1f, %.1f, %.1f)",
+					typeNames[std::clamp(conn.type, 0, 2)], conn.otherRail,
+					conn.pos.x, conn.pos.y, conn.pos.z);
+			}
+
+			// --- ワンクリック修復：未接続の端に「真上から見れば近い」相手がいれば、
+			//     高さを相手に合わせて接続するボタンを出す（ドラッグのやり直し不要）---
+			//   検索半径はスナップ距離の2倍（明示操作なのでドラッグ吸着より少し広めに拾う）
+			const auto& line = data_->railLines[currentEditRailIndex_];
+			if ( line.size() >= 2 ) {
+				const char* endNames[] = { "先頭", "末尾" };
+				for ( int endSide = 0; endSide < 2; ++endSide ) {
+					bool front = ( endSide == 0 );
+					if ( IsRailEndConnected(currentEditRailIndex_, front) ) continue;
+					SnapTarget tgt = FindSnapTargetXZ(currentEditRailIndex_, front, railSnapDistance_ * 2.0f);
+					if ( !tgt.valid ) continue;
+					Vector3 endPos = front ? line.front() : line.back();
+					float heightDiff = tgt.pos.y - endPos.y;
+					char repairLabel[160];
+					snprintf(repairLabel, sizeof(repairLabel),
+						"%s側: 路線%d へ高さを合わせて接続（高さ差 %+.1fm）",
+						endNames[endSide], tgt.rail, heightDiff);
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.45f, 0.10f, 0.75f));
+					if ( ImGui::Button(repairLabel) ) {
+						ConnectToTarget(currentEditRailIndex_, front, tgt);
+					}
+					ImGui::PopStyleColor();
+				}
+			}
+		}
 
 		// --- 線のつなぎ方（ノードの位置は同じで「つなぎ方」だけが変わる）---
 		//   スプライン=置いた点を全部通るなめらかな曲線 / 直線=点をそのまま直線でつなぐ（カクカク）
@@ -1298,6 +1522,8 @@ void RailEditor::DrawWindow(){
 	if ( railAutoSnap_ ) {
 		ImGui::SetNextItemWidth(140.0f);
 		ImGui::SliderFloat("スナップ距離(m)", &railSnapDistance_, 0.3f, 3.0f, "%.1f");
+		ImGui::Checkbox("高さも自動で合わせる（真上から近ければ接続）", &railSnapMatchHeight_);
+		ImGui::TextDisabled("※立体交差（高さの違う線をまたがせる）を作りたい時はOFF");
 	}
 	{
 		const char* jointModes[] = { "エディタのみ", "常に表示", "非表示" };
