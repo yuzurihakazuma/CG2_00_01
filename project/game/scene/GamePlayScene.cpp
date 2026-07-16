@@ -650,6 +650,7 @@ void GamePlayScene::Draw(){
 	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
 	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
 	swallow_.DrawEatFx(commandList);       // 舌で捕まえた敵がSDFで溶けて消える演出
+	SDFManager::GetInstance()->DrawVolumes(commandList); // エディタで配置した3Dボリューム
 
 	// 2. 【MRT終了】
 	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
@@ -675,12 +676,12 @@ void GamePlayScene::Draw(){
 	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
 
 	// 5.5 SDF（文字/画像）を最終画像に焼き込む → エディタの Game View にもそのまま映る。
-	//     Bloom無効時は合成RTを経由しないので、後でバックバッファへ直描きする
-	bool sdfBaked = false;
-	if ( Bloom::GetInstance()->IsEnabled() ) {
-		SDFManager::GetInstance()->DrawIntoTexture(commandList, Bloom::GetInstance()->GetCombineTexture());
-		sdfBaked = true;
-	}
+	//     Bloom有効時は合成RT、無効時は PostEffect の最終RTが finalSrv の実体なので、
+	//     どちらの場合も「FinalBlit が読むテクスチャ」へ焼き込めばフルスクリーンにも映る
+	RenderTexture* sdfTarget = Bloom::GetInstance()->IsEnabled()
+		? Bloom::GetInstance()->GetCombineTexture()
+		: PostEffect::GetInstance()->GetFinalTexture();
+	SDFManager::GetInstance()->DrawIntoTexture(commandList, sdfTarget);
 
 	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);
@@ -705,11 +706,6 @@ void GamePlayScene::Draw(){
 	}
 
 	TextManager::GetInstance()->Draw();
-
-	// SDF 描画（Bloom無効で焼き込めなかった場合のみバックバッファへ直描き）
-	if ( !sdfBaked ) {
-		SDFManager::GetInstance()->Draw(commandList);
-	}
 }
 
 void GamePlayScene::DrawDebugUI(){

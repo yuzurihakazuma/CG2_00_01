@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <vector>
+#include <filesystem>
 #include <d3d12.h>
 #include <wrl.h>
 #include "engine/math/struct.h"
@@ -15,16 +17,32 @@
 //   ・モーフィング：2つ目のボリューム(B)を読むと、距離場の lerp で
 //     形Aから形Bへ連続変形できる（SetMorphT。メッシュでは不可能な芸当）
 //   ・描画はシーンMRTパスの最後（Obj3d等の後）に Draw を呼ぶ
+//   ・ロード元ファイルが更新されると SDFManager の監視が Reload を呼び、
+//     自動でホットリロードされる（SRVスロット維持＝呼び出し側の対応不要）
 //  .sdf3d フォーマット: ヘッダ36バイト（w/h/d + boxMin + boxMax）+ float距離配列
 //  .sdfcol フォーマット: 同ヘッダ + RGBA8配列（最寄り表面のテクスチャ色）
 // =====================================================================
 class SDFVolumeObject {
 public:
+    ~SDFVolumeObject();
+
     // ベース形状(A)の読み込み（コマンドリストは記録中であること）
     bool Load(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList);
 
     // モーフ先形状(B)の読み込み（Load 成功後に呼ぶ。SetMorphT で A→B へ変形）
     bool LoadMorphTarget(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList);
+
+    // モーフ先(B)を破棄して単体表示に戻す
+    void ClearMorphTarget();
+
+    // --- ホットリロード（SDFManager のファイル監視から呼ばれる）---
+    // ロード元ファイル（A/B の .sdf3d / .sdfcol）が更新されたか
+    bool IsFileModified() const;
+    // 更新されたボリュームを読み直す（SRVスロットは維持＝参照側に影響なし。
+    // コマンドリストは記録中であること）
+    bool Reload(ID3D12GraphicsCommandList* commandList);
+    // 生存インスタンス一覧（Load 成功時に自動登録される。監視の巡回用）
+    static const std::vector<SDFVolumeObject*>& GetInstances() { return sInstances_; }
 
     void SetTranslation(const Vector3& t) { translation_ = t; }
     void SetScale(float s) { scale_ = s; }               // 一様スケール（距離値も同率で換算）
@@ -66,8 +84,13 @@ private:
         Microsoft::WRL::ComPtr<ID3D12Resource> colTex;     // Texture3D<RGBA8 sRGB>（色）
         Microsoft::WRL::ComPtr<ID3D12Resource> colUpload;
         uint32_t srv = 0, colSrv = 0;
+        bool srvAllocated = false, colSrvAllocated = false; // リロード時に同スロットを使い回す
         bool hasColor = false;
         bool loaded = false;
+        // --- ホットリロード用：ロード元とその時点の更新時刻 ---
+        std::string path;                                  // .sdf3d のパス
+        std::filesystem::file_time_type distTime {};
+        std::filesystem::file_time_type colTime {};        // .sdfcol（無ければ既定値のまま）
     };
 
     // シェーダーの VolumeCB と同じ並び（float3 の後にパディング）
@@ -88,6 +111,9 @@ private:
     // .sdf3d（＋あれば .sdfcol）を1組読み込んで GPU リソース化する共通処理
     bool LoadVolumeSet(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList,
                        VolumeSet& out);
+
+    static std::string ColPathOf(const std::string& sdf3dPath); // .sdf3d → 同名 .sdfcol
+    static bool IsSetModified(const VolumeSet& v);              // 1組ぶんの更新チェック
 
     VolumeSet volA_; // ベース形状
     VolumeSet volB_; // モーフ先（未ロードなら単体表示）
@@ -110,4 +136,7 @@ private:
     // 共有パイプライン（全インスタンスで1組）
     static Microsoft::WRL::ComPtr<ID3D12RootSignature> sRootSignature_;
     static Microsoft::WRL::ComPtr<ID3D12PipelineState> sPipeline_;
+
+    // 生存インスタンス（Load 成功時に登録 / デストラクタで解除。ホットリロード巡回用）
+    static std::vector<SDFVolumeObject*> sInstances_;
 };

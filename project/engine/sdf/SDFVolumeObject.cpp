@@ -16,6 +16,12 @@
 
 Microsoft::WRL::ComPtr<ID3D12RootSignature> SDFVolumeObject::sRootSignature_;
 Microsoft::WRL::ComPtr<ID3D12PipelineState> SDFVolumeObject::sPipeline_;
+std::vector<SDFVolumeObject*> SDFVolumeObject::sInstances_;
+
+SDFVolumeObject::~SDFVolumeObject() {
+    auto it = std::find(sInstances_.begin(), sInstances_.end(), this);
+    if ( it != sInstances_.end() ) { sInstances_.erase(it); }
+}
 
 // 共有パイプライン：シーンMRT（色＋マスク、深度あり）へレイマーチング結果を描く
 bool SDFVolumeObject::BuildPipeline() {
@@ -147,15 +153,17 @@ bool SDFVolumeObject::LoadVolumeSet(const std::string& sdf3dPath,
         reinterpret_cast<const uint8_t*>( data.data() ), sizeof(float), out.tex, out.upload) ) {
         return false;
     }
-    out.srv = SrvManager::GetInstance()->Allocate();
+    // リロード時は同じSRVスロットへ上書き（参照側のインデックスを無効化しない）
+    if ( !out.srvAllocated ) {
+        out.srv = SrvManager::GetInstance()->Allocate();
+        out.srvAllocated = true;
+    }
     SrvManager::GetInstance()->CreateSRVforTexture3D(out.srv, out.tex.Get(), DXGI_FORMAT_R32_FLOAT, 1);
 
     // --- 2. カラーボリューム（同名 .sdfcol。無ければ単色フォールバック）---
-    std::string colPath = sdf3dPath;
-    size_t dot = colPath.find_last_of('.');
-    if ( dot != std::string::npos ) { colPath = colPath.substr(0, dot); }
-    colPath += ".sdfcol";
+    const std::string colPath = ColPathOf(sdf3dPath);
 
+    out.hasColor = false; // リロードで .sdfcol が消えた/壊れた場合は単色に戻す
     std::ifstream colFile(colPath, std::ios::binary);
     if ( colFile ) {
         Header ch {};
@@ -165,7 +173,10 @@ bool SDFVolumeObject::LoadVolumeSet(const std::string& sdf3dPath,
             colFile.read(reinterpret_cast<char*>( colData.data() ), colData.size());
             if ( colFile && createAndUpload(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
                 colData.data(), 4, out.colTex, out.colUpload) ) {
-                out.colSrv = SrvManager::GetInstance()->Allocate();
+                if ( !out.colSrvAllocated ) {
+                    out.colSrv = SrvManager::GetInstance()->Allocate();
+                    out.colSrvAllocated = true;
+                }
                 SrvManager::GetInstance()->CreateSRVforTexture3D(
                     out.colSrv, out.colTex.Get(), DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 1);
                 out.hasColor = true;
@@ -173,13 +184,68 @@ bool SDFVolumeObject::LoadVolumeSet(const std::string& sdf3dPath,
         }
     }
 
+    // ホットリロード用にロード元とタイムスタンプを記録
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        out.path = sdf3dPath;
+        out.distTime = fs::last_write_time(sdf3dPath, ec);
+        out.colTime = {};
+        if ( fs::exists(colPath, ec) ) { out.colTime = fs::last_write_time(colPath, ec); }
+    }
+
     out.loaded = true;
     return true;
+}
+
+std::string SDFVolumeObject::ColPathOf(const std::string& sdf3dPath) {
+    std::string colPath = sdf3dPath;
+    size_t dot = colPath.find_last_of('.');
+    if ( dot != std::string::npos ) { colPath = colPath.substr(0, dot); }
+    return colPath + ".sdfcol";
+}
+
+// 1組ぶんの更新チェック：.sdf3d / .sdfcol の last_write_time がロード時と違えば true
+bool SDFVolumeObject::IsSetModified(const VolumeSet& v) {
+    if ( !v.loaded || v.path.empty() ) return false;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    auto distTime = fs::last_write_time(v.path, ec);
+    if ( ec ) return false; // ファイルが消えている間は何もしない（生成途中の可能性）
+    if ( distTime != v.distTime ) return true;
+    const std::string colPath = ColPathOf(v.path);
+    if ( fs::exists(colPath, ec) ) {
+        auto colTime = fs::last_write_time(colPath, ec);
+        if ( !ec && colTime != v.colTime ) return true; // .sdfcol の後付け追加も拾う
+    }
+    return false;
+}
+
+bool SDFVolumeObject::IsFileModified() const {
+    return IsSetModified(volA_) || IsSetModified(volB_);
+}
+
+// 更新されたボリュームだけ読み直す。テクスチャは作り直すが SRV スロットは維持されるので、
+// 参照側（ゲームコード/エディタ配置）は何もしなくてよい
+bool SDFVolumeObject::Reload(ID3D12GraphicsCommandList* commandList) {
+    bool reloaded = false;
+    if ( IsSetModified(volA_) && LoadVolumeSet(volA_.path, commandList, volA_) ) { reloaded = true; }
+    if ( IsSetModified(volB_) && LoadVolumeSet(volB_.path, commandList, volB_) ) { reloaded = true; }
+    return reloaded;
+}
+
+void SDFVolumeObject::ClearMorphTarget() {
+    volB_ = VolumeSet {};
 }
 
 bool SDFVolumeObject::Load(const std::string& sdf3dPath, ID3D12GraphicsCommandList* commandList) {
     if ( !BuildPipeline() ) return false;
     if ( !LoadVolumeSet(sdf3dPath, commandList, volA_) ) return false;
+
+    // ホットリロードの巡回対象として登録（SDFManager がファイル更新を検知して Reload を呼ぶ）
+    if ( std::find(sInstances_.begin(), sInstances_.end(), this) == sInstances_.end() ) {
+        sInstances_.push_back(this);
+    }
 
     // --- プロキシ箱（単位キューブ 0〜1。VSで rayBox へ展開する）---
     const float cubeVerts[8][3] = {

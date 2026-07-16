@@ -154,6 +154,10 @@ public: // ゲームプレイシーンなどから、描画に必要なSRVイン
 	// いつでも最終的な結果のSRVインデックスを取得できる関数
 	uint32_t GetMaskSrvIndex() const{ return maskTexture_->GetSrvIndex(); }
 
+	// 最終結果の RenderTexture 本体（SDF焼き込みなど「この上に描き足す」用途向け）
+	// ※ finalResultIndex_ は Draw() 内で更新されるため、Draw() 実行後にのみ有効
+	RenderTexture* GetFinalTexture() const { return renderTextures_[finalResultIndex_].get(); }
+
 private:
 
 	PostEffect() = default;

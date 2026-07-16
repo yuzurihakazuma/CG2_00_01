@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 128,
+  "textureHeight": 128,
+  "keepColor": true,
+  "sprites": {
+    "baketuotiru": {
+      "x": 0,
+      "y": 0,
+      "width": 96,
+      "height": 116,
+      "originalWidth": 128,
+      "originalHeight": 128,
+      "offsetX": 16,
+      "offsetY": 0
+    }
+  }
+}

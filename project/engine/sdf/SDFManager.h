@@ -7,14 +7,18 @@
 #include "engine/sdf/SDFAtlas.h"
 #include "engine/sdf/SDFText.h"
 #include "engine/sdf/SDFSprite.h"
+#include "engine/sdf/SDFVolumeObject.h"
 
 // =====================================================================
 //  SDFManager（シングルトン）
 //   SDF システム全体のまとめ役。
 //   ・resources/sdf/ を監視し、JSON+PNG のペアを自動ロード
+//   ・resources/sdf3d/ も監視し、.sdf3d（3Dボリューム）を自動検知
+//     （エディタ配置ぶんは新規ロード、ゲームコード所有ぶんも含め更新は
+//       全インスタンスへホットリロード）
 //   ・ファイル更新を検知したらホットリロード（SDFWatcher と連携：
-//     input/ に画像やフォントを入れる → 自動生成 → エンジンに即反映）
-//   ・エディタパネルからテキスト/スプライトを配置・編集
+//     input/ に画像やフォント、.obj を入れる → 自動生成 → エンジンに即反映）
+//   ・エディタパネルからテキスト/スプライト/3Dボリュームを配置・編集
 //   ・配置内容は resources/sdf/sdf_scene.json に保存/復元
 //
 //   接続方法:
@@ -22,6 +26,7 @@
 //     EditorManager::Begin      → Update()        ※安全なタイミングでロードする
 //     EditorManager::Update(UI) → DrawDebugUI()
 //     GamePlayScene::Draw(最後) → Draw(commandList)
+//     GamePlayScene::Draw(MRT内)→ DrawVolumes(commandList) ※3Dボリュームは深度あり
 //     EditorManager::Finalize   → Finalize()
 // =====================================================================
 class SDFManager {
@@ -44,6 +49,9 @@ public:
     // Bloom合成結果に描き込めば、エディタの Game View にも SDF が映る。
     // （target を RT 状態へ遷移→描画→PSR に戻すところまで面倒を見る）
     void DrawIntoTexture(ID3D12GraphicsCommandList* commandList, class RenderTexture* target);
+
+    // エディタで配置した3Dボリュームを描画（シーンMRTパスの最後＝深度ありの中で呼ぶ）
+    void DrawVolumes(ID3D12GraphicsCommandList* commandList);
 
     // エディタパネル
     void DrawDebugUI();
@@ -91,10 +99,27 @@ private:
         std::string atlasName;           // 使うスプライトアトラス名
         std::unique_ptr<SDFSprite> sprite;
     };
+    // 3Dボリューム配置：パラメータはここが正で、描画時に vol へ流し込む。
+    // vol はファイルが届いた時に後から解決される（アトラスの遅延解決と同じ流儀）
+    struct VolumeItem {
+        std::string fileName;            // resources/sdf3d/ 内の .sdf3d 名（拡張子なし）
+        std::string morphFile;           // モーフ先（拡張子なし。空=なし）
+        Vector3 translation { 0.0f, 3.0f, 0.0f };
+        float scale = 1.0f;
+        Vector4 color { 1.0f, 1.0f, 1.0f, 1.0f }; // カラーボリュームが無い時の単色
+        float erode = 0.0f;
+        float morphT = 0.0f;
+        bool visible = true;
+        std::unique_ptr<SDFVolumeObject> vol;     // 実体（ファイル未着なら nullptr）
+        std::string loadedMorph;         // vol に実際に読み込んだモーフ先（変更検知用）
+    };
+
+    void ResolveVolumeItem(VolumeItem& item, ID3D12GraphicsCommandList* commandList);
 
     std::vector<std::unique_ptr<SDFAtlas>> atlases_;
     std::vector<TextItem> texts_;
     std::vector<SpriteItem> sprites_;
+    std::vector<VolumeItem> volumes_;
 
     // --- 共有パイプライン ---
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
@@ -104,6 +129,8 @@ private:
 
     // --- 監視 ---
     std::string watchDir_ = "resources/sdf";
+    std::string volumeDir_ = "resources/sdf3d";
+    std::vector<std::string> volumeFiles_; // 監視フォルダで見つかった .sdf3d（拡張子なし名）
     int scanCounter_ = 0;                // 毎フレーム走査しないためのカウンタ
     std::string status_;
 
