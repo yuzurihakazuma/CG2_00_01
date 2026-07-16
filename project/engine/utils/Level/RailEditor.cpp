@@ -30,30 +30,30 @@ static bool MotionsEqual(const std::vector<Vector4>& lhs, const std::vector<Vect
 }
 
 // 折れ線を Catmull-Rom 補間でなめらかにする（手描きキャンバス・なめらか化ボタンで共用）。
-//   seg: 区間あたりの分割数（多いほど滑らか）。点が3個未満ならそのまま返す。
-static std::vector<Vector3> SmoothPolylineCR(const std::vector<Vector3>& pts, int seg){
-	const int n = static_cast< int >( pts.size() );
-	if ( n < 3 || seg < 2 ) return pts;
-	std::vector<Vector3> out;
-	out.reserve(static_cast< size_t >( n ) * seg + 1);
-	auto at = [&]( int i ) -> const Vector3&{ return pts[std::clamp(i, 0, n - 1)]; };
-	for ( int i = 0; i + 1 < n; ++i ) {
-		const Vector3& p0 = at(i - 1);
-		const Vector3& p1 = at(i);
-		const Vector3& p2 = at(i + 1);
-		const Vector3& p3 = at(i + 2);
-		for ( int s = 0; s < seg; ++s ) {
-			float t  = static_cast< float >( s ) / static_cast< float >( seg );
+//   divisions: 区間あたりの分割数（多いほど滑らか）。点が3個未満ならそのまま返す。
+static std::vector<Vector3> SmoothPolylineCR(const std::vector<Vector3>& points, int divisions){
+	const int pointCount = static_cast< int >( points.size() );
+	if ( pointCount < 3 || divisions < 2 ) return points;
+	std::vector<Vector3> smoothed;
+	smoothed.reserve(static_cast< size_t >( pointCount ) * divisions + 1);
+	auto pointAt = [&]( int i ) -> const Vector3&{ return points[std::clamp(i, 0, pointCount - 1)]; };
+	for ( int i = 0; i + 1 < pointCount; ++i ) {
+		const Vector3& p0 = pointAt(i - 1);
+		const Vector3& p1 = pointAt(i);
+		const Vector3& p2 = pointAt(i + 1);
+		const Vector3& p3 = pointAt(i + 2);
+		for ( int step = 0; step < divisions; ++step ) {
+			float t  = static_cast< float >( step ) / static_cast< float >( divisions );
 			float t2 = t * t, t3 = t2 * t;
-			Vector3 q;
-			q.x = 0.5f * ( ( 2.0f * p1.x ) + ( -p0.x + p2.x ) * t + ( 2.0f * p0.x - 5.0f * p1.x + 4.0f * p2.x - p3.x ) * t2 + ( -p0.x + 3.0f * p1.x - 3.0f * p2.x + p3.x ) * t3 );
-			q.y = 0.5f * ( ( 2.0f * p1.y ) + ( -p0.y + p2.y ) * t + ( 2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y ) * t2 + ( -p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y ) * t3 );
-			q.z = 0.5f * ( ( 2.0f * p1.z ) + ( -p0.z + p2.z ) * t + ( 2.0f * p0.z - 5.0f * p1.z + 4.0f * p2.z - p3.z ) * t2 + ( -p0.z + 3.0f * p1.z - 3.0f * p2.z + p3.z ) * t3 );
-			out.push_back(q);
+			Vector3 interpolated;
+			interpolated.x = 0.5f * ( ( 2.0f * p1.x ) + ( -p0.x + p2.x ) * t + ( 2.0f * p0.x - 5.0f * p1.x + 4.0f * p2.x - p3.x ) * t2 + ( -p0.x + 3.0f * p1.x - 3.0f * p2.x + p3.x ) * t3 );
+			interpolated.y = 0.5f * ( ( 2.0f * p1.y ) + ( -p0.y + p2.y ) * t + ( 2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y ) * t2 + ( -p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y ) * t3 );
+			interpolated.z = 0.5f * ( ( 2.0f * p1.z ) + ( -p0.z + p2.z ) * t + ( 2.0f * p0.z - 5.0f * p1.z + 4.0f * p2.z - p3.z ) * t2 + ( -p0.z + 3.0f * p1.z - 3.0f * p2.z + p3.z ) * t3 );
+			smoothed.push_back(interpolated);
 		}
 	}
-	out.push_back(pts.back());
-	return out;
+	smoothed.push_back(points.back());
+	return smoothed;
 }
 
 // マップ読込/差し替え時：選択・履歴をリセットし、空なら1本用意する
