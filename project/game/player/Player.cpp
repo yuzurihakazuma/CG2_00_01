@@ -326,8 +326,21 @@ bool Player::TryJoinNearbyBody(const std::vector<SplineRail>& rails, const Splin
 
     currentRailIndex_ = bestRail;
     currentDistance_  = bestClosestDist;
-    dsSign_         = 0.0f;
-    atJunction_     = isGrounded_; // 地上のみジャンクション停止。空中はそのまま着地を待つ
+    // 勢いの持ち越し：今の進行方向を相手レールの接線に射影して進行符号を決め、
+    //   止まらずに走り抜けられるようにする（溶接持ち越しと同じ操作感に揃える）。
+    //   ほぼ直角に突き当たるT字だけは、どちらへ進むか曖昧なので従来どおり一旦停止して入力を待つ
+    const float kCarryDot = 0.3f; // これ未満＝ほぼ直角の合流とみなす
+    Vector3 newTangent = rails[bestRail].GetTangentByDistance(bestClosestDist);
+    Vector3 newDir     = HorizDir(newTangent.x, newTangent.z);
+    float carry = ( Length(forwardDir) > 1e-4f && Length(newDir) > 1e-4f )
+        ? ( newDir.x * forwardDir.x + newDir.z * forwardDir.z ) : 0.0f;
+    if ( std::abs(carry) >= kCarryDot ) {
+        dsSign_     = ( carry >= 0.0f ) ? 1.0f : -1.0f;
+        atJunction_ = false;
+    } else {
+        dsSign_     = 0.0f;
+        atJunction_ = isGrounded_; // 地上のみジャンクション停止。空中はそのまま着地を待つ
+    }
     switchCooldown_ = 0.15f;
     return true;
 }
@@ -524,10 +537,19 @@ void Player::FinalizePosition(const SplineRail& rail, const Vector3& worldBefore
     if ( position_.y < kKillY ) { Initialize(); return; }
 
     // 向き：実際に進んでいる方向（接線 × 進行符号）へ向ける。
+    //   即時スナップではなく最短弧の指数補間で追従させる（位置の平滑化と同じ約0.15秒）。
+    //   接続の角度変化や進行方向の反転で、モデルが1フレームでカクッと回るのを防ぐ
     Vector3 tangent = rail.GetTangentByDistance(currentDistance_);
     if ( Length(tangent) > 0.001f && dsSign_ != 0.0f ) {
         Vector3 velocity = { tangent.x * dsSign_, tangent.y * dsSign_, tangent.z * dsSign_ };
-        rotation_.y = std::atan2(velocity.x, velocity.z);
+        float targetYaw = std::atan2(velocity.x, velocity.z);
+        const float kPi = 3.14159265f;
+        float yawDiff = targetYaw - rotation_.y;
+        while ( yawDiff >  kPi ) yawDiff -= 2.0f * kPi; // 最短弧（+350°回らず -10° で済ませる）
+        while ( yawDiff < -kPi ) yawDiff += 2.0f * kPi;
+        rotation_.y += yawDiff * std::min(14.0f * dt, 1.0f);
+        while ( rotation_.y >  kPi ) rotation_.y -= 2.0f * kPi; // 値が無限に育たないよう正規化
+        while ( rotation_.y < -kPi ) rotation_.y += 2.0f * kPi;
         rotation_.x = 0.0f;
         rotation_.z = 0.0f;
     }
