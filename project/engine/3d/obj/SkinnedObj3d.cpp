@@ -88,8 +88,10 @@ void SkinnedObj3d::Initialize(
 void SkinnedObj3d::Update(){
 
 	if ( !isPause_ ) {
-		// --- アニメーション時間を進める（デルタタイム基準）---
-		animationTime_ += Time::GetInstance()->GetDeltaTime();
+		// --- アニメーション時間を進める（デルタタイム×再生速度）---
+		//   再生速度は呼び出し側が毎フレーム決められる（例：プレイヤーの移動速度に合わせて
+		//   歩きモーションを進める＝止まれば止まり、速く動くほど足も速くなる）
+		animationTime_ += Time::GetInstance()->GetDeltaTime() * playbackSpeed_;
 		if ( isLoop_ ) {
 			animationTime_ = std::fmod(animationTime_, animation_.duration);
 		} else {

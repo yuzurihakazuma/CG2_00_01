@@ -81,6 +81,10 @@ public:  // --- Getter / Setter ---
 
 	Skeleton& GetSkeleton(){ return skeleton_; }
 
+	// アニメーションの再生速度（1=等速 / 0=停止）。
+	// プレイヤーの実際の移動速度に合わせて呼ぶと「歩いた時だけ歩きモーション」になる
+	void SetPlaybackSpeed(float speed){ playbackSpeed_ = speed; }
+
 
     void SetPauseAnimation(bool pause) { isPause_ = pause; }
 
@@ -112,6 +116,7 @@ private:
     // アニメーション
     Animation animation_;
     float     animationTime_ = 0.0f;
+    float     playbackSpeed_ = 1.0f; // 再生速度（0=停止。歩行速度に合わせる等、毎フレーム変更可）
     bool      isLoop_ = true;
 
     std::string name_ = "SkinnedObj3d";

@@ -1,0 +1,3 @@
+newmtl PlayerPalette
+Kd 1.0 1.0 1.0
+map_Kd player_palette.png

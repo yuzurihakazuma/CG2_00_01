@@ -81,6 +81,7 @@ void GamePlayScene::LoadResources(){
 	modelManager->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	modelManager->LoadModel("human", "resources/human", "walk.gltf");
 	modelManager->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
+	modelManager->LoadModel("player", "resources/player", "player.obj"); // プレイヤー（恐竜マスコット。6色をパレットPNGに焼き込んだ1マテリアル版）
 	modelManager->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
 	modelManager->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
 	modelManager->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
@@ -160,7 +161,10 @@ void GamePlayScene::SetupDemoObjects(){
 	// Obj3d::Create がデフォルトカメラを掴むため、必ず SetupCameras の後に初期化する
 	demo_.Initialize(DirectXCommon::GetInstance()->GetCommandList(), textures_);
 
-	// スキンメッシュ（プレイ中はプレイヤーの位置/向きに同期）
+	// プレイヤーの見た目（恐竜マスコット）。カメラ確定後に生成する
+	playerObj_ = Obj3d::Create("player");
+
+	// スキンメッシュ（Skinning機能の展示。定位置でその場歩き）
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex);
 	skinnedObj_->SetTranslation({ 0.0f, 0.0f, 5.0f });
@@ -532,10 +536,11 @@ void GamePlayScene::UpdateSceneVisuals(){
 	// SDF溶け道：プレイヤーとの距離でパネルの現れ/溶けを更新（エディタ中も動きが見える）
 	dissolveRoad_.Update(player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f }, 1.0f / 60.0f);
 
-	// スキンメッシュ（プレイ中はプレイヤーの位置/向きに同期）
-	if ( skinnedObj_ ) {
-		Vector3 pos, rot, scale;
-		skinnedAnimTrack_.UpdateTransformAtTime(skinnedAnimTime_, pos, rot, scale);
+	// プレイヤーの見た目（恐竜マスコット player.obj）：
+	//   Play中はプレイヤーに追従、Edit中はスタート地点プレビュー。
+	//   リグ無しモデルなので、歩きは実移動速度に連動した手続きウォドル（左右ロール＋小さな跳ね）で出す
+	if ( playerObj_ ) {
+		Vector3 pos {}, rot {};
 		if ( currentMode == EngineMode::Play && player_ ) {
 			pos = player_->GetPosition();
 			rot = player_->GetRotation();
@@ -553,9 +558,31 @@ void GamePlayScene::UpdateSceneVisuals(){
 				}
 			}
 		}
-		skinnedObj_->SetTranslation(pos);
-		skinnedObj_->SetRotation(rot);
-		skinnedObj_->SetScale(scale);
+		// 実際に動いた速さ（見た目の位置の差分）→ ウォドルの速さ。止まればピタッと止まる
+		float horizontalSpeed = 0.0f;
+		if ( playerPrevPosValid_ ) {
+			float dx = pos.x - playerPrevPos_.x;
+			float dz = pos.z - playerPrevPos_.z;
+			horizontalSpeed = std::sqrt(dx * dx + dz * dz) * 60.0f; // 固定60FPS想定で m/s へ
+		}
+		playerPrevPos_ = pos;
+		playerPrevPosValid_ = true;
+		const float kWaddleBaseSpeed = 5.0f;  // プレイヤーの通常移動速度(m/s)で標準テンポ
+		const float kWaddleRate      = 9.0f;  // 標準テンポ時の足踏み角速度(rad/s)
+		float waddleSpeed = std::clamp(horizontalSpeed / kWaddleBaseSpeed, 0.0f, 1.8f);
+		playerWaddlePhase_ += kWaddleRate * waddleSpeed * ( 1.0f / 60.0f );
+		float waddleRoll = std::sin(playerWaddlePhase_) * 0.10f * waddleSpeed;         // 左右にコロコロ
+		float waddleHop  = std::abs(std::sin(playerWaddlePhase_)) * 0.06f * waddleSpeed; // 歩に合わせて小さく跳ねる
+		const float kPlayerModelYOffset = 0.25f; // モデル原点（足元）を道の上面に乗せる補正
+		playerObj_->SetTranslation({ pos.x, pos.y + kPlayerModelYOffset + waddleHop, pos.z });
+		playerObj_->SetRotation({ 0.0f, rot.y, waddleRoll });
+		playerObj_->Update();
+	}
+
+	// スキンメッシュ（Skinning機能の展示）：定位置でその場歩き。
+	//   プレイヤーの見た目は恐竜マスコットに交代したが、スキニング表示自体は残す
+	if ( skinnedObj_ ) {
+		skinnedObj_->SetPlaybackSpeed(1.0f);
 		skinnedObj_->Update();
 	}
 
@@ -619,6 +646,7 @@ void GamePlayScene::Draw(){
 	// 1. 先に「不透明」なものを全部描き切る！！！
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	demo_.DrawOpaque();                         // 展示物（回転キューブ）
+	if ( playerObj_ ) { playerObj_->Draw(); }   // プレイヤー（恐竜マスコット）
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵
