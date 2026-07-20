@@ -18,6 +18,7 @@ struct VolumeCB
     float4 baseColor;
     float3 lightDir; float erode;
     float useColorTexA; float useColorTexB; float useMorph; float morphT;
+    float meltStyle; float meltNoiseFreq; float meltBand; float meltPad; // 溶け方（0=均一/1=段ボール焼け）
 };
 ConstantBuffer<VolumeCB> gVolume : register(b0);
 
@@ -50,6 +51,40 @@ float SampleVol(Texture3D<float> vol, float3 bmin, float3 bmax, float3 wp)
     return d + length(wp - cp);
 }
 
+// --- 3D値ノイズ（ハッシュ＋トリリニア補間。段ボール焼けの「溶けムラ」用）---
+float Hash3(float3 p)
+{
+    p = frac(p * 0.3183099f + float3(0.1f, 0.2f, 0.3f));
+    p *= 17.0f;
+    return frac(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float ValueNoise(float3 p)
+{
+    float3 i = floor(p);
+    float3 f = frac(p);
+    f = f * f * (3.0f - 2.0f * f); // スムースステップ補間
+    float n000 = Hash3(i + float3(0, 0, 0)), n100 = Hash3(i + float3(1, 0, 0));
+    float n010 = Hash3(i + float3(0, 1, 0)), n110 = Hash3(i + float3(1, 1, 0));
+    float n001 = Hash3(i + float3(0, 0, 1)), n101 = Hash3(i + float3(1, 0, 1));
+    float n011 = Hash3(i + float3(0, 1, 1)), n111 = Hash3(i + float3(1, 1, 1));
+    return lerp(lerp(lerp(n000, n100, f.x), lerp(n010, n110, f.x), f.y),
+                lerp(lerp(n001, n101, f.x), lerp(n011, n111, f.x), f.y), f.z);
+}
+
+// その点の実効エロージョン量。
+//   段ボール焼けスタイルではワールド座標ノイズで不均一化：溶けやすい所（ノイズ大）は
+//   先に穴が開き、溶けにくい所は繊維が残る＝熱した段ボールの崩れ方になる
+float ErodeAt(float3 wp)
+{
+    float e = gVolume.erode;
+    if (gVolume.meltStyle > 0.5f)
+    {
+        float n = ValueNoise(wp * gVolume.meltNoiseFreq);
+        e *= lerp(0.45f, 1.65f, n);
+    }
+    return e;
+}
+
 // 合成距離場：モーフ（AとBのlerp）＋エロージョン
 float MapDist(float3 wp)
 {
@@ -59,7 +94,7 @@ float MapDist(float3 wp)
         float dB = SampleVol(gSDFB, gVolume.boxMinB, gVolume.boxMaxB, wp);
         d = lerp(d, dB, gVolume.morphT);
     }
-    return d + gVolume.erode;
+    return d + ErodeAt(wp);
 }
 
 PSOutput main(PSInput input)
@@ -120,6 +155,19 @@ PSOutput main(PSInput input)
     float3 l = normalize(-gVolume.lightDir);
     float ndl = saturate(dot(n, l) * 0.5f + 0.5f);
     float3 rgb = albedo * (0.25f + 0.75f * ndl);
+
+    // --- 段ボール焼け：溶け際の焦げ＋赤熱 ---
+    //   ここに到達した表面は「元の深さ ≒ 局所エロージョン量」の溶け前線。
+    //   局所エロージョンが基準量(meltBand)に近い所ほど今まさに焼け落ちる寸前なので、
+    //   焦げ茶 → 黒 → オレンジ発光の順で色付けする（穴の縁がふちどりで赤熱して見える）
+    if (gVolume.meltStyle > 0.5f)
+    {
+        float charT = saturate(ErodeAt(p) / max(gVolume.meltBand, 1e-3f));
+        float3 charColor = float3(0.13f, 0.08f, 0.05f); // 焦げ（こげ茶〜黒）
+        rgb = lerp(rgb, charColor, smoothstep(0.25f, 0.85f, charT) * 0.9f);
+        float ember = smoothstep(0.55f, 0.95f, charT);  // 消える寸前の縁だけ
+        rgb += float3(1.0f, 0.35f, 0.06f) * ember * 1.6f; // 赤熱（ライティング後に加算＝自発光）
+    }
 
     PSOutput output;
     output.color = float4(rgb, gVolume.baseColor.a);

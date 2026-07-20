@@ -1227,15 +1227,17 @@ void RailEditor::DrawWindow(){
 			// 道の生成トグル（§4：0=自動で道を敷く / 1=道なし）
 			ImGui::SameLine();
 			{
-				bool road = ( i < ( int ) data_->railRoadModes.size() ) ? ( data_->railRoadModes[i] == 0 ) : true;
-				if ( ImGui::Checkbox("道", &road) ) {
+				int roadModeValue = ( i < ( int ) data_->railRoadModes.size() ) ? data_->railRoadModes[i] : 0;
+				const char* roadModeLabels[] = { "道", "なし", "溶け道" };
+				ImGui::SetNextItemWidth(74.0f);
+				if ( ImGui::Combo("##roadMode", &roadModeValue, roadModeLabels, 3) ) {
 					if ( i < ( int ) data_->railRoadModes.size() ) {
-						data_->railRoadModes[i] = road ? 0 : 1;
+						data_->railRoadModes[i] = roadModeValue;
 						++railVersion_; // 道メッシュ・ジョイントの即時再生成トリガー
 					}
 				}
 				if ( ImGui::IsItemHovered() ) {
-					ImGui::SetTooltip("このレールの下に道を生成するか（OFF=レールだけ。カメラ/敵/演出用）");
+					ImGui::SetTooltip("道の種類：\n 道＝通常の道メッシュ\n なし＝レールだけ（カメラ/敵/演出用）\n 溶け道＝SDFの道。普段は消えていて、近づくと現れ、離れると溶けて消える");
 				}
 			}
 			if ( !IsRailReachable(i) ) {

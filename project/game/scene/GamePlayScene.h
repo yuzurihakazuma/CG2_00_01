@@ -12,6 +12,7 @@
 #include "engine/rail/SplineRail.h"
 #include "game/rail/RailField.h"
 #include "game/rail/RoadMesh.h"
+#include "game/rail/DissolveRoad.h"
 #include "game/camera/PlayCameraController.h"
 #include "game/combat/HitFeel.h"
 #include "game/combat/CombatSystem.h"
@@ -135,6 +136,9 @@ private: // メンバ変数
 
 	// --- レール下の道メッシュ（クラフト風の地面。緑線と違い Play 中も見せる本番の見た目）---
 	RoadMesh roadMesh_;
+
+	// --- SDF溶け道（道の種類=SDF溶け道のレール。近づくと現れ、離れると溶けて消える）---
+	DissolveRoad dissolveRoad_;
 
 	// --- ステージ進行（ゴール判定・表示。処理は StageFlow へ分離）---
 	StageFlow stageFlow_;

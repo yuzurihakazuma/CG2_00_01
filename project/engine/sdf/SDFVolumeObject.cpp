@@ -341,6 +341,11 @@ void SDFVolumeObject::Update() {
     cbData_->useColorTexB = volB_.hasColor ? 1.0f : 0.0f;
     cbData_->useMorph = volB_.loaded ? 1.0f : 0.0f;
     cbData_->morphT = std::clamp(morphT_, 0.0f, 1.0f);
+
+    cbData_->meltStyle     = meltStyle_;
+    cbData_->meltNoiseFreq = meltNoiseFreq_;
+    cbData_->meltBand      = meltBand_;
+    cbData_->meltPad       = 0.0f;
 }
 
 // シーンMRTパスの最後で呼ぶ（専用のPSO/ルートシグネチャを自分でセットする）

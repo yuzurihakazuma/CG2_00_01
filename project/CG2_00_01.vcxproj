@@ -252,6 +252,7 @@ exit 0</Command>
     <ClCompile Include="engine\sdf\SDFText.cpp" />
     <ClCompile Include="engine\sdf\SDFVolumeObject.cpp" />
     <ClCompile Include="game\rail\RoadMesh.cpp" />
+    <ClCompile Include="game\rail\DissolveRoad.cpp" />
     <ClCompile Include="game\demo\DemoShowcase.cpp" />
     <ClCompile Include="game\egg\Egg.cpp" />
     <ClCompile Include="game\egg\EggSystem.cpp" />
@@ -391,6 +392,7 @@ exit 0</Command>
     <ClInclude Include="engine\sdf\SDFText.h" />
     <ClInclude Include="engine\sdf\SDFVolumeObject.h" />
     <ClInclude Include="game\rail\RoadMesh.h" />
+    <ClInclude Include="game\rail\DissolveRoad.h" />
     <ClInclude Include="game\demo\DemoShowcase.h" />
     <ClInclude Include="game\egg\Egg.h" />
     <ClInclude Include="game\egg\EggSystem.h" />

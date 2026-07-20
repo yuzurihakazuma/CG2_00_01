@@ -807,6 +807,12 @@ void SDFManager::DrawDebugUI() {
         if ( deleteIndex >= 0 ) { volumes_.erase(volumes_.begin() + deleteIndex); }
     }
 
+    // --- ゲーム側のSDF関連設定（SDF溶け道の消え方調整など）をパネル最下部に表示 ---
+    if ( extraPanelUI_ ) {
+        ImGui::Separator();
+        extraPanelUI_();
+    }
+
     ImGui::End();
 #endif
 }

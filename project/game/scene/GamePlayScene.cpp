@@ -132,6 +132,13 @@ void GamePlayScene::LoadResources(){
 
 	// 敵のSDF消滅演出（踏みつけ/卵命中で倒すと、その場で敵ボールが芯まで溶けて消える）
 	combat_.InitializeDissolveFx(commandList);
+
+	// SDF溶け道（近づくと道が現れ、離れると溶けて消える）のパイプライン構築
+	dissolveRoad_.Initialize(commandList);
+	// 消え方の調整UIを SDF パネル（SDF化の管理画面）の最下部へ差し込む
+	//   ※「調整項目」ウィンドウ内から同名 Begin で追記する方式は、タブが同じドックに
+	//     入ると片方しか描画されず絶対に表示されないため、フック方式で確実に出す
+	SDFManager::GetInstance()->SetExtraPanelUI([this]{ dissolveRoad_.DrawImGui(); });
 }
 
 // メインカメラ／デバッグカメラの生成・登録
@@ -269,6 +276,7 @@ void GamePlayScene::SyncRailsFromEditor(bool simple){
 
 	railField_.Sync(camera_.get(), whiteTex); // レール本体＋緑線を作り直す
 	roadMesh_.Build(railField_.GetRails(), camera_.get()); // レール下の道メッシュも敷き直す
+	dissolveRoad_.Build(railField_.GetRails());            // SDF溶け道のパネル敷設点も打ち直す
 
 	// --- 敵のピン留め：編集後のレール上で「元のワールド位置の最寄り点」へ距離を張り直す ---
 	//   路線まるごと移動なら一緒に付いていき、形の部分編集なら他の敵は動かない。
@@ -521,6 +529,9 @@ void GamePlayScene::UpdateSceneVisuals(){
 	roadMesh_.SetJointVisible(EditorManager::GetInstance()->GetEditorJointVisible()); // ジョイント表示モード（§5）
 	roadMesh_.Update(railField_.GetRails()); // 道メッシュ（動くレール追従＋カメラ追従）
 
+	// SDF溶け道：プレイヤーとの距離でパネルの現れ/溶けを更新（エディタ中も動きが見える）
+	dissolveRoad_.Update(player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f }, 1.0f / 60.0f);
+
 	// スキンメッシュ（プレイ中はプレイヤーの位置/向きに同期）
 	if ( skinnedObj_ ) {
 		Vector3 pos, rot, scale;
@@ -649,6 +660,7 @@ void GamePlayScene::Draw(){
 	demo_.DrawSdf(commandList);            // 展示物（SDF卵のエロージョン/モーフデモ）
 	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
 	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
+	dissolveRoad_.Draw(commandList);       // SDF溶け道（近づくと現れる道パネル）
 	swallow_.DrawEatFx(commandList);       // 舌で捕まえた敵がSDFで溶けて消える演出
 	SDFManager::GetInstance()->DrawVolumes(commandList); // エディタで配置した3Dボリューム
 
@@ -764,10 +776,13 @@ void GamePlayScene::DrawDebugUI(){
 		ImGui::SameLine();
 		if ( ImGui::Button("道を再生成") ) {
 			roadMesh_.Build(railField_.GetRails(), camera_.get());
+			dissolveRoad_.Build(railField_.GetRails());
 		}
+		ImGui::Text("SDF溶け道: チェーン点 %d / 描画チャンク %d", dissolveRoad_.PieceCount(), dissolveRoad_.ActiveCount());
 		ImGui::Text("道メッシュ/ピース数: %d", roadMesh_.TileCount());
 		ImGui::Text("道の頂点数: %d / 三角形: %d", roadMesh_.VertexCount(), roadMesh_.TriangleCount());
 	}
+
 
 	// --- カメラ視点プリセット（レールを編集しやすく）---
 	ImGui::Separator();
@@ -830,6 +845,8 @@ void GamePlayScene::Finalize(){
 	EditorManager::GetInstance()->ResetSceneReferences();
 	// ノードエディタに登録したゲーム値（player_ 等のポインタ）も解除する
 	EditorManager::GetInstance()->ClearNodeGameValues();
+	// SDFパネルへ差し込んだ溶け道設定UI（this をキャプチャ）も解除する
+	SDFManager::GetInstance()->SetExtraPanelUI(nullptr);
 
 	object3ds_.clear();
 	GPUParticleManager::GetInstance()->Finalize();

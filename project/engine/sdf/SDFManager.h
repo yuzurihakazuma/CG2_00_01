@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <functional>
 #include <d3d12.h>
 #include <wrl.h>
 #include "engine/sdf/SDFAtlas.h"
@@ -56,6 +57,11 @@ public:
     // エディタパネル
     void DrawDebugUI();
 
+    // ゲーム側のSDF関連設定UIをこのパネルの最下部へ差し込むフック。
+    //   例：SDF溶け道の消え方調整（GamePlayScene が登録、Finalize で nullptr を渡して解除）
+    //   ※シーン破棄後に呼ばれると危険なので、登録側は必ず解除すること
+    void SetExtraPanelUI(std::function<void()> callback) { extraPanelUI_ = std::move(callback); }
+
     // 終了処理（D3D12リソースを持つため、リークチェッカーより先に必ず呼ぶ）
     void Finalize();
 
@@ -84,6 +90,9 @@ private:
     ~SDFManager() = default;
     SDFManager(const SDFManager&) = delete;
     SDFManager& operator=(const SDFManager&) = delete;
+
+    // パネル最下部へ差し込むゲーム側UI（SetExtraPanelUI で登録。未登録なら何もしない）
+    std::function<void()> extraPanelUI_;
 
     void BuildPipelines();               // 共有ルートシグネチャ＋PSO（文字用/画像用）
     void ScanAndLoad();                  // フォルダ走査→新規/更新分をロード

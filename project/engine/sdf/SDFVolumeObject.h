@@ -52,6 +52,13 @@ public:
     void SetErode(float e) { erode_ = e; }
     // モーフ係数：0=形A / 1=形B。中間は「AとBの中間の形」になる
     void SetMorphT(float t) { morphT_ = t; }
+    // 溶け方のスタイル。style=0：従来（表面が均一に痩せる）
+    //   style=1「段ボールを熱した風」：ワールド座標ノイズでエロージョンを不均一化し
+    //   （溶けやすい所から穴が開く）、溶け際を焦げ色→赤熱（オレンジ発光）で着色する。
+    //   noiseFreq=ノイズの細かさ(1/m)、band=焦げ判定の基準エロージョン量（完全消滅量と同じ値を渡す）
+    void SetMeltStyle(float style, float noiseFreq = 9.0f, float band = 0.3f) {
+        meltStyle_ = style; meltNoiseFreq_ = noiseFreq; meltBand_ = band;
+    }
 
     Vector3& RefTranslation() { return translation_; }   // ImGui編集用
     float&   RefScale() { return scale_; }               // ImGui編集用
@@ -106,6 +113,7 @@ private:
         float baseColor[4];
         float lightDir[3]; float erode;
         float useColorTexA; float useColorTexB; float useMorph; float morphT;
+        float meltStyle; float meltNoiseFreq; float meltBand; float meltPad;
     };
 
     // .sdf3d（＋あれば .sdfcol）を1組読み込んで GPU リソース化する共通処理
@@ -132,6 +140,9 @@ private:
     Vector3 lightDir_ { 0.4f, -1.0f, 0.3f }; // 上からの光（正規化はシェーダー側）
     float   erode_  = 0.0f;                  // エロージョン量(m)
     float   morphT_ = 0.0f;                  // モーフ係数（0=A / 1=B）
+    float   meltStyle_     = 0.0f;           // 溶け方（0=均一 / 1=段ボール焼け）
+    float   meltNoiseFreq_ = 9.0f;           // 不均一ノイズの細かさ(1/m)
+    float   meltBand_      = 0.3f;           // 焦げ判定の基準エロージョン量(m)
 
     // 共有パイプライン（全インスタンスで1組）
     static Microsoft::WRL::ComPtr<ID3D12RootSignature> sRootSignature_;
