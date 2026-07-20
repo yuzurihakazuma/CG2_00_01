@@ -183,6 +183,7 @@ public:
     bool  IsAutoSnap() const{ return railAutoSnap_; }
     float GetSnapDistance() const{ return railSnapDistance_; }
     bool  IsSnapMatchHeight() const{ return railSnapMatchHeight_; } // 高さ違いでもXZが近ければ合わせて接続
+    bool  IsEndGuideVisible() const{ return railEndGuide_; }        // 選択レールの端点に足元ガイドを出す
     int   GetJointVisible() const{ return railJointVisible_; } // 0=エディタのみ/1=常に/2=非表示
 
 private:
@@ -226,6 +227,7 @@ private:
     bool  railAutoSnap_      = true;  // 端点ドラッグで自動接続する
     float railSnapDistance_  = 1.2f;  // 検出半径(m)。ランタイムの合流距離と同じ既定
     bool  railSnapMatchHeight_ = true; // 真上から見て近ければ高さを相手に合わせて接続（OFF=立体交差用）
+    bool  railEndGuide_        = true; // 選択レールの端点から地面へ縦線＋Y値を表示（高さの目視用）
     int   railJointVisible_  = 1;     // ジョイント表示：0=エディタのみ / 1=常に / 2=非表示
 
     // 接続一覧（接続タブ）で選択中の行（-1=なし）

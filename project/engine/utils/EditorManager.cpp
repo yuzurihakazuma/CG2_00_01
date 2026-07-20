@@ -382,17 +382,24 @@ void EditorManager::Update(){
                         if ( nodeCount >= 2 && ( isFront || isBack ) ) {
                             RailEditor::SnapTarget candidate =
                                 railEditor->FindSnapTarget(sel[0].rail, isFront, railEditor->GetSnapDistance());
-                            bool heightGap = false;
                             if ( !candidate.valid ) {
                                 // 3D距離では届かないが、真上から見れば近い相手（高さだけ合っていない）。
                                 // 「近づけたのに繋がらない」の理由表示と高さ合わせスナップの両方に使う
                                 candidate = railEditor->FindSnapTargetXZ(
                                     sel[0].rail, isFront, railEditor->GetSnapDistance());
-                                heightGap = candidate.valid;
                             }
                             if ( candidate.valid ) {
+                                // 「高さ合わせ接続」かどうかは見つけ方ではなく実際のYの移動量で判定する。
+                                //   スナップ距離を広げると3D検索でも高さ差の大きい相手が混ざるため、
+                                //   ここで判定しないと立体交差が「高さ合わせOFF」でも黙って潰される
+                                const float kHeightGapTol = 0.5f;
+                                Vector3 dragTip;
+                                float heightDiff = 0.0f;
+                                if ( railEditor->GetNodePosOf(sel[0].rail, isFront ? 0 : nodeCount - 1, dragTip) ) {
+                                    heightDiff = candidate.pos.y - dragTip.y;
+                                }
                                 railSnapCandidate_ = candidate;
-                                railSnapHeightGap_ = heightGap;
+                                railSnapHeightGap_ = std::abs(heightDiff) > kHeightGapTol;
                                 railSnapDragRail_  = sel[0].rail;
                                 railSnapDragFront_ = isFront;
                             }
@@ -772,6 +779,41 @@ void EditorManager::Update(){
                             dl->AddText({ se.x + 12.0f, se.y - 6.0f }, IM_COL32(255, 110, 100, 235), "未");
                         }
                     }
+
+                }
+
+                // --- 端点の足元ガイド（選択中のレールだけ。非表示＝連結用レールでも出す）---
+                //   端点から地面(Y=0)へ縦線を落とし、足元に丸＋端点の横にY値を表示。
+                //   パース付き3Dビューでは見えない「高さ」を縦線の長さと数字でそのまま見せる
+                if ( rr == railEditor->GetCurrentRailIndex() && railEditor->IsEndGuideVisible() ) {
+                    Vector3 firstTip {};
+                    bool hasFirstTip = false;
+                    for ( int endSide = 0; endSide < 2; ++endSide ) {
+                        int nodeIdx = ( endSide == 0 ) ? 0 : nodeCount - 1;
+                        Vector3 tipPos;
+                        if ( !railEditor->GetNodePosOf(rr, nodeIdx, tipPos) ) continue;
+                        if ( endSide == 0 ) { firstTip = tipPos; hasFirstTip = true; }
+                        // 同じ点を二重に描かない（1ノード、またはループで先頭と末尾が同位置）
+                        else if ( nodeIdx == 0 ) break;
+                        else if ( hasFirstTip
+                               && std::abs(tipPos.x - firstTip.x) + std::abs(tipPos.y - firstTip.y)
+                                + std::abs(tipPos.z - firstTip.z) < 0.01f ) break;
+                        ImVec2 sTip;
+                        if ( !project(tipPos, sTip) ) continue;
+                        const ImU32 guideCol = IM_COL32(230, 230, 230, 150);
+                        // 縦線と足元マークは地面点が映る時だけ。Y値の数字は端点が映れば必ず出す
+                        //   （見上げるカメラだと地面点が後ろに回って project が失敗するため分離）
+                        Vector3 footPos { tipPos.x, 0.0f, tipPos.z };
+                        ImVec2 sFoot;
+                        if ( project(footPos, sFoot) ) {
+                            dl->AddLine(sTip, sFoot, guideCol, 1.5f);
+                            dl->AddCircle(sFoot, 5.0f, guideCol, 0, 1.5f);
+                            dl->AddLine({ sFoot.x - 7.0f, sFoot.y }, { sFoot.x + 7.0f, sFoot.y }, guideCol, 1.5f);
+                        }
+                        char heightText[32];
+                        snprintf(heightText, sizeof(heightText), "Y=%.1f", tipPos.y);
+                        dl->AddText({ sTip.x + 10.0f, sTip.y + 8.0f }, IM_COL32(235, 235, 235, 220), heightText);
+                    }
                 }
             }
 
@@ -923,8 +965,19 @@ void EditorManager::Update(){
                 if ( okTo ) {
                     // スナップ後の位置にゴースト（二重丸）＋ドラッグ中端点からの線
                     if ( okFrom ) {
-                        if ( heightGap ) dashedLine(sFrom, sTo, colLine, 2.0f);
-                        else             dl->AddLine(sFrom, sTo, colLine, 2.0f);
+                        if ( heightGap ) {
+                            // 高さ(縦)と位置(横)に分けたL字点線：縦線の長さ＝合っていない高さの量
+                            Vector3 corner { dragP.x, railSnapCandidate_.pos.y, dragP.z };
+                            ImVec2 sCorner;
+                            if ( project(corner, sCorner) ) {
+                                dashedLine(sFrom, sCorner, colLine, 2.5f);
+                                dashedLine(sCorner, sTo, colLine, 2.0f);
+                            } else {
+                                dashedLine(sFrom, sTo, colLine, 2.0f);
+                            }
+                        } else {
+                            dl->AddLine(sFrom, sTo, colLine, 2.0f);
+                        }
                     }
                     dl->AddCircleFilled(sTo, 5.0f, colFill);
                     dl->AddCircle(sTo, 9.0f, colMark, 0, 2.5f);

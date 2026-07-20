@@ -242,7 +242,20 @@ void Player::MoveAlongRail(const SplineRail& currentRail, bool isCurrentRailHori
             if ( currentRail.oneWay == 2 && dsSign_ > 0.0f ) dsSign_ = 0.0f; // 逆方向(back→front)のみ
 
             // レールごとの速度倍率（加速/減速レール）を掛ける
-            currentDistance_ += dsSign_ * moveSpeed_ * currentRail.speedMul * dt;
+            if ( !isGrounded_ ) {
+                // 空中（ジャンプ中）はワールド空間の弾道を保つ：
+                //   最終位置は「レール上の点 + heightOffset_」なので、何もしないと
+                //   レールが下るとジャンプの弧ごと引きずり下ろされて低いジャンプになる。
+                //   進んだ分のレール高低差を打ち消して、高い所から跳んだ高さを維持する
+                //   （レール乗り換え時の補正と同じ考え方。着地は heightOffset_<=0 のまま
+                //     ＝弧がレールに届いた場所で着地する。上りでは早めに着地して自然）
+                float oldFootY = currentRail.GetPositionByDistance(currentDistance_).y;
+                currentDistance_ += dsSign_ * moveSpeed_ * currentRail.speedMul * dt;
+                float newFootY = currentRail.GetPositionByDistance(currentDistance_).y;
+                heightOffset_ += ( oldFootY - newFootY );
+            } else {
+                currentDistance_ += dsSign_ * moveSpeed_ * currentRail.speedMul * dt;
+            }
         }
     } else {
         dsSign_ = 0.0f; // 離したら次に押した時に向きを決め直す

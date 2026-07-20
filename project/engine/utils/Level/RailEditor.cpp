@@ -887,7 +887,11 @@ RailEditor::SnapTarget RailEditor::FindSnapTargetXZ(int rail, bool front, float 
 		return std::sqrt(dx * dx + dz * dz);
 		};
 
-	float bestDist = radiusXZ;
+	// 採用条件は「XZ距離が radiusXZ 未満」。順位は「XZ距離＋高さ差ペナルティ」で付ける。
+	//   同じくらい近い相手が上下に複数いる時、XZ距離だけだと 0.2m 先の 4.5m 下を
+	//   1.0m 先の 1.3m 下より優先してしまう＝立体交差エリアで意図しない相手に繋がるため
+	const float kHeightPenalty = 0.3f;
+	float bestScore = 3.4e38f;
 	for ( size_t b = 0; b < lines.size(); ++b ) {
 		if ( ( int ) b == rail ) continue;
 		if ( lines[b].size() < 2 ) continue;
@@ -895,10 +899,13 @@ RailEditor::SnapTarget RailEditor::FindSnapTargetXZ(int rail, bool front, float 
 		// (a) 端点同士（溶接候補）
 		const int endNodes[2] = { 0, ( int ) lines[b].size() - 1 };
 		for ( int en : endNodes ) {
-			if ( std::abs(lines[b][en].y - ep.y) > maxYDiff ) continue;
+			float dyAbs = std::abs(lines[b][en].y - ep.y);
+			if ( dyAbs > maxYDiff ) continue;
 			float dd = distXZ(lines[b][en], ep);
-			if ( dd < bestDist ) {
-				bestDist = dd;
+			if ( dd >= radiusXZ ) continue;
+			float score = dd + dyAbs * kHeightPenalty;
+			if ( score < bestScore ) {
+				bestScore = score;
 				best.valid = true;
 				best.isEndpoint = true;
 				best.rail = ( int ) b;
@@ -921,10 +928,13 @@ RailEditor::SnapTarget RailEditor::FindSnapTargetXZ(int rail, bool front, float 
 			Vector3 cp = { p0.x + ( p1.x - p0.x ) * t,
 			               p0.y + ( p1.y - p0.y ) * t,
 			               p0.z + ( p1.z - p0.z ) * t };
-			if ( std::abs(cp.y - ep.y) > maxYDiff ) continue;
+			float dyAbs = std::abs(cp.y - ep.y);
+			if ( dyAbs > maxYDiff ) continue;
 			float dd = distXZ(cp, ep);
-			if ( dd < bestDist ) {
-				bestDist = dd;
+			if ( dd >= radiusXZ ) continue;
+			float score = dd + dyAbs * kHeightPenalty;
+			if ( score < bestScore ) {
+				bestScore = score;
 				best.valid = true;
 				best.isEndpoint = false;
 				best.rail = ( int ) b;
@@ -1525,6 +1535,7 @@ void RailEditor::DrawWindow(){
 		ImGui::Checkbox("高さも自動で合わせる（真上から近ければ接続）", &railSnapMatchHeight_);
 		ImGui::TextDisabled("※立体交差（高さの違う線をまたがせる）を作りたい時はOFF");
 	}
+	ImGui::Checkbox("端点の足元ガイド（選択レールの端から地面へ縦線＋Y値）", &railEndGuide_);
 	{
 		const char* jointModes[] = { "エディタのみ", "常に表示", "非表示" };
 		ImGui::SetNextItemWidth(140.0f);
