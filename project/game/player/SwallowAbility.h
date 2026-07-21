@@ -78,6 +78,11 @@ public:
     float* SwallowCooldownPtr(){ return &swallowCooldown_; }
 
 private:
+public:
+    // ベロ動作中か（プレイヤーモデルの TongueOut アニメ切り替えに使う）
+    bool IsTongueActive() const{ return state_ != State::Idle; }
+
+private:
     enum class State { Idle, Shooting, Retracting };
     State state_ = State::Idle;
 

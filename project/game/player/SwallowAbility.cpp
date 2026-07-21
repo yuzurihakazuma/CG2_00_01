@@ -20,9 +20,11 @@
 using namespace VectorMath;
 
 namespace {
-    const float kShootDuration     = 0.12f; // 舌が伸びきるまでの秒数（ここが「動作」の見せ場）
-    const float kRetractDuration   = 0.35f; // 捕獲時の引き込み秒数。Enemy::TickSwallow の dur と同じ値にする
-    const float kMissRetractDuration = 0.15f; // 空振り時の引っ込み秒数（捕獲より短く、キビキビ戻す）
+    // ※ベロの見た目はプレイヤーモデルの TongueOut アニメ（予備動作→射出→保持→収納）。
+    //   ここの秒数はそのアニメの進行に合わせてある（変える時はアニメ再生速度も合わせること）
+    const float kShootDuration     = 0.22f; // 舌が伸びきるまでの秒数（敵に触れた瞬間に打ち切る）
+    const float kRetractDuration   = 0.25f; // 捕獲時の戻り秒数（回収自体は即時。これは見た目の戻り）
+    const float kMissRetractDuration = 0.25f; // 空振り時の引っ込み秒数
     const float kTongueHalfWidth   = 0.09f; // 舌の太さ(半幅)
     const Vector4 kTongueColor     = { 1.0f, 0.42f, 0.5f, 1.0f }; // ヨッシー舌のピンク
     const Vector4 kEatFxColor      = { 0.98f, 0.96f, 0.86f, 1.0f }; // カラーボリューム無い時の予備色
@@ -71,12 +73,18 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
         for ( auto& enemy : enemies.GetEnemies() ) {
             if ( !enemy->IsAlive() ) continue;
             Vector3 toEnemy = enemy->GetPosition() - playerPos;
+            // 高さが合っていない敵は食べられない（上下の別レールの敵へベロが届いてしまう問題の対策）
+            if ( std::abs(toEnemy.y) > 0.9f ) continue;
             float distance = Length(toEnemy);
             if ( distance >= bestDist ) continue;
 
-            // 前方チェック：水平方向の内積で「ほぼ横〜後ろ」を弾く（cos≒0.2 → 前方約±78°）
-            float horizontalDist = std::sqrt(toEnemy.x * toEnemy.x + toEnemy.z * toEnemy.z);
-            if ( horizontalDist > 1e-4f && ( toEnemy.x * facing.x + toEnemy.z * facing.z ) / horizontalDist < 0.2f ) continue;
+            // ベロは細いビーム扱い：正面方向の直線から横に外れた敵は捕れない
+            //   （隣のレールや壁の向こうの敵をレール越しに貫通して食べてしまう問題の対策）
+            float alongDist = toEnemy.x * facing.x + toEnemy.z * facing.z; // 正面方向の距離
+            if ( alongDist < 0.0f ) continue;                              // 後ろは不可
+            float latX = toEnemy.x - facing.x * alongDist;
+            float latZ = toEnemy.z - facing.z * alongDist;
+            if ( std::sqrt(latX * latX + latZ * latZ) > 0.8f ) continue;   // ベロの線から0.8m以上横は不可
 
             bestDist = distance; found = enemy.get();
         }
@@ -128,7 +136,13 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
         Vector3 tip = mouth + ( aimTip - mouth ) * t;
         UpdateTongueMesh(mouth, tip, camera);
 
-        if ( t >= 1.0f ) {
+        // 先端が敵に触れた瞬間に捕獲へ移行（伸びきりを待たない＝当たったら即ベロを戻す）
+        bool hitNow = false;
+        if ( target_ ) {
+            Vector3 tipToEnemy = target_->GetPosition() - tip;
+            hitNow = Length(tipToEnemy) <= target_->GetRadius() + 0.15f;
+        }
+        if ( hitNow || t >= 1.0f ) {
             if ( target_ ) {
                 // 掴んだ瞬間：位置移動は Enemy 側の既存アニメ(TickSwallow)へそのまま委ねるが、
                 // 見た目は実体メッシュを隠してSDF溶解に差し替える（読込済みの時だけ）。
@@ -264,7 +278,8 @@ void SwallowAbility::UpdateTongueMesh(const Vector3& mouth, const Vector3& tip, 
 }
 
 void SwallowAbility::Draw() const{
-    if ( state_ != State::Idle && tongueObj_ ) { tongueObj_->Draw(); }
+    // ベロの見た目はプレイヤーモデルの TongueOut アニメに一本化した（二重表示防止のためリボンは描かない）。
+    // 捕獲判定・敵の引き込み・SDF消滅・食べられる敵のプレビューリング等の仕様はそのまま生きている
 }
 
 // 捕獲した敵のSDF溶解演出の描画（専用PSOのため、シーンMRTパスの最後で呼ばれる）

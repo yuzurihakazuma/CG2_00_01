@@ -98,7 +98,7 @@ void Enemy::StartSwallow(){
 // 吸い込み中の更新：プレイヤーの口元へ寄りながらスケールを 1→0 へ縮める。
 void Enemy::TickSwallow(const Vector3& playerPos, float dt){
     if ( !swallowing_ ) return;
-    const float duration = 0.35f;
+    const float duration = 0.06f; // 食ったら即回収（掴んだ瞬間ほぼその場で消えてお腹に入る）
     swallowT_ += dt;
     float t = swallowT_ / duration;
     if ( t > 1.0f ) t = 1.0f;

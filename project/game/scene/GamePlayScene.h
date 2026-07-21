@@ -127,13 +127,13 @@ private: // メンバ変数
 	CustomAnimationTrack skinnedAnimTrack_;
 	float skinnedAnimTime_ = 0.0f;
 
-	// --- プレイヤーの見た目（恐竜マスコット resources/player/player.obj）---
-	//   Play中はプレイヤーに追従し、実移動速度に連動したウォドル（左右ロール＋跳ね）で歩きを表現。
-	//   Edit中はスタート地点のスポーンプレビューとして立つ
-	std::unique_ptr<Obj3d> playerObj_ = nullptr;
+	// --- プレイヤーの見た目（リグ付きマスコット resources/player/player.gltf）---
+	//   Play中はプレイヤーに追従。Idle/Walk/TongueOut のクリップを状況で切り替える
+	//   （歩けば Walk、止まれば Idle、ベロ動作中は TongueOut）。Edit中はスタート地点プレビュー
+	std::unique_ptr<SkinnedObj3d> playerObj_ = nullptr;
 	Vector3 playerPrevPos_ {};          // 前フレームの見た目位置（移動速度の算出用）
 	bool    playerPrevPosValid_ = false;
-	float   playerWaddlePhase_ = 0.0f;  // ウォドルの位相
+	float   playerModelYOffset_ = -0.05f; // モデル原点（足元）を道の上面に乗せる補正（エディタで調整可）
 
 	EngineMode prevMode_ = EngineMode::Edit;
 

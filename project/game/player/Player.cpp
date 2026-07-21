@@ -492,12 +492,22 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
         jumpVelocity_   = jumpPower_;
         isGrounded_     = false;
         flutterCdTimer_ = kFloatTime; // 滞空budgetを補充
+        flutterCount_   = 0;          // ふんばり回数リセット（この後の長押しが1回目＝フル性能）
     }
-    // 空中でSPACE長押し中は「弱い重力＋ゆるい上昇」へなめらかに移行（ふわっと浮く）。それ以外は通常重力。
-    if ( !isGrounded_ && input->Pushkey(DIK_SPACE) && flutterCdTimer_ > 0.0f && jumpVelocity_ < kFloatTarget ) {
-        jumpVelocity_  += ( kFloatTarget - jumpVelocity_ ) * std::min(kFloatEase * dt, 1.0f);
+    // 空中でSPACEを押し直すと何度でもふんばれる（押し直しごとに上がる高さは減っていく）
+    else if ( !isGrounded_ && input->Triggerkey(DIK_SPACE) ) {
+        flutterCdTimer_ = kFloatTime; // 滞空budgetを補充し直す
+        ++flutterCount_;              // 回数を重ねるほど弱くなる
+    }
+    // ふんばり中はSPACE長押しで「弱い重力＋ゆるい上昇」へなめらかに移行。目標の上向き速度は
+    // 回数ごとに 0.65 倍ずつ減衰（1回目フル → 2回目65% → 3回目42%...）。それ以外は通常重力。
+    float floatTarget = kFloatTarget * std::pow(0.65f, ( float ) flutterCount_);
+    if ( !isGrounded_ && input->Pushkey(DIK_SPACE) && flutterCdTimer_ > 0.0f && jumpVelocity_ < floatTarget ) {
+        jumpVelocity_  += ( floatTarget - jumpVelocity_ ) * std::min(kFloatEase * dt, 1.0f);
         flutterCdTimer_ -= dt;
+        fluttering_ = true;
     } else {
+        fluttering_ = false;
         jumpVelocity_ -= gravity_ * dt;
     }
 
@@ -513,6 +523,8 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
         jumpVelocity_   = 0.0f;
         isGrounded_     = true;
         flutterCdTimer_ = 0.0f;
+        flutterCount_   = 0;   // ふんばりの減衰も着地でリセット
+        fluttering_     = false;
     }
     return false;
 }
@@ -536,18 +548,22 @@ void Player::FinalizePosition(const SplineRail& rail, const Vector3& worldBefore
     // 落下死 → スタートへリスポーン
     if ( position_.y < kKillY ) { Initialize(); return; }
 
-    // 向き：実際に進んでいる方向（接線 × 進行符号）へ向ける。
-    //   即時スナップではなく最短弧の指数補間で追従させる（位置の平滑化と同じ約0.15秒）。
-    //   接続の角度変化や進行方向の反転で、モデルが1フレームでカクッと回るのを防ぐ
+    // 向き：実際に進んでいる方向（接線 × 進行符号）を「目標角」として記憶し、
+    //   毎フレーム最短弧の指数補間で追従させる。目標の更新は動いている間だけだが、
+    //   回頭そのものは止まっていても続ける（途中でキーを離すと横向きのまま固まり、
+    //   レール上では本来向かない方向を向いてしまう問題の対策）
     Vector3 tangent = rail.GetTangentByDistance(currentDistance_);
-    if ( Length(tangent) > 0.001f && dsSign_ != 0.0f ) {
+    if ( Length(tangent) > 0.001f && dsSign_ != 0.0f && !turnLocked_ ) {
+        // ベロを出している間（turnLocked_）は目標を更新しない＝移動はできるが振り向かない
         Vector3 velocity = { tangent.x * dsSign_, tangent.y * dsSign_, tangent.z * dsSign_ };
-        float targetYaw = std::atan2(velocity.x, velocity.z);
+        targetYaw_ = std::atan2(velocity.x, velocity.z);
+    }
+    {
         const float kPi = 3.14159265f;
-        float yawDiff = targetYaw - rotation_.y;
+        float yawDiff = targetYaw_ - rotation_.y;
         while ( yawDiff >  kPi ) yawDiff -= 2.0f * kPi; // 最短弧（+350°回らず -10° で済ませる）
         while ( yawDiff < -kPi ) yawDiff += 2.0f * kPi;
-        rotation_.y += yawDiff * std::min(14.0f * dt, 1.0f);
+        rotation_.y += yawDiff * std::min(18.0f * dt, 1.0f); // 反転(180°)も素早く向き切る
         while ( rotation_.y >  kPi ) rotation_.y -= 2.0f * kPi; // 値が無限に育たないよう正規化
         while ( rotation_.y < -kPi ) rotation_.y += 2.0f * kPi;
         rotation_.x = 0.0f;

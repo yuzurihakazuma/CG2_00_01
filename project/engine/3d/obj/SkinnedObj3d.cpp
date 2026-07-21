@@ -82,6 +82,26 @@ void SkinnedObj3d::Initialize(
 	animation_ = LoadAnimationFromFile(directoryPath, animFilename);
 }
 
+// ファイル内の全アニメーションクリップを名前で読み込む（glTFの Idle/Walk/TongueOut 等）
+void SkinnedObj3d::LoadClips(const std::string& directoryPath, const std::string& filename){
+	std::vector<std::string> names = GetAnimationClipNames(directoryPath, filename);
+	for ( uint32_t i = 0; i < ( uint32_t ) names.size(); ++i ) {
+		clips_[names[i]] = LoadAnimationFromFile(directoryPath, filename, i);
+	}
+	if ( !names.empty() ) { currentClip_ = names[0]; animation_ = clips_[names[0]]; }
+}
+
+// クリップ切り替え。既に同じクリップなら何もしない（毎フレーム呼んで良い）
+void SkinnedObj3d::SetClip(const std::string& name, bool loop){
+	if ( currentClip_ == name ) { isLoop_ = loop; return; }
+	auto it = clips_.find(name);
+	if ( it == clips_.end() ) return; // 無い名前は無視（従来の単一アニメ運用を壊さない）
+	animation_ = it->second;
+	currentClip_ = name;
+	isLoop_ = loop;
+	animationTime_ = 0.0f; // 頭から再生
+}
+
 // --------------------------------------------------
 // 更新（毎フレーム）
 // --------------------------------------------------

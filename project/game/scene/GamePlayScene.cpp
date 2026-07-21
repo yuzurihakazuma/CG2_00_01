@@ -81,7 +81,7 @@ void GamePlayScene::LoadResources(){
 	modelManager->LoadModel("animatedCube", "resources/AnimatedCube", "AnimatedCube.gltf");
 	modelManager->LoadModel("human", "resources/human", "walk.gltf");
 	modelManager->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
-	modelManager->LoadModel("player", "resources/player", "player.obj"); // プレイヤー（恐竜マスコット。6色をパレットPNGに焼き込んだ1マテリアル版）
+	modelManager->LoadModel("player", "resources/player", "player.gltf"); // プレイヤー（リグ付きマスコット。7色パレット焼き込み済み）
 	modelManager->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
 	modelManager->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
 	modelManager->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
@@ -161,8 +161,14 @@ void GamePlayScene::SetupDemoObjects(){
 	// Obj3d::Create がデフォルトカメラを掴むため、必ず SetupCameras の後に初期化する
 	demo_.Initialize(DirectXCommon::GetInstance()->GetCommandList(), textures_);
 
-	// プレイヤーの見た目（恐竜マスコット）。カメラ確定後に生成する
-	playerObj_ = Obj3d::Create("player");
+	// プレイヤーの見た目（リグ付きマスコット）。カメラ確定後に生成する。
+	//   7色はパレットPNGに焼き込み済みの1テクスチャ構成。クリップは Idle/TongueOut/Walk の3本
+	playerObj_ = SkinnedObj3d::Create("player", "resources/player", "player.gltf");
+	if ( playerObj_ ) { // モデル未登録だと nullptr が返る（Create は FindModel 前提）
+		playerObj_->SetEnvironmentMap(textures_["skybox"].srvIndex);
+		playerObj_->LoadClips("resources/player", "player.gltf");
+		playerObj_->SetClip("Idle", true);
+	}
 
 	// スキンメッシュ（Skinning機能の展示。定位置でその場歩き）
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
@@ -453,6 +459,8 @@ void GamePlayScene::UpdatePlayMode(){
 		// カメラの向きを渡す：向き切替（180°回り込み等）の後も「Dで画面の右へ」進めるように、
 		// プレイヤー側でキー→ワールド方向の割り当てを回す
 		player_->SetCameraYaw(camera_->GetRotation().y);
+		// ベロを出している間は振り向き禁止（移動は可）。出したまま反転して見た目が破綻するのを防ぐ
+		player_->SetTurnLocked(swallow_.IsTongueActive());
 		player_->Update(railField_.GetRails());
 	}
 	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
@@ -558,7 +566,7 @@ void GamePlayScene::UpdateSceneVisuals(){
 				}
 			}
 		}
-		// 実際に動いた速さ（見た目の位置の差分）→ ウォドルの速さ。止まればピタッと止まる
+		// 実際に動いた速さ（見た目の位置の差分）→ クリップと再生速度を決める
 		float horizontalSpeed = 0.0f;
 		if ( playerPrevPosValid_ ) {
 			float dx = pos.x - playerPrevPos_.x;
@@ -567,15 +575,33 @@ void GamePlayScene::UpdateSceneVisuals(){
 		}
 		playerPrevPos_ = pos;
 		playerPrevPosValid_ = true;
-		const float kWaddleBaseSpeed = 5.0f;  // プレイヤーの通常移動速度(m/s)で標準テンポ
-		const float kWaddleRate      = 9.0f;  // 標準テンポ時の足踏み角速度(rad/s)
-		float waddleSpeed = std::clamp(horizontalSpeed / kWaddleBaseSpeed, 0.0f, 1.8f);
-		playerWaddlePhase_ += kWaddleRate * waddleSpeed * ( 1.0f / 60.0f );
-		float waddleRoll = std::sin(playerWaddlePhase_) * 0.10f * waddleSpeed;         // 左右にコロコロ
-		float waddleHop  = std::abs(std::sin(playerWaddlePhase_)) * 0.06f * waddleSpeed; // 歩に合わせて小さく跳ねる
-		const float kPlayerModelYOffset = 0.25f; // モデル原点（足元）を道の上面に乗せる補正
-		playerObj_->SetTranslation({ pos.x, pos.y + kPlayerModelYOffset + waddleHop, pos.z });
-		playerObj_->SetRotation({ 0.0f, rot.y, waddleRoll });
+		const float kWalkBaseSpeed = 5.0f; // プレイヤーの通常移動速度(m/s)で Walk を等速再生
+		float speedRatio = std::clamp(horizontalSpeed / kWalkBaseSpeed, 0.0f, 1.8f);
+
+		// クリップ選択：ベロ動作中 > 歩き > 待機
+		if ( currentMode == EngineMode::Play && swallow_.IsTongueActive() ) {
+			playerObj_->SetClip("TongueOut", false); // 予備動作→射出→収納（1回きり）
+			playerObj_->SetPlaybackSpeed(2.8f);      // 1.33秒のクリップを高速化したベロ動作(約0.5秒)に合わせる
+		} else if ( currentMode == EngineMode::Play && player_ && !player_->IsGrounded() ) {
+			if ( player_->IsFluttering() ) {
+				playerObj_->SetClip("Walk", true);   // ふんばり：足を高速バタバタ（ソニック風）
+				playerObj_->SetPlaybackSpeed(3.2f);
+			} else {
+				// ジャンプ中：Walkの足を伸ばした瞬間のポーズで静止＝つま先立ちで跳んでいる感じ
+				playerObj_->SetClip("Walk", true);
+				playerObj_->SetPlaybackSpeed(0.0f);
+				playerObj_->SetAnimationTime(0.25f); // クリップ(1秒)内のポーズ位置。好みで0〜1秒
+			}
+		} else if ( speedRatio > 0.05f ) {
+			playerObj_->SetClip("Walk", true);       // 足パタパタ＋バウンド
+			playerObj_->SetPlaybackSpeed(( std::max )( speedRatio, 0.4f ));
+		} else {
+			playerObj_->SetClip("Idle", true);       // 呼吸＋頭の微揺れ
+			playerObj_->SetPlaybackSpeed(1.0f);
+		}
+
+		playerObj_->SetTranslation({ pos.x, pos.y + playerModelYOffset_, pos.z });
+		playerObj_->SetRotation({ 0.0f, rot.y, 0.0f });
 		playerObj_->Update();
 	}
 
@@ -807,6 +833,9 @@ void GamePlayScene::DrawDebugUI(){
 			dissolveRoad_.Build(railField_.GetRails());
 		}
 		ImGui::Text("SDF溶け道: チェーン点 %d / 描画チャンク %d", dissolveRoad_.PieceCount(), dissolveRoad_.ActiveCount());
+		ImGui::SetNextItemWidth(160.0f);
+		ImGui::SliderFloat("プレイヤーモデル高さ補正(m)", &playerModelYOffset_, -0.6f, 0.6f, "%.2f");
+		if ( ImGui::IsItemHovered() ) ImGui::SetTooltip("プレイヤーの足元と道の上面が合うように調整（マイナスで下がる）");
 		ImGui::Text("道メッシュ/ピース数: %d", roadMesh_.TileCount());
 		ImGui::Text("道の頂点数: %d / 三角形: %d", roadMesh_.VertexCount(), roadMesh_.TriangleCount());
 	}

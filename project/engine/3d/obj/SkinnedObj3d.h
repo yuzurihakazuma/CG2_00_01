@@ -3,6 +3,7 @@
 #include <wrl.h>
 #include <memory>
 #include <string>
+#include <map>
 
 // 
 #include "engine/math/struct.h"
@@ -85,6 +86,15 @@ public:  // --- Getter / Setter ---
 	// プレイヤーの実際の移動速度に合わせて呼ぶと「歩いた時だけ歩きモーション」になる
 	void SetPlaybackSpeed(float speed){ playbackSpeed_ = speed; }
 
+	// --- 複数クリップ（glTFの Idle/Walk/TongueOut 等）---
+	// ファイル内の全クリップを名前で読み込む（Create 後に一度呼ぶ）
+	void LoadClips(const std::string& directoryPath, const std::string& filename);
+	// クリップ切り替え（同じ名前なら何もしない＝毎フレーム呼んでよい）。loop=falseは最終フレームで停止
+	void SetClip(const std::string& name, bool loop);
+	const std::string& GetCurrentClip() const{ return currentClip_; }
+	// 再生位置を直接指定（秒）。再生速度0と組み合わせると「クリップ内の好きなポーズで静止」できる
+	void SetAnimationTime(float time){ animationTime_ = time; }
+
 
     void SetPauseAnimation(bool pause) { isPause_ = pause; }
 
@@ -117,6 +127,8 @@ private:
     Animation animation_;
     float     animationTime_ = 0.0f;
     float     playbackSpeed_ = 1.0f; // 再生速度（0=停止。歩行速度に合わせる等、毎フレーム変更可）
+    std::map<std::string, Animation> clips_; // 名前→クリップ（LoadClips で読み込む）
+    std::string currentClip_;                // 再生中のクリップ名（クリップ未使用なら空）
     bool      isLoop_ = true;
 
     std::string name_ = "SkinnedObj3d";
