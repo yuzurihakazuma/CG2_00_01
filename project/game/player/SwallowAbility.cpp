@@ -218,6 +218,7 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
 // 舌の見た目を口(mouth)〜先端(tip)の十字リボン（2枚の直交クアッド）として書き直す。
 //   ワールド座標へ直接焼く動的メッシュ（RoadMesh/RailField と同じ方式）。
 void SwallowAbility::UpdateTongueMesh(const Vector3& mouth, const Vector3& tip, Camera* camera){
+    tongueLength_ = Length(tip - mouth); // モデルの Tongue ボーンの伸び制御に使う実距離
     // 遅延生成：初めて必要になった時に固定容量の動的メッシュを1回だけ確保する
     if ( !tongueModel_ ) {
         tongueModel_ = std::make_unique<Model>();

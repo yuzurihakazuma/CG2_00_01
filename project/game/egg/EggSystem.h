@@ -36,6 +36,8 @@ public:
     // しゃがみ等で「産む」：お腹が1以上なら1匹を卵(Held)にして birthPos に生む。産んだら true。
     //   持っている卵が満杯なら一番古い卵を割って捨ててから生む（常に産める）。
     bool LayEgg(const Vector3& birthPos);
+    // 産卵演出中か（プレイヤーの EggLay アニメ切り替えに使う）
+    bool IsBirthActive() const{ return birthTimer_ >= 0.0f; }
 
     // 保持中の卵を1個、指定方向へ投げる（Held → Flying）。speed=初速。投げられたら true。
     bool TryThrow(const Vector3& playerPos, const Vector3& dir, float speed = 12.0f);

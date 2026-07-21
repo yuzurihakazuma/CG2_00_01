@@ -91,6 +91,17 @@ void SkinnedObj3d::LoadClips(const std::string& directoryPath, const std::string
 	if ( !names.empty() ) { currentClip_ = names[0]; animation_ = clips_[names[0]]; }
 }
 
+// 指定ジョイントのワールド座標（モデル空間の骨行列 × ワールド行列）
+bool SkinnedObj3d::GetJointWorldPosition(const std::string& jointName, Vector3& out) const{
+	for ( const auto& joint : skeleton_.joints ) {
+		if ( joint.name != jointName ) continue;
+		Matrix4x4 world = Multiply(joint.skeletonSpaceMatrix, worldMatrix_);
+		out = { world.m[3][0], world.m[3][1], world.m[3][2] };
+		return true;
+	}
+	return false;
+}
+
 // クリップ切り替え。既に同じクリップなら何もしない（毎フレーム呼んで良い）
 void SkinnedObj3d::SetClip(const std::string& name, bool loop){
 	if ( currentClip_ == name ) { isLoop_ = loop; return; }
@@ -139,11 +150,28 @@ void SkinnedObj3d::Update(){
 	// --- スケルトンにアニメーションを適用して行列を更新 ---
 	UpdateSkeleton(skeleton_, animation_, animationTime_);
 
+	// --- ボーン上書き（アニメ適用後）：ベロの長さ等をゲーム側で直接制御する ---
+	if ( hasBoneOverride_ ) {
+		for ( auto& joint : skeleton_.joints ) {
+			if ( joint.name == overrideBoneName_ ) {
+				joint.transform.scale.x *= overrideBoneScale_.x;
+				joint.transform.scale.y *= overrideBoneScale_.y;
+				joint.transform.scale.z *= overrideBoneScale_.z;
+			}
+		}
+		for ( auto& joint : skeleton_.joints ) { // 手動モードと同じ手順で行列を作り直す（親→子順）
+			joint.localMatrix = MakeAffineMatrix(joint.transform.scale, joint.transform.rotate, joint.transform.translate);
+			if ( joint.parent ) { joint.skeletonSpaceMatrix = Multiply(joint.localMatrix, skeleton_.joints[*joint.parent].skeletonSpaceMatrix); }
+			else { joint.skeletonSpaceMatrix = joint.localMatrix; }
+		}
+	}
+
 	// --- MatrixPalette を計算して GPU バッファに書き込む ---
 	UpdateSkinCluster(skinCluster_, skeleton_, model_->GetBoneOrder());
 
 	// --- WVP 行列の計算（Obj3d と同じ処理） ---
 	Matrix4x4 worldMatrix = MakeAffine(scale_, rotation_, translate_);
+	worldMatrix_ = worldMatrix; // ジョイントのワールド座標取得用に保持
 
 	Matrix4x4 worldViewProjectionMatrix;
 	if ( camera_ ) {

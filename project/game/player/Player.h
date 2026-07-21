@@ -67,6 +67,8 @@ private: // メンバ変数
     float moveSpeed_ = 5.0f;          // 移動速度 (m/s)
     float targetYaw_ = 0.0f;          // 向きの目標角。キーを離しても回頭を続けて必ず向き切る
     bool  turnLocked_ = false;        // true=向きの目標を更新しない（ベロを出している間の振り向き禁止）
+    bool  faceOverrideActive_ = false; // true=向きを外部指定に合わせる（卵の構え中の狙い方向）
+    float faceOverrideYaw_ = 0.0f;
     int   flutterCount_ = 0;          // このジャンプ中にふんばった回数（回数ごとに上昇力が減衰）
     bool  fluttering_ = false;        // 今まさにふんばり中か（足バタバタアニメの切り替えに使う）
 
@@ -78,6 +80,9 @@ private:
 public:
     // ベロ動作中などに呼ぶ：移動はできるが振り向かない（見た目の向きを固定する）
     void SetTurnLocked(bool locked){ turnLocked_ = locked; }
+
+    // 向きの強制指定（卵の構え中、狙い方向を向かせる）。active=false で通常の移動向きに戻る
+    void SetFaceOverride(bool active, float yaw){ faceOverrideActive_ = active; faceOverrideYaw_ = yaw; }
 
 private:
     float currentDistance_ = 0.0f;    // ★主状態：現在レール上を進んだ距離 (m)

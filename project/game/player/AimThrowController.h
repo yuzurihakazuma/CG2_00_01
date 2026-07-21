@@ -37,6 +37,12 @@ public:
 
     bool IsAiming() const { return state_ == State::Aiming; }
 
+    // 直前にキャンセル（X）されたか。読むとフラグは消える（投げモーションを出さない判定用）
+    bool ConsumeCanceled(){ bool wasCanceled = canceled_; canceled_ = false; return wasCanceled; }
+
+    // 今の狙い方向のヨー角（構え中、プレイヤーの向きをこれに合わせる）
+    float GetAimYaw() const{ return aimYaw_; }
+
     // ノードエディタの「→ ゲーム値」用（投げ初速を外から調整できる）
     float* ThrowSpeedNormalPtr(){ return &throwSpeedNormal_; }
     float* ThrowSpeedLockPtr(){ return &throwSpeedLock_; }
@@ -49,6 +55,9 @@ private:
     float cursorX_ = 0.0f;   // 狙いカーソルの画面位置X(px)
     float cursorY_ = 0.0f;   // 狙いカーソルの画面位置Y(px)
     bool  aimLocked_ = false; // 敵にロックオン中か（カーソルの色/サイズ変更）
+    bool  canceled_ = false;  // 直前にXでキャンセルしたか（1回読まれたら消えるフラグ）
+    float aimYaw_ = 0.0f;     // 今の狙い方向のヨー角（プレイヤーの向き合わせ用）
+    float aimAxisYaw_ = 0.0f; // 構え開始時のレール軸の向き（狙い中は固定）
 
     float throwSpeedNormal_ = 13.0f; // 通常の投げ初速 (m/s)
     float throwSpeedLock_   = 22.0f; // ロックオン時の投げ初速 (m/s)

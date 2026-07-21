@@ -81,11 +81,16 @@ private:
 public:
     // ベロ動作中か（プレイヤーモデルの TongueOut アニメ切り替えに使う）
     bool IsTongueActive() const{ return state_ != State::Idle; }
+    // 戻し中か（捕獲成立→アニメを収納パートへ飛ばす判定に使う）
+    bool IsRetracting() const{ return state_ == State::Retracting; }
+    // 今フレームのベロの実距離(m)。モデルの Tongue ボーンの伸びをこれに合わせると貫通しない
+    float GetTongueLength() const{ return tongueLength_; }
 
 private:
     enum class State { Idle, Shooting, Retracting };
     State state_ = State::Idle;
 
+    float   tongueLength_ = 0.0f; // 今フレームのベロの実距離(m)
     Enemy*  target_ = nullptr; // Shooting中のみ有効（Retracting中は保持しない＝ダングリング回避）
     float   phaseT_ = 0.0f;    // 現在フェーズの経過秒
     Vector3 grabPos_  { 0.0f, 0.0f, 0.0f }; // 捕獲時：掴んだ瞬間の敵位置（Retractingの起点）

@@ -170,6 +170,9 @@ void GamePlayScene::SetupDemoObjects(){
 		playerObj_->SetClip("Idle", true);
 	}
 
+	// 構え中に手（Itemジョイント）へ持たせる卵の見た目
+	heldEggObj_ = Obj3d::Create("egg");
+
 	// スキンメッシュ（Skinning機能の展示。定位置でその場歩き）
 	skinnedObj_ = SkinnedObj3d::Create("human", "resources/human", "walk.gltf");
 	skinnedObj_->SetEnvironmentMap(textures_["skybox"].srvIndex);
@@ -461,6 +464,8 @@ void GamePlayScene::UpdatePlayMode(){
 		player_->SetCameraYaw(camera_->GetRotation().y);
 		// ベロを出している間は振り向き禁止（移動は可）。出したまま反転して見た目が破綻するのを防ぐ
 		player_->SetTurnLocked(swallow_.IsTongueActive());
+		// 卵の構え中は狙い（カーソル）方向を向く（後ろ狙いなら振り向く）
+		player_->SetFaceOverride(aimThrow_.IsAiming(), aimThrow_.GetAimYaw());
 		player_->Update(railField_.GetRails());
 	}
 	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
@@ -578,11 +583,56 @@ void GamePlayScene::UpdateSceneVisuals(){
 		const float kWalkBaseSpeed = 5.0f; // プレイヤーの通常移動速度(m/s)で Walk を等速再生
 		float speedRatio = std::clamp(horizontalSpeed / kWalkBaseSpeed, 0.0f, 1.8f);
 
+		// 構えをXでキャンセルした場合は投げモーションを出さない（卵は後ろへ戻るだけ）
+		if ( aimThrow_.ConsumeCanceled() ) { playerThrowTimer_ = 0.0f; }
+
 		// クリップ選択：ベロ動作中 > 歩き > 待機
 		if ( currentMode == EngineMode::Play && swallow_.IsTongueActive() ) {
+			bool wasRetracting = ( playerObj_->GetCurrentClip() == "TongueOut" );
 			playerObj_->SetClip("TongueOut", false); // 予備動作→射出→収納（1回きり）
 			playerObj_->SetPlaybackSpeed(2.8f);      // 1.33秒のクリップを高速化したベロ動作(約0.5秒)に合わせる
+			// ベロの長さを実距離に同期（Tongueボーンの伸びを上書き）＝目の前の敵でも貫通しない
+			float stretch = std::clamp(swallow_.GetTongueLength() / 1.2f, 0.10f, 1.0f);
+			playerObj_->SetBoneScaleOverride("Tongue", { 1.0f, stretch, 1.0f });
+			// 捕獲成立で戻しに入った瞬間、クリップを収納パートへ飛ばす（伸ばす絵をスキップ）
+			if ( wasRetracting && swallow_.IsRetracting() && !playerTongueSeeked_ ) {
+				playerObj_->SetAnimationTime(0.85f);
+				playerTongueSeeked_ = true;
+			}
+		} else if ( currentMode == EngineMode::Play && aimThrow_.IsAiming() ) {
+			// 卵投げの構え：Throw クリップの「溜め」ポーズで静止（両手で頭上に構える）
+			playerObj_->ClearBoneScaleOverride();
+			playerTongueSeeked_ = false;
+			playerObj_->SetClip("Throw", false);
+			playerObj_->SetPlaybackSpeed(0.0f);
+			playerObj_->SetAnimationTime(0.67f); // 溜め(f16)のポーズ
+			playerThrowTimer_ = 0.65f;           // 離した後にリリース→復帰を再生する時間
+			// 構え中は卵を持ち物ソケット（Itemジョイント）に持たせる
+			Vector3 itemPos;
+			heldEggVisible_ = ( eggSystem_.HeldCount() > 0 ) && playerObj_->GetJointWorldPosition("Item", itemPos);
+			if ( heldEggVisible_ && heldEggObj_ ) {
+				heldEggObj_->SetTranslation(itemPos);
+				heldEggObj_->SetScale({ 0.29f, 0.29f, 0.29f }); // READMEの推奨（手のサイズに合う）
+				heldEggObj_->Update();
+			}
+		} else if ( currentMode == EngineMode::Play && playerThrowTimer_ > 0.0f ) {
+			// 離した直後：リリース(f20)→復帰を最後まで再生
+			heldEggVisible_ = false;
+			if ( playerObj_->GetCurrentClip() == "Throw" && playerThrowTimer_ >= 0.649f ) {
+				playerObj_->SetAnimationTime(0.75f); // リリース直前(f18)から
+			}
+			playerObj_->SetClip("Throw", false);
+			playerObj_->SetPlaybackSpeed(1.6f);
+			playerThrowTimer_ -= 1.0f / 60.0f;
+		} else if ( currentMode == EngineMode::Play && eggSystem_.IsBirthActive() ) {
+			// 産卵：しゃがみ踏ん張り→ポンッ（演出時間に合わせて早回し）
+			heldEggVisible_ = false;
+			playerObj_->SetClip("EggLay", false);
+			playerObj_->SetPlaybackSpeed(2.5f);
 		} else if ( currentMode == EngineMode::Play && player_ && !player_->IsGrounded() ) {
+			heldEggVisible_ = false;
+			playerObj_->ClearBoneScaleOverride();
+			playerTongueSeeked_ = false;
 			if ( player_->IsFluttering() ) {
 				playerObj_->SetClip("Walk", true);   // ふんばり：足を高速バタバタ（ソニック風）
 				playerObj_->SetPlaybackSpeed(3.2f);
@@ -593,9 +643,15 @@ void GamePlayScene::UpdateSceneVisuals(){
 				playerObj_->SetAnimationTime(0.25f); // クリップ(1秒)内のポーズ位置。好みで0〜1秒
 			}
 		} else if ( speedRatio > 0.05f ) {
+			playerObj_->ClearBoneScaleOverride();
+			playerTongueSeeked_ = false;
+			heldEggVisible_ = false;
 			playerObj_->SetClip("Walk", true);       // 足パタパタ＋バウンド
 			playerObj_->SetPlaybackSpeed(( std::max )( speedRatio, 0.4f ));
 		} else {
+			playerObj_->ClearBoneScaleOverride();
+			playerTongueSeeked_ = false;
+			heldEggVisible_ = false;
 			playerObj_->SetClip("Idle", true);       // 呼吸＋頭の微揺れ
 			playerObj_->SetPlaybackSpeed(1.0f);
 		}
@@ -673,6 +729,7 @@ void GamePlayScene::Draw(){
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
 	demo_.DrawOpaque();                         // 展示物（回転キューブ）
 	if ( playerObj_ ) { playerObj_->Draw(); }   // プレイヤー（恐竜マスコット）
+	if ( heldEggVisible_ && heldEggObj_ ) { heldEggObj_->Draw(); } // 構え中の手持ち卵
 	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
 	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵

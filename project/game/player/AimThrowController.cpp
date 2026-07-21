@@ -54,6 +54,8 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
         // Q を押し始めた＆卵を持っている → 構えに入る（地上/ジャンプ/踏ん張り中どこでもOK）
         if ( input->Pushkey(DIK_Q) && eggs.HeldCount() > 0 ) {
             state_ = State::Aiming;
+            aimAxisYaw_ = player.GetRotation().y; // レール軸の基準は構え開始時の向きで固定
+                                                  // （狙いでプレイヤーが振り向いても軸はブレない）
             // 構え中も移動・ジャンプ・踏ん張りは受け付ける（狙いは矢印キーで別操作なので競合しない）
             // カーソルの初期位置：プレイヤーの少し前方上をスクリーン投影（無理なら画面中央）
             float projectedX, projectedY;
@@ -107,19 +109,29 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
         throwSpeed = throwSpeedLock_; // ★敵ロック時は速く（ノードエディタから調整可）
         DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
     } else {
-        // 未ロック：カーソルの画面位置を奥へアンプロジェクトした方向へ投げる（奥に投げ込める）。
-        // NDC→ワールドの逆投影は MatrixMath::NdcToWorld に一本化
-        Matrix4x4 invVP = Inverse(camera->GetViewProjectionMatrix());
-        float ndcX = cursorX_ / screenWidth * 2.0f - 1.0f;
-        float ndcY = 1.0f - cursorY_ / screenHeight * 2.0f;
-        Vector3 nearPoint = NdcToWorld(ndcX, ndcY, 0.0f, invVP);
-        Vector3 farPoint  = NdcToWorld(ndcX, ndcY, 1.0f, invVP);
-        Vector3 ray = { farPoint.x - nearPoint.x, farPoint.y - nearPoint.y, farPoint.z - nearPoint.z };
-        float rayLength = Length(ray);
-        if ( rayLength > 1e-4f ) throwDir = { ray.x / rayLength, ray.y / rayLength, ray.z / rayLength };
-        // 狙い線の先端＝カーソル方向の少し奥（奥に動かすと線もそちらへ追従する）
+        // 未ロック：レール軸（プレイヤーの向き）に沿ってだけ投げる。
+        //   奥への投げ込みは敵にロックオンした時だけ＝レールアクションとして狙いが迷わない。
+        //   カーソルの上下は投げの山なり（ピッチ）にだけ効く
+        Vector3 axis = { std::sin(aimAxisYaw_), 0.0f, std::cos(aimAxisYaw_) };
+        float pitch = std::clamp(( screenHeight * 0.5f - cursorY_ ) / ( screenHeight * 0.5f ), -0.2f, 0.9f);
+        // カーソルが画面上でプレイヤーのどちら側にあるかで、軸の前/後ろを選ぶ（後ろにも投げられる）
+        float side = 1.0f;
+        float playerScreenX = 0.0f, playerScreenY = 0.0f;
+        float axisScreenX = 0.0f, axisScreenY = 0.0f;
+        if ( project(origin, playerScreenX, playerScreenY)
+          && project({ origin.x + axis.x, origin.y, origin.z + axis.z }, axisScreenX, axisScreenY) ) {
+            float axisDX = axisScreenX - playerScreenX;
+            if ( std::abs(axisDX) > 1e-3f && ( cursorX_ - playerScreenX ) * axisDX < 0.0f ) side = -1.0f;
+        }
+        Vector3 dir = { axis.x * side, pitch, axis.z * side };
+        float dirLength = Length(dir);
+        if ( dirLength > 1e-4f ) throwDir = { dir.x / dirLength, dir.y / dirLength, dir.z / dirLength };
+        // 狙い線の先端＝軸方向の少し奥
         cursorWorld = { origin.x + throwDir.x * 12.0f, origin.y + throwDir.y * 12.0f, origin.z + throwDir.z * 12.0f };
     }
+
+    // プレイヤーの見た目もこの狙い方向を向く（GamePlayScene が毎フレーム反映）
+    aimYaw_ = std::atan2(throwDir.x, throwDir.z);
 
     // 狙い線：プレイヤー → カーソルの先端（奥に合わせると線もそちらへ伸びる）
     DebugDraw::GetInstance()->Line(origin, cursorWorld, { 1.0f, 0.9f, 0.2f, 0.9f });
@@ -147,6 +159,13 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
 
     // Q を離した瞬間 → 投げる（ロック中=敵へ速く / 未ロック=カーソルの奥へ）。
     //   ※「投げずにキャンセル」したい時用のコマンドは別途キーで足せる（今は常に投げる）。
+    // Xでキャンセル：投げずに構え解除。上にのせていた卵は消費されず後ろ（ストック）へ戻る
+    if ( input->Triggerkey(DIK_X) ) {
+        canceled_ = true;
+        Reset();
+        return;
+    }
+
     if ( !input->Pushkey(DIK_Q) ) {
         // 投げる方向へプレイヤーの向きも合わせる（水平成分のyaw）
         if ( std::abs(throwDir.x) > 1e-4f || std::abs(throwDir.z) > 1e-4f ) {

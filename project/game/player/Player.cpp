@@ -553,7 +553,10 @@ void Player::FinalizePosition(const SplineRail& rail, const Vector3& worldBefore
     //   回頭そのものは止まっていても続ける（途中でキーを離すと横向きのまま固まり、
     //   レール上では本来向かない方向を向いてしまう問題の対策）
     Vector3 tangent = rail.GetTangentByDistance(currentDistance_);
-    if ( Length(tangent) > 0.001f && dsSign_ != 0.0f && !turnLocked_ ) {
+    if ( faceOverrideActive_ ) {
+        // 卵の構え中：狙い方向を向く（移動より優先）
+        targetYaw_ = faceOverrideYaw_;
+    } else if ( Length(tangent) > 0.001f && dsSign_ != 0.0f && !turnLocked_ ) {
         // ベロを出している間（turnLocked_）は目標を更新しない＝移動はできるが振り向かない
         Vector3 velocity = { tangent.x * dsSign_, tangent.y * dsSign_, tangent.z * dsSign_ };
         targetYaw_ = std::atan2(velocity.x, velocity.z);
