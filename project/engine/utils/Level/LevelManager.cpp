@@ -101,6 +101,21 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     rootJson["railEndPlazas"] = endPlazaArray;
 
+    // ガイドレール追従の対象レール番号（railLines と数を合わせて保存）
+    json guideRailArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        int guideRail = ( i < levelData.railGuideRails.size() ) ? levelData.railGuideRails[i] : -1;
+        guideRailArray.push_back(guideRail);
+    }
+    rootJson["railGuideRails"] = guideRailArray;
+
+    // 路線のグループ名（railLines と数を合わせて保存）
+    json groupArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        groupArray.push_back(( i < levelData.railGroups.size() ) ? levelData.railGroups[i] : "");
+    }
+    rootJson["railGroups"] = groupArray;
+
     // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
     json motionTypeArray = json::array();
     json motionPhaseArray = json::array();
@@ -278,6 +293,16 @@ LevelData LevelManager::Load(const std::string& fileName){
     }
 
     // 道生成モードを読み込む（0=自動/1=なし。キーが無い旧JSONは後段の resize で全て0=自動になる）
+    if ( rootJson.contains("railGroups") && rootJson["railGroups"].is_array() ) {
+        for ( const auto& groupJson : rootJson["railGroups"] ) {
+            levelData.railGroups.push_back(groupJson.get<std::string>());
+        }
+    }
+    if ( rootJson.contains("railGuideRails") && rootJson["railGuideRails"].is_array() ) {
+        for ( const auto& guideRailJson : rootJson["railGuideRails"] ) {
+            levelData.railGuideRails.push_back(guideRailJson.get<int>());
+        }
+    }
     if ( rootJson.contains("railEndPlazas") && rootJson["railEndPlazas"].is_array() ) {
         for ( const auto& endPlazaJson : rootJson["railEndPlazas"] ) {
             levelData.railEndPlazas.push_back(endPlazaJson.get<int>());
@@ -350,11 +375,13 @@ LevelData LevelManager::Load(const std::string& fileName){
     // タイプ・動き・地面フラグ配列を railLines と同じ数に整える（足りない分はデフォルト）
     levelData.railTypes.resize(levelData.railLines.size(), -1);
     levelData.railMotions.resize(levelData.railLines.size(), Vector4 { 0.0f, 0.0f, 0.0f, 2.0f });
-    levelData.railGroundTypes.resize(levelData.railLines.size(), 0);
+    levelData.railGroundTypes.resize(levelData.railLines.size(), 1); // 既定は Gap（端から落ちられる）
     levelData.railVisible.resize(levelData.railLines.size(), 1);
     levelData.railLineModes.resize(levelData.railLines.size(), 0);
     levelData.railRoadModes.resize(levelData.railLines.size(), 0);
     levelData.railEndPlazas.resize(levelData.railLines.size(), 0);
+    levelData.railGuideRails.resize(levelData.railLines.size(), -1);
+    levelData.railGroups.resize(levelData.railLines.size());
     levelData.railMotionTypes.resize(levelData.railLines.size(), 0);
     levelData.railMotionPhases.resize(levelData.railLines.size(), 0.0f);
     levelData.railOneWay.resize(levelData.railLines.size(), 0);

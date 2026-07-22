@@ -96,6 +96,8 @@ public:
 	// 各レールの道生成モード（0=自動/1=なし）。railLines と同じ並び（§4）
 	const std::vector<int>& GetEditorRailRoadModes() const;
 	const std::vector<int>& GetEditorRailEndPlazas() const; // 端の丸広場（bit0=始点/bit1=終点）
+	const std::vector<int>& GetEditorRailGuideRails() const; // ガイドレール追従の対象（-1=なし）
+	bool GetEditorRailMotionPreview() const; // 動くレールをエディタ中も再生するか
 	// ジョイント表示モード（0=エディタのみ/1=常に/2=非表示。RoadMesh が参照）
 	int GetEditorJointVisible() const;
 	// レールノードをギズモ/フリーハンドでドラッグ中か（ドラッグ中は道の再生成を間引く）

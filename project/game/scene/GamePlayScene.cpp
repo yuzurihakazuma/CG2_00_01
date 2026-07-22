@@ -548,6 +548,17 @@ void GamePlayScene::UpdateSceneVisuals(){
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
 	railField_.UpdateMarkers(); // レール緑線（カメラ移動に追従）
 	roadMesh_.SetJointVisible(EditorManager::GetInstance()->GetEditorJointVisible()); // ジョイント表示モード（§5）
+	// 動くレールのエディタプレビュー：Playを押さなくても動きを再生して組み方を確認できる。
+	//   チェックを外した瞬間に基準位置へ戻す（編集と表示がずれないように）
+	{
+		static bool prevMotionPreview = false;
+		bool motionPreview = ( currentMode == EngineMode::Edit )
+		                  && EditorManager::GetInstance()->GetEditorRailMotionPreview();
+		if ( motionPreview ) { railField_.UpdateMotion(1.0f / 60.0f); }
+		else if ( prevMotionPreview && currentMode == EngineMode::Edit ) { railField_.ResetMotion(); }
+		prevMotionPreview = motionPreview;
+	}
+
 	roadMesh_.Update(railField_.GetRails()); // 道メッシュ（動くレール追従＋カメラ追従）
 
 	// SDF溶け道：プレイヤーとの距離でパネルの現れ/溶けを更新（エディタ中も動きが見える）

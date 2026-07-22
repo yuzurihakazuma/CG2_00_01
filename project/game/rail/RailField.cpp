@@ -222,6 +222,7 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
 
     // 動きを「連結処理より先」に割り当てる（連結処理が HasMotion を判定できるように）。
     const auto& motionTypes  = em->GetEditorRailMotionTypes();
+    const auto& guideRails   = em->GetEditorRailGuideRails();
     const auto& motionPhases = em->GetEditorRailMotionPhases();
     for ( size_t i = 0; i < rails_.size(); ++i ) {
         if ( i < motions.size() ) {
@@ -229,6 +230,7 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
             rails_[i].motionPeriod = ( motions[i].w > 0.1f ) ? motions[i].w : 0.1f;
         }
         rails_[i].motionType  = ( i < motionTypes.size() )  ? motionTypes[i]  : 0;
+        rails_[i].guideRail   = ( i < guideRails.size() )   ? guideRails[i]   : -1;
         rails_[i].motionPhase = ( i < motionPhases.size() ) ? motionPhases[i] : 0.0f;
         rails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
     }
@@ -313,6 +315,19 @@ void RailField::UpdateMotion(float dt){
         case 2: { // 円運動（XZ楕円＋Y。半径は amp の各成分。amp.x と amp.z で円になる）
             float th = u * kTwoPi;
             rail.animOffset = { amp.x * std::cos(th), amp.y * std::sin(th), amp.z * std::sin(th) };
+            break;
+        }
+        case 3: { // ガイドレール追従：別レールの経路に沿って一周し続ける（エスカレーター式）。
+                  //   周期=1周の秒数 / 位相=スタート位置。終点まで行くと始点へ戻って回り続ける
+            int g = rail.guideRail;
+            if ( g >= 0 && g < ( int ) rails_.size() && &rails_[g] != &rail && rails_[g].GetLength() > 0.0f ) {
+                const SplineRail& guide = rails_[g];
+                Vector3 p  = guide.GetPositionByDistance(u * guide.GetLength());
+                Vector3 p0 = guide.GetPositionByDistance(0.0f);
+                rail.animOffset = { p.x - p0.x, p.y - p0.y, p.z - p0.z };
+            } else {
+                rail.animOffset = { 0.0f, 0.0f, 0.0f };
+            }
             break;
         }
         default: { // 0: サイン往復（従来どおり）

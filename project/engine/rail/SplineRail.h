@@ -160,7 +160,9 @@ public:
     // 動きの波形と位相（エディタで選択）
     //   motionType: 0=サイン往復 / 1=端で一時停止する往復 / 2=円運動(cos,sin)
     //   motionPhase: 0〜1。複数レールの動きをずらす（0.5で半周期ずれ）
+    //   motionType 3=ガイドレール追従：guideRail の経路に沿って一周し続ける（振幅は不使用）
     int   motionType  = 0;
+    int   guideRail   = -1; // motionType=3 の追従先レール番号（-1=なし）
     float motionPhase = 0.0f;
 
     // 片方向レール（0=両方向 / 1=正方向のみ(front→back) / 2=逆方向のみ(back→front)）
@@ -171,7 +173,8 @@ public:
 
     // 動きが設定されているか
     bool HasMotion() const {
-        return motionAmp.x != 0.0f || motionAmp.y != 0.0f || motionAmp.z != 0.0f;
+        return motionAmp.x != 0.0f || motionAmp.y != 0.0f || motionAmp.z != 0.0f
+            || ( motionType == 3 && guideRail >= 0 ); // ガイド追従は振幅なしでも動く
     }
 
     // ⑥ 途中分岐情報（BuildRailConnections でロード時に1回だけ計算）

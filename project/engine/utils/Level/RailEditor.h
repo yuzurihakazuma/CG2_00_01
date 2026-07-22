@@ -43,6 +43,7 @@ public:
     const std::vector<int>& GetRailLineModes() const{ return data_->railLineModes; }
     const std::vector<int>& GetRailRoadModes() const{ return data_->railRoadModes; }
     const std::vector<int>& GetRailEndPlazas() const{ return data_->railEndPlazas; } // 端の丸広場
+    const std::vector<int>& GetRailGuideRails() const{ return data_->railGuideRails; } // ガイド追従の対象
     bool IsRailVisible(int rail) const;
     const std::vector<int>&   GetRailMotionTypes() const{ return data_->railMotionTypes; }
     const std::vector<float>& GetRailMotionPhases() const{ return data_->railMotionPhases; }
@@ -143,10 +144,10 @@ public:
                            std::vector<Vector3>* outArc = nullptr) const;
 
     // シェイプのスタンプ配置（生成→マウスに追従→クリックで設置）
-    bool HasPendingStamp() const{ return !pendingStamp_.empty(); }
+    bool HasPendingStamp() const{ return !pendingStamp_.empty() || !pendingMultiStamp_.empty(); }
     const std::vector<Vector3>& GetPendingStamp() const{ return pendingStamp_; }
     void PlaceStamp(const Vector3& at);
-    void CancelStamp(){ pendingStamp_.clear(); }
+    void CancelStamp(){ pendingStamp_.clear(); pendingMultiStamp_.clear(); }
 
     // キーボード操作（EditorManager から呼ばれる）
     void DeleteSelectedNodes();
@@ -185,6 +186,8 @@ public:
     float GetSnapDistance() const{ return railSnapDistance_; }
     bool  IsSnapMatchHeight() const{ return railSnapMatchHeight_; } // 高さ違いでもXZが近ければ合わせて接続
     bool  IsEndGuideVisible() const{ return railEndGuide_; }        // 選択レールの端点に足元ガイドを出す
+    bool  IsReachLinesVisible() const{ return railReachLines_; }    // ジャンプ予測線を出す
+    bool  IsMotionPreview() const{ return railMotionPreview_; }     // 動くレールをエディタ中も再生する
     int   GetJointVisible() const{ return railJointVisible_; } // 0=エディタのみ/1=常に/2=非表示
 
 private:
@@ -196,6 +199,8 @@ private:
 
     // 配置待ちのシェイプ（原点基準の相対座標。空なら配置待ちなし）
     std::vector<Vector3> pendingStamp_;
+    // 複数レール一括テンプレート（登り足場など）。空でなければ PlaceStamp で全ポリラインを路線化する
+    std::vector<std::vector<Vector3>> pendingMultiStamp_;
 
     // レール編集の世代番号（編集のたびに増やし、ゲーム側が変化を検知する）
     int railVersion_ = 0;
@@ -229,6 +234,8 @@ private:
     float railSnapDistance_  = 1.2f;  // 検出半径(m)。ランタイムの合流距離と同じ既定
     bool  railSnapMatchHeight_ = true; // 真上から見て近ければ高さを相手に合わせて接続（OFF=立体交差用）
     bool  railEndGuide_        = true; // 選択レールの端点から地面へ縦線＋Y値を表示（高さの目視用）
+    bool  railMotionPreview_   = false; // 動くレール（親子付け含む）をエディタ中も再生して確認する
+    bool  railReachLines_      = false; // ジャンプ予測の弾道線（Gapが多いと密になるので既定OFF。見たい時だけON）
     int   railJointVisible_  = 1;     // ジョイント表示：0=エディタのみ / 1=常に / 2=非表示
 
     // 接続一覧（接続タブ）で選択中の行（-1=なし）

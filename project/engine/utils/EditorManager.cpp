@@ -713,7 +713,7 @@ void EditorManager::Update(){
                     Vector3 midNodePos;
                     ImVec2 sm;
                     if ( railEditor->GetNodePosOf(rr, nodeCount / 2, midNodePos) && project(midNodePos, sm) ) {
-                        if ( !reachable ) {
+                        if ( !reachable ) { // 通れない表示は常時（消すのはジャンプ予測線だけ）
                             dl->AddText({ sm.x + 8.0f, sm.y - 8.0f }, IM_COL32(220, 120, 255, 255), "未接続 (通れない)");
                         }
                         // 接続の要約（選択中のレールだけ表示＝画面が文字だらけにならないように）
@@ -843,7 +843,8 @@ void EditorManager::Update(){
             //   シアン=どこかのレールへ着地できる（着地点に◎）/ 赤=届かない（先端に✕）。
             //   Safe レールの端はゲーム仕様で飛び出せない（クランプ）ので、
             //   飛べば届く相手がいる時だけ「端をGapにすれば渡れる」とヒントを出す。
-            {
+            //   ※Gapが標準になり点線が密になりやすいため、エディタ設定でOFFにできる
+            if ( railEditor->IsReachLinesVisible() ) {
                 const auto& groundTypes = railEditor->GetRailGroundTypes();
                 for ( int rr = 0; rr < railCount; ++rr ) {
                     if ( !railEditor->IsRailVisible(rr) ) continue;
@@ -1173,6 +1174,13 @@ const std::vector<int>& EditorManager::GetEditorRailRoadModes() const{
 const std::vector<int>& EditorManager::GetEditorRailEndPlazas() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailEndPlazas() : kEmpty;
+}
+const std::vector<int>& EditorManager::GetEditorRailGuideRails() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGuideRails() : kEmpty;
+}
+bool EditorManager::GetEditorRailMotionPreview() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->IsMotionPreview() : false;
 }
 int EditorManager::GetEditorJointVisible() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetJointVisible() : 1;
