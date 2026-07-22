@@ -109,32 +109,56 @@ void AimThrowController::Update(Player& player, EnemyManager& enemies, EggSystem
         throwSpeed = throwSpeedLock_; // ★敵ロック時は速く（ノードエディタから調整可）
         DebugDraw::GetInstance()->Sphere(cursorWorld, lockEnemy->GetRadius() + 0.25f, { 1.0f, 0.2f, 0.2f, 1.0f }, 16);
     } else {
-        // 未ロック：レール軸（プレイヤーの向き）に沿ってだけ投げる。
-        //   奥への投げ込みは敵にロックオンした時だけ＝レールアクションとして狙いが迷わない。
-        //   カーソルの上下は投げの山なり（ピッチ）にだけ効く
+        // 未ロック：カーソルのレイと「レール軸の縦平面」の交点へ投げる。
+        //   ・投げはレール軸の平面内に制限（奥へは飛ばない。奥狙いはロックオン時のみ）
+        //   ・ビームが必ずカーソルを通る＝見えている場所と当たる場所が常に一致する
+        //   ・交点が体の後ろ側なら、そのまま後ろへ投げられる（振り向きも追従）
         Vector3 axis = { std::sin(aimAxisYaw_), 0.0f, std::cos(aimAxisYaw_) };
-        float pitch = std::clamp(( screenHeight * 0.5f - cursorY_ ) / ( screenHeight * 0.5f ), -0.2f, 0.9f);
-        // カーソルが画面上でプレイヤーのどちら側にあるかで、軸の前/後ろを選ぶ（後ろにも投げられる）
-        float side = 1.0f;
-        float playerScreenX = 0.0f, playerScreenY = 0.0f;
-        float axisScreenX = 0.0f, axisScreenY = 0.0f;
-        if ( project(origin, playerScreenX, playerScreenY)
-          && project({ origin.x + axis.x, origin.y, origin.z + axis.z }, axisScreenX, axisScreenY) ) {
-            float axisDX = axisScreenX - playerScreenX;
-            if ( std::abs(axisDX) > 1e-3f && ( cursorX_ - playerScreenX ) * axisDX < 0.0f ) side = -1.0f;
+        Matrix4x4 invVP = Inverse(camera->GetViewProjectionMatrix());
+        float ndcX = cursorX_ / screenWidth * 2.0f - 1.0f;
+        float ndcY = 1.0f - cursorY_ / screenHeight * 2.0f;
+        Vector3 nearPoint = NdcToWorld(ndcX, ndcY, 0.0f, invVP);
+        Vector3 farPoint  = NdcToWorld(ndcX, ndcY, 1.0f, invVP);
+        Vector3 ray = { farPoint.x - nearPoint.x, farPoint.y - nearPoint.y, farPoint.z - nearPoint.z };
+        Vector3 planeNormal = { axis.z, 0.0f, -axis.x }; // レール軸と直交する水平法線（軸とYが張る縦平面）
+        float denom = ray.x * planeNormal.x + ray.z * planeNormal.z;
+        Vector3 target = { origin.x + axis.x * 12.0f, origin.y + 1.0f, origin.z + axis.z * 12.0f }; // フォールバック
+        if ( std::abs(denom) > 1e-6f ) {
+            float tPlane = ( ( origin.x - nearPoint.x ) * planeNormal.x
+                           + ( origin.z - nearPoint.z ) * planeNormal.z ) / denom;
+            if ( tPlane > 0.0f ) {
+                target = { nearPoint.x + ray.x * tPlane,
+                           nearPoint.y + ray.y * tPlane,
+                           nearPoint.z + ray.z * tPlane };
+            }
         }
-        Vector3 dir = { axis.x * side, pitch, axis.z * side };
+        Vector3 dir = { target.x - origin.x, target.y - origin.y, target.z - origin.z };
         float dirLength = Length(dir);
         if ( dirLength > 1e-4f ) throwDir = { dir.x / dirLength, dir.y / dirLength, dir.z / dirLength };
-        // 狙い線の先端＝軸方向の少し奥
-        cursorWorld = { origin.x + throwDir.x * 12.0f, origin.y + throwDir.y * 12.0f, origin.z + throwDir.z * 12.0f };
+        // ビーム先端＝狙い点（遠すぎる時は18mでクランプ。カーソルは線の延長上に乗る）
+        if ( dirLength > 18.0f ) {
+            cursorWorld = { origin.x + throwDir.x * 18.0f, origin.y + throwDir.y * 18.0f, origin.z + throwDir.z * 18.0f };
+        } else {
+            cursorWorld = target;
+        }
     }
 
     // プレイヤーの見た目もこの狙い方向を向く（GamePlayScene が毎フレーム反映）
     aimYaw_ = std::atan2(throwDir.x, throwDir.z);
 
-    // 狙い線：プレイヤー → カーソルの先端（奥に合わせると線もそちらへ伸びる）
-    DebugDraw::GetInstance()->Line(origin, cursorWorld, { 1.0f, 0.9f, 0.2f, 0.9f });
+    // 狙いビーム（ヨッシークラフトワールド風）：口元から狙い方向へ赤い直線＋等間隔の点＋先端マーク。
+    //   卵は直線弾なので、このビームがそのまま実際の弾道と一致する（見たまま当たる）
+    Vector3 beamStart = { origin.x, origin.y + 0.3f, origin.z };
+    DebugDraw::GetInstance()->Line(beamStart, cursorWorld, { 1.0f, 0.18f, 0.12f, 0.95f });
+    for ( int i = 1; i <= 10; ++i ) {
+        float beamT = ( float ) i / 10.0f;
+        Vector3 beamPoint = { beamStart.x + ( cursorWorld.x - beamStart.x ) * beamT,
+                              beamStart.y + ( cursorWorld.y - beamStart.y ) * beamT,
+                              beamStart.z + ( cursorWorld.z - beamStart.z ) * beamT };
+        float dotSize = 0.06f + 0.02f * std::sin(pulseT_ * 6.0f + beamT * 12.0f); // 点が波打って流れる
+        DebugDraw::GetInstance()->Sphere(beamPoint, dotSize, { 1.0f, 0.25f, 0.15f, 0.9f }, 6);
+    }
+    DebugDraw::GetInstance()->Sphere(cursorWorld, 0.16f, { 1.0f, 0.3f, 0.2f, 1.0f }, 10); // 先端マーク
 
     // カーソル表示（視認性向上：脈動＋通常=黄(狙い線と同色)/ロック=赤で大きく）
     pulseT_ += dt;

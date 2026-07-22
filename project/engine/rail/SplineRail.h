@@ -41,6 +41,7 @@ public:
     //   「なし」のレールは道メッシュ・ジャンクション・ジョイントの対象外になる
     //   （カメラ用レール・敵専用レール・演出用の見えないレール向け）
     int roadMode = 0;
+    int endPlaza = 0; // 端の丸広場（bit0=始点 / bit1=終点。RoadMesh が円形の広場を敷く）
 
     // front→back ベクトルの主軸からタイプを自動判定（|X|>=|Z|→横／それ以外→縦）
     void AutoDetectType();

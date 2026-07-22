@@ -93,6 +93,14 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     rootJson["railRoadModes"] = roadModeArray;
 
+    // 各レールの端の丸広場（bit0=始点/bit1=終点）。railLines と数を合わせて保存
+    json endPlazaArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        int endPlaza = ( i < levelData.railEndPlazas.size() ) ? levelData.railEndPlazas[i] : 0;
+        endPlazaArray.push_back(endPlaza);
+    }
+    rootJson["railEndPlazas"] = endPlazaArray;
+
     // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
     json motionTypeArray = json::array();
     json motionPhaseArray = json::array();
@@ -270,6 +278,11 @@ LevelData LevelManager::Load(const std::string& fileName){
     }
 
     // 道生成モードを読み込む（0=自動/1=なし。キーが無い旧JSONは後段の resize で全て0=自動になる）
+    if ( rootJson.contains("railEndPlazas") && rootJson["railEndPlazas"].is_array() ) {
+        for ( const auto& endPlazaJson : rootJson["railEndPlazas"] ) {
+            levelData.railEndPlazas.push_back(endPlazaJson.get<int>());
+        }
+    }
     if ( rootJson.contains("railRoadModes") && rootJson["railRoadModes"].is_array() ) {
         for ( const auto& roadModeJson : rootJson["railRoadModes"] ) {
             levelData.railRoadModes.push_back(roadModeJson.get<int>());
@@ -341,6 +354,7 @@ LevelData LevelManager::Load(const std::string& fileName){
     levelData.railVisible.resize(levelData.railLines.size(), 1);
     levelData.railLineModes.resize(levelData.railLines.size(), 0);
     levelData.railRoadModes.resize(levelData.railLines.size(), 0);
+    levelData.railEndPlazas.resize(levelData.railLines.size(), 0);
     levelData.railMotionTypes.resize(levelData.railLines.size(), 0);
     levelData.railMotionPhases.resize(levelData.railLines.size(), 0.0f);
     levelData.railOneWay.resize(levelData.railLines.size(), 0);

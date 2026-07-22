@@ -110,7 +110,7 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
             }
         }
 
-        if ( input->Triggerkey(DIK_E) && cooldownTimer_ <= 0.0f ) {
+        if ( input->Triggerkey(DIK_E) && cooldownTimer_ <= 0.0f && !actionBlocked_ ) {
             target_ = findCatchable(); // 見つからなければ nullptr のまま＝空振りとして続行
             state_  = State::Shooting;
             phaseT_ = 0.0f;
@@ -194,7 +194,7 @@ void SwallowAbility::Update(Player& player, EnemyManager& enemies, EggSystem& eg
     }
 
     // --- 左Ctrl（しゃがみ）：お腹の敵を1匹、後ろに卵として産む ---
-    if ( input->Triggerkey(DIK_LCONTROL) ) {
+    if ( input->Triggerkey(DIK_LCONTROL) && !actionBlocked_ ) {
         float yaw = player.GetRotation().y;
         Vector3 behind = { playerPos.x - std::sin(yaw) * 0.8f, playerPos.y + 0.3f, playerPos.z - std::cos(yaw) * 0.8f };
         if ( eggs.LayEgg(behind) ) {

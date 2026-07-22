@@ -249,6 +249,7 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
     const auto& holes    = em->GetEditorRailNodeHoles();
     const auto& visible  = em->GetEditorRailVisible();
     const auto& roadMode = em->GetEditorRailRoadModes();
+    const auto& endPlazas = em->GetEditorRailEndPlazas();
     const auto& oneWays  = em->GetEditorRailOneWay();
     const auto& spdMuls  = em->GetEditorRailSpeedMuls();
     for ( size_t i = 0; i < rails_.size(); ++i ) {
@@ -258,6 +259,7 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
         else                    rails_[i].nodeHole.clear();
         rails_[i].visible  = ( i < visible.size() ) ? ( visible[i] != 0 ) : true;
         rails_[i].roadMode = ( i < roadMode.size() ) ? roadMode[i] : 0;
+        rails_[i].endPlaza = ( i < endPlazas.size() ) ? endPlazas[i] : 0;
         rails_[i].oneWay   = ( i < oneWays.size() ) ? oneWays[i] : 0;
         rails_[i].speedMul = ( i < spdMuls.size() && spdMuls[i] > 0.05f ) ? spdMuls[i] : 1.0f;
     }

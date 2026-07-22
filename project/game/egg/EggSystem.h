@@ -39,6 +39,9 @@ public:
     // 産卵演出中か（プレイヤーの EggLay アニメ切り替えに使う）
     bool IsBirthActive() const{ return birthTimer_ >= 0.0f; }
 
+    // 構え中フラグ：後ろに並ぶ保持卵の先頭1個を描かない（手に持っている扱い。キャンセルで自動復帰）
+    void SetAimHolding(bool holding){ aimHolding_ = holding; }
+
     // 保持中の卵を1個、指定方向へ投げる（Held → Flying）。speed=初速。投げられたら true。
     bool TryThrow(const Vector3& playerPos, const Vector3& dir, float speed = 12.0f);
 
@@ -78,6 +81,7 @@ private:
     std::unique_ptr<SDFVolumeObject> birthFx_; // SDFの卵（1個を使い回す）
     Egg*  birthEgg_   = nullptr;               // 演出対象（eggs_ 内に存在するか毎フレーム検証）
     float birthTimer_ = -1.0f;                 // 経過秒。負=演出していない
+    bool  aimHolding_ = false;                 // 構え中（列の先頭の卵を手に持っている扱いで非表示）
 
     // --- 飛行中の卵が残す「煙パフ」---
     //   加算パーティクルは明るい背景で見えないので、実体(Obj3d)の小球で表示する（縮んで消える）。

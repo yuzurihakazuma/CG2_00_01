@@ -107,6 +107,13 @@ bool EggSystem::LayEgg(const Vector3& birthPos){
     // 産卵エロージョン演出を開始：実体メッシュを隠し、SDFの卵を「芯から育てる」。
     //   育ちきったら Update が実体メッシュへバトンタッチする
     if ( birthFx_ ) {
+        // 連続産卵対策：前の演出対象がまだ非表示のままなら、先に実体表示へ戻す
+        //   （戻さないと演出が新しい卵へ移った時、前の卵が永久に見えなくなる）
+        if ( birthEgg_ ) {
+            for ( auto& egg : eggs_ ) {
+                if ( egg.get() == birthEgg_ ) { birthEgg_->SetVisualHidden(false); break; }
+            }
+        }
         birthEgg_   = eggs_.back().get();
         birthTimer_ = 0.0f;
         birthEgg_->SetVisualHidden(true);
@@ -256,7 +263,13 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
 }
 
 void EggSystem::Draw() const{
-    for ( const auto& egg : eggs_ ) { egg->Draw(); }
+    // 構え中は「次に投げる卵（列の先頭）」を1個描かない＝手に持っている扱い。
+    // TryThrow も先頭の保持卵を投げるので、隠した卵と投げる卵は必ず一致する
+    bool handEggSkipped = !aimHolding_;
+    for ( const auto& egg : eggs_ ) {
+        if ( !handEggSkipped && egg->IsHeld() ) { handEggSkipped = true; continue; }
+        egg->Draw();
+    }
     for ( const auto& spit : spits_ ) { if ( spit.obj && !spit.dead ) spit.obj->Draw(); }        // 吐き出し弾
     for ( const auto& puff : puffs_ ) { if ( puff.obj && puff.life > 0.0f ) puff.obj->Draw(); } // 煙パフ
 }

@@ -489,7 +489,7 @@ void RoadMesh::ComputeArmCuts(const std::vector<SplineRail>& rails, Junction& ju
 void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Junction& junc,
                                   Camera* camera, uint32_t atlasSrv){
     const int n = static_cast<int>( junc.arms.size() );
-    if ( n < 2 ) return;
+    if ( n < 1 ) return; // n==1 は「端の丸広場」（1本腕＝入口1つ＋360°の円弧ウェッジ）
     const Vector3& N = junc.center;
 
     // 各腕の入口フレームと「左側の符号」（フレームrightが世界の左とどちら向きで一致するか）
@@ -582,6 +582,10 @@ void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Ju
         while ( phi <= 0.0f ) { phi += 2.0f * 3.14159265f; }
         float phiDeg = phi * 180.0f / 3.14159265f;
         wedgeMode[i]  = ( phiDeg < kMiterMaxDeg ) ? 0 : ( phiDeg > kArcMinDeg ? 2 : 1 );
+        // エディタの「曲がり角の形」設定で上書き：1=いつも丸広場（ヨッシー風）/ 2=丸なし
+        //   （165°〜195°の「ほぼ直進」だけは、丸を強制すると逆に不自然なので自動のまま）
+        if ( cornerStyle_ == 1 && wedgeMode[i] == 0 ) { wedgeMode[i] = 2; }
+        if ( cornerStyle_ == 2 && wedgeMode[i] == 2 ) { wedgeMode[i] = 0; }
         wedgeSteps[i] = ( std::max )( 2, static_cast<int>( phiDeg / kArcStepDeg ) );
     }
 
@@ -670,6 +674,108 @@ void RoadMesh::BuildJunctionPatch(const std::vector<SplineRail>& rails, const Ju
     EmitMesh(data, junc.followRail, camera, atlasSrv);
 }
 
+// 端の丸広場：レールの始点/終点に円形の広場（上面扇+ベベル+壁+底）を敷く。
+//   エディタの「始点/終点に丸広場」チェックで指定（endPlaza bit0=始点/bit1=終点）。
+//   道は広場の中心まで走り込むので、道の端の断面は広場の内部に隠れて継ぎ目が出ない
+void RoadMesh::BuildEndPlaza(const std::vector<SplineRail>& rails, int railIdx, bool front,
+                             Camera* camera, uint32_t atlasSrv){
+    const SplineRail& rail = rails[railIdx];
+    float endS = front ? 0.0f : rail.GetLength();
+    Vector3 N = rail.GetPositionByDistance(endS);
+
+    const float kPlazaR     = kHalfWidth * 1.8f;                      // 広場の外周半径
+    const float kPlazaInner = kPlazaR - ( kHalfWidth - kInnerWidth ); // ベベル幅は道と同じ
+    const float kPlazaTopH  = kTopH - 0.004f; // 道が広場に乗り上げる重なり部分でチラつかないよう僅かに低く
+    const int   kSteps      = 28;
+    const float kTwoPi      = 2.0f * 3.14159265f;
+
+    Model::ModelData data;
+    auto pushV = [&](const Vector3& p, const Vector3& nrm, float u, float v) -> uint32_t{
+        Model::VertexData vert {};
+        vert.position = { p.x, p.y, p.z, 1.0f };
+        vert.normal = nrm;
+        vert.texcoord = { u, v };
+        data.vertices.push_back(vert);
+        return static_cast<uint32_t>( data.vertices.size() - 1 );
+    };
+    auto pushTri = [&](uint32_t a, uint32_t b, uint32_t c){
+        data.indices.push_back(a); data.indices.push_back(b); data.indices.push_back(c);
+    };
+    auto topUV = [&](const Vector3& p, float& u, float& v){
+        u = ( p.x - N.x ) * kUvPerMeter;
+        v = 0.89f + Fract(( p.z - N.z ) * kUvPerMeter) * 0.09f;
+    };
+    auto bottomUV = [&](const Vector3& p, float& u, float& v){
+        u = ( p.x - N.x ) * kUvPerMeter;
+        v = 0.4727f + Fract(( p.z - N.z ) * kUvPerMeter) * ( 0.5273f - 0.4727f );
+    };
+    auto ringPoint = [&](int k, float radius, float h) -> Vector3{
+        float ang = kTwoPi * static_cast<float>( k ) / kSteps;
+        return { N.x + std::cos(ang) * radius, N.y + h + kTopOffset, N.z + std::sin(ang) * radius };
+    };
+    auto ringOutward = [&](int k) -> Vector3{
+        float ang = kTwoPi * static_cast<float>( k ) / kSteps;
+        return { std::cos(ang), 0.0f, std::sin(ang) };
+    };
+
+    // 上面：中心から扇（ジャンクションパッチの上面と同じ張り方/UV）
+    {
+        Vector3 up = { 0.0f, 1.0f, 0.0f };
+        Vector3 centerP = { N.x, N.y + kPlazaTopH + kTopOffset, N.z };
+        float cu, cv; topUV(centerP, cu, cv);
+        uint32_t c = pushV(centerP, up, cu, cv);
+        std::vector<uint32_t> ids(kSteps);
+        for ( int k = 0; k < kSteps; ++k ) {
+            Vector3 p = ringPoint(k, kPlazaInner, kPlazaTopH);
+            float u, v; topUV(p, u, v);
+            ids[k] = pushV(p, up, u, v);
+        }
+        for ( int k = 0; k < kSteps; ++k ) { pushTri(c, ids[k], ids[( k + 1 ) % kSteps]); }
+    }
+
+    // ベベル＋壁（一周。v値/法線はジャンクションパッチと同じ規約）
+    {
+        float segLen = kTwoPi * kPlazaR / kSteps;
+        for ( int k = 0; k < kSteps; ++k ) {
+            int k1 = ( k + 1 ) % kSteps;
+            float u0 = segLen * k * kUvPerMeter;
+            float u1 = segLen * ( k + 1 ) * kUvPerMeter;
+            Vector3 n0 = Normalize(Add(Multiply(ringOutward(k),  0.64f), Vector3 { 0.0f, 0.77f, 0.0f }));
+            Vector3 n1 = Normalize(Add(Multiply(ringOutward(k1), 0.64f), Vector3 { 0.0f, 0.77f, 0.0f }));
+            uint32_t i0 = pushV(ringPoint(k,  kPlazaInner, kPlazaTopH), n0, u0, 0.7422f);
+            uint32_t i1 = pushV(ringPoint(k1, kPlazaInner, kPlazaTopH), n1, u1, 0.7422f);
+            uint32_t o0 = pushV(ringPoint(k,  kPlazaR, kBevelH),   n0, u0, 0.7070f);
+            uint32_t o1 = pushV(ringPoint(k1, kPlazaR, kBevelH),   n1, u1, 0.7070f);
+            pushTri(i0, o0, o1); pushTri(i0, o1, i1);
+
+            Vector3 w0 = ringOutward(k);
+            Vector3 w1 = ringOutward(k1);
+            uint32_t t0 = pushV(ringPoint(k,  kPlazaR, kBevelH), w0, u0, 0.6992f);
+            uint32_t t1 = pushV(ringPoint(k1, kPlazaR, kBevelH), w1, u1, 0.6992f);
+            uint32_t b0 = pushV(ringPoint(k,  kPlazaR, 0.0f),    w0, u0, 0.5352f);
+            uint32_t b1 = pushV(ringPoint(k1, kPlazaR, 0.0f),    w1, u1, 0.5352f);
+            pushTri(t0, b0, b1); pushTri(t0, b1, t1);
+        }
+    }
+
+    // 底面：中心から扇（裏向き）
+    {
+        Vector3 dn = { 0.0f, -1.0f, 0.0f };
+        Vector3 centerP = { N.x, N.y + kTopOffset, N.z };
+        float cu, cv; bottomUV(centerP, cu, cv);
+        uint32_t c = pushV(centerP, dn, cu, cv);
+        std::vector<uint32_t> ids(kSteps);
+        for ( int k = 0; k < kSteps; ++k ) {
+            Vector3 p = ringPoint(k, kPlazaR, 0.0f);
+            float u, v; bottomUV(p, u, v);
+            ids[k] = pushV(p, dn, u, v);
+        }
+        for ( int k = 0; k < kSteps; ++k ) { pushTri(c, ids[( k + 1 ) % kSteps], ids[k]); }
+    }
+
+    EmitMesh(data, rail.HasMotion() ? railIdx : -1, camera, atlasSrv);
+}
+
 // ジャンクション（溶接コーナー/T字/十字）の検出とパッチ生成（任意角度対応）
 //   ・端点溶接（2本）… 150°以上のゆるい角は掃引コネクタ / 鋭い角はパッチ
 //   ・T字分岐（branchPoints）と本体×本体の交差 … 常にパッチ
@@ -682,6 +788,36 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
         return idx >= 0 && idx < n && rails[idx].visible && rails[idx].roadMode == 0 &&
                rails[idx].nodes.size() >= 2 && rails[idx].GetLength() > 0.0f;
     };
+
+    // --- 端の丸広場（エディタ指定）：「腕1本のジャンクション」としてパッチ生成する ---
+    //   入口リングはレールの実断面から取られるので継ぎ目ゼロで道と一体化し、
+    //   外周は360°の円弧ウェッジ＝ヨッシー風の丸い広場になる。道はカットして重ねない
+    if ( ( int ) cuts.size() < n ) { cuts.resize(n); }
+    {
+        const float kPlazaTCut = 1.1f; // 端から入口までの距離（広場の大きさ）
+        for ( int r = 0; r < n; ++r ) {
+            if ( !roadUsable(r) || rails[r].isLoop ) continue; // ループは端が無い
+            float len = rails[r].GetLength();
+            for ( int side = 0; side < 2; ++side ) {
+                bool atFront = ( side == 0 );
+                if ( !( rails[r].endPlaza & ( atFront ? 1 : 2 ) ) ) continue;
+                float nodeS = atFront ? 0.0f : len;
+                Vector3 dirRaw = atFront ? rails[r].GetTangentByDistance(0.0f)
+                                         : Multiply(rails[r].GetTangentByDistance(len), -1.0f);
+                Vector3 dir;
+                if ( !ToHorizontal(dirRaw, dir) ) continue;
+
+                Junction junc;
+                junc.center = rails[r].GetPositionByDistance(nodeS);
+                junc.followRail = r;
+                float tCut = std::clamp(kPlazaTCut, kTCutMin, ( std::max )( kTCutMin, len * 0.45f ));
+                float cutS = atFront ? tCut : len - tCut;
+                junc.arms.push_back({ r, nodeS, cutS, tCut, atFront, dir });
+                cuts[r].push_back({ ( std::min )( nodeS, cutS ), ( std::max )( nodeS, cutS ) });
+                BuildJunctionPatch(rails, junc, camera, atlasSrv);
+            }
+        }
+    }
 
     std::vector<Junction> juncs;
 

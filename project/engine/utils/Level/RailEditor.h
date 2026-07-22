@@ -42,6 +42,7 @@ public:
     const std::vector<int>& GetRailVisible() const{ return data_->railVisible; }
     const std::vector<int>& GetRailLineModes() const{ return data_->railLineModes; }
     const std::vector<int>& GetRailRoadModes() const{ return data_->railRoadModes; }
+    const std::vector<int>& GetRailEndPlazas() const{ return data_->railEndPlazas; } // 端の丸広場
     bool IsRailVisible(int rail) const;
     const std::vector<int>&   GetRailMotionTypes() const{ return data_->railMotionTypes; }
     const std::vector<float>& GetRailMotionPhases() const{ return data_->railMotionPhases; }

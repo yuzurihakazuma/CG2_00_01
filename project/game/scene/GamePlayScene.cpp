@@ -466,6 +466,10 @@ void GamePlayScene::UpdatePlayMode(){
 		player_->SetTurnLocked(swallow_.IsTongueActive());
 		// 卵の構え中は狙い（カーソル）方向を向く（後ろ狙いなら振り向く）
 		player_->SetFaceOverride(aimThrow_.IsAiming(), aimThrow_.GetAimYaw());
+		// 構え中は後ろの列の先頭の卵を非表示（手に持っている扱い。キャンセルで列に戻る）
+		eggSystem_.SetAimHolding(aimThrow_.IsAiming());
+		// 構え中はベロ(E)と産卵(左Ctrl)を発動禁止（両手が卵でふさがっている）
+		swallow_.SetActionBlocked(aimThrow_.IsAiming());
 		player_->Update(railField_.GetRails());
 	}
 	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
@@ -680,6 +684,9 @@ void GamePlayScene::UpdateSceneVisuals(){
 	{
 		int held  = eggSystem_.HeldCount();
 		int belly = eggSystem_.BellyCount();
+		// 構え中は1個を手に持っている扱い＝列から1個減らして見せる。
+		// キャンセルすると構えが解けて自動的に列へ戻る（実際の消費は投げた瞬間だけ）
+		if ( aimThrow_.IsAiming() && held > 0 ) { --held; }
 		for ( int i = 0; i < ( int ) eggHudSlots_.size(); ++i ) {
 			eggHudSlots_[i]->SetColor(( i < held )
 				? Vector4 { 0.55f, 1.0f, 0.6f, 0.95f }    // 保持中＝ヨッシー緑
@@ -874,6 +881,15 @@ void GamePlayScene::DrawDebugUI(){
 		if ( ImGui::Checkbox("両面描画（OFF=背面カリングで軽量化）", &cullNone) ) {
 			roadMesh_.SetCullNone(cullNone); // 即時反映（再生成不要）
 		}
+
+		int cornerStyle = roadMesh_.GetCornerStyle();
+		const char* cornerStyleLabels[] = { "自動（角度で判定）", "いつも丸広場（ヨッシー風）", "丸なし（角ばり）" };
+		ImGui::SetNextItemWidth(200.0f);
+		if ( ImGui::Combo("曲がり角の形", &cornerStyle, cornerStyleLabels, 3) ) {
+			roadMesh_.SetCornerStyle(cornerStyle);
+			roadMesh_.Build(railField_.GetRails(), camera_.get()); // 選んだ瞬間に道を作り直して反映
+		}
+		if ( ImGui::IsItemHovered() ) ImGui::SetTooltip("レールが曲がって繋がる角の見た目：\n 自動＝鋭い角はマイター、大きく回る角は丸広場\n いつも丸広場＝全部の角に丸い広場を出す\n 丸なし＝丸広場を出さず角ばった接続にする");
 
 		float warnLength = roadMesh_.GetWarnLength();
 		ImGui::SetNextItemWidth(160.0f);

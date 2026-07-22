@@ -678,6 +678,7 @@ void RailEditor::PlaceStamp(const Vector3& at){
 	data_->railVisible.push_back(1);
 	data_->railLineModes.push_back(0);
 	data_->railRoadModes.push_back(0);
+	data_->railEndPlazas.push_back(0);
 	data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	data_->railMotionTypes.push_back(0);
 	data_->railMotionPhases.push_back(0.0f);
@@ -724,6 +725,7 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railVisible.push_back(( railIdx < ( int ) data_->railVisible.size() ) ? data_->railVisible[railIdx] : 1);
 	data_->railLineModes.push_back(( railIdx < ( int ) data_->railLineModes.size() ) ? data_->railLineModes[railIdx] : 0);
 	data_->railRoadModes.push_back(( railIdx < ( int ) data_->railRoadModes.size() ) ? data_->railRoadModes[railIdx] : 0);
+	data_->railEndPlazas.push_back(( railIdx < ( int ) data_->railEndPlazas.size() ) ? data_->railEndPlazas[railIdx] : 0);
 	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
 	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
 	data_->railMotionTypes.push_back(( railIdx < ( int ) data_->railMotionTypes.size() ) ? data_->railMotionTypes[railIdx] : 0);
@@ -1194,6 +1196,9 @@ void RailEditor::DrawWindow(){
 	if ( data_->railRoadModes.size() != data_->railLines.size() ) {
 		data_->railRoadModes.resize(data_->railLines.size(), 0);
 	}
+	if ( data_->railEndPlazas.size() != data_->railLines.size() ) {
+		data_->railEndPlazas.resize(data_->railLines.size(), 0);
+	}
 	if ( data_->railTypes.size() != data_->railLines.size() ) {
 		data_->railTypes.resize(data_->railLines.size(), -1);
 	}
@@ -1278,6 +1283,8 @@ void RailEditor::DrawWindow(){
 				data_->railLineModes.erase(data_->railLineModes.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railRoadModes.size() )
 				data_->railRoadModes.erase(data_->railRoadModes.begin() + deleteRail);
+			if ( deleteRail < ( int ) data_->railEndPlazas.size() )
+				data_->railEndPlazas.erase(data_->railEndPlazas.begin() + deleteRail);
 			if ( deleteRail < ( int ) data_->railNodeHoles.size() )
 				data_->railNodeHoles.erase(data_->railNodeHoles.begin() + deleteRail);
 			if ( currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
@@ -1406,6 +1413,26 @@ void RailEditor::DrawWindow(){
 		const char* lineModeLabels[] = { "スプライン (なめらか)", "直線 (カクカク)" };
 		ImGui::SetNextItemWidth(220.0f);
 		if ( ImGui::Combo("線のつなぎ方", &lm, lineModeLabels, 2) ) { ++railVersion_; }
+
+		// --- 端の丸広場（始点/終点に円形の広場を敷く。行き止まりやゴールの見た目用）---
+		data_->railEndPlazas.resize(data_->railLines.size(), 0);
+		{
+			int& endPlaza = data_->railEndPlazas[currentEditRailIndex_];
+			bool plazaFront = ( endPlaza & 1 ) != 0;
+			bool plazaBack  = ( endPlaza & 2 ) != 0;
+			if ( ImGui::Checkbox("始点に丸広場", &plazaFront) ) {
+				endPlaza = ( plazaFront ? 1 : 0 ) | ( plazaBack ? 2 : 0 );
+				++railVersion_; // 道メッシュの即時再生成トリガー
+			}
+			ImGui::SameLine();
+			if ( ImGui::Checkbox("終点に丸広場", &plazaBack) ) {
+				endPlaza = ( plazaFront ? 1 : 0 ) | ( plazaBack ? 2 : 0 );
+				++railVersion_;
+			}
+			if ( ImGui::IsItemHovered() ) {
+				ImGui::SetTooltip("レールの端に円形の広場を敷く（曲がり角の丸広場と同じ見た目。行き止まり/ゴール向け）");
+			}
+		}
 
 		// --- 片方向レール（逆走禁止。ジェットコースター区間など）---
 		data_->railOneWay.resize(data_->railLines.size(), 0);

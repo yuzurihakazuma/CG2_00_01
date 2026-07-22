@@ -78,6 +78,7 @@ struct LevelData{
     // 各レールの道生成モード（railLines と同じ並び）。0=自動で道を敷く / 1=道なし
     //   カメラ用・敵専用・演出用など「レールだけ欲しい」路線に使う（仕様書_残タスク §4）
     std::vector<int> railRoadModes;
+    std::vector<int> railEndPlazas; // 端の丸広場（bit0=始点 / bit1=終点。0=なし）
 
     // 各レールの動きの波形（railLines と同じ並び）
     //   0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動

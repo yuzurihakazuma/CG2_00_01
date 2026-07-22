@@ -1170,6 +1170,10 @@ const std::vector<int>& EditorManager::GetEditorRailRoadModes() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailRoadModes() : kEmpty;
 }
+const std::vector<int>& EditorManager::GetEditorRailEndPlazas() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailEndPlazas() : kEmpty;
+}
 int EditorManager::GetEditorJointVisible() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetJointVisible() : 1;
 }

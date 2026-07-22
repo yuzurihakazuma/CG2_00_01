@@ -147,6 +147,11 @@ void Player::EnterAir(const Vector3& startPos, const Vector3& tangent, float upw
     position_    = startPos;
     airVelocity_ = { tangent.x * dsSign_ * moveSpeed_, upwardVelocity, tangent.z * dsSign_ * moveSpeed_ };
     airDir_      = HorizDir(tangent.x * dsSign_, tangent.z * dsSign_);
+    if ( Length(airDir_) < 1e-4f ) {
+        // 合流直後などで進行符号が0のまま落ちると airDir_ がゼロになり、
+        // 空中の前後操作が全て効かなくなる（操作不能で落ちる）。向いている方向で代用する
+        airDir_ = { std::sin(targetYaw_), 0.0f, std::cos(targetYaw_) };
+    }
     heightOffset_ = 0.0f;
     jumpVelocity_ = 0.0f;
     isGrounded_   = false;

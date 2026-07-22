@@ -52,6 +52,9 @@ public:
     // 穴の警告帯（赤ストライプ）を敷く長さ(m)。変更後は Build で反映
     void  SetWarnLength(float m){ warnLength_ = m; }
     float GetWarnLength() const{ return warnLength_; }
+    // 曲がり角の形：0=自動（角度で判定）/ 1=いつも丸広場（アーク）/ 2=丸なし（マイター）
+    void  SetCornerStyle(int style){ cornerStyle_ = style; }
+    int   GetCornerStyle() const{ return cornerStyle_; }
 
     // 背面カリングの切替（true=両面描画・従来 / false=背面カリングでオーバードロー削減）。
     // 既存スロットにも即時反映される（再生成不要）
@@ -111,6 +114,9 @@ private:
     // 1ジャンクションのパッチ（上面扇+ベベル+壁+底）を生成する
     void BuildJunctionPatch(const std::vector<SplineRail>& rails, const Junction& junc,
                             Camera* camera, uint32_t atlasSrv);
+    // 端の丸広場（エディタの「始点/終点に丸広場」指定で円形の広場を敷く）
+    void BuildEndPlaza(const std::vector<SplineRail>& rails, int railIdx, bool front,
+                       Camera* camera, uint32_t atlasSrv);
 
     // レール1本ぶんの掃引メッシュを生成する（cuts の区間は張らない）。
     //   capFront/capBack: 自由端に平らな暗色フタを張る（丸い road_end の代わり）
@@ -142,6 +148,7 @@ private:
     int  jointVisible_ = 1; // 0=エディタのみ / 1=常に / 2=非表示
 
     float warnLength_ = 1.0f; // 穴の手前後に危険帯（赤ストライプ・上面のみ）を敷く長さ(m)
+    int   cornerStyle_ = 0;   // 曲がり角の形（0=自動/1=いつも丸広場/2=丸なし）
     bool  cullNone_   = true; // true=両面描画（従来） / false=背面カリング
 
     size_t lastVertexCount_ = 0;   // 直近 Build の総頂点数（表示用）
