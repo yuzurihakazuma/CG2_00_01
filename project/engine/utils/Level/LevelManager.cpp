@@ -116,6 +116,13 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     rootJson["railGroups"] = groupArray;
 
+    // 収集物（コイン）の配置
+    json coinArray = json::array();
+    for ( const auto& coin : levelData.coins ) {
+        coinArray.push_back({ { "rail", coin.rail }, { "dist", coin.dist }, { "height", coin.height } });
+    }
+    rootJson["coins"] = coinArray;
+
     // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
     json motionTypeArray = json::array();
     json motionPhaseArray = json::array();
@@ -306,6 +313,16 @@ LevelData LevelManager::Load(const std::string& fileName){
     if ( rootJson.contains("railEndPlazas") && rootJson["railEndPlazas"].is_array() ) {
         for ( const auto& endPlazaJson : rootJson["railEndPlazas"] ) {
             levelData.railEndPlazas.push_back(endPlazaJson.get<int>());
+        }
+    }
+    // 収集物（コイン）を読み込む（キーが無い旧JSONはコインなし）
+    if ( rootJson.contains("coins") && rootJson["coins"].is_array() ) {
+        for ( const auto& coinJson : rootJson["coins"] ) {
+            CoinData coin;
+            coin.rail   = coinJson.value("rail", 0);
+            coin.dist   = coinJson.value("dist", 0.0f);
+            coin.height = coinJson.value("height", 1.0f);
+            levelData.coins.push_back(coin);
         }
     }
     if ( rootJson.contains("railRoadModes") && rootJson["railRoadModes"].is_array() ) {

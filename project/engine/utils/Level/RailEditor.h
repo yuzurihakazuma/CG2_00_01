@@ -147,7 +147,7 @@ public:
     bool HasPendingStamp() const{ return !pendingStamp_.empty() || !pendingMultiStamp_.empty(); }
     const std::vector<Vector3>& GetPendingStamp() const{ return pendingStamp_; }
     void PlaceStamp(const Vector3& at);
-    void CancelStamp(){ pendingStamp_.clear(); pendingMultiStamp_.clear(); }
+    void CancelStamp(){ pendingStamp_.clear(); pendingMultiStamp_.clear(); pendingMultiMeta_.clear(); }
 
     // キーボード操作（EditorManager から呼ばれる）
     void DeleteSelectedNodes();
@@ -201,6 +201,23 @@ private:
     std::vector<Vector3> pendingStamp_;
     // 複数レール一括テンプレート（登り足場など）。空でなければ PlaceStamp で全ポリラインを路線化する
     std::vector<std::vector<Vector3>> pendingMultiStamp_;
+public:
+    // 動くテンプレート用のメタ設定（ポリラインごとの 可視/道/波形/親子/位相。空なら既定値）
+    struct StampMeta {
+        int   visible    = 1;
+        int   roadMode   = 0;   // 0=道あり / 1=なし
+        int   lineMode   = 0;   // 0=スプライン / 1=直線
+        int   motionType = 0;   // 3=ガイドレール追従
+        int   guideRel   = -1;  // テンプレ内の相対番号（0=1本目がガイド。-1=なし）
+        float phase      = 0.0f;
+        float period     = 12.0f;
+    };
+    // 配置前ゴーストの全体表示用（EditorManager が参照。骨組みガイドは薄く描く）
+    const std::vector<std::vector<Vector3>>& GetPendingMultiStamp() const{ return pendingMultiStamp_; }
+    const std::vector<StampMeta>& GetPendingMultiMeta() const{ return pendingMultiMeta_; }
+
+private:
+    std::vector<StampMeta> pendingMultiMeta_;
 
     // レール編集の世代番号（編集のたびに増やし、ゲーム側が変化を検知する）
     int railVersion_ = 0;
@@ -243,6 +260,47 @@ private:
 
     // 値をグリッドに丸める（railSnap_ がOFFならそのまま）
     float SnapValue(float v) const;
+
+    // 「レールと同数であるべき全設定配列」をレール数に揃える（既定値で埋める）。
+    // 配列ズレによる書き込み事故の一元対策。DrawWindow 冒頭で毎フレーム呼ぶ
+    void SyncRailArraySizes();
+    // レールを1本追加し、全設定配列を既定値で揃える。追加したレール番号を返す
+    int AppendRail(std::vector<Vector3> line, const std::string& group = "");
+    // レール1本と全設定配列の同じ番号を削除する（ガイド参照の付け替えも行う）
+    void EraseRail(int idx);
+
+public:
+    // リスト上でホバー中のレール（Game View で黄色ハイライトするため。-1=なし）
+    int GetHoveredListRail() const{ return hoveredListRail_; }
+    // 接続一覧のホバー：相手側レールと接続点（両方光らせて場所を示す）
+    int  GetHoveredListRailB() const{ return hoveredListRailB_; }
+    bool GetHoveredConnPos(Vector3& out) const{ out = hoveredConnPos_; return hoveredConnValid_; }
+
+    // 到達チェックの経路（スタート→ゴールのワールドポリライン。空=未チェック/到達不可）
+    const std::vector<Vector3>& GetRoutePoints() const{ return routePoints_; }
+    // 各点への区間がジャンプ弧かどうか（表示色分け用。routePoints_ と同じ長さ）
+    const std::vector<char>& GetRouteJumpFlags() const{ return routeJumpFlags_; }
+    // ゴースト走行の現在位置（走行中のみ true）
+    bool GetGhostPos(Vector3& out) const;
+private:
+    int hoveredListRail_ = -1;
+    int hoveredListRailB_ = -1;
+    Vector3 hoveredConnPos_ {};
+    bool hoveredConnValid_ = false;
+
+    // --- スタート→ゴール到達チェック＆ゴースト走行 ---
+    void BuildRouteCheck();               // BFSで経路を求め routePoints_ を作る
+    std::vector<Vector3> routePoints_;    // 経路のワールドポリライン
+    std::vector<char>    routeJumpFlags_; // 各点への区間がジャンプ弧か（1=ジャンプ）
+    std::vector<float>   routeCum_;       // 経路の累積距離（ゴースト位置計算用）
+    bool  routeAutoRecheck_ = true;       // 編集のたびに自動で再チェックする
+    int   lastRouteVersion_ = -1;         // 自動再チェック用（railVersion_ の控え）
+    bool  routeChecked_   = false;
+    bool  routeReachable_ = false;
+    int   routeViaCount_  = 0;
+    bool  ghostRun_   = false;            // ゴースト走行中か
+    float ghostDist_  = 0.0f;             // 経路上の進行距離(m)
+    float ghostSpeed_ = 5.0f;             // ゴーストの速度(m/s)。プレイヤーの通常速度と同じ既定値
 
     // レール a,b が接続しているか（端から合流1.2m / 別タイプ交差0.9m。溶接0.7mは1.2mに含まれる）
     bool AreRailsLinked(int a, int b) const;

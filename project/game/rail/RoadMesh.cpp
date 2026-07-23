@@ -81,7 +81,7 @@ const float kMiterMaxDeg = 165.0f;                // これ未満はマイター
 const float kArcMinDeg   = 195.0f;                // これ超は外周円弧
 const float kArcStepDeg  = 12.0f;                 // 円弧の刻み
 const float kGentleDot   = -0.866f;               // 2本溶接: dot<=これ(150°以上) → 掃引コネクタ担当
-const float kStraightDot = -0.996f;               // ほぼ一直線: 何もしない（突き合わせ）
+// （旧 kStraightDot は廃止：ほぼ一直線でも折れ目に隙間が出るためコネクタを常に掃引する）
 const float kArm         = 1.0f;                  // 掃引コネクタが両側を削る長さ
 
 // マイター交点：N + t*di + w*Li = N + s*dj - w*Lj を XZ で解く（t, s を返す）
@@ -843,7 +843,9 @@ void RoadMesh::CollectJunctions(const std::vector<SplineRail>& rails, Camera* ca
             if ( !ToHorizontal(aDirRaw, aDir) || !ToHorizontal(bDirRaw, bDir) ) continue;
 
             float d = Dot(aDir, bDir);
-            if ( d <= kStraightDot ) continue; // ほぼ一直線＝突き合わせのままで綺麗
+            // ※以前は「ほぼ一直線（±5°）は突き合わせのまま」でスキップしていたが、
+            //   判定が水平のみのため平地→スロープの折れ目もスキップされ、断面の傾きが
+            //   違う2本の間に隙間/段差が見えていた。緩い継ぎ目も必ずコネクタで滑らかに繋ぐ
 
             if ( d <= kGentleDot ) {
                 // --- ゆるい角（150°以上）：掃引コネクタで連続的に繋ぐ ---

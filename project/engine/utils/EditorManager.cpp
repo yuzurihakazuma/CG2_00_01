@@ -571,16 +571,27 @@ void EditorManager::Update(){
                 // ゴースト（設置される形）をマウス位置に重ねて表示
                 if ( onGround ) {
                     ImDrawList* ghostDrawList = ImGui::GetWindowDrawList();
-                    const auto& shape = railEditor->GetPendingStamp();
-                    ImVec2 prevS; bool prevOk = false;
-                    for ( const auto& rel : shape ) {
-                        Vector3 wp = { g.x + rel.x, g.y + rel.y, g.z + rel.z };
-                        ImVec2 s; bool ok = project(wp, s);
-                        if ( ok ) {
-                            ghostDrawList->AddCircleFilled(s, 3.0f, IM_COL32(90, 220, 255, 230));
-                            if ( prevOk ) ghostDrawList->AddLine(prevS, s, IM_COL32(90, 220, 255, 200), 2.0f);
+                    // 複数レールテンプレートは全ポリラインをゴースト表示（見えない骨組みガイドは薄く）。
+                    // パラメータを変えるとテンプレート側が毎フレーム作り直すので、ゴーストが即追従する
+                    const auto& multiShapes = railEditor->GetPendingMultiStamp();
+                    const auto& multiMeta   = railEditor->GetPendingMultiMeta();
+                    std::vector<const std::vector<Vector3>*> shapesToDraw;
+                    if ( !multiShapes.empty() ) { for ( const auto& s : multiShapes ) shapesToDraw.push_back(&s); }
+                    else { shapesToDraw.push_back(&railEditor->GetPendingStamp()); }
+                    for ( int si = 0; si < ( int ) shapesToDraw.size(); ++si ) {
+                        bool dim = ( si < ( int ) multiMeta.size() && multiMeta[si].visible == 0 );
+                        ImU32 colLine = dim ? IM_COL32(90, 220, 255, 80)  : IM_COL32(90, 220, 255, 200);
+                        ImU32 colDot  = dim ? IM_COL32(90, 220, 255, 100) : IM_COL32(90, 220, 255, 230);
+                        ImVec2 prevS; bool prevOk = false;
+                        for ( const auto& rel : *shapesToDraw[si] ) {
+                            Vector3 wp = { g.x + rel.x, g.y + rel.y, g.z + rel.z };
+                            ImVec2 s; bool ok = project(wp, s);
+                            if ( ok ) {
+                                ghostDrawList->AddCircleFilled(s, dim ? 2.0f : 3.0f, colDot);
+                                if ( prevOk ) ghostDrawList->AddLine(prevS, s, colLine, dim ? 1.5f : 2.0f);
+                            }
+                            prevS = s; prevOk = ok;
                         }
-                        prevS = s; prevOk = ok;
                     }
                 }
                 // クリックで設置 / 右クリック・Esc で中止
@@ -850,6 +861,62 @@ void EditorManager::Update(){
                         char heightText[32];
                         snprintf(heightText, sizeof(heightText), "Y=%.1f", tipPos.y);
                         dl->AddText({ sTip.x + 10.0f, sTip.y + 8.0f }, IM_COL32(235, 235, 235, 220), heightText);
+                    }
+                }
+            }
+
+            // --- リストでホバー中のレールを黄色でハイライト（リストと画面の対応が一目で分かる）---
+            //   接続一覧のホバー時は相手側レールと接続点のリングも一緒に光らせる
+            {
+                auto highlightRail = [&](int railIdx){
+                    if ( railIdx < 0 ) return;
+                    int highlightNodeCount = railEditor->GetNodeCountOf(railIdx);
+                    ImVec2 prevS {}; bool prevOk = false;
+                    for ( int ni = 0; ni < highlightNodeCount; ++ni ) {
+                        Vector3 p; ImVec2 s;
+                        if ( !railEditor->GetNodePosOf(railIdx, ni, p) || !project(p, s) ) { prevOk = false; continue; }
+                        if ( prevOk ) { dl->AddLine(prevS, s, IM_COL32(255, 240, 80, 230), 4.5f); }
+                        dl->AddCircleFilled(s, 4.0f, IM_COL32(255, 240, 80, 230));
+                        prevS = s; prevOk = true;
+                    }
+                };
+                highlightRail(railEditor->GetHoveredListRail());
+                highlightRail(railEditor->GetHoveredListRailB());
+                Vector3 connPos;
+                if ( railEditor->GetHoveredConnPos(connPos) ) {
+                    ImVec2 sc;
+                    if ( project(connPos, sc) ) {
+                        dl->AddCircle(sc, 13.0f, IM_COL32(255, 240, 80, 255), 0, 3.0f);
+                        dl->AddCircle(sc, 19.0f, IM_COL32(255, 240, 80, 120), 0, 2.0f);
+                    }
+                }
+            }
+
+            // --- 到達チェックの経路（オレンジ）とゴースト走行（緑の丸）---
+            {
+                const auto& route = railEditor->GetRoutePoints();
+                const auto& routeJump = railEditor->GetRouteJumpFlags();
+                if ( route.size() >= 2 ) {
+                    ImVec2 prevS {}; bool prevOk = false;
+                    for ( size_t ri = 0; ri < route.size(); ++ri ) {
+                        ImVec2 s; bool ok = project(route[ri], s);
+                        if ( ok && prevOk ) {
+                            // レール区間=オレンジ / 通常ジャンプ=シアン / ふんばり必要=マゼンタ
+                            char jumpFlag = ( ri < routeJump.size() ) ? routeJump[ri] : 0;
+                            ImU32 routeCol = ( jumpFlag == 2 ) ? IM_COL32(255, 110, 245, 230)
+                                           : ( jumpFlag == 1 ) ? IM_COL32(80, 230, 255, 230)
+                                                               : IM_COL32(255, 150, 40, 220);
+                            dl->AddLine(prevS, s, routeCol, jumpFlag ? 3.5f : 5.0f);
+                        }
+                        prevS = s; prevOk = ok;
+                    }
+                }
+                Vector3 ghostPos;
+                if ( railEditor->GetGhostPos(ghostPos) ) {
+                    ImVec2 s;
+                    if ( project({ ghostPos.x, ghostPos.y + 0.4f, ghostPos.z }, s) ) {
+                        dl->AddCircleFilled(s, 8.0f, IM_COL32(90, 255, 120, 235));
+                        dl->AddCircle(s, 11.0f, IM_COL32(30, 160, 70, 235), 0, 2.0f);
                     }
                 }
             }

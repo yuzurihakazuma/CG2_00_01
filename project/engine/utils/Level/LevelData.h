@@ -45,6 +45,13 @@ struct LevelCameraZone{
 };
 
 // マップ全体のデータ
+// 収集物（コイン）1枚：レール上の距離と高さで配置する
+struct CoinData {
+    int   rail   = 0;    // 配置先レール番号
+    float dist   = 0.0f; // レール上の距離(m)
+    float height = 1.0f; // レール線からの高さ(m)
+};
+
 struct LevelData{
     std::string name;
 
@@ -81,6 +88,7 @@ struct LevelData{
     std::vector<int> railEndPlazas; // 端の丸広場（bit0=始点 / bit1=終点。0=なし）
     std::vector<int> railGuideRails; // ガイドレール追従（波形3）の対象レール番号（-1=なし）
     std::vector<std::string> railGroups; // 路線のグループ名（空=未分類。リスト絞り込み/一括操作用）
+    std::vector<CoinData> coins;         // 収集物（コイン）の配置
 
     // 各レールの動きの波形（railLines と同じ並び）
     //   0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動

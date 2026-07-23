@@ -26,6 +26,9 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // ドラッグ式の数値欄（DragFloat等）を「クリックだけ」でキーボード入力モードにする。
+    // ノード座標や穴の位置などを直接数字で打ち込める（従来どおりドラッグでの増減も可能）
+    io.ConfigDragClickToInputText = true;
     // マルチビューポート：ImGuiウィンドウをゲームウィンドウの外へドラッグで出せる
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
