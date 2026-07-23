@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 256,
+  "textureHeight": 128,
+  "keepColor": true,
+  "sprites": {
+    "sentouki": {
+      "x": 0,
+      "y": 0,
+      "width": 140,
+      "height": 80,
+      "originalWidth": 128,
+      "originalHeight": 128,
+      "offsetX": -4,
+      "offsetY": 24
+    }
+  }
+}

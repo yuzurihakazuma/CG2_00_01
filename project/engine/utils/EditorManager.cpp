@@ -28,9 +28,42 @@
 #include "engine/camera/DebugCamera.h"
 #include "engine/math/Matrix4x4.h"
 #include <cmath>
+#include <algorithm>
+#include <filesystem>
 #ifdef USE_IMGUI
 #include "externals/ImGuizmo/ImGuizmo.h"
 #endif
+
+namespace {
+
+// SDF素材（画像/フォント/フォルダ。Shift押下時は .obj も）を resources/sdf_inbox へコピーする。
+// SDFWatcher が sdf_inbox を監視していて、自動変換→エンジンへ反映まで面倒を見てくれる。
+// SDF行きとして受け取ったら true（.obj/.gltf/.json は従来どおりモデル/シーン取込に回す）
+bool RouteDropToSdf(const std::string& path, bool shiftHeld){
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path p(path);
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+        [](unsigned char c){ return ( char ) std::tolower(c); });
+
+    const bool isDir = fs::is_directory(p, ec);
+    bool target = isDir || ext == ".png" || ext == ".ttf" || ext == ".otf";
+    if ( shiftHeld && ext == ".obj" ) { target = true; } // Shift+ドロップで .obj は3D SDF行き
+    if ( !target ) { return false; }
+
+    const fs::path inbox = "resources/sdf_inbox";
+    fs::create_directories(inbox, ec);
+    if ( isDir ) {
+        fs::copy(p, inbox / p.filename(),
+            fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+    } else {
+        fs::copy_file(p, inbox / p.filename(), fs::copy_options::overwrite_existing, ec);
+    }
+    return !ec;
+}
+
+} // namespace
 
 // シングルトンインスタンスの取得
 EditorManager* EditorManager::GetInstance(){
@@ -96,11 +129,15 @@ void EditorManager::Update(){
     }
 
     // エクスプローラーからD&Dされたファイルを取り込む（エディタ非表示でも受け付ける）
+    //   画像/フォント/フォルダ → SDFWatcher へ中継（Shift押下なら .obj も 3D SDF行き）
+    //   .obj/.gltf/.json      → 従来どおりモデル/シーンとして取込
     {
         std::vector<std::string> dropped = WindowProc::GetInstance()->PopDroppedFiles();
-        if ( !dropped.empty() && blenderImporter_ ) {
+        if ( !dropped.empty() ) {
+            const bool shiftHeld = ImGui::GetIO().KeyShift;
             for ( const auto& file : dropped ) {
-                blenderImporter_->HandleDroppedFile(file);
+                if ( RouteDropToSdf(file, shiftHeld) ) { continue; }
+                if ( blenderImporter_ ) { blenderImporter_->HandleDroppedFile(file); }
             }
         }
     }

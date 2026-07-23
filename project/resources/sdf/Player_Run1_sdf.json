@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 512,
+  "textureHeight": 512,
+  "keepColor": true,
+  "sprites": {
+    "Player_Run1": {
+      "x": 0,
+      "y": 0,
+      "width": 304,
+      "height": 512,
+      "originalWidth": 512,
+      "originalHeight": 512,
+      "offsetX": 104,
+      "offsetY": 8
+    }
+  }
+}

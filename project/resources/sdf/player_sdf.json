@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 128,
+  "textureHeight": 128,
+  "keepColor": true,
+  "sprites": {
+    "player": {
+      "x": 0,
+      "y": 0,
+      "width": 80,
+      "height": 68,
+      "originalWidth": 64,
+      "originalHeight": 64,
+      "offsetX": -8,
+      "offsetY": -4
+    }
+  }
+}

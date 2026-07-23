@@ -1,28 +1,44 @@
 {
+    "cameraZones": [],
     "enemies": [
         {
-            "distance": 8.088627815246582,
+            "distance": 5.255522727966309,
+            "patrol": 0,
             "railIndex": 0,
             "type": 0
         },
         {
             "distance": 0.0,
+            "patrol": 0,
             "railIndex": 0,
             "type": 0
         },
         {
-            "distance": 16.177255630493164,
+            "distance": 12.045768737792969,
+            "patrol": 0,
             "railIndex": 0,
             "type": 0
         },
         {
             "distance": 0.0,
+            "patrol": 0,
             "railIndex": 2,
             "type": 0
         }
     ],
+    "goalNodeIndex": 0,
+    "goalRailIndex": -1,
     "name": "",
     "objects": [],
+    "railEndPlazas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
     "railGroundTypes": [
         0,
         1,
@@ -31,6 +47,33 @@
         0,
         0,
         2
+    ],
+    "railGroups": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+    ],
+    "railGuideRails": [
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1,
+        -1
+    ],
+    "railLineModes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
     ],
     "railLines": [
         [
@@ -168,6 +211,24 @@
             ]
         ]
     ],
+    "railMotionPhases": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
+    "railMotionTypes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
     "railMotions": [
         [
             0.0,
@@ -252,6 +313,33 @@
             0
         ]
     ],
+    "railOneWay": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
+    "railRoadModes": [
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    ],
+    "railSpeedMuls": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+    ],
     "railTypes": [
         -1,
         -1,
@@ -269,5 +357,7 @@
         1,
         1,
         1
-    ]
+    ],
+    "startNodeIndex": 0,
+    "startRailIndex": 0
 }

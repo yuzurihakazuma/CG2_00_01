@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 1024,
+  "textureHeight": 1024,
+  "keepColor": true,
+  "sprites": {
+    "T06NDSZ5MHS-U06T5K054BV-30c0fdef3fdb-512": {
+      "x": 0,
+      "y": 0,
+      "width": 528,
+      "height": 528,
+      "originalWidth": 512,
+      "originalHeight": 512,
+      "offsetX": -8,
+      "offsetY": -8
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "spread": 8,
+  "padding": 8,
+  "textureWidth": 128,
+  "textureHeight": 128,
+  "keepColor": true,
+  "sprites": {
+    "baketukurai": {
+      "x": 0,
+      "y": 0,
+      "width": 36,
+      "height": 41,
+      "originalWidth": 32,
+      "originalHeight": 32,
+      "offsetX": -2,
+      "offsetY": -6
+    }
+  }
+}
