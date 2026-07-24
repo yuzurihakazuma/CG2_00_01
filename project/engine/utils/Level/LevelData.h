@@ -21,6 +21,9 @@ struct LevelEnemyData{
     int   railIndex = 0;
     float distance = 0.0f;
     int   patrol = 0; // 1=レールを往復パトロール（旧データはフィールド無し=0で動かない）
+    float patrolMin = -1.0f; // 巡回範囲の始点(m)。-1=レール全体を往復
+    float patrolMax = -1.0f; // 巡回範囲の終点(m)。-1=レール全体を往復
+    bool operator==(const LevelEnemyData&) const = default; // 未保存判定（dirty）用
 };
 
 // レール上のカメラ演出ゾーン1個分のデータ（マップ保存用）。
@@ -50,6 +53,7 @@ struct CoinData {
     int   rail   = 0;    // 配置先レール番号
     float dist   = 0.0f; // レール上の距離(m)
     float height = 1.0f; // レール線からの高さ(m)
+    bool operator==(const CoinData&) const = default; // Undo履歴の変化検知用
 };
 
 struct LevelData{

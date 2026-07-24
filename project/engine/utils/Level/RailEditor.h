@@ -54,6 +54,7 @@ public:
     int GetGoalRail() const{ return data_->goalRailIndex; }
     int GetGoalNode() const{ return data_->goalNodeIndex; }
     const std::vector<LevelCameraZone>& GetCameraZones() const{ return data_->cameraZones; }
+    const std::vector<CoinData>& GetCoins() const{ return data_->coins; } // 収集物（コイン）の配置
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }
@@ -324,6 +325,7 @@ private:
         std::vector<std::vector<Vector3>> lines;
         std::vector<int>     types;
         std::vector<Vector4> motions; // 動くレール設定も履歴に含める
+        std::vector<CoinData> coins;  // コイン配置も履歴に含める（レール削除のUndoでズレないように）
     };
     std::vector<RailSnapshot> undoStack_;
     std::vector<RailSnapshot> redoStack_;
@@ -334,6 +336,7 @@ private:
     std::vector<std::vector<Vector3>> initialLines_;
     std::vector<int>     initialTypes_;
     std::vector<Vector4> initialMotions_;
+    std::vector<CoinData> initialCoins_;
     bool hasInitial_ = false;
     void CommitIfStable();          // マウス非操作時に変化を検知して履歴へ積む
     void RestoreSnapshot(const RailSnapshot& s); // 状態を復元

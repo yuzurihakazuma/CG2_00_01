@@ -5,7 +5,7 @@
 #include <cmath>
 
 namespace {
-    const float kCoinRadius  = 0.9f;  // 取得判定の半径(m)
+    const float kCoinRadius  = 1.2f;  // 取得判定の半径(m)。高さ1mの標準コインを走ったまま取れる値
     const float kSpinSpeed   = 2.5f;  // 回転速度(rad/s)
     const float kBobAmount   = 0.08f; // 上下のふわふわ(m)
 }

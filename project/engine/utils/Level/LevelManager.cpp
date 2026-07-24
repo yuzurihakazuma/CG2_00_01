@@ -168,6 +168,8 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
         enemyJson["railIndex"] = enemy.railIndex;
         enemyJson["distance"]  = enemy.distance;
         enemyJson["patrol"]    = enemy.patrol;
+        enemyJson["patrolMin"] = enemy.patrolMin;
+        enemyJson["patrolMax"] = enemy.patrolMax;
         enemiesArray.push_back(enemyJson);
     }
     rootJson["enemies"] = enemiesArray;
@@ -380,6 +382,8 @@ LevelData LevelManager::Load(const std::string& fileName){
             enemy.railIndex = enemyJson.value("railIndex", 0);
             enemy.distance  = enemyJson.value("distance", 0.0f);
             enemy.patrol    = enemyJson.value("patrol", 0); // 旧データは0=動かない
+            enemy.patrolMin = enemyJson.value("patrolMin", -1.0f); // 旧データは-1=レール全体
+            enemy.patrolMax = enemyJson.value("patrolMax", -1.0f);
             levelData.enemies.push_back(enemy);
         }
     }

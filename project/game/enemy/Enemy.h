@@ -26,8 +26,10 @@ public:
     ~Enemy();
 
     // 種類・乗せるレール番号・初期位置(レール上の距離)を指定して生成する。
-    //   patrol=true の時だけレールを往復する（既定は置いた場所に留まる）
-    void Initialize(EnemyType type, int railIndex, float distance, bool patrol = false);
+    //   patrol=true の時だけレールを往復する（既定は置いた場所に留まる）。
+    //   patrolMin/Max で往復範囲を距離(m)で絞れる（-1=レール全体）
+    void Initialize(EnemyType type, int railIndex, float distance, bool patrol = false,
+                    float patrolMin = -1.0f, float patrolMax = -1.0f);
 
     // レール上を移動（パトロールON時のみ往復）。位置・向き・コライダーを更新する
     void Update(const std::vector<SplineRail>& rails, float dt);
@@ -63,6 +65,8 @@ private:
     float     dir_       = 1.0f;    // 進行方向(+1/-1)
     float     speed_     = 2.0f;    // 移動速度 (m/s)
     bool      patrol_    = false;   // true=レールを往復 / false=その場に留まる（既定）
+    float     patrolMin_ = -1.0f;   // 往復範囲の始点(m)。-1=レール全体
+    float     patrolMax_ = -1.0f;   // 往復範囲の終点(m)。-1=レール全体
     bool      alive_     = true;
 
     // 飲み込みアニメ用

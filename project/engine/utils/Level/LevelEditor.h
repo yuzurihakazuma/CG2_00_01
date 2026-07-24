@@ -47,7 +47,12 @@ public:
     RailEditor* GetRailEditor() const{ return railEditor_.get(); }
 
     // --- 敵の配置（マップと一緒に保存/読込する）。シーンの EnemyEditor と同期する ---
-    void SetEnemyData(const std::vector<LevelEnemyData>& e){ levelData_.enemies = e; }
+    void SetEnemyData(const std::vector<LevelEnemyData>& e){
+        // 内容が変わった時だけ未保存マーク（これが無いと敵の配置だけでは自動保存が発動せず、
+        // 「敵を置いたのに保存されていない」事故になる）
+        if ( levelData_.enemies != e ) { dirty_ = true; }
+        levelData_.enemies = e;
+    }
     const std::vector<LevelEnemyData>& GetEnemyData() const{ return levelData_.enemies; }
     // マップを読み込んだ回数（増えたら＝新しいマップが読み込まれた合図）
     int GetMapLoadVersion() const{ return mapLoadVersion_; }

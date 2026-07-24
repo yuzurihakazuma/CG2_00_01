@@ -97,7 +97,26 @@ public:
 	const std::vector<int>& GetEditorRailRoadModes() const;
 	const std::vector<int>& GetEditorRailEndPlazas() const; // 端の丸広場（bit0=始点/bit1=終点）
 	const std::vector<int>& GetEditorRailGuideRails() const; // ガイドレール追従の対象（-1=なし）
+	const std::vector<CoinData>& GetEditorCoins() const; // 収集物（コイン）の配置
 	bool GetEditorRailMotionPreview() const; // 動くレールをエディタ中も再生するか
+	// デモ展示（回転ブロック/オーラ/SDF卵/見本の人形）を表示するか（表示メニューでON/OFF）
+	bool IsDemoVisible() const{ return showDemo_; }
+	// レールエディタで選択中のノード（レール番号＋ワールド座標）。
+	//   敵エディタの「選択ノードの位置に配置」用。未選択なら false
+	bool GetEditorSelectedNode(int& outRail, Vector3& outPos) const;
+
+	// Game View 上のマウス情報（ゲーム側の配置エディタが独自ピッキングをするための橋渡し）
+	struct GameViewMouse {
+		bool      hovered = false;     // マウスが Game View 画像の上にあるか
+		bool      gizmoActive = false; // ギズモ操作中（クリックを奪わないため）
+		Vector2   mousePos {};         // マウスのスクリーン座標
+		Vector2   imgMin {};           // Game View 画像の左上（スクリーン座標）
+		Vector2   imgSize {};          // Game View 画像のサイズ
+		Matrix4x4 viewProj {};         // エディタ表示に使ったカメラの VP 行列
+	};
+	const GameViewMouse& GetGameViewMouse() const{ return gameViewMouse_; }
+	// ゲーム側がドラッグ操作中（敵の直接ドラッグ等）にレール編集のマウス操作を止める
+	void SetExternalDragActive(bool active){ externalDragActive_ = active; }
 	// ジョイント表示モード（0=エディタのみ/1=常に/2=非表示。RoadMesh が参照）
 	int GetEditorJointVisible() const;
 	// レールノードをギズモ/フリーハンドでドラッグ中か（ドラッグ中は道の再生成を間引く）
@@ -164,6 +183,15 @@ private:
     // Blenderインポータのパネル表示（普段は邪魔なので非表示。表示メニューでON/OFF。
     //   非表示でもエクスプローラーからのD&Dインポート等の機能自体は生きている）
     bool showBlenderImporter_ = false;
+
+    // デモ展示（回転ブロック/オーラ/SDF卵/見本の人形）と調整項目ウィンドウの表示。
+    //   マップ制作には不要なので既定OFF。表示メニューでON/OFF（GamePlaySceneが参照）
+    bool showDemo_ = false;
+    bool showGlobalVars_ = false;
+
+    // Game View マウス情報（毎フレーム更新。ゲーム側の配置エディタへの橋渡し）
+    GameViewMouse gameViewMouse_ {};
+    bool externalDragActive_ = false; // ゲーム側がドラッグ中（レール編集のマウス操作を止める）
 
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;

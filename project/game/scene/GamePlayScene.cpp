@@ -97,6 +97,15 @@ void GamePlayScene::LoadResources(){
 		fxModel->SetTexture("resources/block/white1x1.png");
 	}
 
+	// 収集物（コイン）用の金色の球。fxSphere と同じ手作りモデル＋白テクスチャ＋色だけで完結
+	modelManager->CreateSphereModel("coin", 12);
+	if ( auto* coinModel = modelManager->FindModel("coin") ) {
+		coinModel->SetTexture("resources/block/white1x1.png");
+		if ( coinModel->GetMaterial() ) {
+			coinModel->GetMaterial()->color = { 1.0f, 0.85f, 0.2f, 1.0f };
+		}
+	}
+
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
 	// ※ 卵の煙／殻の飛び散りは加算パーティクルだと明るい背景で見えないため、
@@ -215,6 +224,15 @@ void GamePlayScene::SetupGameplay(){
 	eggCountText_->SetOutlineWidth(0.22f);
 	eggCountText_->SetOutlineColor({ 0.05f, 0.12f, 0.05f, 1.0f });
 
+	// コイン取得数（SDFText。卵HUDの下に金色で「●n/全体」）
+	coinCountText_ = std::make_unique<SDFText>();
+	coinCountText_->Initialize();
+	coinCountText_->SetFontSize(30.0f);
+	coinCountText_->SetPosition(36.0f, 104.0f);
+	coinCountText_->SetColor({ 1.0f, 0.85f, 0.25f, 1.0f });
+	coinCountText_->SetOutlineWidth(0.22f);
+	coinCountText_->SetOutlineColor({ 0.25f, 0.15f, 0.02f, 1.0f });
+
 	// GPUパーティクル基盤の初期化（エミッターのデモは DemoShowcase が持つ）
 	GPUParticleManager::GetInstance()->Initialize(
 		DirectXCommon::GetInstance(), SrvManager::GetInstance(), "resources/uvChecker.png");
@@ -306,7 +324,8 @@ void GamePlayScene::SyncRailsFromEditor(bool simple){
 		// マップ保存用データにも張り直した距離を反映（保存した時に位置がズレないように）
 		std::vector<LevelEnemyData> save;
 		for ( const auto& spawnData : spawnDatas ) {
-			save.push_back({ static_cast<int>( spawnData.type ), spawnData.railIndex, spawnData.distance, spawnData.patrol ? 1 : 0 });
+			save.push_back({ static_cast<int>( spawnData.type ), spawnData.railIndex, spawnData.distance, spawnData.patrol ? 1 : 0,
+			                 spawnData.patrolMin, spawnData.patrolMax });
 		}
 		EditorManager::GetInstance()->SetEditorEnemyData(save);
 	}
@@ -319,6 +338,9 @@ void GamePlayScene::SyncRailsFromEditor(bool simple){
 
 	// カメラ演出ゾーンを PlayCameraController へ（ノード番号→距離の変換込み）
 	camCtrl_.Sync(EditorManager::GetInstance()->GetEditorCameraZones(), railField_.GetRails());
+
+	// 収集物（コイン）をエディタの配置から作り直す
+	coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
 }
 
 // エディタに配置された敵情報（テンプレート）に基づいて敵の実体を生成する
@@ -376,14 +398,14 @@ void GamePlayScene::SyncFromEditors(){
 		if ( mapLoadVersion != lastMapLoadVersion_ ) {
 			lastMapLoadVersion_ = mapLoadVersion;
 			const auto& saved = editorManager->GetEditorEnemyData();
-			// マップに敵データがある時だけ復元。無い時は今の配置を保持（リリースでも最低1体出す）。
-			if ( !saved.empty() ) {
-				std::vector<EnemySpawnData> spawnDatas;
-				for ( const auto& enemyData : saved ) {
-					spawnDatas.push_back({ static_cast<EnemyType>( enemyData.type ), enemyData.railIndex, enemyData.distance, enemyData.patrol != 0 });
-				}
-				enemyEditor_->SetSpawnDatas(spawnDatas); // changed_ が立つ → 下で SpawnEnemies される
+			// 敵ゼロのマップでも必ず反映する（以前は空だとスキップ→前マップの敵が残留し、
+			// そのまま保存すると別マップの敵が紛れ込むバグがあった）
+			std::vector<EnemySpawnData> spawnDatas;
+			for ( const auto& enemyData : saved ) {
+				spawnDatas.push_back({ static_cast<EnemyType>( enemyData.type ), enemyData.railIndex, enemyData.distance, enemyData.patrol != 0,
+				                       enemyData.patrolMin, enemyData.patrolMax });
 			}
+			enemyEditor_->SetSpawnDatas(spawnDatas); // changed_ が立つ → 下で SpawnEnemies される
 		}
 	}
 
@@ -391,7 +413,8 @@ void GamePlayScene::SyncFromEditors(){
 	if ( enemyEditor_ && enemyEditor_->ConsumeChanged() ) {
 		std::vector<LevelEnemyData> save;
 		for ( const auto& spawnData : enemyEditor_->GetSpawnDatas() ) {
-			save.push_back({ static_cast<int>( spawnData.type ), spawnData.railIndex, spawnData.distance, spawnData.patrol ? 1 : 0 });
+			save.push_back({ static_cast<int>( spawnData.type ), spawnData.railIndex, spawnData.distance, spawnData.patrol ? 1 : 0,
+			                 spawnData.patrolMin, spawnData.patrolMax });
 		}
 		editorManager->SetEditorEnemyData(save);
 		SpawnEnemies();
@@ -438,10 +461,12 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 		eggSystem_.Initialize();
 		aimThrow_.Reset(); // 構え状態を解除
 		swallow_.Reset();  // 舌アクションを解除（敵が作り直されるので target_ を確実に手放す）
+		coinSystem_.ResetPlay(); // コインを全部復活させる
 	}
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
 		railField_.ResetMotion();
+		coinSystem_.ResetPlay(); // 取得済みコインを復活（エディタで配置が見えなくならないように）
 		// カメラ関連の後始末：
 		//   ・回転フリーズ中に Stop しても時間が止まったままにならないよう Reset（内部で TimeScale を戻す）
 		//   ・ゾーンで視野角を変えたまま戻るとエディタ画面が広角/望遠のままになるので標準に戻す
@@ -507,12 +532,15 @@ void GamePlayScene::UpdatePlayMode(){
 	}
 
 	// デモ入力（Space=BGM+HitEffect / P=パーティクル）と HitEffect の進行は DemoShowcase へ
-	demo_.UpdatePlay(input, camera_.get(), textures_, bgmFile_);
+	//   デモ表示OFF（表示メニュー）の間は入力ごと無効
+	if ( EditorManager::GetInstance()->IsDemoVisible() ) {
+		demo_.UpdatePlay(input, camera_.get(), textures_, bgmFile_);
 
-	// アニメーションの進行
-	if ( skinnedObj_ && skinnedAnimTrack_.duration > 0.0f ) {
-		skinnedAnimTime_ += 1.0f / 60.0f;
-		if ( skinnedAnimTime_ > skinnedAnimTrack_.duration ) { skinnedAnimTime_ = 0.0f; }
+		// アニメーションの進行（見本の人形）
+		if ( skinnedObj_ && skinnedAnimTrack_.duration > 0.0f ) {
+			skinnedAnimTime_ += 1.0f / 60.0f;
+			if ( skinnedAnimTime_ > skinnedAnimTrack_.duration ) { skinnedAnimTime_ = 0.0f; }
+		}
 	}
 
 	// エフェクトの更新（stompEffect は timeScale 適用 deltaTime → ヒットストップで一緒に止まる）
@@ -563,6 +591,10 @@ void GamePlayScene::UpdateSceneVisuals(){
 
 	// SDF溶け道：プレイヤーとの距離でパネルの現れ/溶けを更新（エディタ中も動きが見える）
 	dissolveRoad_.Update(player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f }, 1.0f / 60.0f);
+
+	// 収集物（コイン）：回転・浮遊はエディタ中も見せる。取得判定はプレイ中のみ
+	coinSystem_.Update(player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f },
+	                   currentMode == EngineMode::Play, 1.0f / 60.0f);
 
 	// プレイヤーの見た目（恐竜マスコット player.obj）：
 	//   Play中はプレイヤーに追従、Edit中はスタート地点プレビュー。
@@ -677,8 +709,8 @@ void GamePlayScene::UpdateSceneVisuals(){
 	}
 
 	// スキンメッシュ（Skinning機能の展示）：定位置でその場歩き。
-	//   プレイヤーの見た目は恐竜マスコットに交代したが、スキニング表示自体は残す
-	if ( skinnedObj_ ) {
+	//   デモ表示OFF（表示メニュー）の間は更新も描画もしない
+	if ( skinnedObj_ && EditorManager::GetInstance()->IsDemoVisible() ) {
 		skinnedObj_->SetPlaybackSpeed(1.0f);
 		skinnedObj_->Update();
 	}
@@ -715,6 +747,12 @@ void GamePlayScene::UpdateSceneVisuals(){
 			if ( belly > 0 ) { countText += "（＋" + std::to_string(belly) + "）"; }
 			eggCountText_->SetText(countText);
 		}
+		// コイン取得数（コインが1枚も置かれていないマップでは出さない）
+		if ( coinCountText_ ) {
+			coinCountText_->SetText(coinSystem_.TotalCount() > 0
+				? "コイン " + std::to_string(coinSystem_.CollectedCount()) + "/" + std::to_string(coinSystem_.TotalCount())
+				: "");
+		}
 	}
 
 	PostEffect::GetInstance()->Update();
@@ -723,7 +761,10 @@ void GamePlayScene::UpdateSceneVisuals(){
 	ParticleManager::GetInstance()->Update(camera_.get());
 
 	// 展示物（オーラ・回転キューブ・SDF卵・ブロック群・GPUパーティクル）の見た目更新
-	demo_.UpdateVisuals(input, camera_.get());
+	//   デモ表示OFF（表示メニュー）の間はスキップ
+	if ( EditorManager::GetInstance()->IsDemoVisible() ) {
+		demo_.UpdateVisuals(input, camera_.get());
+	}
 }
 
 
@@ -744,13 +785,15 @@ void GamePlayScene::Draw(){
 	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(9, textures_["skybox"].srvIndex);
 
 	// 1. 先に「不透明」なものを全部描き切る！！！
+	const bool demoVisible = EditorManager::GetInstance()->IsDemoVisible(); // デモ展示のON/OFF（表示メニュー）
 	for ( auto& obj : object3ds_ ) { obj->Draw(); }
-	demo_.DrawOpaque();                         // 展示物（回転キューブ）
+	if ( demoVisible ) { demo_.DrawOpaque(); }  // 展示物（回転キューブ）
 	if ( playerObj_ ) { playerObj_->Draw(); }   // プレイヤー（恐竜マスコット）
 	if ( heldEggVisible_ && heldEggObj_ ) { heldEggObj_->Draw(); } // 構え中の手持ち卵
-	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
+	if ( demoVisible && skinnedObj_ ) { skinnedObj_->Draw(); } // 見本の人形（Skinning展示）
 	enemyMgr_.Draw();                           // 敵
 	eggSystem_.Draw();                          // ヨッシーの卵
+	coinSystem_.Draw();                         // 収集物（コイン）
 	swallow_.Draw();                            // 舌（伸ばす/引き込む動作中だけ）
 
 	// レール下の道メッシュ（クラフト風の地面）。Edit/Play どちらでも見える「本番の見た目」
@@ -765,7 +808,7 @@ void GamePlayScene::Draw(){
 	EditorManager::GetInstance()->Draw();
 
 	// --- インスタンシングの3D描画（展示物：ブロック一括）---
-	demo_.DrawInstanced(camera_.get());
+	if ( demoVisible ) { demo_.DrawInstanced(camera_.get()); }
 
 	/*if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
@@ -774,7 +817,7 @@ void GamePlayScene::Draw(){
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 	// ⭕️ 3. 最後に「透明・加算合成」のものを描く！！！（順番超大事）
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-	demo_.DrawAdditive(); // 展示物（オーラ2種＋SpaceデモのHitEffect）
+	if ( demoVisible ) { demo_.DrawAdditive(); } // 展示物（オーラ2種＋SpaceデモのHitEffect）
 	combat_.Draw(); // 踏みつけ/命中の立体エフェクト
 
 	// --- パーティクル描画 ---
@@ -786,7 +829,7 @@ void GamePlayScene::Draw(){
 
 	// --- SDFボリューム（レイマーチング）---
 	//   専用PSOに切り替えるので、通常のObj3d描画が全部終わった後に描く
-	demo_.DrawSdf(commandList);            // 展示物（SDF卵のエロージョン/モーフデモ）
+	if ( demoVisible ) { demo_.DrawSdf(commandList); } // 展示物（SDF卵のエロージョン/モーフデモ）
 	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
 	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
 	dissolveRoad_.Draw(commandList);       // SDF溶け道（近づくと現れる道パネル）
@@ -844,6 +887,10 @@ void GamePlayScene::Draw(){
 		if ( eggCountText_ ) {
 			SDFManager::GetInstance()->DrawTextItem(commandList, *eggCountText_, "jpdot");
 		}
+		// コイン取得数（コインがあるマップだけ文字が入っている）
+		if ( coinCountText_ && coinSystem_.TotalCount() > 0 ) {
+			SDFManager::GetInstance()->DrawTextItem(commandList, *coinCountText_, "jpdot");
+		}
 	}
 
 	TextManager::GetInstance()->Draw();
@@ -860,8 +907,8 @@ void GamePlayScene::DrawDebugUI(){
 
 	TextManager::GetInstance()->DrawDebugUI();
 
-	// 展示物のパネル（SDF卵のエロージョン操作）
-	demo_.DrawImGui();
+	// 展示物のパネル（SDF卵のエロージョン操作）。デモ表示OFFの間はウィンドウごと出さない
+	if ( EditorManager::GetInstance()->IsDemoVisible() ) { demo_.DrawImGui(); }
 
 	// ※ヨッシーHUD（おなか/たまご数・操作説明の仮表示）は一旦削除した。
 	//   本実装のUI（スプライト等）を作る時に復活させる。
@@ -915,6 +962,7 @@ void GamePlayScene::DrawDebugUI(){
 		if ( ImGui::Button("道を再生成") ) {
 			roadMesh_.Build(railField_.GetRails(), camera_.get());
 			dissolveRoad_.Build(railField_.GetRails());
+			coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
 		}
 		ImGui::Text("SDF溶け道: チェーン点 %d / 描画チャンク %d", dissolveRoad_.PieceCount(), dissolveRoad_.ActiveCount());
 		ImGui::SetNextItemWidth(160.0f);
@@ -968,7 +1016,141 @@ void GamePlayScene::DrawDebugUI(){
 
 	// 敵配置用エディタのUIウィンドウを描画
 	if ( enemyEditor_ ) {
-		enemyEditor_->DrawWindow(railField_.GetRails());
+		// レールエディタで選択中のノード位置（レール番号＋距離）を「選択ノードに配置」用に渡す
+		int pickRail = -1; float pickDist = 0.0f; bool hasPick = false;
+		Vector3 pickNodePos {};
+		if ( EditorManager::GetInstance()->GetEditorSelectedNode(pickRail, pickNodePos) ) {
+			const auto& rails = railField_.GetRails();
+			if ( pickRail >= 0 && pickRail < ( int ) rails.size() && rails[pickRail].nodes.size() >= 2 ) {
+				pickDist = rails[pickRail].GetClosestDistance(pickNodePos);
+				hasPick = true;
+			}
+		}
+		enemyEditor_->DrawWindow(railField_.GetRails(), pickRail, pickDist, hasPick);
+
+		// --- Game View 連携（エディット中のみ）：色分けピン・巡回範囲・直接ドラッグ ---
+		if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit ) {
+			const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
+			const auto& rails = railField_.GetRails();
+			auto& spawnDatas = enemyEditor_->MutableSpawnDatas();
+
+			// 敵のワールド位置（レール上＋少し浮かせた高さ）
+			auto enemyWorldPos = [&](const EnemySpawnData& spawnData, Vector3& out) -> bool {
+				if ( spawnData.railIndex < 0 || spawnData.railIndex >= ( int ) rails.size() ) return false;
+				if ( rails[spawnData.railIndex].nodes.size() < 2 ) return false;
+				Vector3 p = rails[spawnData.railIndex].GetPositionByDistance(spawnData.distance);
+				out = { p.x, p.y + 0.5f, p.z };
+				return true;
+			};
+			// world→Game View スクリーン座標
+			auto projectToScreen = [&](const Vector3& worldPos, Vector2& out) -> bool {
+				Vector2 ndc;
+				if ( !WorldToNdc(worldPos, gv.viewProj, ndc) ) return false;
+				out.x = gv.imgMin.x + ( ndc.x * 0.5f + 0.5f ) * gv.imgSize.x;
+				out.y = gv.imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * gv.imgSize.y;
+				return true;
+			};
+
+			// 1) 種類別の色分けピン（Zako=赤 / Strong=紫）＋パトロールの巡回範囲（橙線）
+			for ( const auto& spawnData : spawnDatas ) {
+				Vector3 wp;
+				if ( !enemyWorldPos(spawnData, wp) ) continue;
+				Vector4 pinColor = ( spawnData.type == EnemyType::Zako )
+					? Vector4 { 1.0f, 0.35f, 0.25f, 1.0f }   // 赤（雑魚）
+					: Vector4 { 0.75f, 0.4f, 1.0f, 1.0f };   // 紫（強敵）
+				DebugDraw::GetInstance()->Line({ wp.x, wp.y + 0.4f, wp.z }, { wp.x, wp.y + 1.1f, wp.z }, pinColor);
+				DebugDraw::GetInstance()->Sphere({ wp.x, wp.y + 1.2f, wp.z }, 0.16f, pinColor, 10);
+
+				// 巡回範囲：レールに沿った橙線（範囲指定なしのパトロールはレール全体）
+				if ( spawnData.patrol ) {
+					const SplineRail& rail = rails[spawnData.railIndex];
+					float len = rail.GetLength();
+					float lo = ( spawnData.patrolMin >= 0.0f ) ? ( std::min )( spawnData.patrolMin, len ) : 0.0f;
+					float hi = ( spawnData.patrolMax >= 0.0f ) ? std::clamp(spawnData.patrolMax, lo, len) : len;
+					int steps = std::clamp(( int ) ( ( hi - lo ) / 0.5f ), 1, 200);
+					Vector3 prev = rail.GetPositionByDistance(lo);
+					for ( int s = 1; s <= steps; ++s ) {
+						Vector3 cur = rail.GetPositionByDistance(lo + ( hi - lo ) * ( float ) s / ( float ) steps);
+						DebugDraw::GetInstance()->Line({ prev.x, prev.y + 0.15f, prev.z },
+						                               { cur.x,  cur.y + 0.15f,  cur.z }, { 1.0f, 0.6f, 0.15f, 1.0f });
+						prev = cur;
+					}
+				}
+			}
+
+			// 2) マウス直下の敵を探す（スクリーン距離16px以内。ドラッグのつかみ判定）
+			int mouseOverEnemy = -1;
+			if ( gv.hovered && !gv.gizmoActive && enemyDragIdx_ < 0 ) {
+				float bestPick = 16.0f;
+				for ( int i = 0; i < ( int ) spawnDatas.size(); ++i ) {
+					Vector3 wp; if ( !enemyWorldPos(spawnDatas[i], wp) ) continue;
+					Vector2 sp; if ( !projectToScreen(wp, sp) ) continue;
+					float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+					float d = std::sqrt(dx * dx + dy * dy);
+					if ( d < bestPick ) { bestPick = d; mouseOverEnemy = i; }
+				}
+			}
+			if ( mouseOverEnemy >= 0 ) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); }
+
+			// 3) つかむ → ドラッグでレール上を移動（別レールへの乗せ替えも可）→ 離して確定
+			if ( mouseOverEnemy >= 0 && ImGui::IsMouseClicked(0) ) {
+				enemyDragIdx_ = mouseOverEnemy;
+				enemyEditor_->SetSelectedEntry(mouseOverEnemy);
+			}
+			if ( enemyDragIdx_ >= 0 ) {
+				if ( enemyDragIdx_ >= ( int ) spawnDatas.size() ) {
+					enemyDragIdx_ = -1; // ドラッグ中に削除された等
+				} else if ( ImGui::IsMouseDown(0) ) {
+					// マウスにいちばん近いレール上の点を探す（0.5m刻みのサンプリング）
+					int bestRail = -1; float bestDist = 0.0f; float bestPx = 40.0f;
+					for ( int rr = 0; rr < ( int ) rails.size(); ++rr ) {
+						const SplineRail& rail = rails[rr];
+						if ( rail.nodes.size() < 2 ) continue;
+						float len = rail.GetLength();
+						int steps = std::clamp(( int ) ( len / 0.5f ), 2, 400);
+						for ( int s = 0; s <= steps; ++s ) {
+							float dist = len * ( float ) s / ( float ) steps;
+							Vector3 wp = rail.GetPositionByDistance(dist);
+							Vector2 sp; if ( !projectToScreen({ wp.x, wp.y + 0.5f, wp.z }, sp) ) continue;
+							float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+							float d = std::sqrt(dx * dx + dy * dy);
+							if ( d < bestPx ) { bestPx = d; bestRail = rr; bestDist = dist; }
+						}
+					}
+					if ( bestRail >= 0 ) {
+						spawnDatas[enemyDragIdx_].railIndex = bestRail;
+						spawnDatas[enemyDragIdx_].distance  = bestDist;
+					}
+					// ゴースト表示（確定はマウスを離した時。ドラッグ中の毎フレームリスポーンを避ける）
+					Vector3 wp;
+					if ( enemyWorldPos(spawnDatas[enemyDragIdx_], wp) ) {
+						DebugDraw::GetInstance()->Sphere(wp, 0.9f, { 0.3f, 1.0f, 0.6f, 1.0f });
+					}
+					ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+				} else {
+					// マウスを離した：確定（リスポーン＋マップ保存データへ反映）
+					enemyEditor_->MarkChanged();
+					enemyDragIdx_ = -1;
+				}
+			}
+
+			// 4) 一覧でホバー/選択中の敵のハイライト（黄=ホバー / 水色=選択）
+			auto drawEnemyMarker = [&](int idx, const Vector4& color){
+				if ( idx < 0 || idx >= ( int ) spawnDatas.size() ) return;
+				Vector3 wp;
+				if ( enemyWorldPos(spawnDatas[idx], wp) ) {
+					DebugDraw::GetInstance()->Sphere(wp, 0.8f, color);
+				}
+			};
+			drawEnemyMarker(enemyEditor_->GetHoveredEntry(),  { 1.0f, 1.0f, 0.2f, 1.0f });
+			drawEnemyMarker(enemyEditor_->GetSelectedEntry(), { 0.3f, 0.8f, 1.0f, 1.0f });
+
+			// 敵の上にいる間/ドラッグ中はレール編集のマウス操作を止める（両方掴む事故防止）
+			EditorManager::GetInstance()->SetExternalDragActive(enemyDragIdx_ >= 0 || mouseOverEnemy >= 0);
+		} else {
+			enemyDragIdx_ = -1;
+			EditorManager::GetInstance()->SetExternalDragActive(false);
+		}
 	}
 
 #endif

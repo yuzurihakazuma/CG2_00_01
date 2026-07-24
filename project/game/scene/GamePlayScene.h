@@ -20,6 +20,7 @@
 #include "game/player/SwallowAbility.h"
 #include "game/player/AimThrowController.h"
 #include "game/stage/StageFlow.h"
+#include "game/stage/CoinSystem.h"
 #include "game/enemy/Enemy.h"
 #include "game/enemy/EnemyEditor.h"
 #include "game/enemy/EnemyManager.h"
@@ -155,6 +156,9 @@ private: // メンバ変数
 	// --- ステージ進行（ゴール判定・表示。処理は StageFlow へ分離）---
 	StageFlow stageFlow_;
 
+	// --- 収集物（コイン）。エディタで配置され、プレイ中に触れると取得 ---
+	CoinSystem coinSystem_;
+
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;
 	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
@@ -181,7 +185,13 @@ private: // メンバ変数
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;
 
+	// Game View で直接ドラッグ中の敵（-1=なし。エディット中の敵つまみ移動）
+	int enemyDragIdx_ = -1;
+
 	// --- 卵保持数の数字表示（SDFText。HUDアイコン列の右に「×N」）---
 	std::unique_ptr<SDFText> eggCountText_;
+
+	// --- コイン取得数の表示（SDFText。「コイン n/全体」）---
+	std::unique_ptr<SDFText> coinCountText_;
 
 };

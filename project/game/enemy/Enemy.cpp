@@ -4,12 +4,16 @@
 #include "engine/3d/model/Model.h"
 #include "engine/rail/SplineRail.h"
 
+#include <algorithm>
 #include <cmath>
 
 Enemy::Enemy() = default;
 Enemy::~Enemy() = default;
 
-void Enemy::Initialize(EnemyType type, int railIndex, float distance, bool patrol){
+void Enemy::Initialize(EnemyType type, int railIndex, float distance, bool patrol,
+                       float patrolMin, float patrolMax){
+    patrolMin_ = patrolMin;
+    patrolMax_ = patrolMax;
     type_      = type;
     railIndex_ = railIndex;
     distance_  = distance;
@@ -58,9 +62,12 @@ void Enemy::Update(const std::vector<SplineRail>& rails, float dt){
     if ( patrol_ ) {
         distance_ += dir_ * speed_ * dt;
     }
+    // 往復の折り返し範囲：巡回範囲が指定されていればそこで折り返す（-1=レール全体）。
     // レール編集で全長が縮んだ時も範囲内に収める（OFFの敵も対象）
-    if ( distance_ > railLength )  { distance_ = railLength;  dir_ = -1.0f; }
-    if ( distance_ < 0.0f ) { distance_ = 0.0f; dir_ = 1.0f; }
+    float lo = ( patrol_ && patrolMin_ >= 0.0f ) ? ( std::min )( patrolMin_, railLength ) : 0.0f;
+    float hi = ( patrol_ && patrolMax_ >= 0.0f ) ? std::clamp(patrolMax_, lo, railLength) : railLength;
+    if ( distance_ > hi ) { distance_ = hi; dir_ = -1.0f; }
+    if ( distance_ < lo ) { distance_ = lo; dir_ = 1.0f; }
 
     // 位置：レール面の上に半径ぶん乗せる
     Vector3 railPos = rail.GetPositionByDistance(distance_);

@@ -245,6 +245,11 @@ void EditorManager::Update(){
     // 2. メインメニューバー
     if ( ImGui::BeginMainMenuBar() ) {
         if ( ImGui::BeginMenu("ファイル (File)") ) {
+            // マップ保存：ヒエラルキーの「上書き保存」ボタンと同じ処理をメニューからも
+            if ( ImGui::MenuItem("マップを上書き保存 (Ctrl+S)") ) {
+                if ( levelEditor_ ) { levelEditor_->QuickSave(); }
+            }
+            ImGui::Separator();
             if ( ImGui::MenuItem("パーティクルを保存 (Save Particles)") ) {
                 if ( gpuParticleEditor_ ) { gpuParticleEditor_->Save(); }
             }
@@ -290,6 +295,13 @@ void EditorManager::Update(){
             ImGui::Separator();
             ImGui::Checkbox("ノードエディタ", &showNodeEditor_);
             ImGui::Checkbox("Blenderインポータ", &showBlenderImporter_);
+            ImGui::Separator();
+            // デモ・デバッグ系の表示（マップ制作には不要なので既定OFF。必要な時だけON）
+            ImGui::Checkbox("デモ展示（回転ブロック・オーラ・SDF卵・見本の人形）", &showDemo_);
+            if ( ImGui::IsItemHovered() ) {
+                ImGui::SetTooltip("エンジン機能の見本オブジェクト一式（ヒットエフェクト・サークル・ブロック群など）。\nゲーム本編とは無関係の展示なので、マップ制作中はOFFのままでよい");
+            }
+            ImGui::Checkbox("調整項目 (GlobalVariables)", &showGlobalVars_);
             ImGui::EndMenu();
         }
 
@@ -338,11 +350,24 @@ void EditorManager::Update(){
     // 直前の Image の画面矩形とホバー状態（マウス↔ワールド変換に使う）
     const ImVec2 imgMin       = ImGui::GetItemRectMin();
     const ImVec2 imgSize      = ImGui::GetItemRectSize();
-    const bool   imageHovered = ImGui::IsItemHovered();
+    bool         imageHovered = ImGui::IsItemHovered();
 
     // デバッグカメラのホイールズームは Game View にマウスがある時だけ許可する
     // （レールエディタ等のパネル上でスクロールしてもカメラがズームしないように）。
     if ( debugCamera_ ) { debugCamera_->SetGameViewHovered(imageHovered); }
+
+    // ゲーム側の配置エディタ（敵ドラッグ等）が独自ピッキングに使う Game View 情報を控える
+    {
+        ImVec2 gvMouse = ImGui::GetMousePos();
+        gameViewMouse_.hovered     = imageHovered;
+        gameViewMouse_.gizmoActive = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+        gameViewMouse_.mousePos    = { gvMouse.x, gvMouse.y };
+        gameViewMouse_.imgMin      = { imgMin.x, imgMin.y };
+        gameViewMouse_.imgSize     = { imgSize.x, imgSize.y };
+        if ( editorCamera_ ) { gameViewMouse_.viewProj = editorCamera_->GetViewProjectionMatrix(); }
+    }
+    // 敵ドラッグ（ゲーム側）優先中はレール編集のマウス操作を止める（両方掴む事故防止）
+    if ( externalDragActive_ ) { imageHovered = false; }
 
     if ( editorCamera_ ) {
         ImGuizmo::SetOrthographic(false);
@@ -1182,7 +1207,7 @@ void EditorManager::Update(){
     // 6.7 SDF（フォント/画像）パネル：アトラス一覧＋テキスト/スプライト配置
     SDFManager::GetInstance()->DrawDebugUI();
 
-    GlobalVariables::GetInstance()->Update();
+    if ( showGlobalVars_ ) { GlobalVariables::GetInstance()->Update(); } // 表示メニューでON/OFF
 
     // 7.5 インスペクター（ギズモ対象オブジェクトの Transform 編集）
     ImGui::Begin("インスペクター (Transform)");
@@ -1282,6 +1307,20 @@ const std::vector<int>& EditorManager::GetEditorRailEndPlazas() const{
 const std::vector<int>& EditorManager::GetEditorRailGuideRails() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGuideRails() : kEmpty;
+}
+const std::vector<CoinData>& EditorManager::GetEditorCoins() const{
+    static const std::vector<CoinData> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetCoins() : kEmpty;
+}
+bool EditorManager::GetEditorSelectedNode(int& outRail, Vector3& outPos) const{
+    if ( !levelEditor_ ) return false;
+    RailEditor* railEditor = levelEditor_->GetRailEditor();
+    int node = railEditor->GetSelectedRailNode();
+    if ( node < 0 ) return false;
+    int rail = railEditor->GetCurrentRailIndex();
+    if ( !railEditor->GetNodePosOf(rail, node, outPos) ) return false;
+    outRail = rail;
+    return true;
 }
 bool EditorManager::GetEditorRailMotionPreview() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->IsMotionPreview() : false;

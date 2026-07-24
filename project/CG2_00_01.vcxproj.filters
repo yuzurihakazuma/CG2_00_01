@@ -315,6 +315,9 @@
     <ClCompile Include="game\stage\StageFlow.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="game\stage\CoinSystem.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="externals\ImGuizmo\ImGuizmo.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -655,6 +658,9 @@
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="game\stage\StageFlow.h">
+      <Filter>ソース ファイル\ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="game\stage\CoinSystem.h">
       <Filter>ソース ファイル\ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="externals\ImGuizmo\ImGuizmo.h">

@@ -135,8 +135,10 @@ static bool DrawDistanceWidget(const char* idSuffix, float* distance, float maxD
 // ================================================================
 //  メインの描画関数
 // ================================================================
-void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
+void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
+                             int pickRail, float pickDist, bool hasPick) {
 #ifdef USE_IMGUI
+    hoveredEntry_ = -1; // Game View ハイライトは毎フレーム取り直す
     ImGui::SetNextWindowSize(ImVec2(360.0f, 500.0f), ImGuiCond_FirstUseEver);
     ImGui::Begin("敵配置エディタ (Enemy Editor)");
 
@@ -175,6 +177,38 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
                 changed_ = true;
             }
             ImGui::PopStyleColor(3);
+
+            // --- 選択ノードの位置に追加（Game View でクリックした場所へ数値入力なしで置ける）---
+            ImGui::BeginDisabled(!hasPick);
+            if ( ImGui::Button("＋ 選択ノードの位置に追加", ImVec2(-1.0f, 0.0f)) ) {
+                EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
+                spawnDatas_.push_back({ type, pickRail, pickDist, spawnPatrol_ });
+                selectedEntry_ = static_cast<int>(spawnDatas_.size()) - 1;
+                changed_ = true;
+            }
+            ImGui::EndDisabled();
+            if ( hasPick ) {
+                ImGui::TextDisabled("配置先: Rail %d の %.1fm 地点（選択中ノード）", pickRail, pickDist);
+            } else {
+                ImGui::TextDisabled("(Game View でレールのノードをクリック選択すると使える)");
+            }
+
+            // --- 等間隔で並べる（コインの配置と同じ操作感。選んだレールにN体を均等配置）---
+            static int multiCount = 3;
+            ImGui::SetNextItemWidth(80.0f);
+            ImGui::DragInt("体数##multi", &multiCount, 1, 1, 12);
+            ImGui::SameLine();
+            if ( ImGui::Button("選んだレールに等間隔で並べる") ) {
+                EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
+                float len = splineRails[spawnRailIndex_].GetLength();
+                for ( int k = 0; k < multiCount; ++k ) {
+                    // 両端1割は空ける（端ぴったりに敵が立たないように）
+                    float t = (multiCount > 1) ? (float)k / (float)(multiCount - 1) : 0.5f;
+                    float d = len * (0.1f + 0.8f * t);
+                    spawnDatas_.push_back({ type, spawnRailIndex_, d, spawnPatrol_ });
+                }
+                changed_ = true;
+            }
         }
     }
 
@@ -194,15 +228,22 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
             ImGui::TextDisabled("  ドラッグで並び替え / クリックで編集");
         }
 
-        // --- 全削除ボタン ---
+        // --- 全削除ボタン（誤爆防止の2段階式：1回目で確認表示 → 3秒以内にもう一度で実行）---
         if ( spawnDatas_.size() >= 2 ) {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.5f, 0.12f, 0.12f, 1.0f));
+            static float clearArmedTime = -100.0f;
+            bool armed = (ImGui::GetTime() - clearArmedTime) < 3.0;
+            ImGui::PushStyleColor(ImGuiCol_Button,        armed ? ImVec4(0.85f, 0.2f, 0.2f, 1.0f) : ImVec4(0.5f, 0.12f, 0.12f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.7f, 0.18f, 0.18f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.9f, 0.22f, 0.22f, 1.0f));
-            if ( ImGui::Button("全削除##clear", ImVec2(-1.0f, 0.0f)) ) {
-                spawnDatas_.clear();
-                selectedEntry_ = -1;
-                changed_ = true;
+            if ( ImGui::Button(armed ? "本当に全削除する（もう一度クリック）##clear" : "全削除##clear", ImVec2(-1.0f, 0.0f)) ) {
+                if ( armed ) {
+                    spawnDatas_.clear();
+                    selectedEntry_ = -1;
+                    changed_ = true;
+                    clearArmedTime = -100.0f;
+                } else {
+                    clearArmedTime = (float)ImGui::GetTime();
+                }
             }
             ImGui::PopStyleColor(3);
         }
@@ -243,6 +284,8 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
             if ( ImGui::Selectable(label, isSelected, ImGuiSelectableFlags_AllowOverlap) ) {
                 selectedEntry_ = isSelected ? -1 : i;
             }
+            // ホバー中の敵は Game View で黄色くハイライト（どの行がどの敵か一目で分かる）
+            if ( ImGui::IsItemHovered() ) { hoveredEntry_ = i; }
 
             if ( isSelected || (i % 2 == 1) ) {
                 ImGui::PopStyleColor(3);
@@ -307,6 +350,41 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
                     changed_ = true;
                 }
 
+                // 巡回範囲（パトロールON時のみ。-1=レール全体を往復）
+                if ( spawn.patrol ) {
+                    bool ranged = (spawn.patrolMin >= 0.0f || spawn.patrolMax >= 0.0f);
+                    if ( ImGui::Checkbox("巡回範囲を指定（OFF=レール全体）##edit", &ranged) ) {
+                        if ( ranged ) {
+                            // 初期値は「今の位置±3m」（Game View に橙線で範囲が出る）
+                            float rangeMax = validRail ? railLen : 100.0f;
+                            spawn.patrolMin = std::clamp(spawn.distance - 3.0f, 0.0f, rangeMax);
+                            spawn.patrolMax = std::clamp(spawn.distance + 3.0f, spawn.patrolMin, rangeMax);
+                        } else {
+                            spawn.patrolMin = spawn.patrolMax = -1.0f;
+                        }
+                        changed_ = true;
+                    }
+                    if ( ranged ) {
+                        float rangeMax = validRail ? railLen : 100.0f;
+                        if ( ImGui::DragFloatRange2("範囲(m)##edit", &spawn.patrolMin, &spawn.patrolMax,
+                                0.1f, 0.0f, rangeMax, "始 %.1f", "終 %.1f") ) {
+                            spawn.patrolMin = std::clamp(spawn.patrolMin, 0.0f, rangeMax);
+                            spawn.patrolMax = std::clamp(spawn.patrolMax, spawn.patrolMin, rangeMax);
+                            changed_ = true;
+                        }
+                        ImGui::TextDisabled("(Game View に橙色の線で範囲が表示される)");
+                    }
+                }
+
+                // 選択ノードの位置へ移動（Game View でクリックした場所へ数値入力なしで動かせる）
+                ImGui::BeginDisabled(!hasPick);
+                if ( ImGui::Button("選択ノードの位置へ移動", ImVec2(-1.0f, 0.0f)) ) {
+                    spawn.railIndex = pickRail;
+                    spawn.distance  = pickDist;
+                    changed_ = true;
+                }
+                ImGui::EndDisabled();
+
                 ImGui::Spacing();
 
                 // --- 操作ボタン行：複製と削除を横に並べる ---
@@ -348,6 +426,7 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails) {
         }
     }
 
+    ImGui::TextDisabled("※配置はマップと一緒に保存される（自動保存 / 上書き保存 / Ctrl+S）");
     ImGui::End();
 #endif
 }

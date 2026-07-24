@@ -8,6 +8,8 @@ struct EnemySpawnData {
     int railIndex;       // 配置先のレール番号
     float distance;      // レール上の初期位置(メートル)
     bool patrol = false; // true=レールを往復パトロール / false=置いた場所に留まる（既定）
+    float patrolMin = -1.0f; // 巡回範囲の始点(m)。-1=レール全体を往復
+    float patrolMax = -1.0f; // 巡回範囲の終点(m)。-1=レール全体を往復
 };
 
 class SplineRail;
@@ -23,8 +25,18 @@ public:
     // 初期化：デフォルトの敵データを登録する
     void Initialize();
 
-    // ImGui ウィンドウの描画
-    void DrawWindow(const std::vector<SplineRail>& splineRails);
+    // ImGui ウィンドウの描画。
+    //   pickRail/pickDist: レールエディタで選択中ノードのレール番号と距離（「選択ノードに配置」用）。
+    //   hasPick=false なら未選択（ボタンはグレーアウト）
+    void DrawWindow(const std::vector<SplineRail>& splineRails,
+                    int pickRail = -1, float pickDist = 0.0f, bool hasPick = false);
+
+    // Game View ハイライト用：一覧でホバー中/選択中のエントリ番号（-1=なし）
+    int GetHoveredEntry() const { return hoveredEntry_; }
+    int GetSelectedEntry() const { return selectedEntry_; }
+    // Game View 直接ドラッグ用：選択の同期と、MutableSpawnDatas 直編集後の確定通知
+    void SetSelectedEntry(int i) { selectedEntry_ = i; }
+    void MarkChanged() { changed_ = true; }
 
     // 配置情報の取得
     const std::vector<EnemySpawnData>& GetSpawnDatas() const { return spawnDatas_; }
@@ -57,6 +69,9 @@ private:
 
     // 一覧で現在選択中のエントリ（インライン編集対象）
     int selectedEntry_ = -1;
+
+    // 一覧でホバー中のエントリ（Game View ハイライト用。毎フレーム取り直す）
+    int hoveredEntry_ = -1;
 
     // ドラッグ＆ドロップ用：ドラッグ中のエントリ番号（-1=ドラッグしていない）
     int dragSourceIdx_ = -1;
