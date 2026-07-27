@@ -308,7 +308,12 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
                         && srcIdx < static_cast<int>(spawnDatas_.size()) ) {
                         EnemySpawnData moving = spawnDatas_[srcIdx];
                         spawnDatas_.erase(spawnDatas_.begin() + srcIdx);
-                        int insertAt = (srcIdx < i) ? (i - 1) : i;
+                        // erase でドロップ先より後ろは1つ前へ詰まっているので、
+                        // 下方向・上方向どちらも「ドロップ先の位置 i」へそのまま挿す＝
+                        // ドロップした行の場所を奪う直感どおりの並びになる
+                        // （以前は下方向で i-1 に挿してしまい、1つ上にずれる＋
+                        //   直下へのドロップが並び不変なのに全敵リスポーンするバグだった）
+                        int insertAt = std::clamp(i, 0, static_cast<int>(spawnDatas_.size()));
                         spawnDatas_.insert(spawnDatas_.begin() + insertAt, moving);
                         selectedEntry_ = insertAt;
                         changed_ = true;
