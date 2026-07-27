@@ -3,6 +3,7 @@
 #include "Engine/Base/TimeManager.h"
 #include "engine/math/VectorMath.h"
 #include "engine/rail/SplineRail.h"
+#include "game/stage/BlockSystem.h" // ブロック（乗れる/ぶつかる）の当たり判定
 #include <algorithm>
 #include <cmath>
 
@@ -247,6 +248,7 @@ void Player::MoveAlongRail(const SplineRail& currentRail, bool isCurrentRailHori
             if ( currentRail.oneWay == 2 && dsSign_ > 0.0f ) dsSign_ = 0.0f; // 逆方向(back→front)のみ
 
             // レールごとの速度倍率（加速/減速レール）を掛ける
+            float prevDistance = currentDistance_;
             if ( !isGrounded_ ) {
                 // 空中（ジャンプ中）はワールド空間の弾道を保つ：
                 //   最終位置は「レール上の点 + heightOffset_」なので、何もしないと
@@ -260,6 +262,20 @@ void Player::MoveAlongRail(const SplineRail& currentRail, bool isCurrentRailHori
                 heightOffset_ += ( oldFootY - newFootY );
             } else {
                 currentDistance_ += dsSign_ * moveSpeed_ * currentRail.speedMul * dt;
+            }
+
+            // ブロックの横当たり：体の高さ帯に重なるブロックへは進入できない（壁になる）。
+            //   乗っている時（足がブロック上面）は帯が重ならないので普通に上を歩ける
+            if ( blocks_ ) {
+                float blockMin = 0.0f, blockMax = 0.0f;
+                if ( blocks_->BlockedAt(currentRailIndex_, currentDistance_,
+                                        heightOffset_ + 0.05f, heightOffset_ + 0.95f,
+                                        &blockMin, &blockMax) ) {
+                    const float kPushGap = 0.01f; // 面から少し離す（毎フレーム再衝突しない）
+                    if ( prevDistance <= blockMin )      { currentDistance_ = blockMin - kPushGap; }
+                    else if ( prevDistance >= blockMax ) { currentDistance_ = blockMax + kPushGap; }
+                    else                                 { currentDistance_ = prevDistance; } // 万一内部に居たら動かさない
+                }
             }
         }
     } else {
@@ -517,14 +533,36 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
     }
 
     heightOffset_ += jumpVelocity_ * dt;
-    if ( heightOffset_ <= 0.0f ) {
-        if ( IsOverHole(rails) ) {
-            // 穴の上で降りてきた → レールを離れて自由落下（下の別レールに着地できる）
+
+    // 頭上のブロック：上昇中に頭をぶつけたら上昇を止める（マリオ風）
+    if ( blocks_ && jumpVelocity_ > 0.0f ) {
+        const float kHeadHeight = 1.0f;
+        float ceiling = blocks_->CeilingHeightAt(currentRailIndex_, currentDistance_, heightOffset_);
+        if ( heightOffset_ + kHeadHeight > ceiling ) {
+            heightOffset_ = ceiling - kHeadHeight;
+            jumpVelocity_ = 0.0f;
+        }
+    }
+
+    // 足元の支持面：ブロックの上面 or レール面(0)。ブロックの上に立てる
+    float groundHeight = blocks_
+        ? blocks_->GroundHeightAt(currentRailIndex_, currentDistance_, heightOffset_)
+        : 0.0f;
+
+    // 接地中に足場が無くなった（ブロックの端から歩き出た）→ そのまま落下開始
+    if ( isGrounded_ && groundHeight < heightOffset_ - 0.01f ) {
+        isGrounded_   = false;
+        jumpVelocity_ = 0.0f;
+    }
+
+    if ( heightOffset_ <= groundHeight && jumpVelocity_ <= 0.0f ) {
+        if ( groundHeight <= 0.0f && IsOverHole(rails) ) {
+            // 穴の上で降りてきた（ブロックにも乗っていない）→ レールを離れて自由落下
             EnterAir(rail.GetPositionByDistance(currentDistance_), rail.GetTangentByDistance(currentDistance_), jumpVelocity_, 0.15f);
             return true;
         }
-        // 地面あり＆降りてきた → 着地
-        heightOffset_   = 0.0f;
+        // 地面あり＆降りてきた → 着地（ブロックの上面 or レール面）
+        heightOffset_   = groundHeight;
         jumpVelocity_   = 0.0f;
         isGrounded_     = true;
         flutterCdTimer_ = 0.0f;

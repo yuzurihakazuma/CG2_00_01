@@ -4,6 +4,7 @@
 
 // 前方宣言
 class SplineRail;
+class BlockSystem;
 
 // プレイヤークラス（レール上を距離ベースで移動する）
 class Player{
@@ -45,6 +46,9 @@ public:
     //   画面基準に合わせて回すために使う（Dを押せば常に画面の右へ進む）。
     void SetCameraYaw(float yawRad){ camYaw_ = yawRad; }
 
+    // ブロック（乗れる/ぶつかる）の当たり判定窓口。シーンが一度渡す（所有しない）
+    void SetBlocks(const BlockSystem* blocks){ blocks_ = blocks; }
+
 private: // メンバ変数
 
     // スタート地点（Initialize / リスポーンで使う）
@@ -57,6 +61,9 @@ private: // メンバ変数
     mutable int lastKeyQuad_ = 0;
 
     bool movementLocked_ = false; // true の間は移動・ジャンプ入力を無視（構え中など）
+
+    // ブロックの当たり判定（シーンの BlockSystem。所有しない。nullptr=ブロックなし）
+    const BlockSystem* blocks_ = nullptr;
 
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };

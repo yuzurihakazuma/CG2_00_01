@@ -106,6 +106,17 @@ void GamePlayScene::LoadResources(){
 		}
 	}
 
+	// ブロックの見た目2種（同じ block.obj を別名で読んで色だけ変える）。
+	//   上が空いている面＝明るい / 積み上げた内部＝暗い、で地形らしく見せる。
+	//   ※デモ展示が使う "block" とは別モデルなので、そちらの見た目は変えない
+	modelManager->LoadModel("blockTop",  "resources/block", "block.obj");
+	modelManager->LoadModel("blockFill", "resources/block", "block.obj");
+	if ( auto* topModel = modelManager->FindModel("blockTop") ) {
+		if ( topModel->GetMaterial() ) { topModel->GetMaterial()->color = { 1.0f, 0.95f, 0.8f, 1.0f }; }
+	}
+	if ( auto* fillModel = modelManager->FindModel("blockFill") ) {
+		if ( fillModel->GetMaterial() ) { fillModel->GetMaterial()->color = { 0.55f, 0.45f, 0.38f, 1.0f }; }
+	}
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
 	// ※ 卵の煙／殻の飛び散りは加算パーティクルだと明るい背景で見えないため、
@@ -125,6 +136,10 @@ void GamePlayScene::LoadResources(){
 	// ここでキャッシュに載せておく（実行中のテクスチャ読み込みはデバッグレイヤーが嫌うため）
 	textures_["roadAtlas"]     = textureManager->Load("resources/road/road_atlas.png");
 	textures_["skybox"]        = textureManager->LoadCube("resources/StandardCubeMap.dds");
+
+	// ブロックの一括描画を準備（見た目グループごとに1ドローコール）。
+	//   モデルとテクスチャが揃った後に呼ぶ（ディゾルブ用SRVの束縛先が必要なため）
+	blockSystem_.Initialize(textures_["uvChecker"].srvIndex);
 
 	// Skybox
 	Obj3dCommon::GetInstance()->SetEnvironmentTexture(textures_["skybox"].srvIndex);
@@ -341,6 +356,11 @@ void GamePlayScene::SyncRailsFromEditor(bool simple){
 
 	// 収集物（コイン）をエディタの配置から作り直す
 	coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+
+	// ブロック（乗れる/ぶつかる）もエディタの配置から作り直す
+	blockSystem_.Sync(EditorManager::GetInstance()->GetEditorBlocks(), &railField_.GetRails());
+	lastBlockVersion_ = EditorManager::GetInstance()->GetEditorBlockVersion();
+	if ( player_ ) { player_->SetBlocks(&blockSystem_); }
 }
 
 // エディタに配置された敵情報（テンプレート）に基づいて敵の実体を生成する
@@ -406,6 +426,17 @@ void GamePlayScene::SyncFromEditors(){
 				                       enemyData.patrolMin, enemyData.patrolMax });
 			}
 			enemyEditor_->SetSpawnDatas(spawnDatas); // changed_ が立つ → 下で SpawnEnemies される
+		}
+	}
+
+	// ブロックのライブ同期：ペイント配置/削除のたびにブロックだけ作り直す
+	//   （レール・道・敵はそのまま＝クリック連打しても軽い）
+	{
+		int blockVersion = editorManager->GetEditorBlockVersion();
+		if ( blockVersion != lastBlockVersion_ ) {
+			lastBlockVersion_ = blockVersion;
+			blockSystem_.Sync(editorManager->GetEditorBlocks(), &railField_.GetRails());
+			if ( player_ ) { player_->SetBlocks(&blockSystem_); }
 		}
 	}
 
@@ -595,6 +626,9 @@ void GamePlayScene::UpdateSceneVisuals(){
 	// 収集物（コイン）：回転・浮遊はエディタ中も見せる。取得判定はプレイ中のみ
 	coinSystem_.Update(player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f },
 	                   currentMode == EngineMode::Play, 1.0f / 60.0f);
+
+	// ブロック：位置＋行列更新（動くレールに乗ったブロックの追従・カメラ追従）
+	blockSystem_.Update();
 
 	// プレイヤーの見た目（恐竜マスコット player.obj）：
 	//   Play中はプレイヤーに追従、Edit中はスタート地点プレビュー。
@@ -809,6 +843,7 @@ void GamePlayScene::Draw(){
 
 	// --- インスタンシングの3D描画（展示物：ブロック一括）---
 	if ( demoVisible ) { demo_.DrawInstanced(camera_.get()); }
+	blockSystem_.Draw(camera_.get()); // 配置ブロック（見た目グループごとに1ドローコール）
 
 	/*if ( skybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
@@ -963,6 +998,7 @@ void GamePlayScene::DrawDebugUI(){
 			roadMesh_.Build(railField_.GetRails(), camera_.get());
 			dissolveRoad_.Build(railField_.GetRails());
 			coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+			blockSystem_.Sync(EditorManager::GetInstance()->GetEditorBlocks(), &railField_.GetRails());
 		}
 		ImGui::Text("SDF溶け道: チェーン点 %d / 描画チャンク %d", dissolveRoad_.PieceCount(), dissolveRoad_.ActiveCount());
 		ImGui::SetNextItemWidth(160.0f);
@@ -1079,8 +1115,10 @@ void GamePlayScene::DrawDebugUI(){
 			}
 
 			// 2) マウス直下の敵を探す（スクリーン距離16px以内。ドラッグのつかみ判定）
+			//    ブロック配置モード中はクリックをブロック側に譲る（敵をつかまない）
 			int mouseOverEnemy = -1;
-			if ( gv.hovered && !gv.gizmoActive && enemyDragIdx_ < 0 ) {
+			if ( gv.hovered && !gv.gizmoActive && enemyDragIdx_ < 0
+				&& !EditorManager::GetInstance()->IsEditorBlockPaintMode() ) {
 				float bestPick = 16.0f;
 				for ( int i = 0; i < ( int ) spawnDatas.size(); ++i ) {
 					Vector3 wp; if ( !enemyWorldPos(spawnDatas[i], wp) ) continue;
@@ -1151,6 +1189,117 @@ void GamePlayScene::DrawDebugUI(){
 			enemyDragIdx_ = -1;
 			EditorManager::GetInstance()->SetExternalDragActive(false);
 		}
+	}
+
+	// --- ブロック配置モード（マリオメーカー風：クリックで置く/消す。配置物タブでON）---
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit
+		&& EditorManager::GetInstance()->IsEditorBlockPaintMode() ) {
+		const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
+		const auto& rails = railField_.GetRails();
+		auto projectToScreen = [&](const Vector3& worldPos, Vector2& out) -> bool {
+			Vector2 ndc;
+			if ( !WorldToNdc(worldPos, gv.viewProj, ndc) ) return false;
+			out.x = gv.imgMin.x + ( ndc.x * 0.5f + 0.5f ) * gv.imgSize.x;
+			out.y = gv.imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * gv.imgSize.y;
+			return true;
+		};
+
+		// 1) マウスに一番近いレール点（0.25m刻みサンプル → 1mセルへ吸着）
+		int bestRail = -1; float bestDist = 0.0f; float bestPx = 90.0f;
+		if ( gv.hovered && !gv.gizmoActive ) {
+			for ( int rr = 0; rr < ( int ) rails.size(); ++rr ) {
+				const SplineRail& rail = rails[rr];
+				if ( rail.nodes.size() < 2 ) continue;
+				float len = rail.GetLength();
+				int steps = std::clamp(( int ) ( len / 0.25f ), 2, 800);
+				for ( int s = 0; s <= steps; ++s ) {
+					float dist = len * ( float ) s / ( float ) steps;
+					Vector3 wp = rail.GetPositionByDistance(dist);
+					Vector2 sp; if ( !projectToScreen({ wp.x, wp.y + 0.5f, wp.z }, sp) ) continue;
+					float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+					float d = std::sqrt(dx * dx + dy * dy);
+					if ( d < bestPx ) { bestPx = d; bestRail = rr; bestDist = dist; }
+				}
+			}
+		}
+
+		if ( bestRail >= 0 ) {
+			const SplineRail& rail = rails[bestRail];
+			// 1mグリッドの「整数セル」へ吸着する。レール長で丸めずクランプすると
+			// 端だけ半端な距離のセルが生まれ、隣と重なった二重ブロックが置けてしまう
+			float railLen  = rail.GetLength();
+			float cellDist = std::round(bestDist);
+			if ( cellDist < 0.0f )    { cellDist = 0.0f; }
+			if ( cellDist > railLen ) { cellDist = std::floor(railLen); }
+
+			Vector3 base    = rail.GetPositionByDistance(cellDist);
+			Vector3 tangent = rail.GetTangentByDistance(cellDist);
+			// 道幅方向（水平の右）。BlockSystem::BlockWorldPos と同じ求め方に揃える
+			float horizLen = std::sqrt(tangent.x * tangent.x + tangent.z * tangent.z);
+			Vector3 right { 0.0f, 0.0f, 0.0f };
+			if ( horizLen > 1e-4f ) { right = { tangent.z / horizLen, 0.0f, -tangent.x / horizLen }; }
+
+			// 2) 断面のセル（段 × 横ずれ）から、マウスに一番近いものを選ぶ。
+			//    マウスを上へ動かせば高い段、横へ動かせば道の脇（飾り/壁）に置ける
+			int   bestLevel = 0;
+			float bestSide  = 0.0f;
+			float bestCellPx = 1e9f;
+			for ( int level = 0; level < 8; ++level ) {
+				for ( int sideStep = -2; sideStep <= 2; ++sideStep ) {
+					float side = ( float ) sideStep;
+					Vector3 center = { base.x + right.x * side,
+					                   base.y + ( float ) level * BlockSystem::kSize + 0.5f,
+					                   base.z + right.z * side };
+					Vector2 sp; if ( !projectToScreen(center, sp) ) continue;
+					float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+					float d = std::sqrt(dx * dx + dy * dy);
+					if ( d < bestCellPx ) { bestCellPx = d; bestLevel = level; bestSide = side; }
+				}
+			}
+
+			bool cellOccupied = EditorManager::GetInstance()->HasEditorBlock(bestRail, cellDist, bestLevel, bestSide);
+
+			// 3) ゴースト表示（緑=ここに置く / 赤=クリックで消す）
+			Vector3 ghostCenter = { base.x + right.x * bestSide,
+			                        base.y + ( float ) bestLevel * BlockSystem::kSize + 0.5f,
+			                        base.z + right.z * bestSide };
+			DebugDraw::GetInstance()->Box(ghostCenter, { 1.0f, 1.0f, 1.0f },
+				cellOccupied ? Vector4 { 1.0f, 0.35f, 0.3f, 1.0f } : Vector4 { 0.3f, 1.0f, 0.5f, 1.0f });
+
+			// 4) クリックで適用。押した瞬間に「置く/消す」を決めて、押しっぱなしで連続適用（ペイント）
+			auto applyPaint = [&](int rail_, float dist_, int level_, float side_){
+				if ( blockPaintErasing_ ) { EditorManager::GetInstance()->RemoveEditorBlock(rail_, dist_, level_, side_); }
+				else                      { EditorManager::GetInstance()->AddEditorBlock(rail_, dist_, level_, side_); }
+				lastPaintRail_ = rail_; lastPaintDist_ = dist_; lastPaintLevel_ = level_; lastPaintSide_ = side_;
+			};
+			if ( gv.hovered && !gv.gizmoActive ) {
+				if ( ImGui::IsMouseClicked(0) ) {
+					blockPaintErasing_ = cellOccupied;
+					applyPaint(bestRail, cellDist, bestLevel, bestSide);
+				} else if ( ImGui::IsMouseDown(0) && lastPaintLevel_ >= 0 ) {
+					bool sameCell = ( lastPaintRail_ == bestRail && lastPaintLevel_ == bestLevel
+						&& std::abs(lastPaintSide_ - bestSide) < 0.5f
+						&& std::abs(lastPaintDist_ - cellDist) < 0.5f );
+					if ( !sameCell ) {
+						// 速くドラッグするとフレーム間でセルが飛ぶ。同じ段・同じ横位置なら
+						// 間のセルも埋めて、線を引くように途切れず塗れるようにする
+						if ( lastPaintRail_ == bestRail && lastPaintLevel_ == bestLevel
+							&& std::abs(lastPaintSide_ - bestSide) < 0.5f ) {
+							float from = lastPaintDist_, to = cellDist;
+							float step = ( to >= from ) ? 1.0f : -1.0f;
+							for ( float d = from + step; std::abs(d - to) > 0.5f; d += step ) {
+								applyPaint(bestRail, d, bestLevel, bestSide);
+							}
+						}
+						applyPaint(bestRail, cellDist, bestLevel, bestSide);
+					}
+				}
+			}
+		}
+		if ( !ImGui::IsMouseDown(0) ) { lastPaintLevel_ = -1; } // ペイントの連続適用をリセット
+
+		// 配置モード中はレール編集のクリックを止める（ノード選択やスタンプと競合しない）
+		if ( gv.hovered ) { EditorManager::GetInstance()->SetExternalDragActive(true); }
 	}
 
 #endif

@@ -189,6 +189,7 @@ exit 0</Command>
     <ClCompile Include="game\player\AimThrowController.cpp" />
     <ClCompile Include="game\stage\StageFlow.cpp" />
     <ClCompile Include="game\stage\CoinSystem.cpp" />
+    <ClCompile Include="game\stage\BlockSystem.cpp" />
     <ClCompile Include="engine\postEffect\Bloom.cpp" />
     <ClCompile Include="engine\3d\animation\Animation.cpp" />
     <ClCompile Include="engine\collision\Collision.cpp" />
@@ -318,6 +319,7 @@ exit 0</Command>
     <ClInclude Include="game\player\AimThrowController.h" />
     <ClInclude Include="game\stage\StageFlow.h" />
     <ClInclude Include="game\stage\CoinSystem.h" />
+    <ClInclude Include="game\stage\BlockSystem.h" />
     <ClInclude Include="engine\postEffect\Bloom.h" />
     <ClInclude Include="engine\3d\animation\Animation.h" />
     <ClInclude Include="engine\collision\Collision.h" />

@@ -98,6 +98,14 @@ public:
 	const std::vector<int>& GetEditorRailEndPlazas() const; // 端の丸広場（bit0=始点/bit1=終点）
 	const std::vector<int>& GetEditorRailGuideRails() const; // ガイドレール追従の対象（-1=なし）
 	const std::vector<CoinData>& GetEditorCoins() const; // 収集物（コイン）の配置
+
+	// --- ブロック（乗れる/ぶつかる1m角。Game Viewペイント配置の橋渡し）---
+	const std::vector<BlockData>& GetEditorBlocks() const;
+	int  GetEditorBlockVersion() const;                    // 変化したらゲーム側が作り直す
+	bool IsEditorBlockPaintMode() const;                   // 配置モード中か（Game Viewクリックの奪い先）
+	bool HasEditorBlock(int rail, float dist, int level, float side) const;
+	void AddEditorBlock(int rail, float dist, int level, float side);
+	void RemoveEditorBlock(int rail, float dist, int level, float side);
 	bool GetEditorRailMotionPreview() const; // 動くレールをエディタ中も再生するか
 	// デモ展示（回転ブロック/オーラ/SDF卵/見本の人形）を表示するか（表示メニューでON/OFF）
 	bool IsDemoVisible() const{ return showDemo_; }

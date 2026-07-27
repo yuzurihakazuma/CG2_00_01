@@ -21,6 +21,7 @@
 #include "game/player/AimThrowController.h"
 #include "game/stage/StageFlow.h"
 #include "game/stage/CoinSystem.h"
+#include "game/stage/BlockSystem.h"
 #include "game/enemy/Enemy.h"
 #include "game/enemy/EnemyEditor.h"
 #include "game/enemy/EnemyManager.h"
@@ -159,6 +160,10 @@ private: // メンバ変数
 	// --- 収集物（コイン）。エディタで配置され、プレイ中に触れると取得 ---
 	CoinSystem coinSystem_;
 
+	// --- ブロック（乗れる/ぶつかる1m角。マリオメーカー風配置）---
+	BlockSystem blockSystem_;
+	int lastBlockVersion_ = -1; // ブロック編集のライブ同期用（レール全体は作り直さない）
+
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;
 	// エディタの最新レールから railField_ を作り直し、敵も配置し直す（緑線・プレイヤー一本化）
@@ -187,6 +192,13 @@ private: // メンバ変数
 
 	// Game View で直接ドラッグ中の敵（-1=なし。エディット中の敵つまみ移動）
 	int enemyDragIdx_ = -1;
+
+	// ブロック配置モードのペイント状態（押した瞬間に置く/消すを決めて塗り続ける）
+	bool  blockPaintErasing_ = false;
+	int   lastPaintRail_  = -1;
+	float lastPaintDist_  = 0.0f;
+	int   lastPaintLevel_ = -1;
+	float lastPaintSide_  = 0.0f;
 
 	// --- 卵保持数の数字表示（SDFText。HUDアイコン列の右に「×N」）---
 	std::unique_ptr<SDFText> eggCountText_;

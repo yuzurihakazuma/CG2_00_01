@@ -98,6 +98,7 @@ private:
     int selectedMapIndex_ = -1;             // 一覧で選択中のマップ
     std::string currentMapFile_ = "resources/map/map01.json"; // 今開いているファイル
     bool  dirty_ = false;                   // 未保存の変更があるか
+    int   lastBlockVersion_ = 0;            // ブロック編集の監視用（変化→dirty_）
     bool  autoSave_ = false;                // 自動保存 ON/OFF
     float autoSaveTimer_ = 0.0f;            // 自動保存までのフレームカウンタ
 

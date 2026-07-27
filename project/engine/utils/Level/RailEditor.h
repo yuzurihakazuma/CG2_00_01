@@ -56,6 +56,14 @@ public:
     const std::vector<LevelCameraZone>& GetCameraZones() const{ return data_->cameraZones; }
     const std::vector<CoinData>& GetCoins() const{ return data_->coins; } // 収集物（コイン）の配置
 
+    // --- ブロック（乗れる/ぶつかる1m角。マリオメーカー風のGame Viewペイント配置）---
+    const std::vector<BlockData>& GetBlocks() const{ return data_->blocks; }
+    int  GetBlockVersion() const{ return blockVersion_; }   // ブロック編集の世代番号（ゲーム側が再生成を検知）
+    bool IsBlockPaintMode() const{ return blockPaintMode_; } // Game View クリックで配置/削除するモード
+    int  FindBlock(int rail, float dist, int level, float side) const; // セル一致するブロック番号（-1=なし）
+    void AddBlock(int rail, float dist, int level, float side);        // セルが空なら追加
+    bool RemoveBlock(int rail, float dist, int level, float side);     // セル一致を削除（true=消した）
+
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }
     int  GetCurrentRailNodeCount() const;
@@ -259,6 +267,10 @@ private:
     // 接続一覧（接続タブ）で選択中の行（-1=なし）
     int   selectedConnection_ = -1;
 
+    // ブロック編集（配置物タブ／Game Viewペイント）
+    int  blockVersion_ = 0;       // 編集のたびに増やし、ゲーム側が作り直しを検知する
+    bool blockPaintMode_ = false; // Game View クリックで配置/削除するモード
+
     // 値をグリッドに丸める（railSnap_ がOFFならそのまま）
     float SnapValue(float v) const;
 
@@ -326,6 +338,7 @@ private:
         std::vector<int>     types;
         std::vector<Vector4> motions; // 動くレール設定も履歴に含める
         std::vector<CoinData> coins;  // コイン配置も履歴に含める（レール削除のUndoでズレないように）
+        std::vector<BlockData> blocks; // ブロック配置も履歴に含める（ペイントのやり直しができる）
     };
     std::vector<RailSnapshot> undoStack_;
     std::vector<RailSnapshot> redoStack_;
@@ -337,6 +350,7 @@ private:
     std::vector<int>     initialTypes_;
     std::vector<Vector4> initialMotions_;
     std::vector<CoinData> initialCoins_;
+    std::vector<BlockData> initialBlocks_;
     bool hasInitial_ = false;
     void CommitIfStable();          // マウス非操作時に変化を検知して履歴へ積む
     void RestoreSnapshot(const RailSnapshot& s); // 状態を復元

@@ -1312,6 +1312,25 @@ const std::vector<CoinData>& EditorManager::GetEditorCoins() const{
     static const std::vector<CoinData> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetCoins() : kEmpty;
 }
+const std::vector<BlockData>& EditorManager::GetEditorBlocks() const{
+    static const std::vector<BlockData> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetBlocks() : kEmpty;
+}
+int EditorManager::GetEditorBlockVersion() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetBlockVersion() : 0;
+}
+bool EditorManager::IsEditorBlockPaintMode() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->IsBlockPaintMode() : false;
+}
+bool EditorManager::HasEditorBlock(int rail, float dist, int level, float side) const{
+    return levelEditor_ ? ( levelEditor_->GetRailEditor()->FindBlock(rail, dist, level, side) >= 0 ) : false;
+}
+void EditorManager::AddEditorBlock(int rail, float dist, int level, float side){
+    if ( levelEditor_ ) { levelEditor_->GetRailEditor()->AddBlock(rail, dist, level, side); }
+}
+void EditorManager::RemoveEditorBlock(int rail, float dist, int level, float side){
+    if ( levelEditor_ ) { levelEditor_->GetRailEditor()->RemoveBlock(rail, dist, level, side); }
+}
 bool EditorManager::GetEditorSelectedNode(int& outRail, Vector3& outPos) const{
     if ( !levelEditor_ ) return false;
     RailEditor* railEditor = levelEditor_->GetRailEditor();

@@ -180,6 +180,10 @@ void LevelEditor::LoadAndCreateMap(const std::string& fileName){
 
 	// レール編集の選択・履歴をリセット（空なら1本用意する）
 	railEditor_->OnMapChanged();
+	// OnMapChanged はブロック世代番号も進める（ゲーム側の作り直し通知）ので、
+	// 読み込んだ直後が「未保存」扱いにならないよう監視値をここで揃える
+	lastBlockVersion_ = railEditor_->GetBlockVersion();
+	dirty_ = false;
 
 	++mapLoadVersion_; // シーンが敵を読み直す合図
 }
@@ -229,6 +233,12 @@ void LevelEditor::Update(){
 	}
 
 	for ( auto& obj : object3ds_ ) { obj->Update(); }
+
+	// ブロック編集（Game Viewペイント）も未保存扱いにする（railVersion と別系統のため個別に監視）
+	if ( railEditor_ && railEditor_->GetBlockVersion() != lastBlockVersion_ ) {
+		lastBlockVersion_ = railEditor_->GetBlockVersion();
+		dirty_ = true;
+	}
 
 	// 自動保存：変更があれば少し待ってから上書き保存（毎フレーム書かないようにデバウンス）
 	if ( autoSave_ && dirty_ ) {

@@ -56,6 +56,16 @@ struct CoinData {
     bool operator==(const CoinData&) const = default; // Undo履歴の変化検知用
 };
 
+// ブロック1個：レール上の距離＋高さ段数で置く1m角の足場/壁（マリオメーカー風配置）。
+//   dist は1mグリッドに吸着した値。level=0 がレール面の上、1 でその1段上…
+struct BlockData {
+    int   rail  = 0;    // 配置先レール番号
+    float dist  = 0.0f; // レール上の距離(m)。1m刻み
+    int   level = 0;    // 高さ段数（1段=1m）
+    float side  = 0.0f; // 道幅方向のずれ(m)。1m刻み。0=中心線（当たるのは中心のみ／横は飾り）
+    bool operator==(const BlockData&) const = default; // Undo履歴の変化検知用
+};
+
 struct LevelData{
     std::string name;
 
@@ -93,6 +103,7 @@ struct LevelData{
     std::vector<int> railGuideRails; // ガイドレール追従（波形3）の対象レール番号（-1=なし）
     std::vector<std::string> railGroups; // 路線のグループ名（空=未分類。リスト絞り込み/一括操作用）
     std::vector<CoinData> coins;         // 収集物（コイン）の配置
+    std::vector<BlockData> blocks;       // ブロック（乗れる/ぶつかる1m角）の配置
 
     // 各レールの動きの波形（railLines と同じ並び）
     //   0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動
