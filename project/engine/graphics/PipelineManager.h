@@ -40,6 +40,9 @@ public:
 
 	// Computeパイプラインをセット
 	void SetGPUParticleComputePipeline(ID3D12GraphicsCommandList* commandList);
+
+	// GPUパーティクルのEmit（発生）用Computeパイプラインをセット（FreeListから空きを取り出して書き込む）
+	void SetGPUParticleEmitPipeline(ID3D12GraphicsCommandList* commandList);
 	// Draw用パイプラインをセット
 	void SetGPUParticleDrawPipeline(ID3D12GraphicsCommandList* commandList);
 
@@ -71,6 +74,8 @@ private:
 
 	// GPUパーティクル用の初期化関数
 	void CreateGPUParticleComputeRootSignature();
+	void CreateGPUParticleEmitRootSignature();
+	void CreateGPUParticleEmitPipeline();
 	
 	// GPUパーティクル用の初期化関数（Computeシェーダー用）
 	void CreateGPUParticleComputePipeline();
@@ -132,6 +137,8 @@ private:
 	// GPUパーティクルのComputeシェーダー用の変数
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleComputeRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleComputePipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleEmitRootSignature_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState>  gpuParticleEmitPipelineState_;
 
 	// GPUパーティクルのDrawシェーダー用の変数
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> gpuParticleDrawRootSignature_;

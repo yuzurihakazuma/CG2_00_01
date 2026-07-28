@@ -110,9 +110,11 @@ private:
     };
     std::vector<SpitBall> spits_;
 
+public:
     // パフを1個出す（pos=位置, vel=初速, color=色, scale=大きさ, life=寿命秒, modelName=見た目）。
     //   modelName="fxSphere"（白い専用の粒。敵の"sphere"とは別物）の時だけ color でタイントする。
     //   "eggShell" 等の専用モデルは自前の色をそのまま見せる。
+    //   ？ブロックのコイン演出など、外部のちょっとした粒エフェクトにも使える
     void SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life,
                    const std::string& modelName = "fxSphere");
 };

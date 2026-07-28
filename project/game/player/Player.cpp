@@ -83,7 +83,10 @@ void Player::Update(const std::vector<SplineRail>& allRails){
     if ( currentRail.nodes.size() < 2 ) return;
 
     // 穴の上に来たら、レールを離れて自由落下（弾道）。下の別レールへ着地できる。
-    if ( isGrounded_ && IsOverHole(allRails) ) {
+    //   ただしブロックの上に立っている時は落ちない（穴を渡す橋・足場が作れるように）
+    bool onBlock = ( blocks_
+        && blocks_->GroundHeightAt(currentRailIndex_, currentDistance_, heightOffset_) > 0.0f );
+    if ( isGrounded_ && !onBlock && IsOverHole(allRails) ) {
         EnterAir(currentRail.GetPositionByDistance(currentDistance_), currentRail.GetTangentByDistance(currentDistance_), 0.0f, 0.15f);
         return;
     }
@@ -532,27 +535,52 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
         jumpVelocity_ -= gravity_ * dt;
     }
 
+    float prevFootY = heightOffset_; // 貫通防止：移動前の足の高さ（着地の掃引判定に使う）
     heightOffset_ += jumpVelocity_ * dt;
 
-    // 頭上のブロック：上昇中に頭をぶつけたら上昇を止める（マリオ風）
+    // 頭上のブロック：上昇中に頭をぶつけたら上昇を止める（マリオ風）。
+    //   ぶつけた先が？ブロックならコインが飛び出す（BlockSystem が判定）
     if ( blocks_ && jumpVelocity_ > 0.0f ) {
         const float kHeadHeight = 1.0f;
         float ceiling = blocks_->CeilingHeightAt(currentRailIndex_, currentDistance_, heightOffset_);
         if ( heightOffset_ + kHeadHeight > ceiling ) {
             heightOffset_ = ceiling - kHeadHeight;
             jumpVelocity_ = 0.0f;
+            blocks_->NotifyHeadBump(currentRailIndex_, currentDistance_, ceiling);
         }
     }
 
-    // 足元の支持面：ブロックの上面 or レール面(0)。ブロックの上に立てる
+    // ブロック内部に埋まった場合（空中からの着地・リスポーン・乗り換え等）は
+    // 上面へ押し出して復帰する（中で身動きが取れなくなるソフトロックの防止）
+    if ( blocks_ ) {
+        float embedTop = 0.0f;
+        int   guard = 0;
+        while ( guard++ < 10
+            && blocks_->BlockedAt(currentRailIndex_, currentDistance_,
+                                  heightOffset_ + 0.05f, heightOffset_ + 0.95f,
+                                  nullptr, nullptr, &embedTop) ) {
+            heightOffset_ = embedTop;
+            prevFootY     = embedTop;
+            jumpVelocity_ = 0.0f;
+        }
+    }
+
+    // 足元の支持面：ブロックの上面 or レール面(0)。ブロックの上に立てる。
+    //   落下が速い時に1フレームで上面を飛び越さないよう、移動前の足の高さも見て掃引する
     float groundHeight = blocks_
-        ? blocks_->GroundHeightAt(currentRailIndex_, currentDistance_, heightOffset_)
+        ? blocks_->GroundHeightAt(currentRailIndex_, currentDistance_, ( std::max )( prevFootY, heightOffset_ ))
         : 0.0f;
 
-    // 接地中に足場が無くなった（ブロックの端から歩き出た）→ そのまま落下開始
+    // 接地中に足場が下がった時：
+    //   小さな下り（斜面を歩いて降りる・小段差）は足を地面に吸い付けたまま歩く。
+    //   大きく下がった（ブロックの端から歩き出た）時だけ落下を開始する
     if ( isGrounded_ && groundHeight < heightOffset_ - 0.01f ) {
-        isGrounded_   = false;
-        jumpVelocity_ = 0.0f;
+        if ( heightOffset_ - groundHeight <= 0.35f ) {
+            heightOffset_ = groundHeight; // 斜面・小段差はスナップして接地を維持
+        } else {
+            isGrounded_   = false;
+            jumpVelocity_ = 0.0f;
+        }
     }
 
     if ( heightOffset_ <= groundHeight && jumpVelocity_ <= 0.0f ) {
@@ -561,6 +589,7 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
             EnterAir(rail.GetPositionByDistance(currentDistance_), rail.GetTangentByDistance(currentDistance_), jumpVelocity_, 0.15f);
             return true;
         }
+        float landVelocity = jumpVelocity_; // 着地の瞬間の落下速度（ジャンプ台の判定に使う）
         // 地面あり＆降りてきた → 着地（ブロックの上面 or レール面）
         heightOffset_   = groundHeight;
         jumpVelocity_   = 0.0f;
@@ -568,6 +597,14 @@ bool Player::UpdateJumpAndLand(const SplineRail& rail, const std::vector<SplineR
         flutterCdTimer_ = 0.0f;
         flutterCount_   = 0;   // ふんばりの減衰も着地でリセット
         fluttering_     = false;
+
+        // ジャンプ台ブロック：勢いよく飛び乗ったら大きく跳ね返る（歩いて乗っただけでは跳ねない）
+        if ( blocks_ && landVelocity < -4.0f
+            && blocks_->SupportTypeAt(currentRailIndex_, currentDistance_, heightOffset_) == BlockSystem::kTypeSpring ) {
+            jumpVelocity_ = jumpPower_ * 1.35f; // 通常ジャンプより高く跳ぶ
+            isGrounded_   = false;
+            flutterCount_ = 0;                  // 跳ねた後もふんばり可能
+        }
     }
     return false;
 }

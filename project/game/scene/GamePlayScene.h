@@ -200,6 +200,16 @@ private: // メンバ変数
 	int   lastPaintLevel_ = -1;
 	float lastPaintSide_  = 0.0f;
 
+	// 範囲フィル（塗り方=矩形）のドラッグ状態（始点〜終点をボタンを離した時に一括適用）
+	bool  rectFillActive_   = false;
+	bool  rectFillErase_    = false;
+	int   rectFillRail_     = -1;
+	float rectFillDist_     = 0.0f;
+	int   rectFillLevel_    = 0;
+	float rectFillSide_     = 0.0f;
+	float rectFillEndDist_  = 0.0f;
+	int   rectFillEndLevel_ = 0;
+
 	// --- 卵保持数の数字表示（SDFText。HUDアイコン列の右に「×N」）---
 	std::unique_ptr<SDFText> eggCountText_;
 

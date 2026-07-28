@@ -25,6 +25,10 @@ class InstancedGroup;
 class BlockSystem {
 public:
     static constexpr float kSize = 1.0f; // 1ブロック = 1m角
+    static constexpr int kTypeCount = 7; // ブロックの種類数（BlockData::type と対応）
+    static constexpr int kTypeSpring = 4; // ジャンプ台（上に飛び乗ると大きく跳ねる）
+    static constexpr int kTypeHatena = 5; // ？ブロック（下から頭突きするとコインが出る。1回きり）
+    static constexpr int kTypeCloud  = 6; // すり抜け床（上には乗れる/下と横からは通り抜ける）
 
     BlockSystem();
     ~BlockSystem(); // InstancedGroup を前方宣言で持つため cpp 側で定義
@@ -44,11 +48,22 @@ public:
     // 足元の支持面：dist に重なるブロックのうち、上面が footY+0.25 以下で一番高いもの（無ければ 0=レール面）
     float GroundHeightAt(int rail, float dist, float footY) const;
     // 体の高さ帯 [bodyBottom, bodyTop] が dist のブロックに横から重なるか。
-    //   重なったブロックの占有区間 [outMin, outMax]（プレイヤー半径ぶん拡張済み）を返す
+    //   重なったブロックの占有区間 [outMin, outMax]（プレイヤー半径ぶん拡張済み）と
+    //   上面の高さ outTop（埋まった時の押し出し先）を返す
     bool  BlockedAt(int rail, float dist, float bodyBottom, float bodyTop,
-                    float* outMin, float* outMax) const;
+                    float* outMin, float* outMax, float* outTop = nullptr) const;
     // 頭上の天井：dist に重なるブロックの底面のうち、footY より上で一番低いもの（無ければ大きな値）
     float CeilingHeightAt(int rail, float dist, float footY) const;
+    // 今の足元を支えているブロックの種類（-1=レール面/ブロックなし）。ジャンプ台の判定に使う
+    int   SupportTypeAt(int rail, float dist, float footY) const;
+
+    // --- ？ブロック（頭突きでコイン）---
+    // 頭をぶつけた時に Player が呼ぶ：ぶつけた先が未使用の？ブロックならコインを出す
+    void  NotifyHeadBump(int rail, float dist, float headY);
+    // 頭突きで出たコインのワールド位置（1フレーム分。シーンが取り出して演出とカウントに使う）
+    bool  ConsumeBumpCoin(Vector3& outPos);
+    // Play開始時：？ブロックを全部未使用に戻す
+    void  ResetPlay();
 
 private:
     struct Block {
@@ -56,26 +71,54 @@ private:
         float dist  = 0.0f; // レール上の距離(m)。1m刻み
         int   level = 0;    // 段数（1段=1m）
         float side  = 0.0f; // 道幅方向のずれ(m)。0=中心線
+        int   type  = 0;    // 見た目の種類（0=スポンジ/1=段ボール層/2=斜面45°/3=ゆるい斜面/4=バネ/5=？/6=すり抜け）
+        int   ascend = 1;   // 斜面の登り方向（+1=dist増加側が高い/-1=逆。隣のブロックから自動決定）
+        bool  used  = false; // ？ブロック：このPlayで既にコインを出したか
     };
+    static bool IsSlopeType(int type){ return type == 2 || type == 3; }
     std::vector<Block> blocks_;
     const std::vector<SplineRail>* rails_ = nullptr; // シーンの RailField が所有（借り物）
 
-    // 見た目2種：上が空いている＝乗る面（明るい） / 上が塞がっている＝内部（暗い）。
-    //   グループごとに Obj3d の配列を持ち、InstancedGroup へまとめて渡す
+    // 種類ごとの一括描画グループ（クラフトブロック4種）＋自動デコの紙花2種。
+    //   Obj3d は行列計算専用のプール（伸びるだけ）から借り、グループは非所有ポインタで持つ。
+    //   ペイントのたびに Obj3d（GPUリソース2本持ち）を作り直さないための構造
     struct LookGroup {
-        std::vector<std::unique_ptr<Obj3d>> objs; // インスタンスの見た目（行列計算用）
-        std::vector<int> blockIndices;            // objs[i] が対応する blocks_ の番号
+        std::vector<Obj3d*> objs;      // プールから借りた行列計算機（非所有）
+        std::vector<int> blockIndices; // objs[i] が対応する blocks_ の番号（花は -1）
         std::unique_ptr<InstancedGroup> batch;
     };
-    LookGroup topLook_;  // 上に何も無い（乗れる面）
-    LookGroup fillLook_; // 上にブロックがある（積み上げた内部）
+    LookGroup typeLooks_[kTypeCount]; // 種類別のブロック
+    LookGroup usedHatenaLook_;        // 使用済みの？ブロック（灰色）
+    LookGroup flowerLooks_[2];        // 花（0=オレンジ / 1=白い顔つき）。継ぎ目に自動で咲く
+
+    // 頭突きで出たコインの位置（シーンが ConsumeBumpCoin で取り出す）
+    std::vector<Vector3> bumpCoinQueue_;
+
+    // 花の配置（Sync時に計算。動くレール追従のため rail/dist/高さで持つ）
+    struct FlowerSpot {
+        int   rail = 0;
+        float dist = 0.0f;   // 継ぎ目の位置（セルの中間）
+        float side = 0.0f;
+        float topY = 0.0f;   // 咲かせる高さ（ブロック上面。レール面からの相対）
+        float yawOffset = 0.0f; // 少しランダムに回す
+        int   kind = 0;      // 0=オレンジ / 1=白
+    };
+    std::vector<FlowerSpot> flowers_;
+
+    std::vector<std::unique_ptr<Obj3d>> objPool_; // 行列計算用プール（必要数まで伸びるだけ）
+    void EnsurePool(size_t count);                // プールを count 個まで育てる
 
     // (レール, 1mセル) → そのセルにあるブロック番号。当たり判定と隣接判定の高速検索用
     std::unordered_map<uint64_t, std::vector<int>> cellMap_;
 
     void RebuildCellMap();                    // blocks_ から cellMap_ を作り直す
     bool HasBlockAt(int rail, int cell, int level, float side) const; // 隣接判定
-    void BuildLookGroups();                   // 隣接に応じて見た目グループへ振り分け
+    int  FindBlockIndexAt(int rail, int cell, int level, float side) const; // ブロック番号（-1=なし）
+    void BuildLookGroups();                   // 種類ごとの見た目グループへ振り分け＋花の自動配置
+    // このブロックの dist 位置での表面高さ（レール面からの相対）。斜面は位置で変わる
+    float SurfaceHeightAt(const Block& block, float dist) const;
+    // このブロックが dist 方向に当たりを持つ半幅（斜面26°は2mぶん）
+    static float FootprintHalf(int type){ return ( type == 3 ) ? 1.0f : 0.5f; }
     // ブロックの中心ワールド座標（動くレールの現在位置・接線の横方向を反映）
     bool BlockWorldPos(const Block& block, Vector3& outPos, float& outYaw) const;
 };

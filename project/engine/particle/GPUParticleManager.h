@@ -87,6 +87,7 @@ private:
     GPUParticleManager& operator=(const GPUParticleManager&) = delete;
 
     void CreateParticleBuffer();   // UAVバッファ作成
+    void CreateFreeListBuffers();  // FreeList（空きスロット管理）バッファ作成
     void CreateConstantBuffers();  // CB作成
     void CreateVertexBuffer();     // 板ポリ作成
 
@@ -102,9 +103,21 @@ private:
     uint32_t uavIndex_ = 0; // Compute時に使うUAVのインデックス
     uint32_t srvIndex_ = 0; // Draw時に使うSRVのインデックス
 
-    // Emit用のUploadバッファ (CPU→GPU転送に使う)
+    // FreeList（空きスロット番号のスタック）と空き数カウンタ (Default Heap / UAV)
+    //   死亡したパーティクルの番号を UpdateCS が返却し、EmitCS が取り出して再利用する
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListBuffer_;      // uint × kMaxParticles
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexBuffer_; // int × 1（空き数）
+    uint32_t freeListUavIndex_ = 0;
+    uint32_t freeListIndexUavIndex_ = 0;
+
+    // Emit用のUploadバッファ (CPU→GPU転送に使う。EmitCS が t0 として読む)
     Microsoft::WRL::ComPtr<ID3D12Resource> emitUploadBuffer_;
     GPUParticleData* emitUploadData_ = nullptr; // Mapしたポインタ
+    uint32_t emitSrvIndex_ = 0;                 // EmitCS が読む t0 用SRV
+
+    // Emit用定数バッファ (b0: emitCount)
+    Microsoft::WRL::ComPtr<ID3D12Resource> emitCBResource_;
+    uint32_t* emitCBData_ = nullptr;
 
     // 定数バッファ
     Microsoft::WRL::ComPtr<ID3D12Resource> updateCBResource_;
@@ -127,13 +140,15 @@ private:
     // 1フレームに発生できる最大数
     static constexpr uint32_t kMaxEmitPerFrame = 1000;
 
-    // Emit用 (スロット番号 + データ のペア)
-    struct EmitEntry { uint32_t slot; GPUParticleData data; };
-    std::vector<EmitEntry> emitQueue_;
-    uint32_t nextFreeSlot_ = 0; // 循環インデックス
+    // Emit用（このフレームに発生させるパーティクルの中身。書き込み先スロットは
+    //   GPU側の EmitCS が FreeList から取り出して決める＝CPUはスロットを管理しない）
+    std::vector<GPUParticleData> emitQueue_;
 
 	// 初期化用バッファ (全パーティクルをalive=0で初期化するための一時バッファ)
     Microsoft::WRL::ComPtr<ID3D12Resource> initBuffer_;
+    // FreeList初期化用の一時バッファ（freeList[i]=i と 空き数=kMaxParticles を転送する）
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListInitBuffer_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexInitBuffer_;
 
     float gravityY_ = -0.098f;
 

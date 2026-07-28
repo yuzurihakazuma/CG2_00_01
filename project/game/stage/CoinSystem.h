@@ -22,6 +22,8 @@ public:
     void Draw() const;
     int CollectedCount() const{ return collected_; }
     int TotalCount() const{ return ( int ) coins_.size(); }
+    // ？ブロック等から出たボーナスコイン（配置コインの総数には含まれない）
+    void AddBonus(int count){ collected_ += count; }
 
 private:
     struct Coin {

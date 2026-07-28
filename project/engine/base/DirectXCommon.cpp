@@ -647,7 +647,11 @@ void DirectXCommon::InitializeInfoQueue(){
 		D3D12_MESSAGE_ID denyIds[] = {
 			// windows11でのDXGIデバックレイヤーとDX12デバックレイヤーの相互作用バグによるエラーメッセージ
 			// https://stackoverflow.com/questions/69805245/directx-12-application-is-crashing-in-windows-11
-			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE,D3D12_MESSAGE_ID_LIVE_DEVICE, };
+			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE,D3D12_MESSAGE_ID_LIVE_DEVICE,
+			// 終了時の ReportLiveObjects が挙げる「シェーダーキャッシュセッションが生きている」警告(#1281)。
+			// D3D12ランタイム内部のキャッシュで、アプリ側では解放できない（Refcount:0, IntRef:1）。
+			// WARNINGでブレークする設定なので、抑制しないと終了のたびに例外0x87Aで落ちる
+			( D3D12_MESSAGE_ID ) 1281 /* LIVE_SHADERCACHESESSION */, };
 		// 抑制するレベル
 		D3D12_MESSAGE_SEVERITY severities[] = { D3D12_MESSAGE_SEVERITY_INFO };
 		D3D12_INFO_QUEUE_FILTER filter {};

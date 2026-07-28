@@ -34,6 +34,8 @@ void PipelineManager::Finalize(){
 	// GPUパーティクル用のリソースも忘れずに解放
 	gpuParticleComputeRootSignature_.Reset();
 	gpuParticleComputePipelineState_.Reset();
+	gpuParticleEmitRootSignature_.Reset();
+	gpuParticleEmitPipelineState_.Reset();
 	gpuParticleDrawRootSignature_.Reset();
 	gpuParticleDrawPipelineState_.Reset();
 
@@ -93,6 +95,8 @@ void PipelineManager::Initialize(DirectXCommon* dxCommon){
 	// GPUパーティクル用のルートシグネチャとパイプラインの作成
 	CreateGPUParticleComputeRootSignature();
 	CreateGPUParticleComputePipeline();
+	CreateGPUParticleEmitRootSignature();
+	CreateGPUParticleEmitPipeline();
 
 	// Draw用のルートシグネチャとパイプラインの作成
 	CreateGPUParticleDrawRootSignature();
@@ -468,8 +472,10 @@ void PipelineManager::CreateSkinningObject3DGraphicsPipeline(){
 // ルートシグネチャの生成 GPUパーティクル用 Computeシェーダー用
 void PipelineManager::CreateGPUParticleComputeRootSignature(){
 	RootSignatureBuilder builder;
-	builder.AddDescriptorTableUAV(0);                          // [0]: u0 (RWStructuredBuffer)
-	builder.AddCBV(0, D3D12_SHADER_VISIBILITY_ALL);            // [1]: b0 (deltaTime等)
+	builder.AddDescriptorTableUAV(0);                          // [0]: u0 パーティクル (RWStructuredBuffer)
+	builder.AddDescriptorTableUAV(1);                          // [1]: u1 FreeList（空きスロット番号）
+	builder.AddDescriptorTableUAV(2);                          // [2]: u2 FreeListIndex（空き数カウンタ）
+	builder.AddCBV(0, D3D12_SHADER_VISIBILITY_ALL);            // [3]: b0 (deltaTime等)
 	builder.BuildForCompute(dxCommon_->GetDevice(), gpuParticleComputeRootSignature_);
 }
 
@@ -485,6 +491,32 @@ void PipelineManager::CreateGPUParticleComputePipeline(){
 
 	HRESULT hr = dxCommon_->GetDevice()->CreateComputePipelineState(
 		&psoDesc, IID_PPV_ARGS(&gpuParticleComputePipelineState_));
+	assert(SUCCEEDED(hr));
+}
+
+// ルートシグネチャの生成 GPUパーティクル用 Emit（発生）Computeシェーダー用
+void PipelineManager::CreateGPUParticleEmitRootSignature(){
+	RootSignatureBuilder builder;
+	builder.AddDescriptorTableUAV(0);                                 // [0]: u0 パーティクル
+	builder.AddDescriptorTableUAV(1);                                 // [1]: u1 FreeList
+	builder.AddDescriptorTableUAV(2);                                 // [2]: u2 FreeListIndex
+	builder.AddDescriptorTableSRV(0, D3D12_SHADER_VISIBILITY_ALL);    // [3]: t0 発生リクエスト
+	builder.AddCBV(0, D3D12_SHADER_VISIBILITY_ALL);                   // [4]: b0 (emitCount)
+	builder.BuildForCompute(dxCommon_->GetDevice(), gpuParticleEmitRootSignature_);
+}
+
+// パイプラインの生成 GPUパーティクル用 Emit（発生）Computeシェーダー用
+void PipelineManager::CreateGPUParticleEmitPipeline(){
+	auto csBlob = dxCommon_->GetShaderCompiler().CompileShader(
+		L"resources/shaders/Particle/ParticleEmit.CS.hlsl", L"cs_6_0");
+	assert(csBlob);
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.pRootSignature = gpuParticleEmitRootSignature_.Get();
+	psoDesc.CS = { csBlob->GetBufferPointer(), csBlob->GetBufferSize() };
+
+	HRESULT hr = dxCommon_->GetDevice()->CreateComputePipelineState(
+		&psoDesc, IID_PPV_ARGS(&gpuParticleEmitPipelineState_));
 	assert(SUCCEEDED(hr));
 }
 
@@ -557,6 +589,12 @@ void PipelineManager::CreateSkyboxGraphicsPipeline(){
 void PipelineManager::SetGPUParticleComputePipeline(ID3D12GraphicsCommandList* commandList){
 	commandList->SetComputeRootSignature(gpuParticleComputeRootSignature_.Get());
 	commandList->SetPipelineState(gpuParticleComputePipelineState_.Get());
+}
+
+// GPUパーティクルのEmit（発生）用Computeパイプラインをコマンドリストにセットする関数
+void PipelineManager::SetGPUParticleEmitPipeline(ID3D12GraphicsCommandList* commandList){
+	commandList->SetComputeRootSignature(gpuParticleEmitRootSignature_.Get());
+	commandList->SetPipelineState(gpuParticleEmitPipelineState_.Get());
 }
 
 // GPUパーティクル用のDrawシェーダーパイプラインをコマンドリストにセットする関数

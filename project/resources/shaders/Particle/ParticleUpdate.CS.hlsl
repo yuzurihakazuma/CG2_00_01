@@ -14,6 +14,12 @@ struct GPUParticleData
 // u0: 読み書き可能なパーティクルバッファ
 RWStructuredBuffer<GPUParticleData> gParticles : register(u0);
 
+// u1: FreeList（空きスロット番号のスタック。gFreeList[0 .. 空き数-1] が有効）
+RWStructuredBuffer<uint> gFreeList : register(u1);
+
+// u2: FreeListの空き数カウンタ（[0]のみ使用。Emitで減り、死亡返却で増える）
+RWStructuredBuffer<int> gFreeListIndex : register(u2);
+
 // b0: 更新用定数バッファ
 cbuffer UpdateCB : register(b0)
 {
@@ -39,6 +45,20 @@ void main(uint3 id : SV_DispatchThreadID)
     if (gParticles[i].currentTime >= gParticles[i].lifeTime)
     {
         gParticles[i].alive = 0;
+
+        // 空いたスロット番号を FreeList へ返却する（Emit側が再利用できるように）。
+        // InterlockedAdd は加算前の値を返すので、加算前の「空き数」が次の格納先になる
+        int freeListIndex;
+        InterlockedAdd(gFreeListIndex[0], 1, freeListIndex);
+        if (freeListIndex < (int) maxParticles)
+        {
+            gFreeList[freeListIndex] = i;
+        }
+        else
+        {
+            // 万一あふれたらカウンタを戻す（全スロット返却済みなら理論上起きない）
+            InterlockedAdd(gFreeListIndex[0], -1);
+        }
         return;
     }
 

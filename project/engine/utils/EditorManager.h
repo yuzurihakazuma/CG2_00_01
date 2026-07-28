@@ -103,8 +103,11 @@ public:
 	const std::vector<BlockData>& GetEditorBlocks() const;
 	int  GetEditorBlockVersion() const;                    // 変化したらゲーム側が作り直す
 	bool IsEditorBlockPaintMode() const;                   // 配置モード中か（Game Viewクリックの奪い先）
+	bool IsEditorBlockEraseMode() const;                   // 消しゴムモード中か
+	int  GetEditorBlockPaintType() const;                  // 置くブロックの種類
+	int  GetEditorBlockPaintShape() const;                 // 塗り方（0=1個/1=柱/2=階段）
 	bool HasEditorBlock(int rail, float dist, int level, float side) const;
-	void AddEditorBlock(int rail, float dist, int level, float side);
+	void AddEditorBlock(int rail, float dist, int level, float side, int type);
 	void RemoveEditorBlock(int rail, float dist, int level, float side);
 	bool GetEditorRailMotionPreview() const; // 動くレールをエディタ中も再生するか
 	// デモ展示（回転ブロック/オーラ/SDF卵/見本の人形）を表示するか（表示メニューでON/OFF）

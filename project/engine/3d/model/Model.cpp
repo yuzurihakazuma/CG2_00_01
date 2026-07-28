@@ -446,9 +446,13 @@ Model::ModelData Model::LoadModelFile(const std::string& directoryPath, const st
 	ModelData modelData;
 	Assimp::Importer importer;
 	std::string filePath = directoryPath + "/" + filename;
+	OutputDebugStringA(("LoadModelFile: " + filePath + "\n").c_str()); // クラッシュ時にどのモデルか分かるように
 
-	// 1. ファイルを読み込む (三角形化、UV反転、面順反転のオプション付き)
-	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate);
+	// 1. ファイルを読み込む (三角形化、UV反転、面順反転のオプション付き)。
+	//    GenNormals: 法線を持たないモデル（スクリプト生成のOBJ等）にはフラット法線を自動生成する。
+	//    これが無いと Release では assert が消えて mNormals(null) を読みアクセス違反で落ちる
+	const aiScene* scene = importer.ReadFile(filePath.c_str(),
+		aiProcess_FlipWindingOrder | aiProcess_FlipUVs | aiProcess_Triangulate | aiProcess_GenNormals);
 	assert(scene != nullptr && scene->HasMeshes()); // 読み込めない、またはメッシュがない場合はエラー
 
 	// 2. メッシュの解析

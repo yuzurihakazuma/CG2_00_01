@@ -1322,11 +1322,20 @@ int EditorManager::GetEditorBlockVersion() const{
 bool EditorManager::IsEditorBlockPaintMode() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->IsBlockPaintMode() : false;
 }
+bool EditorManager::IsEditorBlockEraseMode() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->IsBlockEraseMode() : false;
+}
+int EditorManager::GetEditorBlockPaintType() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetBlockPaintType() : 0;
+}
+int EditorManager::GetEditorBlockPaintShape() const{
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetBlockPaintShape() : 0;
+}
 bool EditorManager::HasEditorBlock(int rail, float dist, int level, float side) const{
     return levelEditor_ ? ( levelEditor_->GetRailEditor()->FindBlock(rail, dist, level, side) >= 0 ) : false;
 }
-void EditorManager::AddEditorBlock(int rail, float dist, int level, float side){
-    if ( levelEditor_ ) { levelEditor_->GetRailEditor()->AddBlock(rail, dist, level, side); }
+void EditorManager::AddEditorBlock(int rail, float dist, int level, float side, int type){
+    if ( levelEditor_ ) { levelEditor_->GetRailEditor()->AddBlock(rail, dist, level, side, type); }
 }
 void EditorManager::RemoveEditorBlock(int rail, float dist, int level, float side){
     if ( levelEditor_ ) { levelEditor_->GetRailEditor()->RemoveBlock(rail, dist, level, side); }

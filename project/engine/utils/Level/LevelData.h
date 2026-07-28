@@ -63,6 +63,7 @@ struct BlockData {
     float dist  = 0.0f; // レール上の距離(m)。1m刻み
     int   level = 0;    // 高さ段数（1段=1m）
     float side  = 0.0f; // 道幅方向のずれ(m)。1m刻み。0=中心線（当たるのは中心のみ／横は飾り）
+    int   type  = 0;    // 見た目の種類（0=スポンジ/1=段ボール層/2=斜面45°/3=ゆるい斜面）
     bool operator==(const BlockData&) const = default; // Undo履歴の変化検知用
 };
 

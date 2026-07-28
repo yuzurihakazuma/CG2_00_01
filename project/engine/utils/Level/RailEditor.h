@@ -28,6 +28,9 @@ public:
     // カメラ演出専用のウィンドウ（ゾーンの追加・編集・プレビュー）を描画する
     void DrawCameraWindow();
 
+    // 配置エディタ（コイン・ブロック専用ウィンドウ）。置く系の作業を集約
+    void DrawItemWindow();
+
     // 「この画角をプレビュー」の要求をシーンが受け取る（BlenderImporter と同じパターン）。
     //   要求があれば true を返し、メインカメラに設定すべき位置・回転を出す（1回で消費）。
     bool ConsumeCameraPreviewRequest(Vector3& outPos, Vector3& outRot);
@@ -60,8 +63,11 @@ public:
     const std::vector<BlockData>& GetBlocks() const{ return data_->blocks; }
     int  GetBlockVersion() const{ return blockVersion_; }   // ブロック編集の世代番号（ゲーム側が再生成を検知）
     bool IsBlockPaintMode() const{ return blockPaintMode_; } // Game View クリックで配置/削除するモード
+    bool IsBlockEraseMode() const{ return blockPaintErase_; } // true=消しゴム（クリックで必ず消す）
+    int  GetBlockPaintType() const{ return blockPaintType_; } // 置くブロックの種類（BlockData::type）
+    int  GetBlockPaintShape() const{ return blockPaintShape_; } // 塗り方（0=1個/1=柱/2=階段）
     int  FindBlock(int rail, float dist, int level, float side) const; // セル一致するブロック番号（-1=なし）
-    void AddBlock(int rail, float dist, int level, float side);        // セルが空なら追加
+    void AddBlock(int rail, float dist, int level, float side, int type = 0); // セルが空なら追加
     bool RemoveBlock(int rail, float dist, int level, float side);     // セル一致を削除（true=消した）
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
@@ -270,6 +276,9 @@ private:
     // ブロック編集（配置物タブ／Game Viewペイント）
     int  blockVersion_ = 0;       // 編集のたびに増やし、ゲーム側が作り直しを検知する
     bool blockPaintMode_ = false; // Game View クリックで配置/削除するモード
+    bool blockPaintErase_ = false; // true=消しゴムモード（クリックで必ず消す）
+    int  blockPaintType_ = 0;      // 置くブロックの種類（BlockData::type）
+    int  blockPaintShape_ = 0;     // 塗り方（0=1個ずつ/1=柱：下まで縦に埋める/2=階段：ドラッグで1段ずつ）
 
     // 値をグリッドに丸める（railSnap_ がOFFならそのまま）
     float SnapValue(float v) const;

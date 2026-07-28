@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <string>
 #include <algorithm>
+#include <unordered_map>
 
 #include "engine/utils/ImGuiManager.h"
 #include "engine/base/Input.h"
@@ -685,6 +686,42 @@ void RailEditor::SyncRailArraySizes(){
 	data_->railMotionPhases.resize(n, 0.0f);
 	data_->railOneWay.resize(n, 0);
 	data_->railSpeedMuls.resize(n, 1.0f);
+
+	// レールが短くなって範囲外に取り残されたブロックを末尾セルへ寄せる。
+	//   放置すると「見た目は端に重なって出るのに、当たりは元の位置」「消しゴムが届かない」
+	//   という孤児ブロックになる。寄せた先が既に埋まっていたら重複ぶんは削除する
+	if ( !data_->blocks.empty() ) {
+		bool blocksChanged = false;
+		// ブロックがあるレールだけ折れ線長を測る（毎フレーム呼ばれるので無駄計算はしない）
+		std::unordered_map<int, float> railLengths;
+		for ( auto& block : data_->blocks ) {
+			if ( block.rail < 0 || block.rail >= ( int ) n ) continue;
+			auto found = railLengths.find(block.rail);
+			if ( found == railLengths.end() ) {
+				const auto& line = data_->railLines[block.rail];
+				float length = 0.0f;
+				for ( size_t k = 1; k < line.size(); ++k ) {
+					float dx = line[k].x - line[k - 1].x;
+					float dy = line[k].y - line[k - 1].y;
+					float dz = line[k].z - line[k - 1].z;
+					length += std::sqrt(dx * dx + dy * dy + dz * dz);
+				}
+				found = railLengths.emplace(block.rail, length).first;
+			}
+			// 折れ線とスプラインの長さ差を考慮して少し余裕を持たせる
+			if ( block.dist > found->second + 1.0f ) {
+				float newDist = ( std::max )( 0.0f, std::floor(found->second) );
+				// 寄せ先が埋まっていたら重複になるので消す（-1マーク）
+				block.dist = ( FindBlock(block.rail, newDist, block.level, block.side) >= 0 )
+					? -1.0f : newDist;
+				blocksChanged = true;
+			}
+		}
+		if ( blocksChanged ) {
+			std::erase_if(data_->blocks, [](const BlockData& block){ return block.dist < 0.0f; });
+			++blockVersion_;
+		}
+	}
 }
 
 // レールを1本追加し、全設定配列を既定値で揃える。追加したレール番号を返す。
@@ -762,11 +799,11 @@ int RailEditor::FindBlock(int rail, float dist, int level, float side) const{
 	return -1;
 }
 
-void RailEditor::AddBlock(int rail, float dist, int level, float side){
+void RailEditor::AddBlock(int rail, float dist, int level, float side, int type){
 	if ( rail < 0 || rail >= ( int ) data_->railLines.size() ) return;
 	if ( level < 0 ) return;
 	if ( FindBlock(rail, dist, level, side) >= 0 ) return; // 同じセルへの二重配置は無視
-	data_->blocks.push_back({ rail, dist, level, side });
+	data_->blocks.push_back({ rail, dist, level, side, type });
 	++blockVersion_;
 }
 
@@ -1299,10 +1336,11 @@ void RailEditor::ResetToInitial(){
 	}
 	if ( currentEditRailIndex_ < 0 ) currentEditRailIndex_ = 0;
 
-	committed_.lines  = data_->railLines; // 戻した直後を基準に
-	committed_.types  = data_->railTypes;
-	committed_.coins  = data_->coins;
-	committed_.blocks = data_->blocks;
+	committed_.lines   = data_->railLines; // 戻した直後を基準に
+	committed_.types   = data_->railTypes;
+	committed_.motions = data_->railMotions; // これを忘れると直後に偽のUndo履歴が1つ積まれる
+	committed_.coins   = data_->coins;
+	committed_.blocks  = data_->blocks;
 	++railVersion_;
 }
 
@@ -2970,90 +3008,9 @@ void RailEditor::DrawWindow(){
 		ImGui::SameLine();
 		ImGui::TextDisabled("(路線の選択は管理タブ / Game View クリック)");
 		ImGui::Separator();
-	// --- 収集物（コイン）：選択レールに沿って等間隔に置く。Playで触れると取得 ---
-	if ( ImGui::CollapsingHeader("収集物（コイン）", ImGuiTreeNodeFlags_DefaultOpen) ) {
-		const auto& coinLine = data_->railLines[currentEditRailIndex_];
-		int railCoinCount = 0;
-		for ( const auto& coin : data_->coins ) {
-			if ( coin.rail == currentEditRailIndex_ ) ++railCoinCount;
-		}
-		ImGui::Text("この路線: %d枚 / マップ全体: %d枚", railCoinCount, ( int ) data_->coins.size());
-
-		static int   coinCount  = 5;    // 並べる枚数
-		static float coinHeight = 1.0f; // レールからの高さ(m)
-		static float coinMargin = 0.1f; // 両端に置かない割合（0=端まで置く）
-		ImGui::PushItemWidth(140.0f);
-		ImGui::SliderInt("枚数", &coinCount, 1, 30);
-		ImGui::DragFloat("高さ(m)", &coinHeight, 0.05f, 0.0f, 5.0f, "%.2f");
-		ImGui::SliderFloat("端の余白（割合）", &coinMargin, 0.0f, 0.4f);
-		ImGui::PopItemWidth();
-
-		if ( ImGui::Button("選択レールに等間隔で並べ直す") && coinLine.size() >= 2 ) {
-			// 並べ直し方式：先にこの路線の既存コインを消す（連打しても重複して溜まらない）
-			std::erase_if(data_->coins,
-				[this](const CoinData& coin){ return coin.rail == currentEditRailIndex_; });
-			// 折れ線の長さを測り、両端の余白を除いた範囲へ等間隔に配置する
-			float total = 0.0f;
-			for ( size_t k = 1; k < coinLine.size(); ++k ) {
-				float dx = coinLine[k].x - coinLine[k - 1].x;
-				float dy = coinLine[k].y - coinLine[k - 1].y;
-				float dz = coinLine[k].z - coinLine[k - 1].z;
-				total += std::sqrt(dx * dx + dy * dy + dz * dz);
-			}
-			float s0 = total * coinMargin;
-			float s1 = total * ( 1.0f - coinMargin );
-			for ( int k = 0; k < coinCount; ++k ) {
-				float t = ( coinCount > 1 ) ? ( float ) k / ( float ) ( coinCount - 1 ) : 0.5f;
-				CoinData coin;
-				coin.rail   = currentEditRailIndex_;
-				coin.dist   = s0 + ( s1 - s0 ) * t;
-				coin.height = coinHeight;
-				data_->coins.push_back(coin);
-			}
-			RebuildRailPoints(); // 世代番号を進めてゲーム側にコイン再生成を通知
-		}
-		ImGui::SameLine();
-		if ( ImGui::Button("この路線のコインを削除") ) {
-			std::erase_if(data_->coins,
-				[this](const CoinData& coin){ return coin.rail == currentEditRailIndex_; });
-			RebuildRailPoints();
-		}
-		if ( !data_->coins.empty() ) {
-			if ( ImGui::Button("全コイン削除") ) {
-				data_->coins.clear();
-				RebuildRailPoints();
-			}
-		}
-		ImGui::TextDisabled("※エディタ中も表示。Playで触れると取得（Play開始のたびに復活）");
-		ImGui::Separator();
-	}
-	// --- ブロック（乗れる/ぶつかる1m角。マリオメーカー風のペイント配置）---
-	if ( ImGui::CollapsingHeader("ブロック（乗れる/ぶつかる）", ImGuiTreeNodeFlags_DefaultOpen) ) {
-		bool paintOn = blockPaintMode_;
-		if ( paintOn ) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.25f, 1.0f)); }
-		if ( ImGui::Button(paintOn ? "ブロック配置モード中（クリックで終了）" : "ブロック配置モードを開始", ImVec2(-1.0f, 26.0f)) ) {
-			blockPaintMode_ = !blockPaintMode_;
-		}
-		if ( paintOn ) { ImGui::PopStyleColor(); }
-		if ( ImGui::IsItemHovered() ) {
-			ImGui::SetTooltip("Game View でレールの近くをクリック：空セル=置く / ブロック=消す\n"
-				"マウスを上に動かすと高い段、横に動かすと道の脇に置ける。押しっぱなしで連続配置\n"
-				"1マス=1m。道の中心のブロックは乗れて壁になる（脇にずらしたものは飾り）");
-		}
-		ImGui::Text("マップ全体: %d個", ( int ) data_->blocks.size());
-		if ( !data_->blocks.empty() ) {
-			ImGui::SameLine();
-			if ( ImGui::SmallButton("全ブロック削除") ) {
-				data_->blocks.clear();
-				++blockVersion_;
-			}
-			ImGui::SameLine();
-			ImGui::TextDisabled("(Ctrl+Zで戻せる)");
-		}
-		ImGui::TextDisabled("※階段・壁・足場を作ってレール上のアクションを増やせる");
-		ImGui::TextDisabled("　上が空いたブロックは明るく、積んだ内部は暗く表示される");
-		ImGui::Separator();
-	}
+	// コイン・ブロックの配置UIは専用の「配置エディタ」ウィンドウへ集約した（DrawItemWindow）
+	ImGui::TextDisabled("コインとブロックの配置 → 「配置エディタ」ウィンドウへ移動しました");
+	ImGui::Separator();
 
 	// この路線の穴配列をノード数に合わせて整える（外はDrawWindow冒頭で整える）
 	if ( currentEditRailIndex_ < ( int ) data_->railNodeHoles.size() ) {
@@ -3292,6 +3249,170 @@ void RailEditor::DrawWindow(){
 	ImGui::End();
 #endif
 }
+
+// =====================================================================
+//  配置エディタ（コイン・ブロック専用ウィンドウ）
+//   「置く」系の作業をレール編集から分離して集約。ドッキングで
+//   レールエディタの隣に並べたり、外に出したりできる
+// =====================================================================
+void RailEditor::DrawItemWindow(){
+#ifdef USE_IMGUI
+	ImGui::SetNextWindowSize(ImVec2(380, 500), ImGuiCond_FirstUseEver);
+	ImGui::Begin("配置エディタ (Coin/Block)");
+	if ( data_->railLines.empty() || currentEditRailIndex_ < 0
+		|| currentEditRailIndex_ >= ( int ) data_->railLines.size() ) {
+		ImGui::TextDisabled("レールがありません（レールエディタの作成タブで作る）");
+	} else {
+		ImGui::Text("編集対象: 路線%d", currentEditRailIndex_);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(路線の選択は管理タブ / Game View クリック)");
+		ImGui::Separator();
+	// --- 収集物（コイン）：選択レールに沿って等間隔に置く。Playで触れると取得 ---
+	if ( ImGui::CollapsingHeader("収集物（コイン）", ImGuiTreeNodeFlags_DefaultOpen) ) {
+		const auto& coinLine = data_->railLines[currentEditRailIndex_];
+		int railCoinCount = 0;
+		for ( const auto& coin : data_->coins ) {
+			if ( coin.rail == currentEditRailIndex_ ) ++railCoinCount;
+		}
+		ImGui::Text("この路線: %d枚 / マップ全体: %d枚", railCoinCount, ( int ) data_->coins.size());
+
+		static int   coinCount  = 5;    // 並べる枚数
+		static float coinHeight = 1.0f; // レールからの高さ(m)
+		static float coinMargin = 0.1f; // 両端に置かない割合（0=端まで置く）
+		ImGui::PushItemWidth(140.0f);
+		ImGui::SliderInt("枚数", &coinCount, 1, 30);
+		ImGui::DragFloat("高さ(m)", &coinHeight, 0.05f, 0.0f, 5.0f, "%.2f");
+		ImGui::SliderFloat("端の余白（割合）", &coinMargin, 0.0f, 0.4f);
+		ImGui::PopItemWidth();
+
+		if ( ImGui::Button("選択レールに等間隔で並べ直す") && coinLine.size() >= 2 ) {
+			// 並べ直し方式：先にこの路線の既存コインを消す（連打しても重複して溜まらない）
+			std::erase_if(data_->coins,
+				[this](const CoinData& coin){ return coin.rail == currentEditRailIndex_; });
+			// 折れ線の長さを測り、両端の余白を除いた範囲へ等間隔に配置する
+			float total = 0.0f;
+			for ( size_t k = 1; k < coinLine.size(); ++k ) {
+				float dx = coinLine[k].x - coinLine[k - 1].x;
+				float dy = coinLine[k].y - coinLine[k - 1].y;
+				float dz = coinLine[k].z - coinLine[k - 1].z;
+				total += std::sqrt(dx * dx + dy * dy + dz * dz);
+			}
+			float s0 = total * coinMargin;
+			float s1 = total * ( 1.0f - coinMargin );
+			for ( int k = 0; k < coinCount; ++k ) {
+				float t = ( coinCount > 1 ) ? ( float ) k / ( float ) ( coinCount - 1 ) : 0.5f;
+				CoinData coin;
+				coin.rail   = currentEditRailIndex_;
+				coin.dist   = s0 + ( s1 - s0 ) * t;
+				coin.height = coinHeight;
+				data_->coins.push_back(coin);
+			}
+			RebuildRailPoints(); // 世代番号を進めてゲーム側にコイン再生成を通知
+		}
+		ImGui::SameLine();
+		if ( ImGui::Button("この路線のコインを削除") ) {
+			std::erase_if(data_->coins,
+				[this](const CoinData& coin){ return coin.rail == currentEditRailIndex_; });
+			RebuildRailPoints();
+		}
+		if ( !data_->coins.empty() ) {
+			if ( ImGui::Button("全コイン削除") ) {
+				data_->coins.clear();
+				RebuildRailPoints();
+			}
+		}
+		ImGui::TextDisabled("※エディタ中も表示。Playで触れると取得（Play開始のたびに復活）");
+		ImGui::Separator();
+	}
+	// --- ブロック（乗れる/ぶつかる1m角。マリオメーカー風のペイント配置）---
+	if ( ImGui::CollapsingHeader("ブロック（乗れる/ぶつかる）", ImGuiTreeNodeFlags_DefaultOpen) ) {
+		bool paintOn = blockPaintMode_;
+		if ( paintOn ) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.55f, 0.25f, 1.0f)); }
+		if ( ImGui::Button(paintOn ? "ブロック配置モード中（クリックで終了）" : "ブロック配置モードを開始", ImVec2(-1.0f, 26.0f)) ) {
+			blockPaintMode_ = !blockPaintMode_;
+		}
+		if ( paintOn ) { ImGui::PopStyleColor(); }
+		if ( ImGui::IsItemHovered() ) {
+			ImGui::SetTooltip("Game View でレールの近くをクリック：左=置く / 右クリック=消す（ブロックを左クリックでも消える）\n"
+				"マウスを上に動かすと高い段、横に動かすと道の脇に置ける。押しっぱなしで連続配置\n"
+				"1マス=1m。道の中心のブロックは乗れて壁になる（脇にずらしたものは飾り）");
+		}
+		if ( blockPaintMode_ ) {
+			// 置く/消す のモード切替（右クリックでも常に消せるが、明示モードがあると確実）
+			int eraseModeInt = blockPaintErase_ ? 1 : 0;
+			ImGui::RadioButton("置く##blockmode", &eraseModeInt, 0);
+			ImGui::SameLine();
+			ImGui::RadioButton("消しゴム##blockmode", &eraseModeInt, 1);
+			blockPaintErase_ = ( eraseModeInt == 1 );
+			// ブロックの種類（見た目＋性質）
+			const char* blockTypeNames[] = {
+				"スポンジ (黄)", "段ボール層", "斜面 45°", "ゆるい斜面 26°",
+				"ジャンプ台 (緑)", "？ブロック (金)", "すり抜け床 (白)" };
+			ImGui::SetNextItemWidth(200.0f);
+			ImGui::Combo("種類##blocktype", &blockPaintType_, blockTypeNames, 7);
+			if ( ImGui::IsItemHovered() ) {
+				ImGui::SetTooltip("斜面＝歩いて登れる坂（隣のブロックへ向けて自動で向く）\n"
+					"ジャンプ台＝上に飛び乗ると大きく跳ね返る\n"
+					"？ブロック＝下から頭突きするとコインが出る（1回きり。Playごとに復活）\n"
+					"すり抜け床＝上には乗れて、下と横からは通り抜けられる一方通行の床\n"
+					"ブロックを2個以上並べると、つなぎ目に紙花が自動で咲く");
+			}
+
+			// 塗り方（1クリックの形）
+			const char* blockShapeNames[] = {
+				"1個ずつ", "柱（下まで縦に埋める）", "階段（ドラッグで1段ずつ上がる）",
+				"範囲フィル（ドラッグで矩形）" };
+			ImGui::SetNextItemWidth(240.0f);
+			ImGui::Combo("塗り方##blockshape", &blockPaintShape_, blockShapeNames, 4);
+			if ( ImGui::IsItemHovered() ) {
+				ImGui::SetTooltip("柱：クリックした段から地面まで一気に積む（塔や壁の土台に）。\n"
+					"　　消しゴム時はそのセルの縦一列をまとめて消す\n"
+					"階段：押しっぱなしでドラッグすると1マスごとに1段ずつ高くなる\n"
+					"範囲フィル：ドラッグの始点〜終点の矩形（距離×高さ）を一括で塗る/消す");
+			}
+		}
+		ImGui::Text("マップ全体: %d個", ( int ) data_->blocks.size());
+		if ( !data_->blocks.empty() ) {
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("全ブロック削除") ) {
+				data_->blocks.clear();
+				++blockVersion_;
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(Ctrl+Zで戻せる)");
+		}
+		ImGui::TextDisabled("※階段・壁・足場を作ってレール上のアクションを増やせる");
+		ImGui::TextDisabled("　上が空いたブロックは明るく、積んだ内部は暗く表示される");
+		ImGui::Separator();
+	}
+
+		// --- 管理（個数の内訳と一括操作）---
+		if ( ImGui::CollapsingHeader("管理（個数と一括削除）", ImGuiTreeNodeFlags_DefaultOpen) ) {
+			int typeCounts[8] = {};
+			int railBlockCount = 0;
+			for ( const auto& block : data_->blocks ) {
+				if ( block.type >= 0 && block.type < 8 ) { ++typeCounts[block.type]; }
+				if ( block.rail == currentEditRailIndex_ ) { ++railBlockCount; }
+			}
+			const char* typeNamesShort[] = { "スポンジ", "段ボール", "斜面45", "斜面26", "バネ", "？", "すり抜け" };
+			ImGui::TextDisabled("ブロックの内訳:");
+			for ( int t = 0; t < 7; ++t ) {
+				if ( typeCounts[t] > 0 ) { ImGui::Text("  %s: %d個", typeNamesShort[t], typeCounts[t]); }
+			}
+			ImGui::Text("この路線のブロック: %d個", railBlockCount);
+			ImGui::SameLine();
+			if ( ImGui::SmallButton("この路線のブロックを削除") ) {
+				std::erase_if(data_->blocks,
+					[this](const BlockData& block){ return block.rail == currentEditRailIndex_; });
+				++blockVersion_;
+			}
+			ImGui::Text("コイン: マップ全体 %d枚", ( int ) data_->coins.size());
+		}
+	}
+	ImGui::End();
+#endif
+}
+
 
 // =====================================================================
 //  カメラ演出専用ウィンドウ

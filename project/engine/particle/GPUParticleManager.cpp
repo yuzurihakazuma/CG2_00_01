@@ -24,6 +24,7 @@ void GPUParticleManager::Initialize(
     srvManager_ = srvManager;
 
     CreateParticleBuffer();
+    CreateFreeListBuffers();
     CreateConstantBuffers();
     CreateVertexBuffer();
 
@@ -79,10 +80,70 @@ void GPUParticleManager::CreateParticleBuffer(){
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     cmd->ResourceBarrier(1, &barrier);
 
-    // ⑤ Emit用のUploadバッファを永続確保
+    // ⑤ Emit用のUploadバッファを永続確保（EmitCS が t0 の発生リクエストとして読む）
     const size_t emitSize = sizeof(GPUParticleData) * kMaxEmitPerFrame;
     emitUploadBuffer_ = ResourceFactory::GetInstance()->CreateBufferResource(emitSize);
     emitUploadBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&emitUploadData_));
+    emitSrvIndex_ = srvManager_->Allocate();
+    srvManager_->CreateSRVforStructuredBuffer(
+        emitSrvIndex_, emitUploadBuffer_.Get(),
+        kMaxEmitPerFrame, sizeof(GPUParticleData));
+}
+
+// -------------------------------------------------------
+//  FreeList（空きスロット管理）バッファ (UAV)
+//   ・freeListBuffer_      : 空きスロット番号のスタック（uint × kMaxParticles）
+//   ・freeListIndexBuffer_ : 空き数カウンタ（int × 1）
+//   死亡時に UpdateCS が番号を返却し、発生時に EmitCS が取り出して再利用する。
+//   これが無いとCPU側の循環インデックスが生存中の粒を上書きしてしまう
+// -------------------------------------------------------
+void GPUParticleManager::CreateFreeListBuffers(){
+    auto* cmd = dxCommon_->GetCommandList();
+
+    // 遷移バリアの共通形
+    auto transition = [&](ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after){
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = res;
+        barrier.Transition.StateBefore = before;
+        barrier.Transition.StateAfter = after;
+        cmd->ResourceBarrier(1, &barrier);
+    };
+
+    // --- FreeList本体：初期値は「全スロットが空き」= freeList[i] = i ---
+    const size_t freeListSize = sizeof(uint32_t) * kMaxParticles;
+    freeListBuffer_ = ResourceFactory::GetInstance()->CreateUAVBuffer(freeListSize);
+    freeListUavIndex_ = srvManager_->Allocate();
+    srvManager_->CreateUAVForStructuredBuffer(
+        freeListUavIndex_, freeListBuffer_.Get(),
+        kMaxParticles, sizeof(uint32_t));
+
+    freeListInitBuffer_ = ResourceFactory::GetInstance()->CreateBufferResource(freeListSize);
+    uint32_t* freeListInit = nullptr;
+    freeListInitBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&freeListInit));
+    for ( uint32_t i = 0; i < kMaxParticles; ++i ) { freeListInit[i] = i; }
+    freeListInitBuffer_->Unmap(0, nullptr);
+
+    transition(freeListBuffer_.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+    cmd->CopyResource(freeListBuffer_.Get(), freeListInitBuffer_.Get());
+    transition(freeListBuffer_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    // --- 空き数カウンタ：初期値は kMaxParticles（全部空き） ---
+    freeListIndexBuffer_ = ResourceFactory::GetInstance()->CreateUAVBuffer(sizeof(int32_t));
+    freeListIndexUavIndex_ = srvManager_->Allocate();
+    srvManager_->CreateUAVForStructuredBuffer(
+        freeListIndexUavIndex_, freeListIndexBuffer_.Get(),
+        1, sizeof(int32_t));
+
+    freeListIndexInitBuffer_ = ResourceFactory::GetInstance()->CreateBufferResource(sizeof(int32_t));
+    int32_t* counterInit = nullptr;
+    freeListIndexInitBuffer_->Map(0, nullptr, reinterpret_cast<void**>(&counterInit));
+    *counterInit = static_cast<int32_t>( kMaxParticles );
+    freeListIndexInitBuffer_->Unmap(0, nullptr);
+
+    transition(freeListIndexBuffer_.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+    cmd->CopyResource(freeListIndexBuffer_.Get(), freeListIndexInitBuffer_.Get());
+    transition(freeListIndexBuffer_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 // -------------------------------------------------------
@@ -108,6 +169,11 @@ void GPUParticleManager::CreateConstantBuffers(){
     mat->enableLighting = 0;
     mat->uvTransform = MakeIdentity4x4();
     materialCBResource_->Unmap(0, nullptr);
+
+    // Emit用 (b0: このフレームの発生数)
+    emitCBResource_ = ResourceFactory::GetInstance()->CreateBufferResource(0x100);
+    emitCBResource_->Map(0, nullptr, reinterpret_cast<void**>(&emitCBData_));
+    *emitCBData_ = 0;
 }
 
 // -------------------------------------------------------
@@ -168,59 +234,34 @@ void GPUParticleManager::Emit(const Vector3& position, const Vector3& velocity,
     p.scale = scale;
     p.alive = 1;
 
-    uint32_t slot = nextFreeSlot_;
-    nextFreeSlot_ = (nextFreeSlot_ + 1) % kMaxParticles; // 循環
-
-    emitQueue_.push_back({ slot, p });
+    // 書き込み先スロットはGPU側の EmitCS が FreeList から取り出して決める。
+    //   （以前のCPU循環インデックス方式は、生存中のパーティクルを上書きする事故があった）
+    emitQueue_.push_back(p);
 }
 
 // -------------------------------------------------------
 //  Emitキューをアップロード
+//   Uploadバッファ（EmitCS の t0）へ発生リクエストを書き写すだけ。
+//   スロット決定と particleBuffer_ への書き込みは EmitCS が FreeList を使って行う
 // -------------------------------------------------------
 void GPUParticleManager::UploadEmitQueue(ID3D12GraphicsCommandList* commandList){
-   
-    lastFrameEmitCount_ = static_cast< uint32_t >( emitQueue_.size() ); 
+    (void)commandList;
+    lastFrameEmitCount_ = static_cast< uint32_t >( emitQueue_.size() );
     totalEmitted_ += lastFrameEmitCount_;
-    
-    if (emitQueue_.empty()) return;
 
-    // UAV → COPY_DEST
-    D3D12_RESOURCE_BARRIER barrier = {};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = particleBuffer_.Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-    commandList->ResourceBarrier(1, &barrier);
+    if (emitQueue_.empty()) { *emitCBData_ = 0; return; }
 
-    // UploadバッファにデータをコピーしてからGPUバッファへ転送
-    for (uint32_t i = 0; i < static_cast<uint32_t>(emitQueue_.size()); i++)
-    {
-        const auto& entry = emitQueue_[i];
-        emitUploadData_[i] = entry.data; // Uploadバッファに書き込む
-
-        // 対象スロットに1粒だけコピー
-        commandList->CopyBufferRegion(
-            particleBuffer_.Get(),
-            entry.slot * sizeof(GPUParticleData), // コピー先オフセット
-            emitUploadBuffer_.Get(),
-            i * sizeof(GPUParticleData),           // コピー元オフセット
-            sizeof(GPUParticleData)
-        );
-    }
-
+    std::memcpy(emitUploadData_, emitQueue_.data(),
+                sizeof(GPUParticleData) * emitQueue_.size());
+    *emitCBData_ = lastFrameEmitCount_;
     emitQueue_.clear();
-
-    // COPY_DEST → UNORDERED_ACCESS に戻す
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    commandList->ResourceBarrier(1, &barrier);
 }
 
 // -------------------------------------------------------
 //  Dispatch (Computeシェーダー実行)
 // -------------------------------------------------------
 void GPUParticleManager::Dispatch(ID3D12GraphicsCommandList* commandList){
-    // 新しいパーティクルをGPUに転送
+    // 新しいパーティクル（発生リクエスト）をUploadバッファへ書き写す
     UploadEmitQueue(commandList);
 
     // UAVバリア (前フレームのCompute書き込みが完了するまで待つ)
@@ -233,14 +274,37 @@ void GPUParticleManager::Dispatch(ID3D12GraphicsCommandList* commandList){
     ID3D12DescriptorHeap* heaps[] = { srvManager_->GetDescriptorHeap() };
     commandList->SetDescriptorHeaps(1, heaps);
 
-    // Computeパイプラインをセット
+    // --- Emit: FreeListから空きスロットを取り出して新しい粒を書き込む ---
+    if ( lastFrameEmitCount_ > 0 ) {
+        PipelineManager::GetInstance()->SetGPUParticleEmitPipeline(commandList);
+        srvManager_->SetComputeRootDescriptorTable(0, uavIndex_);              // [0]: u0 パーティクル
+        srvManager_->SetComputeRootDescriptorTable(1, freeListUavIndex_);      // [1]: u1 FreeList
+        srvManager_->SetComputeRootDescriptorTable(2, freeListIndexUavIndex_); // [2]: u2 空き数カウンタ
+        srvManager_->SetComputeRootDescriptorTable(3, emitSrvIndex_);          // [3]: t0 発生リクエスト
+        commandList->SetComputeRootConstantBufferView(
+            4, emitCBResource_->GetGPUVirtualAddress());                       // [4]: b0 emitCount
+        UINT emitGroups = ( lastFrameEmitCount_ + 255 ) / 256;
+        commandList->Dispatch(emitGroups, 1, 1);
+
+        // Emitの書き込みが終わってから Update を走らせる（同フレーム内の順序保証）
+        D3D12_RESOURCE_BARRIER emitBarriers[3] = {};
+        emitBarriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        emitBarriers[0].UAV.pResource = particleBuffer_.Get();
+        emitBarriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        emitBarriers[1].UAV.pResource = freeListBuffer_.Get();
+        emitBarriers[2].Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+        emitBarriers[2].UAV.pResource = freeListIndexBuffer_.Get();
+        commandList->ResourceBarrier(3, emitBarriers);
+    }
+
+    // --- Update: 物理更新＋寿命判定。死亡した粒の番号は FreeList へ返却する ---
     PipelineManager::GetInstance()->SetGPUParticleComputePipeline(commandList);
 
-    // [0]: UAVバッファ
-    srvManager_->SetComputeRootDescriptorTable(0, uavIndex_);
-    // [1]: 更新用CB
+    srvManager_->SetComputeRootDescriptorTable(0, uavIndex_);              // [0]: u0 パーティクル
+    srvManager_->SetComputeRootDescriptorTable(1, freeListUavIndex_);      // [1]: u1 FreeList
+    srvManager_->SetComputeRootDescriptorTable(2, freeListIndexUavIndex_); // [2]: u2 空き数カウンタ
     commandList->SetComputeRootConstantBufferView(
-        1, updateCBResource_->GetGPUVirtualAddress());
+        3, updateCBResource_->GetGPUVirtualAddress());                     // [3]: b0 更新用CB
 
     // Dispatch (256スレッドのグループを必要数起動)
     UINT groupCount = (kMaxParticles + 255) / 256;
@@ -309,12 +373,21 @@ void GPUParticleManager::Finalize(){
         cameraCBResource_->Unmap(0, nullptr);
         cameraCBData_ = nullptr;
     }
+    if (emitCBData_) {
+        emitCBResource_->Unmap(0, nullptr);
+        emitCBData_ = nullptr;
+    }
 
     initBuffer_.Reset();
+    freeListInitBuffer_.Reset();
+    freeListIndexInitBuffer_.Reset();
     particleBuffer_.Reset();
+    freeListBuffer_.Reset();
+    freeListIndexBuffer_.Reset();
     emitUploadBuffer_.Reset();
     updateCBResource_.Reset();
     cameraCBResource_.Reset();
     materialCBResource_.Reset();
+    emitCBResource_.Reset();
     vertexResource_.Reset();
 }

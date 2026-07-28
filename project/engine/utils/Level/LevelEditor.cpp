@@ -517,6 +517,9 @@ void LevelEditor::DrawDebugUI(){
 	// 6. カメラエディタ（レール上のカメラ演出ゾーン。専用ウィンドウ）
 	railEditor_->DrawCameraWindow();
 
+	// 7. 配置エディタ（コイン・ブロック。専用ウィンドウ）
+	railEditor_->DrawItemWindow();
+
 #endif
 }
 
