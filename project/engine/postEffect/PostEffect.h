@@ -25,17 +25,35 @@ enum class PostEffectType {
 	MaskedDistortion, // 指定円周囲の熱波歪み
 	MaskedGlow,       // 指定円周囲のスポットライト
 	MaskedSepia,      // 指定エリアのセピア
+	PictureBook,      // 絵本風（ポスタライズ＋輪郭線）
+	TiltShift,        // ティルトシフト（画面上下をぼかしてジオラマ風。中央の帯はシャープ）
+	PaperGrain,       // 紙の質感（繊維ノイズをうっすら乗算。クラフト感の底上げ）
+	IrisWipe,         // アイリスワイプ（指定点中心の円の外側を紙色で覆う。リスポーン演出）
 	Count           // 種類の数
 };
 
-// ポストエフェクト共通の定数バッファ (b0) ／ HLSL の PostEffectParams と一致させる
+// ポストエフェクト共通の定数バッファ (b0) ／ HLSL の PostEffectParams と一致させる。
+//   既存シェーダーは先頭8floatだけを宣言して読む（CBが大きい分には問題ない）
 struct PostEffectParams {
 	float time = 0.0f;       // 経過時間（ノイズ・歪みアニメ等）
 	float param0 = 0.0f;     // 汎用パラメータ（ColorTint の alpha など）
 	float colorR = 1.0f;     // ティント色 R
 	float colorG = 1.0f;     // ティント色 G
 	float colorB = 1.0f;     // ティント色 B
-	float padding[3] = { 0.0f, 0.0f, 0.0f };
+	// --- アイリスワイプ ---
+	float irisRadius = 2.0f;   // 円の半径（画面高さ=1基準。2=全開＝実質無効）
+	float irisCX = 0.5f;       // 円の中心UV
+	float irisCY = 0.5f;
+	// --- ティルトシフト ---（既定値＝Play用に調整した本番ルック）
+	float tiltStrength = 7.2f;   // ぼかし強さ(px)
+	float tiltCenterY = 0.55f;   // ピントが合う帯の中心（UV）
+	float tiltHalfWidth = 0.17f; // 帯の半幅（この範囲はシャープ）
+	// --- 紙の質感 ---
+	float grainStrength = 0.17f; // 繊維ノイズの強さ
+	// --- 絵本風 ---
+	float posterLevels = 14.0f;  // 色の段階数
+	float posterEdge = 0.8f;     // 輪郭線の濃さ
+	float padding[2] = { 0.0f, 0.0f };
 };
 
 // マスク系ポストエフェクト用の定数バッファ (b1) ／ HLSL の MaskParams と一致させる
@@ -142,6 +160,17 @@ public: // ゲームプレイシーンなどから、描画に必要なSRVイン
 	//  大元（マスター）のスイッチをON/OFFする
 	void SetMasterActive(bool isActive) {
 		isActive_ = isActive;
+	}
+
+	// --- 新エフェクトのパラメータ設定（persistent map な b0 へ直接書く）---
+	void SetTiltShiftParams(float strengthPx, float centerY, float halfWidth){
+		paramData_->tiltStrength = strengthPx; paramData_->tiltCenterY = centerY; paramData_->tiltHalfWidth = halfWidth;
+	}
+	void SetPaperGrainStrength(float strength){ paramData_->grainStrength = strength; }
+	void SetPictureBookParams(float levels, float edge){ paramData_->posterLevels = levels; paramData_->posterEdge = edge; }
+	// アイリスワイプ：radius=円の半径（画面高さ=1基準。0=全閉/1.4=全開）、cx/cy=中心UV
+	void SetIrisParams(float radius, float cx, float cy){
+		paramData_->irisRadius = radius; paramData_->irisCX = cx; paramData_->irisCY = cy;
 	}
 
 	//  全てのエフェクトを一括でOFFにする（シーン切り替え時などに便利！）

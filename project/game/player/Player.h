@@ -50,6 +50,9 @@ public:
     //   ？ブロックの頭突き通知で状態を書き換えるため非const
     void SetBlocks(BlockSystem* blocks){ blocks_ = blocks; }
 
+    // 落下死でリスポーンした瞬間か（取得するとフラグは消える。アイリスワイプ演出用）
+    bool ConsumeFellRespawn(){ bool fell = fellRespawned_; fellRespawned_ = false; return fell; }
+
 private: // メンバ変数
 
     // スタート地点（Initialize / リスポーンで使う）
@@ -65,6 +68,9 @@ private: // メンバ変数
 
     // ブロックの当たり判定（シーンの BlockSystem。所有しない。nullptr=ブロックなし）
     BlockSystem* blocks_ = nullptr;
+
+    // 落下死→リスポーンが起きた瞬間のフラグ（シーンが Consume して演出に使う）
+    bool fellRespawned_ = false;
 
 
     Vector3 position_ { 0.0f, 0.0f, 0.0f };

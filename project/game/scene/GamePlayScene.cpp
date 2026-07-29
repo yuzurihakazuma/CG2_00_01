@@ -50,6 +50,69 @@
 using namespace VectorMath;
 using namespace MatrixMath;
 
+// ★HITCH-DIAG: 敵撃破フリーズの原因計測（原因特定後に削除する一時コード）
+//   毎フレームの所要時間と内訳を hitch_log.txt に記録し、撃破エフェクトを
+//   要素別（立体エフェクト/SDF溶け/ヒットストップ+ポストエフェクト）に自動発火して犯人を切り分ける
+#include <chrono>
+#include <cstdio>
+namespace {
+	struct HitchDiag {
+		static HitchDiag& I(){ static HitchDiag inst; return inst; }
+		static double NowMs(){
+			using namespace std::chrono;
+			return duration<double, std::milli>( steady_clock::now().time_since_epoch() ).count();
+		}
+		uint64_t frame = 0;
+		double lastStart = 0.0;
+		int logFrames = 0; // トリガー後この回数は閾値未満でも毎フレーム記録
+		static const int kMaxSec = 24;
+		const char* name[kMaxSec] = {};
+		double ms[kMaxSec] = {};
+		int n = 0;
+		FILE* fp = nullptr;
+		void Line(const char* text){
+			if ( !fp ) { fopen_s(&fp, "hitch_log.txt", "w"); }
+			if ( fp ) { fprintf(fp, "%s\n", text); fflush(fp); }
+		}
+		void Add(const char* sectionName, double sectionMs){
+			if ( n < kMaxSec ) { name[n] = sectionName; ms[n] = sectionMs; ++n; }
+		}
+		// フレーム先頭で呼ぶ：前フレームの合計（Present/GPU待ち込み）と内訳を記録
+		void BeginFrame(){
+			double now = NowMs();
+			if ( lastStart > 0.0 ) {
+				double total = now - lastStart;
+				if ( total > 25.0 || logFrames > 0 ) {
+					if ( logFrames > 0 ) { --logFrames; }
+					char buf[1024];
+					int len = snprintf(buf, sizeof(buf), "f%06llu total=%7.2fms |", ( unsigned long long ) frame, total);
+					for ( int i = 0; i < n && len > 0 && len < ( int ) sizeof(buf); ++i ) {
+						if ( ms[i] >= 0.05 ) { len += snprintf(buf + len, sizeof(buf) - len, " %s=%.2f", name[i], ms[i]); }
+					}
+					Line(buf);
+				}
+			}
+			lastStart = now;
+			n = 0;
+			++frame;
+			// 進行確認用ハートビート（ログが途絶えた時にどこまで回ったか分かるように）
+			if ( frame % 100 == 0 ) {
+				char hb[96];
+				snprintf(hb, sizeof(hb), "---- heartbeat f%06llu", ( unsigned long long ) frame);
+				Line(hb);
+			}
+		}
+	};
+	struct DiagScope {
+		const char* nm; double t0;
+		DiagScope(const char* sectionName) : nm(sectionName), t0(HitchDiag::NowMs()){}
+		~DiagScope(){ HitchDiag::I().Add(nm, HitchDiag::NowMs() - t0); }
+	};
+}
+#define DIAG_CAT2(a, b) a##b
+#define DIAG_CAT(a, b) DIAG_CAT2(a, b)
+#define DIAG_SCOPE(tag) DiagScope DIAG_CAT(diagScope_, __LINE__)(tag)
+
 // 初期化
 void GamePlayScene::Initialize(){
 	// べた書きを段階ごとの関数へ。読み込み → カメラ → 装飾物 → ゲーム部品 の順。
@@ -269,6 +332,13 @@ void GamePlayScene::SetupGameplay(){
 	// 戦闘（踏みつけ/卵命中）＋ヒット演出（エフェクト用テクスチャを渡す）
 	combat_.Initialize(textures_["circle"].srvIndex, textures_["skybox"].srvIndex);
 
+	// エフェクトの事前生成：初撃破の瞬間に Obj3d を数十個作るとゲームが固まるので、
+	// ロード中のいま全部作ってプールに積んでおく。パフの数は最悪フレーム
+	// （卵トレイル約13個借用中＋命中バースト8＋割れ演出6＋投げ煙6）を賄う量＝返却上限に合わせる
+	combat_.Prewarm(camera_.get(), 4);
+	eggSystem_.PrewarmPuffPool("fxSphere", 32);
+	eggSystem_.PrewarmPuffPool("eggShell", 28);
+
 	// --- ノードエディタの「→ ゲーム値」に、今作っているゲームの調整値を登録する ---
 	//   ノードグラフから接続すると、プレイ中の挙動をリアルタイムに動かせる。
 	//   ※ポインタ登録なので、シーン終了時（Finalize）に必ず解除する。
@@ -381,18 +451,79 @@ void GamePlayScene::SpawnEnemies(){
 
 // メインのフレーム更新。べた書きを段階ごとの関数に委譲して見通しを良くした。
 void GamePlayScene::Update(){
-	hitFeel_.UpdateHitStop();     // 踏みつけ等のヒットストップ
-	SyncFromEditors();            // エディタ編集（レール／敵／カメラ要求）をシーンへ反映
-	UpdateCameraAndPostEffect();  // カメラ更新＋シェイク＋踏みつけポストエフェクト
-
-	EngineMode currentMode = EditorManager::GetInstance()->GetMode();
-	HandleModeTransition(currentMode); // Edit↔Play 切替時のリセット（prevMode_ もここで更新）
-
-	if ( currentMode == EngineMode::Play ) {
-		UpdatePlayMode();         // プレイ中のゲーム進行
+	// ★HITCH-DIAG: フレーム計測＋撃破エフェクトの要素別自動発火（犯人切り分け）
+	{
+		auto& dg = HitchDiag::I();
+		dg.BeginFrame();
+		struct FirePlan { uint64_t frame; const char* tag; bool stomp; bool dissolve; bool feel; };
+		static const FirePlan plans[] = {
+			{ 100, "BASELINE(no trigger)",             false, false, false },
+			{ 220, "A:full(stomp+dissolve+hitfeel)",   true,  true,  true  },
+			{ 340, "B:stomp-only",                     true,  false, false },
+			{ 460, "C:dissolve-only",                  false, true,  false },
+			{ 580, "D:hitfeel-only",                   false, false, true  },
+		};
+		for ( const auto& plan : plans ) {
+			if ( dg.frame == plan.frame ) {
+				char buf[160];
+				snprintf(buf, sizeof(buf), "==== TRIGGER %s ====", plan.tag);
+				dg.Line(buf);
+				dg.logFrames = 45;
+				Vector3 pos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 1.0f, 0.0f };
+				if ( plan.feel ) { hitFeel_.Trigger(0.06f, 0.28f); hitFeel_.TriggerImpactFx(pos); }
+				combat_.DebugSpawnKillFx(pos, camera_.get(), plan.stomp, plan.dissolve);
+			}
+		}
 	}
 
-	UpdateSceneVisuals();         // モード問わず毎フレーム行う描画用更新
+	{ DIAG_SCOPE("hitstop"); hitFeel_.UpdateHitStop(); }     // 踏みつけ等のヒットストップ
+	{ DIAG_SCOPE("syncEd"); SyncFromEditors(); }             // エディタ編集（レール／敵／カメラ要求）をシーンへ反映
+	{ DIAG_SCOPE("cam"); UpdateCameraAndPostEffect(); }      // カメラ更新＋シェイク＋踏みつけポストエフェクト
+
+	EngineMode currentMode = EditorManager::GetInstance()->GetMode();
+	{ DIAG_SCOPE("modeTr"); HandleModeTransition(currentMode); } // Edit↔Play 切替時のリセット（prevMode_ もここで更新）
+
+	if ( currentMode == EngineMode::Play ) {
+		DIAG_SCOPE("play");
+		UpdatePlayMode();         // プレイ中のゲーム進行
+	} else {
+		// ★HITCH-DIAG: Editモードでもエフェクトを進める（自動発火した演出を減衰させて計測窓を分離する）
+		DIAG_SCOPE("fxEdit");
+		combat_.UpdateEffects(1.0f / 60.0f);
+	}
+
+	{ DIAG_SCOPE("visuals"); UpdateSceneVisuals(); }         // モード問わず毎フレーム行う描画用更新
+
+	// --- エフェクト初回使用の前倒し（ウォームアップ）---
+	//   SDF溶け演出は初めて描画された瞬間にシェーダー/パイプラインの遅延構築で1秒以上固まり、
+	//   ヒット時ポストエフェクト（歪み+グロー）の初回パスも約0.2秒かかる（フレーム計測で実測）。
+	//   起動直後の数フレームで「画面外のSDF溶け＋無効パラメータのポストエフェクト」を一度通しておき、
+	//   初めて敵を倒した瞬間のフリーズを無くす
+	{
+		static int fxWarmupFrame = 0;
+		++fxWarmupFrame;
+		PostEffect* postEffect = PostEffect::GetInstance();
+		if ( fxWarmupFrame == 1 ) {
+			combat_.DebugSpawnKillFx({ 0.0f, -10000.0f, 0.0f }, camera_.get(), false, true); // 画面外でSDF溶けを1回描かせる
+			postEffect->SetMaskParams(PostEffectMaskParams{});   // マスク半径0＝画面に影響なし
+			postEffect->SetEffectActive(PostEffectType::MaskedDistortion, true);
+			postEffect->SetEffectActive(PostEffectType::MaskedGlow, true);
+			postEffect->SetIrisParams(2.0f, 0.5f, 0.5f);         // 全開＝見えない
+			postEffect->SetEffectActive(PostEffectType::IrisWipe, true);
+			postEffect->SetEffectActive(PostEffectType::TiltShift, true);
+			postEffect->SetEffectActive(PostEffectType::PaperGrain, true);
+			postEffect->SetEffectActive(PostEffectType::PictureBook, true);
+		} else if ( fxWarmupFrame == 4 ) {
+			// 3フレーム通したら全て元に戻す（Edit中は全OFFが正規状態。Play遷移時は改めてONになる）
+			postEffect->SetEffectActive(PostEffectType::MaskedDistortion, false);
+			postEffect->SetEffectActive(PostEffectType::MaskedGlow, false);
+			postEffect->SetEffectActive(PostEffectType::IrisWipe, false);
+			postEffect->SetEffectActive(PostEffectType::TiltShift, false);
+			postEffect->SetEffectActive(PostEffectType::PaperGrain, false);
+			postEffect->SetEffectActive(PostEffectType::PictureBook, false);
+			combat_.ClearEffects(); // 画面外の溶け演出を止めてスロットを返す
+		}
+	}
 }
 
 
@@ -492,6 +623,15 @@ void GamePlayScene::UpdateCameraAndPostEffect(){
 void GamePlayScene::HandleModeTransition(EngineMode current){
 	// エディット → プレイ：最新レールで確定し、プレイヤーをスタートへ、エフェクト・卵を消す
 	if ( prevMode_ == EngineMode::Edit && current == EngineMode::Play ) {
+		// クラフト世界観の常時ポストエフェクト（プレイ中だけ。編集の見やすさを守るためEditではOFF）。
+		//   値はエディタで調整して決めた本番ルック（Playを押すたびこの状態から始まる）
+		PostEffect* postEffect = PostEffect::GetInstance();
+		postEffect->SetEffectActive(PostEffectType::TiltShift, true);   // ジオラマ風（遠景ぼかし）
+		postEffect->SetEffectActive(PostEffectType::PaperGrain, true);  // 紙の質感
+		postEffect->SetEffectActive(PostEffectType::PictureBook, true); // 絵本風（ポスタライズ＋輪郭）
+		postEffect->SetTiltShiftParams(7.2f, 0.55f, 0.17f);
+		postEffect->SetPaperGrainStrength(0.17f);
+		postEffect->SetPictureBookParams(14.0f, 0.8f);
 		SyncRailsFromEditor();
 		if ( player_ ) { player_->Initialize(); player_->SetMovementLocked(false); }
 		camCtrl_.Reset(); // 向き切替トリガーの状態を初期化（前回プレイの向きを持ち越さない）
@@ -505,6 +645,13 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 	}
 	// プレイ → エディット：動くレールを基準位置に戻す（編集と表示を一致させる）
 	if ( prevMode_ == EngineMode::Play && current == EngineMode::Edit ) {
+		// プレイ用ポストエフェクトを解除（編集画面はそのまま見えるように）
+		PostEffect* postEffect = PostEffect::GetInstance();
+		postEffect->SetEffectActive(PostEffectType::TiltShift, false);
+		postEffect->SetEffectActive(PostEffectType::PaperGrain, false);
+		postEffect->SetEffectActive(PostEffectType::PictureBook, false);
+		postEffect->SetEffectActive(PostEffectType::IrisWipe, false);
+		irisPhase_ = 0;
 		railField_.ResetMotion();
 		coinSystem_.ResetPlay(); // 取得済みコインを復活（エディタで配置が見えなくならないように）
 		// カメラ関連の後始末：
@@ -535,17 +682,21 @@ void GamePlayScene::UpdatePlayMode(){
 		eggSystem_.SetAimHolding(aimThrow_.IsAiming());
 		// 構え中はベロ(E)と産卵(左Ctrl)を発動禁止（両手が卵でふさがっている）
 		swallow_.SetActionBlocked(aimThrow_.IsAiming());
+		DIAG_SCOPE("player");
 		player_->Update(railField_.GetRails());
 	}
 	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
 	// 敵の移動＋吸い込みTick。吸い込み完了 → お腹に+1（口元で緑がふわっと）
-	enemyMgr_.Update(railField_.GetRails(), playerPos, deltaTime, [&](const Vector3& pos){
-		eggSystem_.AddToBelly();
-		eggSystem_.SpawnSwallowFx(pos);
-	});
+	{
+		DIAG_SCOPE("enemy");
+		enemyMgr_.Update(railField_.GetRails(), playerPos, deltaTime, [&](const Vector3& pos){
+			eggSystem_.AddToBelly();
+			eggSystem_.SpawnSwallowFx(pos);
+		});
+	}
 
 	// 当たり判定＋踏みつけ
-	combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get());
+	{ DIAG_SCOPE("combat"); combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get()); }
 
 	// E=舌を伸ばして捕まえる / 左Ctrl=産卵（SwallowAbility へ分離。deltaTime はクールタイム・舌アニメ用）
 	swallow_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get(), deltaTime);
@@ -555,6 +706,7 @@ void GamePlayScene::UpdatePlayMode(){
 
 	// 卵の追従・飛行・割れの更新
 	if ( player_ ) {
+		DIAG_SCOPE("egg");
 		Vector3 currentPlayerPos = player_->GetPosition();
 		float yaw = player_->GetRotation().y;
 		Vector3 facing = { std::sin(yaw), 0.0f, std::cos(yaw) };
@@ -584,7 +736,7 @@ void GamePlayScene::UpdatePlayMode(){
 	}
 
 	// エフェクトの更新（stompEffect は timeScale 適用 deltaTime → ヒットストップで一緒に止まる）
-	combat_.UpdateEffects(deltaTime); // 踏みつけ/命中の立体エフェクト
+	{ DIAG_SCOPE("fx"); combat_.UpdateEffects(deltaTime); } // 踏みつけ/命中の立体エフェクト
 }
 
 
@@ -638,6 +790,43 @@ void GamePlayScene::UpdateSceneVisuals(){
 
 	// ブロック：位置＋行列更新（動くレールに乗ったブロックの追従・カメラ追従）
 	blockSystem_.Update();
+
+	// --- アイリスワイプ演出：落下死→リスポーン時に、プレイヤー中心の円が閉じて→開く ---
+	if ( currentMode == EngineMode::Play && player_ ) {
+		if ( player_->ConsumeFellRespawn() ) {
+			irisPhase_ = 1; // 閉じるところから開始
+			irisTimer_ = 0.0f;
+			PostEffect::GetInstance()->SetEffectActive(PostEffectType::IrisWipe, true);
+		}
+		if ( irisPhase_ != 0 ) {
+			irisTimer_ += 1.0f / 60.0f;
+			const float kCloseTime = 0.18f, kHoldTime = 0.12f, kOpenTime = 0.5f;
+			float radius = 1.4f; // 全開
+			if ( irisPhase_ == 1 ) {        // 閉じる
+				radius = 1.4f * ( 1.0f - irisTimer_ / kCloseTime );
+				if ( irisTimer_ >= kCloseTime ) { irisPhase_ = 2; irisTimer_ = 0.0f; radius = 0.0f; }
+			} else if ( irisPhase_ == 2 ) { // 閉じたまま一呼吸
+				radius = 0.0f;
+				if ( irisTimer_ >= kHoldTime ) { irisPhase_ = 3; irisTimer_ = 0.0f; }
+			} else {                        // 開く
+				float t = irisTimer_ / kOpenTime;
+				radius = 1.4f * t * t; // ゆっくり始まってすっと開く
+				if ( irisTimer_ >= kOpenTime ) {
+					irisPhase_ = 0;
+					PostEffect::GetInstance()->SetEffectActive(PostEffectType::IrisWipe, false);
+				}
+			}
+			// 円の中心＝プレイヤーの胸元をスクリーンUVへ投影
+			float centerU = 0.5f, centerV = 0.5f;
+			Vector3 playerHead = player_->GetPosition(); playerHead.y += 0.8f;
+			Vector2 ndc;
+			if ( WorldToNdc(playerHead, camera_->GetViewProjectionMatrix(), ndc) ) {
+				centerU = ndc.x * 0.5f + 0.5f;
+				centerV = 1.0f - ( ndc.y * 0.5f + 0.5f );
+			}
+			PostEffect::GetInstance()->SetIrisParams(( std::max )( radius, 0.0f ), centerU, centerV);
+		}
+	}
 
 	// ？ブロックから出たコイン：カウント加算＋金色の粒が飛び出す演出
 	{
@@ -826,6 +1015,7 @@ void GamePlayScene::UpdateSceneVisuals(){
 
 
 void GamePlayScene::Draw(){
+	DIAG_SCOPE("Draw"); // ★HITCH-DIAG: Draw全体のCPU時間（コマンド記録）
 	auto dxCommon = DirectXCommon::GetInstance();
 	auto commandList = dxCommon->GetCommandList();
 
@@ -886,12 +1076,15 @@ void GamePlayScene::Draw(){
 
 	// --- SDFボリューム（レイマーチング）---
 	//   専用PSOに切り替えるので、通常のObj3d描画が全部終わった後に描く
-	if ( demoVisible ) { demo_.DrawSdf(commandList); } // 展示物（SDF卵のエロージョン/モーフデモ）
-	eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
-	combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
-	dissolveRoad_.Draw(commandList);       // SDF溶け道（近づくと現れる道パネル）
-	swallow_.DrawEatFx(commandList);       // 舌で捕まえた敵がSDFで溶けて消える演出
-	SDFManager::GetInstance()->DrawVolumes(commandList); // エディタで配置した3Dボリューム
+	{
+		DIAG_SCOPE("sdfDraw");
+		if ( demoVisible ) { demo_.DrawSdf(commandList); } // 展示物（SDF卵のエロージョン/モーフデモ）
+		eggSystem_.DrawBirthFx(commandList);   // 産卵エロージョン演出中のSDF卵
+		combat_.DrawDissolveFx(commandList);   // 倒された敵がSDFで溶けて消える演出
+		dissolveRoad_.Draw(commandList);       // SDF溶け道（近づくと現れる道パネル）
+		swallow_.DrawEatFx(commandList);       // 舌で捕まえた敵がSDFで溶けて消える演出
+		SDFManager::GetInstance()->DrawVolumes(commandList); // エディタで配置した3Dボリューム
+	}
 
 	// 2. 【MRT終了】
 	// デバッグ描画：MRT（シーンRT）内で線を描く → ポストエフェクト/Bloomを通って
@@ -906,15 +1099,19 @@ void GamePlayScene::Draw(){
 
 
 	// 3. ポストエフェクト処理（バックバッファへの最終出力は FinalBlit に任せる）
-	PostEffect::GetInstance()->Draw(commandList, false);
+	{ DIAG_SCOPE("postFx"); PostEffect::GetInstance()->Draw(commandList, false); }
 
 	// 4. SRV番号取得
 	uint32_t colorSrv = PostEffect::GetInstance()->GetSrvIndex();
 	uint32_t maskSrv  = PostEffect::GetInstance()->GetMaskSrvIndex();
 
 	// 5. Bloomに「色」と「マスク」を両方渡す
-	Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
-	uint32_t finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
+	uint32_t finalSrv = 0;
+	{
+		DIAG_SCOPE("bloom");
+		Bloom::GetInstance()->Render(commandList, colorSrv, maskSrv);
+		finalSrv = Bloom::GetInstance()->GetResultSrvIndex();
+	}
 
 	// 5.5 SDF（文字/画像）を最終画像に焼き込む → エディタの Game View にもそのまま映る。
 	//     Bloom有効時は合成RT、無効時は PostEffect の最終RTが finalSrv の実体なので、
@@ -922,7 +1119,7 @@ void GamePlayScene::Draw(){
 	RenderTexture* sdfTarget = Bloom::GetInstance()->IsEnabled()
 		? Bloom::GetInstance()->GetCombineTexture()
 		: PostEffect::GetInstance()->GetFinalTexture();
-	SDFManager::GetInstance()->DrawIntoTexture(commandList, sdfTarget);
+	{ DIAG_SCOPE("sdfBake"); SDFManager::GetInstance()->DrawIntoTexture(commandList, sdfTarget); }
 
 	// エディタに最終的なゲーム画面のSRVを渡す（Game View 表示用）
 	EditorManager::GetInstance()->SetGameViewSrvIndex(finalSrv);

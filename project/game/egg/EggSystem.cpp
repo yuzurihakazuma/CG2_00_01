@@ -24,6 +24,14 @@ namespace {
 
 void EggSystem::Initialize(){
     eggs_.clear();
+    // 表示中パフの Obj3d はプールへ返してから消す。捨てるとモード切替のたびに
+    // プールが痩せていき、いずれ初回バーストのカクつきが再発してしまう
+    for ( auto& puff : puffs_ ) {
+        if ( puff.obj ) {
+            auto& pool = puffPool_[puff.model];
+            if ( pool.size() < 32 ) { pool.push_back(std::move(puff.obj)); }
+        }
+    }
     puffs_.clear();
     spits_.clear();
     stomach_    = 0;
@@ -51,11 +59,30 @@ void EggSystem::DrawBirthFx(ID3D12GraphicsCommandList* commandList){
     if ( birthTimer_ >= 0.0f && birthFx_ ) { birthFx_->Draw(commandList); }
 }
 
+// パフ用 Obj3d の事前生成：ロード時にプールへ積んでおく（初回バーストの固まり対策）
+void EggSystem::PrewarmPuffPool(const std::string& modelName, int count){
+    auto& pool = puffPool_[modelName];
+    while ( ( int ) pool.size() < count ) {
+        auto obj = Obj3d::Create(modelName);
+        if ( !obj ) break; // モデル未登録なら何もしない（SpawnPuff 側と同じ扱い）
+        pool.push_back(std::move(obj));
+    }
+}
+
 // 実体パフを1個出す（fxSphere=色付きの粒／eggShell=殻の欠片）。縮みながら消えるので加算でなくても確実に見える。
 void EggSystem::SpawnPuff(const Vector3& pos, const Vector3& vel, const Vector4& color, float scale, float life,
                           const std::string& modelName){
     TrailPuff puff;
-    puff.obj = Obj3d::Create(modelName); // 既定カメラが自動バインド
+    // 同じモデルの使い終わった Obj3d があれば使い回す（Create はGPUリソース確保を伴い、
+    // 敵撃破や卵割れの一斉バーストでその瞬間だけ重くなるため）
+    auto poolIt = puffPool_.find(modelName);
+    if ( poolIt != puffPool_.end() && !poolIt->second.empty() ) {
+        puff.obj = std::move(poolIt->second.back());
+        poolIt->second.pop_back();
+    } else {
+        puff.obj = Obj3d::Create(modelName); // 既定カメラが自動バインド
+    }
+    puff.model = modelName;
     if ( puff.obj ) {
         puff.obj->SetScale({ scale, scale, scale });
         // 殻の欠片(eggShell)は自前の色をそのまま見せる。汎用の粒(fxSphere)だけ呼び出し側の色を付ける。
@@ -212,6 +239,13 @@ void EggSystem::Update(const Vector3& playerPos, const Vector3& facing, float dt
             puff.obj->SetRotation(puff.rot);
             puff.obj->SetScale({ shrunkScale, shrunkScale, shrunkScale });
             puff.obj->Update();
+        }
+    }
+    // 寿命切れのパフは Obj3d をプールへ返してから消す（次のバーストで使い回す）
+    for ( auto& puff : puffs_ ) {
+        if ( puff.life <= 0.0f && puff.obj ) {
+            auto& pool = puffPool_[puff.model];
+            if ( pool.size() < 32 ) { pool.push_back(std::move(puff.obj)); }
         }
     }
     puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(),

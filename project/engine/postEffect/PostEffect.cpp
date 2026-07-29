@@ -306,7 +306,11 @@ void PostEffect::DrawDebugUI(){
 			"カラーティント (Color Tint)",
 			"マスク歪み (Masked Distortion)",
 			"マスクグロー (Masked Glow)",
-			"マスクセピア (Masked Sepia)"
+			"マスクセピア (Masked Sepia)",
+			"絵本風 (Picture Book)",
+			"ティルトシフト・ジオラマ (Tilt Shift)",
+			"紙の質感 (Paper Grain)",
+			"アイリスワイプ (Iris Wipe)"
 		};
 		// --- ポストエフェクトのON/OFF設定 ---
 		if ( ImGui::CollapsingHeader("ポストエフェクト設定 (Post Effect)", ImGuiTreeNodeFlags_DefaultOpen) ) {
@@ -324,6 +328,27 @@ void PostEffect::DrawDebugUI(){
 						ImGui::Indent(); // ちょっと右にずらす
 						ImGui::SliderFloat("ノイズの速度", &timeSpeed_, 0.0f, 0.5f);
 						if ( ImGui::Button("速度リセット") ) { timeSpeed_ = 0.05f; }
+						ImGui::Unindent();
+					}
+					// ティルトシフトがONの時：強さ・ピント帯を直接いじれる
+					if ( i == static_cast< int >(PostEffectType::TiltShift) && activeEffects_[i] ) {
+						ImGui::Indent();
+						ImGui::SliderFloat("ぼかしの強さ(px)", &paramData_->tiltStrength, 0.0f, 16.0f, "%.1f");
+						ImGui::SliderFloat("ピント帯の中心", &paramData_->tiltCenterY, 0.2f, 0.8f, "%.2f");
+						ImGui::SliderFloat("ピント帯の広さ", &paramData_->tiltHalfWidth, 0.05f, 0.4f, "%.2f");
+						ImGui::Unindent();
+					}
+					// 紙の質感がONの時：濃さを直接いじれる
+					if ( i == static_cast< int >(PostEffectType::PaperGrain) && activeEffects_[i] ) {
+						ImGui::Indent();
+						ImGui::SliderFloat("紙の質感の濃さ", &paramData_->grainStrength, 0.0f, 0.5f, "%.2f");
+						ImGui::Unindent();
+					}
+					// 絵本風がONの時：色数と輪郭の濃さを直接いじれる
+					if ( i == static_cast< int >(PostEffectType::PictureBook) && activeEffects_[i] ) {
+						ImGui::Indent();
+						ImGui::SliderFloat("色の段階数", &paramData_->posterLevels, 2.0f, 16.0f, "%.0f");
+						ImGui::SliderFloat("輪郭線の濃さ", &paramData_->posterEdge, 0.0f, 1.0f, "%.2f");
 						ImGui::Unindent();
 					}
 				}

@@ -4,6 +4,7 @@
 #include <memory>
 #include <functional>
 #include <string>
+#include <unordered_map>
 
 class Obj3d;            // トレイル煙パフ用（実体で確実に表示する）
 class SDFVolumeObject;  // 産卵エロージョン演出用（SDFの卵が芯から育つ）
@@ -87,6 +88,7 @@ private:
     //   加算パーティクルは明るい背景で見えないので、実体(Obj3d)の小球で表示する（縮んで消える）。
     struct TrailPuff {
         std::unique_ptr<Obj3d> obj;
+        std::string model;                     // プール返却先のキー（モデル名）
         Vector3 pos { 0.0f, 0.0f, 0.0f };
         Vector3 vel { 0.0f, 0.0f, 0.0f };
         Vector3 rot { 0.0f, 0.0f, 0.0f };      // 姿勢（欠片が舞うように回す）
@@ -96,6 +98,10 @@ private:
         float   baseScale = 0.3f;
     };
     std::vector<TrailPuff> puffs_;
+
+    // パフ用 Obj3d のプール（モデル名ごと）。粒1個ごとの生成/破棄は
+    // GPUリソース確保を伴い、敵を倒した瞬間などの一斉発生でカクつく原因になる
+    std::unordered_map<std::string, std::vector<std::unique_ptr<Obj3d>>> puffPool_;
     float trailTimer_ = 0.0f; // 一定間隔でトレイルを出すためのタイマー
 
     // --- 吐き出し弾（飲んだ敵をそのまま前方へ発射。モンスターボール柄の球）---
@@ -111,6 +117,10 @@ private:
     std::vector<SpitBall> spits_;
 
 public:
+    // パフ用 Obj3d の事前生成（シーンロード時に呼ぶ）。初回バーストで一斉に Create すると
+    //   その瞬間だけ固まるので、ここでプールに count 個積んでおく（プールはモード切替でも生き続ける）
+    void PrewarmPuffPool(const std::string& modelName, int count);
+
     // パフを1個出す（pos=位置, vel=初速, color=色, scale=大きさ, life=寿命秒, modelName=見た目）。
     //   modelName="fxSphere"（白い専用の粒。敵の"sphere"とは別物）の時だけ color でタイントする。
     //   "eggShell" 等の専用モデルは自前の色をそのまま見せる。

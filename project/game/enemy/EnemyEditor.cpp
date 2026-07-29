@@ -173,7 +173,10 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.25f, 0.8f, 0.25f, 1.0f));
             if ( ImGui::Button("＋ 敵を追加", ImVec2(-1.0f, 28.0f)) ) {
                 EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
-                spawnDatas_.push_back({ type, spawnRailIndex_, spawnDistance_, spawnPatrol_ });
+                // レール端1mには置かない：距離0のままだとレール始点＝プレイヤーのスタート地点に
+                // 敵が重なってしまう事故が起きる（実際に起きた）ため
+                float d = std::clamp(spawnDistance_, 1.0f, std::max(1.0f, maxDist - 1.0f));
+                spawnDatas_.push_back({ type, spawnRailIndex_, d, spawnPatrol_ });
                 changed_ = true;
             }
             ImGui::PopStyleColor(3);
@@ -182,7 +185,10 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
             ImGui::BeginDisabled(!hasPick);
             if ( ImGui::Button("＋ 選択ノードの位置に追加", ImVec2(-1.0f, 0.0f)) ) {
                 EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
-                spawnDatas_.push_back({ type, pickRail, pickDist, spawnPatrol_ });
+                // 始点ノード選択時もレール端1mは避ける（プレイヤー開始位置との重なり防止）
+                float pickLen = splineRails[pickRail].GetLength();
+                float d = std::clamp(pickDist, 1.0f, std::max(1.0f, pickLen - 1.0f));
+                spawnDatas_.push_back({ type, pickRail, d, spawnPatrol_ });
                 selectedEntry_ = static_cast<int>(spawnDatas_.size()) - 1;
                 changed_ = true;
             }

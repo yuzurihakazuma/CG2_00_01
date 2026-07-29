@@ -44,8 +44,25 @@ void CombatSystem::InitializeDissolveFx(ID3D12GraphicsCommandList* commandList){
     }
 }
 
+// エフェクトの事前生成：ロード画面のうちに Obj3d 一式（専用モデル4種の登録込み）を作ってプールへ。
+//   プールにあるものは Update/Draw の対象外なので、位置はどこでもよい
+void CombatSystem::Prewarm(Camera* camera, int count){
+    while ( ( int ) stompPool_.size() < count ) {
+        auto stompEffect = std::make_unique<StompEffect>();
+        stompEffect->Initialize({ 0.0f, -10000.0f, 0.0f }, camera, circleTex_, envTex_, StompEffectType::Stomp);
+        stompPool_.push_back(std::move(stompEffect));
+    }
+}
+
 void CombatSystem::SpawnStompEffect(const Vector3& pos, Camera* camera, StompEffectType type){
-    auto stompEffect = std::make_unique<StompEffect>();
+    // プールに使い終わったものがあれば使い回す（Initialize は Obj3d を作り直さず設定だけリセットする）
+    std::unique_ptr<StompEffect> stompEffect;
+    if ( !stompPool_.empty() ) {
+        stompEffect = std::move(stompPool_.back());
+        stompPool_.pop_back();
+    } else {
+        stompEffect = std::make_unique<StompEffect>();
+    }
     stompEffect->Initialize(pos, camera, circleTex_, envTex_, type);
     stompEffects_.push_back(std::move(stompEffect));
 }
@@ -136,7 +153,15 @@ void CombatSystem::Update(Player& player, EnemyManager& enemies, EggSystem& eggs
 
 void CombatSystem::UpdateEffects(float dt){
     for ( auto& effect : stompEffects_ ) { effect->Update(dt); }
-    stompEffects_.remove_if([](const std::unique_ptr<StompEffect>& effect){ return effect->IsDead(); });
+    // 消滅したエフェクトは破棄せずプールへ戻す（次の発生で使い回す）
+    for ( auto it = stompEffects_.begin(); it != stompEffects_.end(); ) {
+        if ( ( *it )->IsDead() ) {
+            if ( stompPool_.size() < 8 ) { stompPool_.push_back(std::move(*it)); }
+            it = stompEffects_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     // --- 敵のSDF消滅：エロージョンを進めて芯まで溶かす（終盤は透明化も並行）---
     for ( auto& dissolve : dissolves_ ) {
@@ -166,6 +191,10 @@ void CombatSystem::DrawDissolveFx(ID3D12GraphicsCommandList* commandList){
 }
 
 void CombatSystem::ClearEffects(){
+    // 表示中のものもプールへ戻してから空にする（破棄→再生成のコストを避ける）
+    for ( auto& effect : stompEffects_ ) {
+        if ( stompPool_.size() < 8 ) { stompPool_.push_back(std::move(effect)); }
+    }
     stompEffects_.clear();
     for ( auto& dissolve : dissolves_ ) { dissolve.timer = -1.0f; } // 溶かし中の演出も止める
 }

@@ -45,7 +45,7 @@ void PipelineManager::Finalize(){
 	object3DPipelineStateAdditive_.Reset();
 
 	// ポストエフェクトの種類ごとのパイプラインステートも忘れずに解放
-	for ( int i = 0; i < 14; ++i ) {
+	for ( int i = 0; i < 18; ++i ) {
 		if ( postEffectPipelineStates_[i] != nullptr ) {
 			postEffectPipelineStates_[i].Reset();
 		}
@@ -402,6 +402,10 @@ void PipelineManager::CreatePostEffectPipeline(){
 		L"resources/shaders/PostEffect/MaskedDistortion.PS.hlsl", // 11: MaskedDistortion
 		L"resources/shaders/PostEffect/MaskedGlow.PS.hlsl",       // 12: MaskedGlow
 		L"resources/shaders/PostEffect/MaskedSepia.PS.hlsl",      // 13: MaskedSepia
+		L"resources/shaders/PostEffect/PictureBook.PS.hlsl",      // 14: PictureBook（絵本風）
+		L"resources/shaders/PostEffect/TiltShift.PS.hlsl",        // 15: TiltShift（ジオラマ）
+		L"resources/shaders/PostEffect/PaperGrain.PS.hlsl",       // 16: PaperGrain（紙の質感）
+		L"resources/shaders/PostEffect/IrisWipe.PS.hlsl",         // 17: IrisWipe（アイリス）
 	};
 
 	// パイプラインの共通設定（ブレンドやカリングなど）
@@ -412,8 +416,8 @@ void PipelineManager::CreatePostEffectPipeline(){
 		.SetDepthStencil(false)
 		.SetBlendMode(BlendMode::kNormal);
 
-	// for文で7個のシェーダーを一気にコンパイルして配列に保存！
-	for ( int i = 0; i < 14; ++i ) {
+	// for文で全シェーダーを一気にコンパイルして配列に保存！
+	for ( int i = 0; i < 18; ++i ) {
 		auto psBlob = dxCommon_->GetShaderCompiler().CompileShader(psPaths[i], L"ps_6_0");
 		builder.SetShaders(vsBlob.Get(), psBlob.Get());
 		builder.Build(dxCommon_->GetDevice(), postEffectPipelineStates_[i]);

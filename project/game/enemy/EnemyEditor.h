@@ -64,7 +64,7 @@ private:
     // ImGui UI 操作用の一時的な入力値バッファ
     int   spawnEnemyTypeIdx_ = 0; // 選択中の敵タイプインデックス (0: Zako, 1: Strong)
     int   spawnRailIndex_    = 0; // 選択中のレールインデックス
-    float spawnDistance_     = 0.0f; // 選択中のレール上距離(m)
+    float spawnDistance_     = 5.0f; // 選択中のレール上距離(m)。0だとレール始点＝プレイヤー開始位置に重なるので離しておく
     bool  spawnPatrol_       = false; // 新規配置でパトロールを付けるか（既定=動かない）
 
     // 一覧で現在選択中のエントリ（インライン編集対象）

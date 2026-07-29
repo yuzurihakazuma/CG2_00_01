@@ -626,7 +626,7 @@ void Player::FinalizePosition(const SplineRail& rail, const Vector3& worldBefore
     position_ = { basePos.x + posSmooth_.x, basePos.y + posSmooth_.y, basePos.z + posSmooth_.z };
 
     // 落下死 → スタートへリスポーン
-    if ( position_.y < kKillY ) { Initialize(); return; }
+    if ( position_.y < kKillY ) { Initialize(); fellRespawned_ = true; return; } // 落下死→リスポーン（演出フラグ）
 
     // 向き：実際に進んでいる方向（接線 × 進行符号）を「目標角」として記憶し、
     //   毎フレーム最短弧の指数補間で追従させる。目標の更新は動いている間だけだが、
@@ -773,6 +773,7 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
     // 落下死 → スタートへリスポーン
     if ( position_.y < kKillY ) {
         Initialize();
+        fellRespawned_ = true; // アイリスワイプ演出用（シーンが Consume する）
     }
 }
 

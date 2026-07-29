@@ -7,8 +7,8 @@
 
 void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t textureIndex, uint32_t envMapIndex,
                              StompEffectType type) {
-    std::random_device seed_gen;
-    std::mt19937 engine(seed_gen());
+    // 乱数エンジンは1個を使い回す（std::random_device は毎回OSの乱数源を叩いて重いため）
+    static std::mt19937 engine(std::random_device{}());
 
     // --- 種類ごとの色パレット（state で見た目を分ける）---
     Vector4 ringEndColor = { 0.4f, 0.85f, 1.0f, 1.0f };   // 円柱衝撃波の冷却色
@@ -71,18 +71,27 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
         modelManager->CreatePlaneModel("stompSmoke");
     }
 
-    // 2. 予兆のコア球体 (Core) の生成 (純白ソリッド光球)
-    {
+    // =================================================================
+    // ここから各パーツのセットアップ。
+    //   Obj3d の生成（GPUリソース確保）は初回だけ行い、2回目以降は使い回す。
+    //   1回の踏みつけで23個のObj3dを作り直すと、その瞬間だけフレームが落ちる
+    //   （敵を倒すと一瞬重くなるバグ）ため。パラメータのリセットは毎回行う
+    // =================================================================
+    const bool firstBuild = cores_.empty();
+
+    // 2. 予兆のコア球体 (Core)（純白ソリッド光球）
+    if ( firstBuild ) {
         Core core;
         core.obj = Obj3d::Create("stompCoreSphere");
+        if ( core.obj ) { cores_.push_back(std::move(core)); }
+    }
+    for (auto& core : cores_) {
         if (core.obj) {
             core.obj->SetCamera(camera);
             core.obj->SetTranslation(position + Vector3{0.0f, 0.3f, 0.0f});
             core.obj->SetScale({ 0.1f, 0.1f, 0.1f });
-
             core.obj->SetPipelineType(PipelineType::Object3D_Additive);
             core.obj->SetEnvironmentMap(envMapIndex);
-            
             if (auto model = core.obj->GetModel()) {
                 model->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
                 if (auto mat = model->GetMaterial()) {
@@ -90,30 +99,29 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
                     mat->emissive = 1.0f;
                 }
             }
-
-            core.lifeTime = 0.08f;
-            core.currentTime = 0.0f;
-            core.startScale = 0.1f;
-            core.endScale = 1.2f;
-
-            cores_.push_back(std::move(core));
         }
+        core.lifeTime = 0.08f;
+        core.currentTime = 0.0f;
+        core.startScale = 0.1f;
+        core.endScale = 1.2f;
     }
 
-    // 3. 円柱型衝撃波の生成 (プレスされ平たく潰れながら広がるリング演出)
-    {
+    // 3. 円柱型衝撃波（プレスされ平たく潰れながら広がるリング演出）
+    if ( firstBuild ) {
         Cylinder cyl;
         cyl.obj = Obj3d::Create("stompCylinder");
+        if ( cyl.obj ) { cylinders_.push_back(std::move(cyl)); }
+    }
+    for (auto& cyl : cylinders_) {
         if (cyl.obj) {
             cyl.obj->SetCamera(camera);
             // 地面よりほんの少し浮かせて描画のチラつき(Zファイティング)を防ぐ
             cyl.obj->SetTranslation(position + Vector3{0.0f, 0.02f, 0.0f});
             cyl.obj->SetScale({ 0.1f, 0.1f, 0.1f });
-
             cyl.obj->SetPipelineType(PipelineType::Object3D_Additive);
             cyl.obj->SetEnvironmentMap(envMapIndex);
 
-            // ノイズテクスチャとディゾルブしきい値の設定
+            // ノイズテクスチャとディゾルブしきい値の設定（Loadはキャッシュ済みなら即返る）
             uint32_t noiseTexIndex = TextureManager::GetInstance()->Load("Resources/noise0.png").srvIndex;
             cyl.obj->SetNoiseTexture(noiseTexIndex);
             cyl.obj->SetDissolveThreshold(0.0f); // 初期はディゾルブしない
@@ -121,57 +129,50 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
             if (auto model = cyl.obj->GetModel()) {
                 // テクスチャをノイズ画像に設定してエフェクトらしい質感にする
                 model->SetTexture(noiseTexIndex);
-
                 model->SetColor({ 0.4f, 0.85f, 1.0f, 0.8f }); // 水色
                 if (auto mat = model->GetMaterial()) {
                     mat->enableLighting = 0;
                     mat->emissive = 1.0f;
                 }
             }
-
-            cyl.lifeTime = 0.55f;
-            cyl.currentTime = 0.0f;
-            cyl.startScale = 0.1f;
-            cyl.endScale = 2.0f;       // 横方向の最大半径 (星の輪と調和するサイズ)
-            cyl.heightScale = 1.0f;
-            cyl.colorEnd = ringEndColor; // 白フラッシュ→種類ごとの色へ
-
-            cylinders_.push_back(std::move(cyl));
         }
+        cyl.lifeTime = 0.55f;
+        cyl.currentTime = 0.0f;
+        cyl.startScale = 0.1f;
+        cyl.endScale = 2.0f;       // 横方向の最大半径 (星の輪と調和するサイズ)
+        cyl.heightScale = 1.0f;
+        cyl.colorEnd = ringEndColor; // 白フラッシュ→種類ごとの色へ
     }
 
-    // 4. 【新規星型演出】放射状に広がる星型の輪 (StarRing) の生成 (ヨッシー風王道エフェクト)
-    // 8つの星を円状に配置し、外周に向かって弾け飛ぶようにする
-    for (int i = 0; i < 8; ++i) {
-        StarRing star;
-        star.obj = Obj3d::Create("stompStar");
+    // 4. 放射状に広がる星型の輪 (StarRing)（8つの星を円状に配置して弾け飛ばす）
+    if ( firstBuild ) {
+        for (int i = 0; i < 8; ++i) {
+            StarRing star;
+            star.obj = Obj3d::Create("stompStar");
+            if ( star.obj ) { starRings_.push_back(std::move(star)); }
+        }
+    }
+    for (int i = 0; i < (int)starRings_.size(); ++i) {
+        StarRing& star = starRings_[i];
+        // 放射状の方向ベクトル (X-Y平面)
+        float angle = i * (2.0f * 3.14159265f / 8.0f);
+        star.direction = { std::sin(angle), std::cos(angle), 0.0f };
+        star.rotation = { 0.0f, 0.0f, rotDist(engine) };
+        star.rotationSpeed = { 0.0f, 0.0f, rotSpeedDist(engine) };
+        star.baseScale = 0.6f;
+        star.color = starColor;
+        star.lifeTime = 0.35f; // すばやく広がる
+        star.currentTime = 0.0f;
+        star.startRadius = 0.2f;
+        star.endRadius = 1.3f; // 雑魚敵の少し外側まで広がる
         if (star.obj) {
             star.obj->SetCamera(camera);
             star.obj->SetIsBillboard(true); // カメラに正対させて視認性100%に
-
-            // 放射状の方向ベクトル (X-Y平面)
-            float angle = i * (2.0f * 3.14159265f / 8.0f);
-            star.direction = { std::sin(angle), std::cos(angle), 0.0f };
-
-            // 初期位置を少し外側に配置
             star.obj->SetTranslation(position + Vector3{0.0f, 0.3f, 0.0f} + star.direction * 0.2f);
-            
-            // 初期回転
-            star.rotation = { 0.0f, 0.0f, rotDist(engine) };
             star.obj->SetRotation(star.rotation);
-
-            // Z軸自転速度
-            star.rotationSpeed = { 0.0f, 0.0f, rotSpeedDist(engine) };
-
-            // サイズ
-            star.baseScale = 0.6f;
             star.obj->SetScale({ star.baseScale, star.baseScale, star.baseScale });
-
             star.obj->SetPipelineType(PipelineType::Object3D_Additive);
             star.obj->SetEnvironmentMap(envMapIndex);
-
-            // 種類ごとの色でソリッド発光
-            star.color = starColor;
             if (auto model = star.obj->GetModel()) {
                 model->SetColor(starColor);
                 if (auto mat = model->GetMaterial()) {
@@ -179,49 +180,35 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
                     mat->emissive = 1.0f;
                 }
             }
-
-            star.lifeTime = 0.35f; // すばやく広がる
-            star.currentTime = 0.0f;
-            star.startRadius = 0.2f;
-            star.endRadius = 1.3f; // 雑魚敵の少し外側まで広がる
-
-            starRings_.push_back(std::move(star));
         }
     }
 
-    // 5. 飛び散るポップな3D星 (PopParticle) の生成 (くるくる回るカラフルな星ブロック)
-    //    色は種類ごとのパレット(popColors)から選ぶ。
+    // 5. 飛び散るポップな3D星 (PopParticle)（くるくる回るカラフルな星ブロック）
     std::uniform_int_distribution<int> colorChoice(0, 2);
-
-    for (int i = 0; i < 8; ++i) {
-        PopParticle part;
-        part.obj = Obj3d::Create("stompStar");
-
+    if ( firstBuild ) {
+        for (int i = 0; i < 8; ++i) {
+            PopParticle part;
+            part.obj = Obj3d::Create("stompStar");
+            if ( part.obj ) { popParticles_.push_back(std::move(part)); }
+        }
+    }
+    for (auto& part : popParticles_) {
+        // 初速（2.5D的に手前奥もマイルドに混ぜつつ、画面内の放物線を描かせる）
+        part.velocity = { velXDist(engine), velYDist(engine), velZDist(engine) };
+        part.rotation = { rotDist(engine), rotDist(engine), rotDist(engine) };
+        part.rotationSpeed = { rotSpeedDist(engine), rotSpeedDist(engine), rotSpeedDist(engine) };
+        float s = scaleDist(engine);
+        part.baseScale = { s, s, s };
+        part.color = popColors[colorChoice(engine)];
+        part.lifeTime = lifeDist(engine);
+        part.currentTime = 0.0f;
         if (part.obj) {
             part.obj->SetCamera(camera);
             part.obj->SetTranslation(position + Vector3{0.0f, 0.2f, 0.0f});
-
-            // 初速（2.5D的に手前奥もマイルドに混ぜつつ、画面内の放物線を描かせる）
-            part.velocity = { velXDist(engine), velYDist(engine), velZDist(engine) };
-
-            // 初期回転 (3軸ランダム)
-            part.rotation = { rotDist(engine), rotDist(engine), rotDist(engine) };
             part.obj->SetRotation(part.rotation);
-
-            // 自転回転速度
-            part.rotationSpeed = { rotSpeedDist(engine), rotSpeedDist(engine), rotSpeedDist(engine) };
-
-            // サイズ
-            float s = scaleDist(engine);
-            Vector3 initScale = { s, s, s };
-            part.obj->SetScale(initScale);
-            part.baseScale = initScale;
-
-            // 色とマテリアル (ソリッド発光)
-            part.color = popColors[colorChoice(engine)];
+            part.obj->SetScale(part.baseScale);
             part.obj->SetPipelineType(PipelineType::Object3D_Additive);
             part.obj->SetEnvironmentMap(envMapIndex);
-            
             if (auto model = part.obj->GetModel()) {
                 model->SetColor(part.color);
                 if (auto mat = model->GetMaterial()) {
@@ -229,37 +216,36 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
                     mat->emissive = 1.0f;
                 }
             }
-
-            part.lifeTime = lifeDist(engine);
-            part.currentTime = 0.0f;
-
-            popParticles_.push_back(std::move(part));
         }
     }
 
-    // 6. 足元のモコモコ煙 (Smoke) の生成
-    for (int i = 0; i < 5; ++i) {
-        Smoke smoke;
-        smoke.obj = Obj3d::Create("stompSmoke");
-
+    // 6. 足元のモコモコ煙 (Smoke)
+    if ( firstBuild ) {
+        for (int i = 0; i < 5; ++i) {
+            Smoke smoke;
+            smoke.obj = Obj3d::Create("stompSmoke");
+            if ( smoke.obj ) { smokes_.push_back(std::move(smoke)); }
+        }
+    }
+    for (auto& smoke : smokes_) {
+        smoke.offset = {
+            smokeOffsetDist(engine),
+            smokeOffsetDist(engine) * 0.4f,
+            smokeOffsetDist(engine) * 0.25f
+        };
+        smoke.baseScale = smokeScaleDist(engine);
+        smoke.color = smokeColor;
+        smoke.lifeTime = lifeDist(engine) * 0.85f;
+        smoke.currentTime = 0.0f;
+        smoke.rotationSpeed = smokeRotSpeedDist(engine);
+        smoke.currentRotation = rotDist(engine);
         if (smoke.obj) {
             smoke.obj->SetCamera(camera);
             smoke.obj->SetIsBillboard(true);
-            
-            smoke.offset = { 
-                smokeOffsetDist(engine), 
-                smokeOffsetDist(engine) * 0.4f, 
-                smokeOffsetDist(engine) * 0.25f 
-            };
             smoke.obj->SetTranslation(position + smoke.offset);
-
-            smoke.baseScale = smokeScaleDist(engine);
             smoke.obj->SetScale({ smoke.baseScale, smoke.baseScale, 1.0f });
-
             smoke.obj->SetPipelineType(PipelineType::Object3D_Additive);
             smoke.obj->SetEnvironmentMap(envMapIndex);
-            
-            smoke.color = smokeColor;
             if (auto model = smoke.obj->GetModel()) {
                 model->SetTexture(textureIndex);
                 model->SetColor(smokeColor);
@@ -267,15 +253,10 @@ void StompEffect::Initialize(const Vector3& position, Camera* camera, uint32_t t
                     mat->enableLighting = 0;
                 }
             }
-
-            smoke.lifeTime = lifeDist(engine) * 0.85f;
-            smoke.currentTime = 0.0f;
-            smoke.rotationSpeed = smokeRotSpeedDist(engine);
-            smoke.currentRotation = rotDist(engine);
-
-            smokes_.push_back(std::move(smoke));
         }
     }
+
+    isDead_ = false; // 使い回し時に「死亡済み」のまま始まらないように
 }
 
 void StompEffect::Update(float dt) {

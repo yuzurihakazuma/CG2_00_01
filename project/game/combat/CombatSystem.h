@@ -35,6 +35,12 @@ public:
     //   （フレーム途中のロードはデバッグレイヤーが嫌うのでシーンの LoadResources から呼ぶ）
     void InitializeDissolveFx(ID3D12GraphicsCommandList* commandList);
 
+    // エフェクトの事前生成（シーンロード時に呼ぶ）。StompEffect 1体=Obj3d×23個
+    //   （GPUリソース確保46回）なので、初撃破のフレームで作るとゲームが止まる。
+    //   ここで count 体ぶん作ってプールに積んでおき、実戦では使い回すだけにする。
+    //   ※ Initialize（テクスチャ受け取り）の後に呼ぶこと
+    void Prewarm(Camera* camera, int count);
+
     // 踏みつけ＋卵vs敵の当たり判定（Play中に毎フレーム呼ぶ）
     void Update(Player& player, EnemyManager& enemies, EggSystem& eggs, HitFeel& hitFeel, Camera* camera);
 
@@ -44,6 +50,12 @@ public:
     void DrawDissolveFx(ID3D12GraphicsCommandList* commandList);
     void ClearEffects();          // モード切替時など（SDF消滅も止める）
 
+    // ★HITCH-DIAG: 撃破エフェクトを要素別に単体発火させる計測用（原因特定後に削除）
+    void DebugSpawnKillFx(const Vector3& pos, Camera* camera, bool stomp, bool dissolve){
+        if ( stomp )    { SpawnStompEffect(pos, camera, StompEffectType::Stomp); }
+        if ( dissolve ) { SpawnEnemyDissolve(pos, 0.5f); }
+    }
+
 private:
     void SpawnStompEffect(const Vector3& pos, Camera* camera, StompEffectType type);
 
@@ -51,6 +63,8 @@ private:
     void SpawnEnemyDissolve(const Vector3& pos, float radius);
 
     std::list<std::unique_ptr<StompEffect>> stompEffects_;
+    // 使い終わったエフェクトの置き場（Obj3d×23個/体の作り直しを避ける。敵を倒した瞬間のカクつき対策）
+    std::vector<std::unique_ptr<StompEffect>> stompPool_;
     uint32_t circleTex_ = 0;
     uint32_t envTex_    = 0;
 

@@ -193,6 +193,10 @@ private: // メンバ変数
 	// Game View で直接ドラッグ中の敵（-1=なし。エディット中の敵つまみ移動）
 	int enemyDragIdx_ = -1;
 
+	// アイリスワイプ演出（落下死→リスポーン時。0=停止/1=閉じる/2=閉じたまま/3=開く）
+	int   irisPhase_ = 0;
+	float irisTimer_ = 0.0f;
+
 	// ブロック配置モードのペイント状態（押した瞬間に置く/消すを決めて塗り続ける）
 	bool  blockPaintErasing_ = false;
 	int   lastPaintRail_  = -1;
