@@ -50,11 +50,10 @@ public:
     void DrawDissolveFx(ID3D12GraphicsCommandList* commandList);
     void ClearEffects();          // モード切替時など（SDF消滅も止める）
 
-    // ★HITCH-DIAG: 撃破エフェクトを要素別に単体発火させる計測用（原因特定後に削除）
-    void DebugSpawnKillFx(const Vector3& pos, Camera* camera, bool stomp, bool dissolve){
-        if ( stomp )    { SpawnStompEffect(pos, camera, StompEffectType::Stomp); }
-        if ( dissolve ) { SpawnEnemyDissolve(pos, 0.5f); }
-    }
+    // エフェクト初回使用のウォームアップ：SDF溶けを画面外で1回発火させ、初回描画時の
+    // パイプライン遅延構築（実測で1秒超のフリーズ）をシーン開始直後に前倒しする。
+    // 呼んだ後は ClearEffects で止めること（シーン側のウォームアップ処理が数フレーム後に行う）
+    void WarmupDissolveFx(){ SpawnEnemyDissolve({ 0.0f, -10000.0f, 0.0f }, 0.5f); }
 
 private:
     void SpawnStompEffect(const Vector3& pos, Camera* camera, StompEffectType type);
