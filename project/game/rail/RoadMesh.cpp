@@ -59,7 +59,8 @@ const float kMaxRingGap = 1.00f;                            // リング最大�
 const float kCurveAngle = 3.0f * 3.14159265f / 180.0f;      // リングを置く累積角(3°)
 const float kSlopeIn    = 0.45f;                            // 坂UVに入る |tangent.y|（ヒステリシス上側）
 const float kSlopeOut   = 0.35f;                            // 坂UVから抜ける（下側）
-const float kTopOffset  = -0.30f;                           // 断面高さへの加算。上面(0.25)がレールの5cm下に来る
+const float kTopOffset  = -0.25f;                           // 断面高さへの加算。上面(0.25)がレール線ぴったりに来る
+                                                            // （レール線＝歩行面＝ブロックの底面基準。ズレ補正が要らなくなる）
 const float kUvPerMeter = 1.0f / 2.0f;                      // u = 距離 / 2m（ピースとテクスチャ周期を共有）
 const float kSimpleStep = 1.0f;                             // 簡易ビルド（ドラッグ中）のリング間隔(m)
 const float kDarkV      = 0.465f;                           // アトラスの黒帯の中央（穴の奈落フタ用）
@@ -387,7 +388,7 @@ void RoadMesh::PlacePiece(Model* model, std::vector<std::unique_ptr<PieceSlot>>&
                           int railIdx, const std::vector<SplineRail>& rails,
                           const Vector3& pos, float yaw, float pitch, Camera* camera){
     if ( !model ) return;
-    Vector3 p = { pos.x, pos.y + kTopOffset, pos.z }; // 上面(0.25)がレールの5cm下に来る高さ
+    Vector3 p = { pos.x, pos.y + kTopOffset, pos.z }; // 上面(0.25)がレール線ぴったりに来る高さ
 
     const bool moving = ( railIdx >= 0 && railIdx < ( int ) rails.size() && rails[railIdx].HasMotion() );
     if ( !moving ) {

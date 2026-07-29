@@ -209,9 +209,11 @@ bool BlockSystem::BlockWorldPos(const Block& block, Vector3& outPos, float& outY
     Vector3 right { 0.0f, 0.0f, 0.0f };
     if ( horizLen > 1e-4f ) { right = { tangent.z / horizLen, 0.0f, -tangent.x / horizLen }; }
 
-    // モデルは原点が底面中心・実寸1m角なので、底面の高さ（レール面＋段数）に置く
+    // モデルは原点が底面中心・実寸1m角。底面は「道の上面」（レール線の5cm下）＋段数に置く。
+    //   これでブロックが道にぴったり接地し、プレイヤーが上に乗った時の見た目も
+    //   道に立つ時と同じ基準になる（当たり判定はレール線基準のままで整合する）
     outPos = { base.x + right.x * block.side,
-               base.y + ( float ) block.level * kSize,
+               base.y + kSurfaceY + ( float ) block.level * kSize,
                base.z + right.z * block.side };
     outYaw = ( horizLen > 1e-4f ) ? std::atan2(tangent.x, tangent.z) : 0.0f;
     return true;

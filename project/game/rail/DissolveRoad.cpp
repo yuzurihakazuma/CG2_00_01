@@ -17,7 +17,7 @@
 namespace {
     // --- 敷設 ---
     const float kSpacing = 0.7f;    // チェーン点の間隔(m)
-    const float kYOffset = -0.42f;  // レール線から道の中心までの高さ（上面が通常の道の高さ付近）
+    const float kYOffset = -0.37f;  // レール線から道の中心までの高さ（上面＝レール線に揃えた通常の道と同じ）
     const float kRoundR  = 0.08f;   // 断面の角丸半径(m)
     // --- 見た目 ---
     const Vector4 kRoadColor { 0.72f, 0.55f, 0.34f, 1.0f };  // クラフト紙（段ボール）色

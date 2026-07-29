@@ -25,6 +25,9 @@ class InstancedGroup;
 class BlockSystem {
 public:
     static constexpr float kSize = 1.0f; // 1ブロック = 1m角
+    // 道の上面の高さ（レール線からの差）。RoadMesh 側を「上面＝レール線ぴったり」に
+    // 揃えたので 0（レール線＝歩行面＝ブロック底面。全システムで基準が一致する）
+    static constexpr float kSurfaceY = 0.0f;
     static constexpr int kTypeCount = 7; // ブロックの種類数（BlockData::type と対応）
     static constexpr int kTypeSpring = 4; // ジャンプ台（上に飛び乗ると大きく跳ねる）
     static constexpr int kTypeHatena = 5; // ？ブロック（下から頭突きするとコインが出る。1回きり）

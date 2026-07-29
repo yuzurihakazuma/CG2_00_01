@@ -1228,12 +1228,16 @@ void GamePlayScene::DrawDebugUI(){
 
 		// 1) マウスに一番近いレール（0.25m刻みサンプル → 1mセルへ吸着）。
 		//    高い段(level 7=+7m)や横(side±2)も選べるよう、レール線1点ではなく
-		//    「そのサンプル位置に立つ断面の縦線segment（+0.5〜+7.5m）」との画面距離で判定する
-		int bestRail = -1; float bestDist = 0.0f; float bestPx = 130.0f;
+		//    「そのサンプル位置に立つ断面の縦線segment（+0.5〜+7.5m）」との画面距離で判定する。
+		//    ※縦線だけで選ぶと、画面上で柱が重なる「1本奥の並走レール」に吸着して
+		//      見ている道からずれた場所に置かれる事故が起きる。そこで
+		//      足元（レール線）の近さも加点し、指している道のレールが勝つようにする
+		int bestRail = -1; float bestDist = 0.0f; float bestPx = 220.0f;
 		if ( gv.hovered && !gv.gizmoActive ) {
 			for ( int rr = 0; rr < ( int ) rails.size(); ++rr ) {
 				const SplineRail& rail = rails[rr];
 				if ( rail.nodes.size() < 2 ) continue;
+				if ( !rail.visible ) continue; // 見えない骨組み（リフトのガイド等）には置かない
 				float len = rail.GetLength();
 				int steps = std::clamp(( int ) ( len / 0.25f ), 2, 800);
 				for ( int s = 0; s <= steps; ++s ) {
@@ -1250,8 +1254,14 @@ void GamePlayScene::DrawDebugUI(){
 						: 0.0f;
 					float cx = spLow.x + vx * t, cy = spLow.y + vy * t;
 					float dx = cx - gv.mousePos.x, dy = cy - gv.mousePos.y;
-					float d = std::sqrt(dx * dx + dy * dy);
-					if ( d < bestPx ) { bestPx = d; bestRail = rr; bestDist = dist; }
+					float segDistPx = std::sqrt(dx * dx + dy * dy);
+					// 足元の近さ（上限つき＝高い段を選ぶ操作は妨げない）
+					float bx = spLow.x - gv.mousePos.x, by = spLow.y - gv.mousePos.y;
+					float baseDistPx = std::sqrt(bx * bx + by * by);
+					float score = segDistPx + ( std::min )( baseDistPx, 160.0f ) * 0.5f;
+					// 塗り始めたレールに吸い付く（ドラッグ中に隣のレールへ飛び移らない）
+					if ( rr == lastPaintRail_ || ( rectFillActive_ && rr == rectFillRail_ ) ) { score -= 25.0f; }
+					if ( score < bestPx ) { bestPx = score; bestRail = rr; bestDist = dist; }
 				}
 			}
 		}
@@ -1261,6 +1271,19 @@ void GamePlayScene::DrawDebugUI(){
 			// 1mグリッドの「整数セル」へ吸着する。レール長で丸めずクランプすると
 			// 端だけ半端な距離のセルが生まれ、隣と重なった二重ブロックが置けてしまう
 			float railLen  = rail.GetLength();
+
+			// どのレールに置かれるかが一目で分かるように、対象レールを黄色でなぞる
+			{
+				int highlightSteps = std::clamp(( int ) railLen, 1, 200);
+				Vector3 prevPoint = rail.GetPositionByDistance(0.0f);
+				for ( int s = 1; s <= highlightSteps; ++s ) {
+					Vector3 curPoint = rail.GetPositionByDistance(railLen * ( float ) s / ( float ) highlightSteps);
+					DebugDraw::GetInstance()->Line({ prevPoint.x, prevPoint.y + 0.05f, prevPoint.z },
+					                               { curPoint.x, curPoint.y + 0.05f, curPoint.z },
+					                               { 1.0f, 0.9f, 0.2f, 1.0f });
+					prevPoint = curPoint;
+				}
+			}
 			float cellDist = std::round(bestDist);
 			if ( cellDist < 0.0f )    { cellDist = 0.0f; }
 			if ( cellDist > railLen ) { cellDist = std::floor(railLen); }
@@ -1283,7 +1306,7 @@ void GamePlayScene::DrawDebugUI(){
 				for ( int sideStep = -2; sideStep <= 2; ++sideStep ) {
 					float side = ( float ) sideStep;
 					Vector3 center = { base.x + right.x * side,
-					                   base.y + ( float ) level * BlockSystem::kSize + 0.5f,
+					                   base.y + ( float ) level * BlockSystem::kSize + 0.5f + BlockSystem::kSurfaceY,
 					                   base.z + right.z * side };
 					Vector2 sp; if ( !projectToScreen(center, sp) ) continue;
 					float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
@@ -1302,7 +1325,7 @@ void GamePlayScene::DrawDebugUI(){
 
 			// 3) ゴースト表示（緑=ここに置く / 赤=クリックで消す / 水色=道の脇＝当たらない飾り）
 			Vector3 ghostCenter = { base.x + right.x * bestSide,
-			                        base.y + ( float ) bestLevel * BlockSystem::kSize + 0.5f,
+			                        base.y + ( float ) bestLevel * BlockSystem::kSize + 0.5f + BlockSystem::kSurfaceY,
 			                        base.z + right.z * bestSide };
 			Vector4 ghostColor;
 			if ( cellOccupied || eraseMode ) { ghostColor = { 1.0f, 0.35f, 0.3f, 1.0f }; }  // 消す
@@ -1312,14 +1335,14 @@ void GamePlayScene::DrawDebugUI(){
 			// 横ずれセルの時は中心線との対応が分かるように足元へ線を引く
 			if ( bestSide != 0.0f ) {
 				DebugDraw::GetInstance()->Line(ghostCenter,
-					{ base.x, base.y + ( float ) bestLevel * BlockSystem::kSize + 0.5f, base.z }, ghostColor);
+					{ base.x, base.y + ( float ) bestLevel * BlockSystem::kSize + 0.5f + BlockSystem::kSurfaceY, base.z }, ghostColor);
 			}
 			// 柱モード：下まで埋まる範囲を薄い枠で予告する
 			if ( paintShape == 1 ) {
 				Vector4 dim = { ghostColor.x, ghostColor.y, ghostColor.z, 0.35f };
 				for ( int lv = 0; lv < bestLevel; ++lv ) {
 					DebugDraw::GetInstance()->Box(
-						{ ghostCenter.x, base.y + ( float ) lv * BlockSystem::kSize + 0.5f, ghostCenter.z },
+						{ ghostCenter.x, base.y + ( float ) lv * BlockSystem::kSize + 0.5f + BlockSystem::kSurfaceY, ghostCenter.z },
 						{ 0.9f, 0.9f, 0.9f }, dim);
 				}
 			}
@@ -1327,6 +1350,13 @@ void GamePlayScene::DrawDebugUI(){
 			// 4) クリックで適用。押した瞬間に「置く/消す」を決めて、押しっぱなしで連続適用（ペイント）。
 			//    右クリック＝常に消す / 消しゴムモード＝左クリックでも消す / ブロックを左クリック＝消す
 			auto applyPaint = [&](int rail_, float dist_, int level_, float side_){
+				// 配置ズレ調査用ログ（1配置=1行。デバッガ出力＋ファイルにも追記）
+				char paintLog[256];
+				snprintf(paintLog, sizeof(paintLog),
+					"BlockPaint: rail=%d dist=%.1f lvl=%d side=%.1f erase=%d | mouse=(%.0f,%.0f) img=(%.0f,%.0f)+(%.0fx%.0f) pickPx=%.1f\n",
+					rail_, dist_, level_, side_, blockPaintErasing_ ? 1 : 0,
+					gv.mousePos.x, gv.mousePos.y, gv.imgMin.x, gv.imgMin.y, gv.imgSize.x, gv.imgSize.y, bestPx);
+				OutputDebugStringA(paintLog);
 				EditorManager* editorManager = EditorManager::GetInstance();
 				if ( blockPaintErasing_ ) {
 					if ( paintShape == 1 ) {
@@ -1364,7 +1394,7 @@ void GamePlayScene::DrawDebugUI(){
 					for ( int lv = rl0; lv <= rl1; ++lv ) {
 						DebugDraw::GetInstance()->Box(
 							{ cellBase.x + cellRight.x * rectFillSide_,
-							  cellBase.y + ( float ) lv * BlockSystem::kSize + 0.5f,
+							  cellBase.y + ( float ) lv * BlockSystem::kSize + 0.5f + BlockSystem::kSurfaceY,
 							  cellBase.z + cellRight.z * rectFillSide_ },
 							{ 0.92f, 0.92f, 0.92f }, dim);
 					}
@@ -1390,7 +1420,9 @@ void GamePlayScene::DrawDebugUI(){
 						blockPaintErasing_ = eraseMode || cellOccupied;
 						applyPaint(bestRail, cellDist, bestLevel, bestSide);
 					}
-				} else if ( ImGui::IsMouseDown(0) && lastPaintLevel_ >= 0 ) {
+				} else if ( ImGui::IsMouseDown(0) && lastPaintLevel_ >= 0
+					&& ImGui::IsMouseDragging(0, 6.0f)      // クリックの手ぶれ（数px）では連続配置しない
+					&& bestRail == lastPaintRail_ ) {        // ドラッグ中に別レールへ飛び移って撒き散らさない
 					// 階段モード中は段の違いを無視して「同じマスか」だけを見る（段はこちらで決めるため）
 					bool sameCell = ( lastPaintRail_ == bestRail
 						&& std::abs(lastPaintSide_ - bestSide) < 0.5f

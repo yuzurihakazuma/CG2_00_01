@@ -135,7 +135,7 @@ private: // メンバ変数
 	std::unique_ptr<SkinnedObj3d> playerObj_ = nullptr;
 	Vector3 playerPrevPos_ {};          // 前フレームの見た目位置（移動速度の算出用）
 	bool    playerPrevPosValid_ = false;
-	float   playerModelYOffset_ = -0.05f; // モデル原点（足元）を道の上面に乗せる補正（エディタで調整可）
+	float   playerModelYOffset_ = 0.0f; // モデル原点（足元）を道の上面に乗せる補正（道の上面＝レール線に統一したので既定0）
 	bool    playerTongueSeeked_ = false;  // 捕獲時の収納パートへのシークを1回だけ行うためのフラグ
 	float   playerThrowTimer_ = 0.0f;     // 投げリリース後の復帰モーション再生の残り時間
 	std::unique_ptr<Obj3d> heldEggObj_ = nullptr; // 構え中に Item ジョイントへ持たせる卵の見た目
