@@ -25,4 +25,5 @@ private:
     std::unique_ptr<DebugCamera>     debugCamera_; // デバッグカメラ（マウス操作）
     std::unique_ptr<SkinnedObj3d>    skinnedObj_;  // 編集対象モデル
     std::unique_ptr<AnimationEditor> editor_;      // アニメーション編集UI
+    uint32_t envMapSrv_ = 0; // 環境マップ（キューブマップ）。未束縛だとシェーダーのSRV次元不一致でGPU検証エラーになる
 };

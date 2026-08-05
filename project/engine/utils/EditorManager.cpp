@@ -23,6 +23,10 @@
 #include "engine/sdf/SDFVolumeObject.h"
 #include "engine/utils/GlobalVariables.h"
 #include "engine/3d/obj/SkinnedObj3d.h"
+#include <cstdio>   // UI設定(editor_ui.ini)の保存/読込
+#include <cstring>
+#include <cstdlib>
+#include <algorithm>
 #include "engine/3d/obj/Obj3d.h"
 #include "engine/camera/Camera.h"
 #include "engine/camera/DebugCamera.h"
@@ -114,6 +118,16 @@ void EditorManager::Begin(){
     // SDF アトラスのフォルダ監視・自動ロード・ホットリロードも同じ安全な瞬間に行う
     SDFManager::GetInstance()->Update();
 #ifdef USE_IMGUI
+    // アイコンモード中はウィンドウ同士のドッキングを無効化する（NewFrame前に切替）。
+    //   パネルは右側ドロワーへ自動整列されるのでドッキング不要。有効なままだと
+    //   浮遊ウィンドウ同士を重ねてドッキングでき、アイコンモードのドック解体処理と
+    //   衝突してエラーになる（敵＋レールの窓を重ねると落ちる報告の原因）
+    if ( ImGui::GetCurrentContext() ) {
+        ImGuiIO& io = ImGui::GetIO();
+        if ( uiShell_ == UiShell::Icon ) { io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable; }
+        else                             { io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; }
+    }
+    uiShellFrame_ = uiShell_; // このフレームのUI分岐はここで確定（F2切替は次フレームから効く）
     ImGuiManager::GetInstance()->Begin();
 #endif
 }
@@ -126,6 +140,13 @@ void EditorManager::Update(){
     Input* input = Input::GetInstance();
     if ( input->Triggerkey(DIK_F1) ) {
         isEditorActive_ = !isEditorActive_;
+    }
+    // F2: UIシェル切替（ドック⇔アイコン）。選択は editor_ui.ini に保存され次回起動も維持
+    if ( !uiConfigLoaded_ ) { LoadUiConfig(); uiConfigLoaded_ = true; }
+    if ( input->Triggerkey(DIK_F2) ) {
+        uiShell_ = ( uiShell_ == UiShell::Dock ) ? UiShell::Icon : UiShell::Dock;
+        if ( uiShell_ == UiShell::Dock ) { dockRelayoutPending_ = true; } // 元のドック配置へ組み直す
+        SaveUiConfig();
     }
 
     // エクスプローラーからD&Dされたファイルを取り込む（エディタ非表示でも受け付ける）
@@ -158,7 +179,9 @@ void EditorManager::Update(){
         return;
     }
 
-    // 1. 全画面の透明なドッキング土台
+    // 1. 全画面の透明なドッキング土台（アイコンモードではドックを使わず、ゲームビューを全画面背景にする）
+    //   ※分岐は必ず uiShellFrame_（フレーム先頭で確定した値）を使う
+    if ( uiShellFrame_ == UiShell::Dock ) {
     ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -177,6 +200,12 @@ void EditorManager::Update(){
     ImGui::PopStyleVar(3);
     ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    // アイコンモードから戻った直後は必ず初期レイアウトへ組み直す（浮遊化した窓を全部戻す）
+    if ( dockRelayoutPending_ ) {
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        dockRelayoutPending_ = false;
+    }
 
     // imgui.ini にレイアウトが保存されていない時のみ初期レイアウトを構築する
     // DockBuilderGetNode が nullptr を返す = 保存データなし = 初期化が必要
@@ -204,13 +233,24 @@ void EditorManager::Update(){
         ImGui::DockBuilderDockWindow("レールエディタ",               dock_bottom);
         ImGui::DockBuilderDockWindow("Blenderインポート (Blender)",  dock_bottom);
         ImGui::DockBuilderDockWindow("GPU Particle Editor",         dock_bottom);
+        // 以前は浮遊だったウィンドウも全てドックへ入れる（アイコンモードから戻った時に
+        // バラバラの浮遊窓が散らばらないように、全ウィンドウの定位置を決めておく）
+        ImGui::DockBuilderDockWindow("配置エディタ (Coin/Block)",     dock_bottom);
+        ImGui::DockBuilderDockWindow("カメラエディタ",               dock_bottom);
+        ImGui::DockBuilderDockWindow("SDF (フォント/画像)",          dock_bottom);
+        ImGui::DockBuilderDockWindow("ファイルエディタ (Project)",    dock_bottom);
+        ImGui::DockBuilderDockWindow("敵配置エディタ (Enemy Editor)", dock_right);
 
         ImGui::DockBuilderFinish(dockspace_id);
     }
 
     ImGui::End();
+    } // uiShell_ == Dock
+    // アイコンモードではドッキング自体を無効化している（Begin参照）ため、ここでは何もしない。
+    // ドックモードへ戻る時は dockRelayoutPending_ で標準レイアウトが組み直される
 
     // コントロールウィンドウ（実行制御をここに集約：モード切替＋時間制御）
+    if ( IsPanelVisible(Panel_Control) ) {
     ImGui::Begin("コントロール (Play / Stop)");
 
     Time* time = Time::GetInstance();
@@ -241,6 +281,7 @@ void EditorManager::Update(){
     if ( ImGui::Button("等速 (1.0x)") ) { time->SetTimeScale(1.0f); }
 
     ImGui::End();
+    } // Panel_Control
 
     // 2. メインメニューバー
     if ( ImGui::BeginMainMenuBar() ) {
@@ -263,6 +304,13 @@ void EditorManager::Update(){
             ImGui::EndMenu();
         }
         if ( ImGui::BeginMenu("ウィンドウ (Window)") ) {
+            if ( ImGui::MenuItem(uiShell_ == UiShell::Dock ? "アイコンUIへ切替 (F2)" : "ドックUIへ切替 (F2)") ) {
+                uiShell_ = ( uiShell_ == UiShell::Dock ) ? UiShell::Icon : UiShell::Dock;
+                if ( uiShell_ == UiShell::Dock ) { dockRelayoutPending_ = true; }
+                SaveUiConfig();
+            }
+            if ( ImGui::MenuItem("UI設定（フォント / スケール）") ) { showUiSettings_ = true; }
+            ImGui::Separator();
             if ( ImGui::MenuItem("レイアウトをリセット") ) {
                 // ノードを削除することで次フレームの GetNode チェックが nullptr になり再構築される
                 ImGuiID id = ImGui::GetID("MyDockSpace");
@@ -338,7 +386,25 @@ void EditorManager::Update(){
     
 
     // 3. Game View
-    ImGui::Begin("Game View");
+    //   アイコンモードでは全画面の「背景ウィンドウ」として描く。
+    //   マウス橋渡し（GameViewMouse）は Image の矩形から取るので、ブロック配置・
+    //   敵ドラッグ・レール編集はどちらのモードでも無改修でそのまま動く
+    if ( uiShellFrame_ == UiShell::Icon ) {
+        ImGuiViewport* gameViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(gameViewport->WorkPos);
+        ImGui::SetNextWindowSize(gameViewport->WorkSize);
+        ImGui::SetNextWindowViewport(gameViewport->ID);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::Begin("Game View", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+            ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar);
+        ImGui::PopStyleVar(3);
+    } else {
+        ImGui::Begin("Game View");
+    }
     ImVec2 sceneSize = ImGui::GetContentRegionAvail();
     if ( sceneSize.x < 10.0f ) sceneSize.x = 640.0f;
     if ( sceneSize.y < 10.0f ) sceneSize.y = 360.0f;
@@ -1170,21 +1236,29 @@ void EditorManager::Update(){
 
     ImGui::End();
 
-    // 4. 全シーン共通のUI
-    PostEffect::GetInstance()->DrawDebugUI();
+    // 3.5 アイコンツールバー（アイコンモードのみ。Game View の後に描いて手前に出す）
+    if ( uiShellFrame_ == UiShell::Icon ) { DrawIconToolbar(); }
+    if ( showUiSettings_ ) { DrawUiSettingsWindow(); }
 
-    // スキニングUI（「詳細設定」へ合流するウィンドウは必ずドックスペースより後に Begin する。
-    //  先に Begin するとそのウィンドウだけドッキングできなくなる）
-    if ( targetSkinnedObj_ ) {
-        targetSkinnedObj_->DrawDebugUI();
+    // 4. 全シーン共通のUI
+    if ( IsPanelVisible(Panel_Inspector) ) {
+        PostEffect::GetInstance()->DrawDebugUI();
+
+        // スキニングUI（「詳細設定」へ合流するウィンドウは必ずドックスペースより後に Begin する。
+        //  先に Begin するとそのウィンドウだけドッキングできなくなる）
+        if ( targetSkinnedObj_ ) {
+            targetSkinnedObj_->DrawDebugUI();
+        }
     }
 
     // 5. 現在のシーン固有のUI
     SceneManager::GetInstance()->DrawCurrentSceneDebugUI();
 
-    // 6. LevelEditor のデバッグUI
+    // 6. LevelEditor のデバッグUI（パネル分類に応じてウィンドウ単位で開閉。Dockモードは全true）
     if ( levelEditor_ ) {
-        levelEditor_->DrawDebugUI();
+        levelEditor_->DrawDebugUI(
+            IsPanelVisible(Panel_Hierarchy), IsPanelVisible(Panel_Inspector), IsPanelVisible(Panel_Assets),
+            IsPanelVisible(Panel_Rail), IsPanelVisible(Panel_Camera), IsPanelVisible(Panel_Items));
     }
 
     // 6.5 Blenderインポータ（パネル描画＋ホットリロード監視）
@@ -1194,22 +1268,25 @@ void EditorManager::Update(){
         blenderImporter_->DrawDebugUI();
     }
 
-    if ( gpuParticleEditor_ ) {
+    if ( gpuParticleEditor_ && IsPanelVisible(Panel_GpuParticle) ) {
         gpuParticleEditor_->DrawDebugUI();
     }
 
     // ファイルエディタ（Project風のファイル閲覧・編集。master_engine から移植）
-    if ( fileEditor_ ) {
+    if ( fileEditor_ && IsPanelVisible(Panel_File) ) {
         fileEditor_->DrawDebugUI();
     }
 
     // 調整項目（GlobalVariables）の編集ウィンドウ
     // 6.7 SDF（フォント/画像）パネル：アトラス一覧＋テキスト/スプライト配置
-    SDFManager::GetInstance()->DrawDebugUI();
+    if ( IsPanelVisible(Panel_Sdf) ) {
+        SDFManager::GetInstance()->DrawDebugUI();
+    }
 
     if ( showGlobalVars_ ) { GlobalVariables::GetInstance()->Update(); } // 表示メニューでON/OFF
 
     // 7.5 インスペクター（ギズモ対象オブジェクトの Transform 編集）
+    if ( IsPanelVisible(Panel_Transform) ) {
     ImGui::Begin("インスペクター (Transform)");
     if ( gizmoTarget_ ) {
         // ギズモ操作モードの切替（Game View 上のギズモに反映）
@@ -1238,15 +1315,24 @@ void EditorManager::Update(){
         ImGui::TextDisabled("対象オブジェクトが未登録です\n(シーンから SetGizmoTarget で登録)");
     }
     ImGui::End();
+    } // Panel_Transform
 
     // 7. パフォーマンスモニター（master_engine から移植：履歴グラフ・メモリ/VRAM・ドローコール付き）
-    if ( perfMonitor_ ) {
+    if ( perfMonitor_ && IsPanelVisible(Panel_Perf) ) {
         perfMonitor_->DrawDebugUI(cpuUpdateTimeMs_, cpuDrawTimeMs_);
     }
 
     // 8. ノードエディタ（表示メニューでON/OFF。master_engine から移植）
     if ( nodeEditor_ && showNodeEditor_ ) {
         nodeEditor_->DrawDebugUI(&showNodeEditor_);
+    }
+
+    // 9. アイコンモードのツールバーは全ウィンドウ提出後に必ず最前面へ戻す
+    //   （Game View をクリックした時などに背面へ回って見えなくなる不具合の対策）
+    if ( uiShellFrame_ == UiShell::Icon ) {
+        if ( ImGuiWindow* toolbarWindow = ImGui::FindWindowByName("##IconToolbar") ) {
+            ImGui::BringWindowToDisplayFront(toolbarWindow);
+        }
     }
 #endif
 }
@@ -1255,6 +1341,292 @@ void EditorManager::Draw(){
     if ( levelEditor_ ) {
         levelEditor_->Draw();
     }
+}
+
+// =====================================================================
+//  UIシェル（アイコンモード）
+// =====================================================================
+#ifdef USE_IMGUI
+namespace {
+    // アイコンモードのパネル定義（アイコン＋短いラベルの2行ボタン・ツールチップ・ウィンドウ名）。
+    //   アイコンは Segoe MDL2 のグリフ（UTF-8直書き）。EditorPanel と同じ並び順
+    struct PanelIconDef { const char* icon; const char* name; const char* windowTitle; };
+    const PanelIconDef kPanelIcons[EditorManager::Panel_Count] = {
+        { "\xEE\x9D\xA8\n操作", "コントロール（Play / Stop・タイムスケール）", "コントロール (Play / Stop)" },        // E768 ▶
+        { "\xEE\xA3\xB1\n階層", "ヒエラルキー（配置リスト・マップ保存/読込）", "ヒエラルキー (配置リスト)" },          // E8F1 リスト
+        { "\xEE\xA2\xB7\n資産", "アセットブラウザ（モデルのドラッグ配置）", "アセットブラウザ (Assets)" },            // E8B7 フォルダ
+        { "\xEE\xA4\x8F\n詳細", "インスペクター（詳細設定：ポストエフェクト等）", "インスペクター (詳細設定)" },       // E90F レンチ
+        { "\xEE\x9C\x8F\n変形", "インスペクター（Transform：ギズモ対象の編集）", "インスペクター (Transform)" },      // E70F 鉛筆
+        { "\xEE\x9D\xB4\n線路", "レールエディタ（管理/作成/動き/配置物/接続）", "レールエディタ" },                  // E774 地球（コース）
+        { "\xEE\x9C\xA2\n映像", "カメラエディタ（カメラゾーン）", "カメラエディタ" },                              // E722 カメラ
+        { "\xEE\x9C\x99\n配置", "配置エディタ（コイン / ブロック）", "配置エディタ (Coin/Block)" },                // E719 バッグ
+        { "\xEE\x9D\xBB\n敵",   "敵配置エディタ", "敵配置エディタ (Enemy Editor)" },                              // E77B 人物
+        { "\xEE\x9C\xB4\n粒子", "GPUパーティクルエディタ", "GPU Particle Editor" },                              // E734 星
+        { "\xEE\xA3\x92\n文字", "SDF（フォント / 画像）", "SDF (フォント/画像)" },                                // E8D2 フォント
+        { "\xEE\xA0\xA3\n計測", "パフォーマンスモニター", "パフォーマンスモニター" },                              // E823 時計
+        { "\xEE\xA2\xA5\n書類", "ファイルエディタ（Project）", "ファイルエディタ (Project)" },                     // E8A5 ドキュメント
+    };
+    // 単発アクションのアイコングリフ
+    const char* kIconGlyphBack = "\xEE\x9C\x80"; // U+E700 メニュー（三本線）
+    const char* kIconGlyphSave = "\xEE\x9D\x8E"; // U+E74E フロッピー（保存）
+    const char* kIconGlyphGear = "\xEE\x9C\x93"; // U+E713 歯車（設定）
+}
+#endif
+
+void EditorManager::DrawIconToolbar(){
+#ifdef USE_IMGUI
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    // ドロワーが左配置の時、ツールバーは右端へ寄せる（重ならないように反対側）
+    float toolbarWidth = 110.0f;
+    if ( ImGuiWindow* toolbarWindow = ImGui::FindWindowByName("##IconToolbar") ) { toolbarWidth = toolbarWindow->Size.x; }
+    const bool drawerOnLeft = ( uiDrawerSide_ == 1 );
+    const float toolbarX = drawerOnLeft
+        ? viewport->WorkPos.x + viewport->WorkSize.x - toolbarWidth - 6.0f
+        : viewport->WorkPos.x + 6.0f;
+    ImGui::SetNextWindowPos(ImVec2(toolbarX, viewport->WorkPos.y + 6.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.88f);
+    ImGuiWindowFlags toolbarFlags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoFocusOnAppearing;
+    if ( !ImGui::Begin("##IconToolbar", nullptr, toolbarFlags) ) { ImGui::End(); return; }
+    // 他の浮遊ウィンドウに隠れないよう毎フレーム最前面へ
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+
+    const ImVec2 kIconSize { 48.0f, 50.0f }; // 上段アイコングリフ＋下段ラベルの2行ボタン
+    int columnIndex = 0; // 2列に並べる（縦に長くなりすぎて画面から溢れないように）
+    auto nextCell = [&](){
+        if ( ( columnIndex & 1 ) == 1 ) { ImGui::SameLine(); }
+        ++columnIndex;
+    };
+    auto newRow = [&](){ columnIndex = 0; };
+    // ONのアイコンは青く光らせるトグルボタン
+    auto iconButton = [&](const char* icon, const char* tooltip, bool active) -> bool {
+        nextCell();
+        if ( active ) {
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.55f, 0.85f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.65f, 0.95f, 1.0f));
+        }
+        bool pressed = ImGui::Button(icon, kIconSize);
+        if ( active ) { ImGui::PopStyleColor(2); }
+        if ( ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort) ) { ImGui::SetTooltip("%s", tooltip); }
+        return pressed;
+    };
+    if ( iconButton("\xEE\x9C\x80\nドック", "ドックUIへ戻る (F2)", false) ) {
+        uiShell_ = UiShell::Dock;
+        dockRelayoutPending_ = true; // 元のドック配置へ組み直す
+        SaveUiConfig();
+    }
+    newRow();
+
+    // --- ワークスペース（作業内容に合わせて一式切替）---
+    ImGui::Separator();
+    ImGui::TextDisabled("作業");
+    bool workspaceApplied = false;
+    // ※ラベルの「##ws〜」はID重複防止（下の「窓」セクションに同名ボタンがあるため。表示はされない）
+    if ( iconButton("\xEE\x9C\x99\n設置##ws0", "設置：配置エディタだけ表示（画面が広く、クリック配置がやりやすい）", false) ) { ApplyWorkspace(0); workspaceApplied = true; }
+    if ( iconButton("\xEE\x9E\x90\n調整##ws1", "調整：インスペクタ＋パフォーマンス（スライダーを動かしながら画を見る）", false) ) { ApplyWorkspace(1); workspaceApplied = true; }
+    if ( iconButton("\xEE\x9D\xB4\n線路##ws2", "レール：レールエディタ＋カメラ＋ヒエラルキー", false) ) { ApplyWorkspace(2); workspaceApplied = true; }
+    if ( iconButton("\xEE\x9D\xBB\n敵##ws3",   "敵配置：敵エディタだけ表示", false) ) { ApplyWorkspace(3); workspaceApplied = true; }
+    if ( iconButton("\xEE\x9C\x91\n全閉##ws4", "全部閉じる（ゲーム画面のみ）", false) ) { ApplyWorkspace(4); workspaceApplied = true; }
+    ( void ) workspaceApplied; // ドロワーが毎フレーム自動整列するので個別配置は不要
+    newRow();
+
+    // --- パネル個別開閉 ---
+    ImGui::Separator();
+    ImGui::TextDisabled("窓");
+    for ( int i = 0; i < Panel_Count; ++i ) {
+        if ( iconButton(kPanelIcons[i].icon, kPanelIcons[i].name, panelVisible_[i]) ) {
+            panelVisible_[i] = !panelVisible_[i];
+            SaveUiConfig();
+        }
+    }
+    newRow();
+
+    // --- その他の既存トグル ---
+    ImGui::Separator();
+    ImGui::TextDisabled("他");
+    if ( iconButton("\xEE\xA5\x90\nノード", "ノードエディタ", showNodeEditor_) ) { showNodeEditor_ = !showNodeEditor_; }
+    if ( iconButton("\xEE\xA2\x98\nBlend", "Blenderインポータ", showBlenderImporter_) ) { showBlenderImporter_ = !showBlenderImporter_; }
+    if ( iconButton("\xEE\x9E\x8A\nデモ", "デモ展示（回転ブロック・オーラ・SDF卵・人形）", showDemo_) ) { showDemo_ = !showDemo_; }
+    if ( iconButton("\xEE\x9C\x9C\n調整値", "調整項目 (GlobalVariables)", showGlobalVars_) ) { showGlobalVars_ = !showGlobalVars_; }
+    newRow();
+
+    // --- シーン切替・ファイル・設定 ---
+    ImGui::Separator();
+    ImGui::TextDisabled("シーン");
+    if ( iconButton("\xEE\xA1\x8A\n題名", "タイトルシーンへ", false) ) { SceneManager::GetInstance()->ChangeSceneWithFade("TITLE"); }
+    if ( iconButton("\xEE\x9D\xA8\n遊ぶ", "ゲームプレイシーンへ", false) ) { SceneManager::GetInstance()->ChangeSceneWithFade("GAMEPLAY"); }
+    if ( iconButton("\xEE\x9D\x95\n動作", "アニメーションエディタへ", false) ) { SceneManager::GetInstance()->ChangeSceneWithFade("ANIMATION_EDITOR"); }
+    newRow();
+    ImGui::Separator();
+    if ( iconButton("\xEE\x9D\x8E\n保存", "マップを上書き保存 (Ctrl+S)", false) ) { if ( levelEditor_ ) { levelEditor_->QuickSave(); } }
+    if ( iconButton("\xEE\x9C\x93\n設定", "UI設定（フォント / スケール）", showUiSettings_) ) { showUiSettings_ = !showUiSettings_; }
+
+    ImGui::End();
+
+    // --- 右側ドロワー：表示中のパネルを右端の固定カラムへ自動で縦積みする ---
+    //   浮遊ウィンドウが画面のあちこちに散らばる／中央のゲーム画面を覆う／前回位置の
+    //   まま変な場所に開く、といった使いづらさをまとめて解消する。
+    //   位置とサイズは毎フレーム名前指定で上書きするので、どのパネルも必ずここに現れる
+    {
+        ImGuiViewport* drawerViewport = ImGui::GetMainViewport();
+        // 手動リサイズの取り込み：パネルの縁をドラッグして変えた幅をドロワー幅として採用する
+        //（毎フレーム幅を強制する方式のままでも、採用→強制の順なのでドラッグが効く）
+        for ( int i = 0; i < Panel_Count; ++i ) {
+            if ( !panelVisible_[i] ) continue;
+            ImGuiWindow* panelWindow = ImGui::FindWindowByName(kPanelIcons[i].windowTitle);
+            if ( panelWindow && !panelWindow->Collapsed && fabsf(panelWindow->Size.x - uiDrawerWidth_) > 0.5f ) {
+                uiDrawerWidth_ = ( std::max )( 300.0f, ( std::min )( 800.0f, panelWindow->Size.x ) );
+                uiDrawerWidthDirty_ = true;
+                break;
+            }
+        }
+        if ( uiDrawerWidthDirty_ && !ImGui::IsMouseDown(ImGuiMouseButton_Left) ) {
+            uiDrawerWidthDirty_ = false;
+            SaveUiConfig(); // ドラッグを離したタイミングで保存
+        }
+        const float drawerWidth = uiDrawerWidth_;
+        // タイトルの▼で畳んだパネルはタイトルバーぶんだけ場所を取り、
+        // 残りの高さを開いているパネルで分け合う（使わないパネルを畳むと他が広くなる）
+        const float collapsedHeight = ImGui::GetFrameHeight() + 4.0f;
+        int   expandedCount  = 0;
+        float collapsedTotal = 0.0f;
+        bool  isCollapsed[Panel_Count] = {};
+        int   visibleCount = 0;
+        for ( int i = 0; i < Panel_Count; ++i ) {
+            if ( !panelVisible_[i] ) continue;
+            ++visibleCount;
+            ImGuiWindow* panelWindow = ImGui::FindWindowByName(kPanelIcons[i].windowTitle);
+            isCollapsed[i] = ( panelWindow && panelWindow->Collapsed );
+            if ( isCollapsed[i] ) { collapsedTotal += collapsedHeight; } else { ++expandedCount; }
+        }
+        if ( visibleCount > 0 ) {
+            // 配置（右/左）はUI設定で切替可能。左配置ならツールバーが右へ移る
+            const float drawerX = drawerOnLeft
+                ? drawerViewport->WorkPos.x
+                : drawerViewport->WorkPos.x + drawerViewport->WorkSize.x - drawerWidth;
+            const float expandedHeight = ( std::max )( 200.0f,
+                ( drawerViewport->WorkSize.y - collapsedTotal ) / ( float ) ( std::max )( 1, expandedCount ) );
+            float y = drawerViewport->WorkPos.y;
+            for ( int i = 0; i < Panel_Count; ++i ) {
+                if ( !panelVisible_[i] ) continue;
+                const char* windowName = kPanelIcons[i].windowTitle;
+                const float height = isCollapsed[i] ? collapsedHeight : expandedHeight;
+                ImGui::SetWindowPos(windowName, ImVec2(drawerX, y), ImGuiCond_Always);
+                ImGui::SetWindowSize(windowName, ImVec2(drawerWidth, expandedHeight), ImGuiCond_Always);
+                y += height;
+            }
+        }
+    }
+#endif
+}
+
+void EditorManager::DrawUiSettingsWindow(){
+#ifdef USE_IMGUI
+    if ( !ImGui::Begin("UI設定", &showUiSettings_, ImGuiWindowFlags_AlwaysAutoResize) ) { ImGui::End(); return; }
+    // フォント切替（起動時に読み込めたフォントの一覧から選ぶ）
+    const auto& fonts = ImGuiManager::GetInstance()->GetFonts();
+    if ( !fonts.empty() ) {
+        if ( uiFontIndex_ < 0 || uiFontIndex_ >= ( int ) fonts.size() ) { uiFontIndex_ = 0; }
+        if ( ImGui::BeginCombo("フォント", fonts[uiFontIndex_].name.c_str()) ) {
+            for ( int i = 0; i < ( int ) fonts.size(); ++i ) {
+                if ( ImGui::Selectable(fonts[i].name.c_str(), i == uiFontIndex_) ) {
+                    uiFontIndex_ = i;
+                    ImGui::GetIO().FontDefault = fonts[i].font; // 次フレームから反映
+                    SaveUiConfig();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
+    if ( ImGui::SliderFloat("UIスケール", &uiFontScale_, 0.7f, 1.6f, "%.2fx") ) {
+        ImGui::GetStyle().FontScaleMain = uiFontScale_;
+    }
+    if ( ImGui::IsItemDeactivatedAfterEdit() ) { SaveUiConfig(); }
+    ImGui::SliderFloat("ドロワー幅", &uiDrawerWidth_, 300.0f, 800.0f, "%.0fpx");
+    if ( ImGui::IsItemDeactivatedAfterEdit() ) { SaveUiConfig(); }
+    const char* kDrawerSideNames[] = { "右側（ツールバー左）", "左側（ツールバー右）" };
+    if ( ImGui::Combo("ドロワー位置", &uiDrawerSide_, kDrawerSideNames, 2) ) { SaveUiConfig(); }
+    if ( ImGui::Checkbox("起動時にエディタを表示（F1不要）", &uiAutoShowEditor_) ) { SaveUiConfig(); }
+    ImGui::TextDisabled("F2: ドックUI ⇔ アイコンUI（設定は自動保存）\n"
+                        "パネルはタイトルの▼で畳める（畳むと他のパネルが広がる）\n"
+                        "パネルの縁ドラッグでもドロワー幅を変えられる\n"
+                        "ゲームビュー右クリック＝その場に敵/コイン/ブロックを配置");
+    ImGui::End();
+#endif
+}
+
+// ワークスペース：作業内容に合わせてパネル一式を切り替える（0=設置/1=調整/2=レール/3=敵/4=全部閉じる）
+void EditorManager::ApplyWorkspace(int index){
+    for ( bool& visible : panelVisible_ ) { visible = false; }
+    switch ( index ) {
+    case 0: panelVisible_[Panel_Items] = true;  panelVisible_[Panel_Control] = true; break;
+    case 1: panelVisible_[Panel_Inspector] = true; panelVisible_[Panel_Perf] = true; panelVisible_[Panel_Control] = true; break;
+    case 2: panelVisible_[Panel_Rail] = true; panelVisible_[Panel_Camera] = true; panelVisible_[Panel_Hierarchy] = true; break;
+    case 3: panelVisible_[Panel_Enemy] = true; panelVisible_[Panel_Control] = true; break;
+    default: break; // 4: 全部閉じる（ゲーム画面のみ）
+    }
+    SaveUiConfig();
+}
+
+void EditorManager::SaveUiConfig() const{
+    FILE* fp = nullptr;
+    fopen_s(&fp, "resources/editor_ui.ini", "w");
+    if ( !fp ) return;
+    fprintf(fp, "shell=%d\nfont=%d\nscale=%.3f\ndrawer=%.0f\nside=%d\nautoshow=%d\npanels=",
+            ( int ) uiShell_, uiFontIndex_, uiFontScale_, uiDrawerWidth_, uiDrawerSide_, uiAutoShowEditor_ ? 1 : 0);
+    for ( int i = 0; i < Panel_Count; ++i ) { fputc(panelVisible_[i] ? '1' : '0', fp); }
+    fputc('\n', fp);
+    fclose(fp);
+}
+
+void EditorManager::LoadUiConfig(){
+    FILE* fp = nullptr;
+    fopen_s(&fp, "resources/editor_ui.ini", "r");
+    if ( fp ) {
+        // 行構造に依存しないよう、全体を読んでキーごとに拾う
+        char buffer[256] = {};
+        fread(buffer, 1, sizeof(buffer) - 1, fp);
+        fclose(fp);
+        const char* found = nullptr;
+        if ( ( found = strstr(buffer, "shell=") ) )  { uiShell_ = ( atoi(found + 6) == 1 ) ? UiShell::Icon : UiShell::Dock; }
+        if ( ( found = strstr(buffer, "font=") ) )   { uiFontIndex_ = atoi(found + 5); }
+        if ( ( found = strstr(buffer, "scale=") ) )  {
+            float scale = ( float ) atof(found + 6);
+            uiFontScale_ = ( scale > 0.3f && scale < 3.0f ) ? scale : 1.0f;
+        }
+        if ( ( found = strstr(buffer, "drawer=") ) ) {
+            float width = ( float ) atof(found + 7);
+            uiDrawerWidth_ = ( width >= 300.0f && width <= 800.0f ) ? width : 460.0f;
+        }
+        if ( ( found = strstr(buffer, "side=") ) )     { uiDrawerSide_ = ( atoi(found + 5) == 1 ) ? 1 : 0; }
+        if ( ( found = strstr(buffer, "autoshow=") ) ) {
+            uiAutoShowEditor_ = ( atoi(found + 9) == 1 );
+            if ( uiAutoShowEditor_ ) { isEditorActive_ = true; } // 起動時からエディタを開く設定
+        }
+        if ( ( found = strstr(buffer, "panels=") ) ) {
+            found += 7;
+            for ( int i = 0; i < Panel_Count && ( found[i] == '0' || found[i] == '1' ); ++i ) {
+                panelVisible_[i] = ( found[i] == '1' );
+            }
+        }
+    } else {
+        // 初回は「設置ワークスペース」相当（アイコンモードにした時に画面が広い状態から始まる）
+        panelVisible_[Panel_Items]   = true;
+        panelVisible_[Panel_Control] = true;
+    }
+#ifdef USE_IMGUI
+    const auto& fonts = ImGuiManager::GetInstance()->GetFonts();
+    if ( uiFontIndex_ > 0 && uiFontIndex_ < ( int ) fonts.size() ) {
+        ImGui::GetIO().FontDefault = fonts[uiFontIndex_].font;
+    }
+    ImGui::GetStyle().FontScaleMain = uiFontScale_;
+#endif
+    // ドックモードは起動時に必ず標準レイアウトへ組み直す。
+    //   アイコンモードのセッションを挟むと imgui.ini に「空のドックノード＋浮遊ウィンドウ」という
+    //   中途半端な状態が残り、初期化スキップ判定をすり抜けてバラバラのまま起動してしまうため
+    dockRelayoutPending_ = true;
 }
 
 void EditorManager::SetCamera(const Camera* camera){

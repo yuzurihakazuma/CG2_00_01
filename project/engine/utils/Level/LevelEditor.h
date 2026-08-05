@@ -33,7 +33,10 @@ public:
     void SetCamera(const Camera* camera);
 
     // デバッグ用UIの描画
-    void DrawDebugUI();
+    // エディタUIの描画。引数でウィンドウ単位の表示を絞れる（アイコンモードのカテゴリ開閉用。
+    //   既定は全true＝従来どおり。非表示でもレール編集の毎フレーム処理(TickEditing)は必ず動く）
+    void DrawDebugUI(bool showHierarchy = true, bool showInspector = true, bool showAssets = true,
+                     bool showRail = true, bool showCamera = true, bool showItems = true);
 
     // Blenderインポータ等の外部から変換済みデータを受け取って反映する
     //   additive: true=既存マップに追記 / false=置き換え

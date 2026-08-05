@@ -70,6 +70,35 @@ public:
     // エディタがアクティブかどうか
     bool IsActive() const{ return isEditorActive_; }
 
+    // ===== UIシェル（F2で切替）=====
+    //   Dock : 従来どおりの全パネルドッキング表示（挙動・見た目は完全に従来のまま）
+    //   Icon : ゲームビュー全画面＋左端アイコンツールバーで必要なパネルだけ浮遊表示
+    enum class UiShell { Dock, Icon };
+    // アイコンモードで開閉できるパネルの分類（アイコン1個=1パネル）
+    enum EditorPanel {
+        Panel_Control,     // 操作（Play/Stop・タイムスケール）
+        Panel_Hierarchy,   // ヒエラルキー（配置リスト）
+        Panel_Assets,      // アセットブラウザ
+        Panel_Inspector,   // インスペクター（詳細設定）※9クラス合流の束
+        Panel_Transform,   // インスペクター（Transform）
+        Panel_Rail,        // レールエディタ
+        Panel_Camera,      // カメラエディタ
+        Panel_Items,       // 配置エディタ（コイン/ブロック）
+        Panel_Enemy,       // 敵配置エディタ
+        Panel_GpuParticle, // GPUパーティクル
+        Panel_Sdf,         // SDF（フォント/画像）
+        Panel_Perf,        // パフォーマンスモニター
+        Panel_File,        // ファイルエディタ
+        Panel_Count
+    };
+    UiShell GetUiShell() const{ return uiShell_; }
+    // このパネルを今フレーム描くべきか。Dockモードは常に true（＝従来と同一）、
+    // Iconモードではアイコンで選んだものだけ true（非表示パネルは Begin ごと呼ばれない＝コストゼロ）
+    bool IsPanelVisible(int panel) const{
+        if ( uiShellFrame_ == UiShell::Dock ) return true; // フレーム先頭で確定した値で判定
+        return panel >= 0 && panel < Panel_Count && panelVisible_[panel];
+    }
+
 	// シーンから SkinnedObj3d を登録する。シーン終了時は必ず nullptr を渡してリセットすること
 	void SetTargetSkinnedObj(SkinnedObj3d* obj){ targetSkinnedObj_ = obj; }
 
@@ -199,6 +228,28 @@ private:
     //   マップ制作には不要なので既定OFF。表示メニューでON/OFF（GamePlaySceneが参照）
     bool showDemo_ = false;
     bool showGlobalVars_ = false;
+
+    // --- UIシェル（アイコンモード）の状態 ---
+    void DrawIconToolbar();          // 左端のアイコンツールバー（Iconモードのみ）
+    void DrawUiSettingsWindow();     // フォント・UIスケール設定ウィンドウ
+    void ApplyWorkspace(int index);  // ワークスペースプリセット適用（0=設置/1=調整/2=レール/3=敵/4=全部閉じる）
+    void SaveUiConfig() const;       // resources/editor_ui.ini へ保存（モード/パネル/フォント）
+    void LoadUiConfig();
+    UiShell uiShell_ = UiShell::Dock;
+    // このフレームで実際に使うシェル（Beginでドッキング有効/無効と同時に確定させる。
+    //   F2等でフレーム途中に uiShell_ が変わっても、UI分岐は必ずこちらを使うこと。
+    //   途中で切り替えると「ドッキング無効のままドック再構築」が走りImGui内部でクラッシュする）
+    UiShell uiShellFrame_ = UiShell::Dock;
+    bool panelVisible_[Panel_Count] = {}; // Iconモードで表示中のパネル
+    bool dockRelayoutPending_ = false;    // アイコン→ドック復帰時に初期レイアウトを組み直す
+    float uiDrawerWidth_ = 460.0f;        // ドロワーの幅（UI設定・縁ドラッグで変更、保存）
+    int   uiDrawerSide_ = 0;              // ドロワーの位置（0=右 / 1=左。ツールバーは反対側へ）
+    bool  uiAutoShowEditor_ = false;      // 起動時からエディタを表示する（F1不要にする設定）
+    bool  uiDrawerWidthDirty_ = false;    // 縁ドラッグ中フラグ（離した時に保存）
+    bool uiConfigLoaded_ = false;
+    bool showUiSettings_ = false;
+    int  uiFontIndex_ = 0;           // ImGuiManager のフォント一覧のインデックス
+    float uiFontScale_ = 1.0f;
 
     // Game View マウス情報（毎フレーム更新。ゲーム側の配置エディタへの橋渡し）
     GameViewMouse gameViewMouse_ {};

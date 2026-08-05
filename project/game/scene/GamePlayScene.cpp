@@ -1068,13 +1068,15 @@ void GamePlayScene::Draw(){
 void GamePlayScene::DrawDebugUI(){
 
 #ifdef USE_IMGUI
-	Obj3dCommon::GetInstance()->DrawDebugUI();
-	if ( camera_ ) { camera_->DrawDebugUI(); }
-	if ( debugCamera_ ) { debugCamera_->DrawDebugUI(); }
-	ParticleManager::GetInstance()->DrawDebugUI();
-
-
-	TextManager::GetInstance()->DrawDebugUI();
+	// 共有の「インスペクター (詳細設定)」へ合流する組（アイコンモードでは詳細パネルOFF時に丸ごと省略）
+	const bool showSceneInspector = EditorManager::GetInstance()->IsPanelVisible(EditorManager::Panel_Inspector);
+	if ( showSceneInspector ) {
+		Obj3dCommon::GetInstance()->DrawDebugUI();
+		if ( camera_ ) { camera_->DrawDebugUI(); }
+		if ( debugCamera_ ) { debugCamera_->DrawDebugUI(); }
+		ParticleManager::GetInstance()->DrawDebugUI();
+		TextManager::GetInstance()->DrawDebugUI();
+	}
 
 	// 展示物のパネル（SDF卵のエロージョン操作）。デモ表示OFFの間はウィンドウごと出さない
 	if ( EditorManager::GetInstance()->IsDemoVisible() ) { demo_.DrawImGui(); }
@@ -1086,6 +1088,7 @@ void GamePlayScene::DrawDebugUI(){
 	stageFlow_.DrawDebugUI();
 
 	// レール経路の可視化トグル（共有の「詳細設定」ウィンドウに合流させる）
+	if ( showSceneInspector ) {
 	ImGui::Begin("インスペクター (詳細設定)");
 
 	if ( ImGui::CollapsingHeader("レール表示・カメラ視点 (Rail Debug)") ) {
@@ -1183,9 +1186,10 @@ void GamePlayScene::DrawDebugUI(){
 		ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
 	}
 	ImGui::End();
+	} // showSceneInspector
 
-	// 敵配置用エディタのUIウィンドウを描画
-	if ( enemyEditor_ ) {
+	// 敵配置用エディタのUIウィンドウを描画（アイコンモードでは敵パネルON時のみ）
+	if ( enemyEditor_ && EditorManager::GetInstance()->IsPanelVisible(EditorManager::Panel_Enemy) ) {
 		// レールエディタで選択中のノード位置（レール番号＋距離）を「選択ノードに配置」用に渡す
 		int pickRail = -1; float pickDist = 0.0f; bool hasPick = false;
 		Vector3 pickNodePos {};
@@ -1197,8 +1201,12 @@ void GamePlayScene::DrawDebugUI(){
 			}
 		}
 		enemyEditor_->DrawWindow(railField_.GetRails(), pickRail, pickDist, hasPick);
+	}
 
-		// --- Game View 連携（エディット中のみ）：色分けピン・巡回範囲・直接ドラッグ ---
+	// --- 敵の Game View 連携：色分けピン・巡回範囲・直接ドラッグ ---
+	//   敵パネルの表示に関係なくエディット中は常に有効（アイコンモードでパネルを
+	//   閉じていても、ゲームビューの敵をそのままつかんで配置変更できる）
+	if ( enemyEditor_ ) {
 		if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit ) {
 			const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
 			const auto& rails = railField_.GetRails();
@@ -1325,9 +1333,418 @@ void GamePlayScene::DrawDebugUI(){
 		}
 	}
 
-	// --- ブロック配置モード（マリオメーカー風：クリックで置く/消す。配置物タブでON）---
+	// --- 配置済みブロックのつかみ移動（エディット中・ペイントモードOFF時）---
+	//   ゲームビューのブロックを左ドラッグでつかんでレール上を移動できる。
+	//   マウスの上下で段、左右で横ずれも変わる。離した時に確定（塞がっていたら元へ戻る）
 	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit
-		&& EditorManager::GetInstance()->IsEditorBlockPaintMode() ) {
+		&& !EditorManager::GetInstance()->IsEditorBlockPaintMode() ) {
+		const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
+		const auto& rails = railField_.GetRails();
+		const auto& blocks = EditorManager::GetInstance()->GetEditorBlocks();
+		auto projectToScreen = [&](const Vector3& worldPos, Vector2& out) -> bool {
+			Vector2 ndc;
+			if ( !WorldToNdc(worldPos, gv.viewProj, ndc) ) return false;
+			out.x = gv.imgMin.x + ( ndc.x * 0.5f + 0.5f ) * gv.imgSize.x;
+			out.y = gv.imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * gv.imgSize.y;
+			return true;
+		};
+		// セル（レール×距離×段×横）の見た目の中心位置
+		auto cellCenter = [&](int rail, float dist, int level, float side, Vector3& out) -> bool {
+			if ( rail < 0 || rail >= ( int ) rails.size() ) return false;
+			if ( rails[rail].nodes.size() < 2 ) return false;
+			Vector3 base = rails[rail].GetPositionByDistance(dist);
+			Vector3 tangent = rails[rail].GetTangentByDistance(dist);
+			float horizLen = std::sqrt(tangent.x * tangent.x + tangent.z * tangent.z);
+			Vector3 right { 0.0f, 0.0f, 0.0f };
+			if ( horizLen > 1e-4f ) { right = { tangent.z / horizLen, 0.0f, -tangent.x / horizLen }; }
+			out = { base.x + right.x * side,
+			        base.y + ( float ) level * BlockSystem::kSize + 0.5f + BlockSystem::kSurfaceY,
+			        base.z + right.z * side };
+			return true;
+		};
+		// 敵のつかみ判定を優先（敵の16px圏内ではブロックをつかまない）
+		auto enemyUnderMouse = [&]() -> bool {
+			if ( !enemyEditor_ ) return false;
+			for ( const auto& spawnData : enemyEditor_->MutableSpawnDatas() ) {
+				if ( spawnData.railIndex < 0 || spawnData.railIndex >= ( int ) rails.size() ) continue;
+				if ( rails[spawnData.railIndex].nodes.size() < 2 ) continue;
+				Vector3 p = rails[spawnData.railIndex].GetPositionByDistance(spawnData.distance);
+				Vector2 sp; if ( !projectToScreen({ p.x, p.y + 0.5f, p.z }, sp) ) continue;
+				float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+				if ( std::sqrt(dx * dx + dy * dy) < 16.0f ) return true;
+			}
+			return false;
+		};
+
+		// 1) マウス直下のブロックを探す（画面距離22px以内。黄枠＋手カーソルで教える）
+		int mouseOverBlock = -1;
+		if ( gv.hovered && !gv.gizmoActive && blockDragIdx_ < 0 && enemyDragIdx_ < 0 && !enemyUnderMouse() ) {
+			float bestPick = 22.0f;
+			for ( int i = 0; i < ( int ) blocks.size(); ++i ) {
+				Vector3 center; if ( !cellCenter(blocks[i].rail, blocks[i].dist, blocks[i].level, blocks[i].side, center) ) continue;
+				Vector2 sp; if ( !projectToScreen(center, sp) ) continue;
+				float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+				float d = std::sqrt(dx * dx + dy * dy);
+				if ( d < bestPick ) { bestPick = d; mouseOverBlock = i; }
+			}
+		}
+		if ( mouseOverBlock >= 0 ) {
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+			Vector3 center;
+			if ( cellCenter(blocks[mouseOverBlock].rail, blocks[mouseOverBlock].dist,
+			                blocks[mouseOverBlock].level, blocks[mouseOverBlock].side, center) ) {
+				DebugDraw::GetInstance()->Box(center, { 1.06f, 1.06f, 1.06f }, { 1.0f, 0.95f, 0.3f, 1.0f });
+			}
+			if ( ImGui::IsMouseClicked(0) ) {
+				blockDragIdx_  = mouseOverBlock;
+				blockDragOrig_ = blocks[mouseOverBlock];
+				blockDragCell_ = blocks[mouseOverBlock];
+				blockDragDup_  = ImGui::GetIO().KeyCtrl; // Ctrl+ドラッグ＝複製
+			}
+		}
+
+		// 2) ドラッグ中：マウスに一番近いセルを移動先候補にしてゴースト表示
+		if ( blockDragIdx_ >= 0 ) {
+			if ( blockDragIdx_ >= ( int ) blocks.size() ) {
+				blockDragIdx_ = -1; // ドラッグ中に削除された等
+			} else if ( ImGui::IsMouseDown(0) ) {
+				// レール＋距離のピック（つかんだ段の高さで投影して高い段でも狙いやすく）
+				int bestRail = -1; float bestDist = 0.0f; float bestPx = 90.0f;
+				for ( int rr = 0; rr < ( int ) rails.size(); ++rr ) {
+					const SplineRail& rail = rails[rr];
+					if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+					float len = rail.GetLength();
+					int steps = std::clamp(( int ) ( len / 0.5f ), 2, 400);
+					for ( int s = 0; s <= steps; ++s ) {
+						float dist = len * ( float ) s / ( float ) steps;
+						Vector3 wp = rail.GetPositionByDistance(dist);
+						Vector3 probe = { wp.x, wp.y + ( float ) blockDragCell_.level + 0.5f, wp.z };
+						Vector2 sp; if ( !projectToScreen(probe, sp) ) continue;
+						float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+						float d = std::sqrt(dx * dx + dy * dy);
+						if ( rr == blockDragCell_.rail ) { d -= 20.0f; } // 今のレールに吸い付く
+						if ( d < bestPx ) { bestPx = d; bestRail = rr; bestDist = dist; }
+					}
+				}
+				if ( bestRail >= 0 ) {
+					float railLen  = rails[bestRail].GetLength();
+					float cellDist = std::round(bestDist);
+					if ( cellDist < 0.0f )    { cellDist = 0.0f; }
+					if ( cellDist > railLen ) { cellDist = std::floor(railLen); }
+					blockDragCell_.rail = bestRail;
+					blockDragCell_.dist = cellDist;
+					// 段×横ずれ：断面のセル（8段×5列）からマウスに一番近いものを選ぶ
+					int bestLevel = blockDragCell_.level; float bestSide = blockDragCell_.side;
+					float bestCellPx = 1e9f;
+					for ( int level = 0; level < 8; ++level ) {
+						for ( int sideStep = -2; sideStep <= 2; ++sideStep ) {
+							Vector3 center;
+							if ( !cellCenter(bestRail, cellDist, level, ( float ) sideStep, center) ) continue;
+							Vector2 sp; if ( !projectToScreen(center, sp) ) continue;
+							float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+							float d = std::sqrt(dx * dx + dy * dy) + std::abs(( float ) sideStep) * 10.0f;
+							if ( d < bestCellPx ) { bestCellPx = d; bestLevel = level; bestSide = ( float ) sideStep; }
+						}
+					}
+					blockDragCell_.level = bestLevel;
+					blockDragCell_.side  = bestSide;
+				}
+				// Ctrlは押し直しでも切り替え可能（ドラッグ中に複製⇔移動を変えられる）
+				blockDragDup_ = ImGui::GetIO().KeyCtrl;
+				// ゴースト：緑=移動できる / 赤=他のブロックで塞がっている / 水色=複製
+				int occupiedBy = -1;
+				if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
+					occupiedBy = levelEd->GetRailEditor()->FindBlock(
+						blockDragCell_.rail, blockDragCell_.dist, blockDragCell_.level, blockDragCell_.side);
+				}
+				bool cellBlocked = ( occupiedBy >= 0 && occupiedBy != blockDragIdx_ );
+				Vector3 ghostCenter;
+				if ( cellCenter(blockDragCell_.rail, blockDragCell_.dist, blockDragCell_.level, blockDragCell_.side, ghostCenter) ) {
+					Vector4 ghostColor;
+					if ( cellBlocked )          { ghostColor = { 1.0f, 0.35f, 0.3f, 1.0f }; }
+					else if ( blockDragDup_ )   { ghostColor = { 0.4f, 0.85f, 1.0f, 1.0f }; } // 複製＝水色
+					else                        { ghostColor = { 0.3f, 1.0f, 0.5f, 1.0f }; }
+					DebugDraw::GetInstance()->Box(ghostCenter, { 1.0f, 1.0f, 1.0f }, ghostColor);
+					// 元の場所：移動なら薄枠（無くなる予定）、複製ならしっかり枠（残る）＋対応線
+					Vector3 origCenter;
+					if ( cellCenter(blockDragOrig_.rail, blockDragOrig_.dist, blockDragOrig_.level, blockDragOrig_.side, origCenter) ) {
+						Vector4 origColor = blockDragDup_ ? Vector4 { 1.0f, 1.0f, 1.0f, 0.9f }
+						                                  : Vector4 { 1.0f, 1.0f, 1.0f, 0.35f };
+						DebugDraw::GetInstance()->Box(origCenter, { 0.95f, 0.95f, 0.95f }, origColor);
+						DebugDraw::GetInstance()->Line(origCenter, ghostCenter, { 1.0f, 0.95f, 0.3f, 0.8f });
+					}
+				}
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+			} else {
+				// 離した：確定。移動＝元を消して新セルへ / 複製(Ctrl)＝元を残して新セルへコピー
+				const BlockData& orig = blockDragOrig_;
+				bool moved = ( blockDragCell_.rail != orig.rail
+					|| blockDragCell_.dist  != orig.dist
+					|| blockDragCell_.level != orig.level
+					|| blockDragCell_.side  != orig.side );
+				if ( moved ) {
+					if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
+						auto* railEd = levelEd->GetRailEditor();
+						if ( !blockDragDup_ ) {
+							railEd->RemoveBlock(orig.rail, orig.dist, orig.level, orig.side);
+						}
+						railEd->AddBlock(blockDragCell_.rail, blockDragCell_.dist, blockDragCell_.level, blockDragCell_.side, orig.type);
+						if ( !blockDragDup_ ) {
+							// 実際に入ったか＝末尾要素の一致で判定（塞がっていて拒否されたら元の場所へ復帰）
+							const auto& afterBlocks = railEd->GetBlocks();
+							bool placed = !afterBlocks.empty()
+								&& afterBlocks.back().rail  == blockDragCell_.rail
+								&& afterBlocks.back().dist  == blockDragCell_.dist
+								&& afterBlocks.back().level == blockDragCell_.level
+								&& afterBlocks.back().side  == blockDragCell_.side
+								&& afterBlocks.back().type  == orig.type;
+							if ( !placed ) {
+								railEd->AddBlock(orig.rail, orig.dist, orig.level, orig.side, orig.type);
+							}
+						}
+					}
+				}
+				blockDragIdx_ = -1;
+				blockDragDup_ = false;
+			}
+		}
+		// つかみ候補/ドラッグ中はレール編集のマウス操作を止める（敵側の判定を上書きしない＝trueのみ）
+		if ( mouseOverBlock >= 0 || blockDragIdx_ >= 0 ) {
+			EditorManager::GetInstance()->SetExternalDragActive(true);
+		}
+	} else {
+		blockDragIdx_ = -1;
+	}
+
+	// --- ゲームビュー右クリック配置：その場に敵/コイン/ブロックを直接置くメニュー ---
+	//   パネルを開かずに置ける最短ルート。ブロック配置モード中は右クリック＝削除なので出さない
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit
+		&& !EditorManager::GetInstance()->IsEditorBlockPaintMode() ) {
+		const auto& gvCtx = EditorManager::GetInstance()->GetGameViewMouse();
+		const auto& ctxRails = railField_.GetRails();
+		ImGuiIO& ctxIo = ImGui::GetIO();
+		// 右ドラッグはデバッグカメラの回転に使うので、「動かさず右クリックを離した」時だけ開く
+		const float dragX = ctxIo.MousePos.x - ctxIo.MouseClickedPos[1].x;
+		const float dragY = ctxIo.MousePos.y - ctxIo.MouseClickedPos[1].y;
+		const bool rightClickedStill = ImGui::IsMouseReleased(ImGuiMouseButton_Right)
+			&& std::abs(dragX) < 4.0f && std::abs(dragY) < 4.0f;
+		// world→スクリーン投影（この節共通）
+		auto ctxProject = [&](const Vector3& worldPos, Vector2& out) -> bool {
+			Vector2 ndc;
+			if ( !WorldToNdc(worldPos, gvCtx.viewProj, ndc) ) return false;
+			out.x = gvCtx.imgMin.x + ( ndc.x * 0.5f + 0.5f ) * gvCtx.imgSize.x;
+			out.y = gvCtx.imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * gvCtx.imgSize.y;
+			return true;
+		};
+		auto ctxRailPoint = [&](int rail, float dist, float lift) -> Vector3 {
+			Vector3 p = ctxRails[rail].GetPositionByDistance(dist);
+			return { p.x, p.y + lift, p.z };
+		};
+		if ( gvCtx.hovered && !gvCtx.gizmoActive && rightClickedStill ) {
+			// マウスに一番近いレール上の点（0.5m刻みサンプル・60px以内）を配置先にする
+			int bestRail = -1; float bestDist = 0.0f; float bestPx = 60.0f;
+			for ( int railIndex = 0; railIndex < ( int ) ctxRails.size(); ++railIndex ) {
+				const SplineRail& rail = ctxRails[railIndex];
+				if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+				const float length = rail.GetLength();
+				const int steps = std::clamp(( int ) ( length / 0.5f ), 2, 400);
+				for ( int s = 0; s <= steps; ++s ) {
+					const float dist = length * ( float ) s / ( float ) steps;
+					Vector2 screenPos;
+					if ( !ctxProject(rail.GetPositionByDistance(dist), screenPos) ) continue;
+					const float dx = screenPos.x - gvCtx.mousePos.x;
+					const float dy = screenPos.y - gvCtx.mousePos.y;
+					const float distancePx = std::sqrt(dx * dx + dy * dy);
+					if ( distancePx < bestPx ) { bestPx = distancePx; bestRail = railIndex; bestDist = dist; }
+				}
+			}
+			// ついで：クリック地点の近くにある既存の敵/ブロック/コインも調べる（操作メニュー用）
+			ctxEnemyIdx_ = ctxBlockIdx_ = ctxCoinIdx_ = -1;
+			auto nearestPx = [&](const Vector3& worldPos) -> float {
+				Vector2 sp; if ( !ctxProject(worldPos, sp) ) return 1e9f;
+				float dx = sp.x - gvCtx.mousePos.x, dy = sp.y - gvCtx.mousePos.y;
+				return std::sqrt(dx * dx + dy * dy);
+			};
+			if ( enemyEditor_ ) {
+				float best = 26.0f;
+				const auto& spawnDatas = enemyEditor_->MutableSpawnDatas();
+				for ( int i = 0; i < ( int ) spawnDatas.size(); ++i ) {
+					const auto& sd = spawnDatas[i];
+					if ( sd.railIndex < 0 || sd.railIndex >= ( int ) ctxRails.size() ) continue;
+					if ( ctxRails[sd.railIndex].nodes.size() < 2 ) continue;
+					float d = nearestPx(ctxRailPoint(sd.railIndex, sd.distance, 0.5f));
+					if ( d < best ) { best = d; ctxEnemyIdx_ = i; }
+				}
+			}
+			{
+				float best = 26.0f;
+				const auto& ctxBlocks = EditorManager::GetInstance()->GetEditorBlocks();
+				for ( int i = 0; i < ( int ) ctxBlocks.size(); ++i ) {
+					const auto& b = ctxBlocks[i];
+					if ( b.rail < 0 || b.rail >= ( int ) ctxRails.size() ) continue;
+					if ( ctxRails[b.rail].nodes.size() < 2 ) continue;
+					// 横ずれは無視した近似中心（メニュー用の当たりなので十分）
+					float d = nearestPx(ctxRailPoint(b.rail, b.dist, ( float ) b.level * BlockSystem::kSize + 0.5f));
+					if ( d < best ) { best = d; ctxBlockIdx_ = i; }
+				}
+			}
+			{
+				float best = 26.0f;
+				const auto& ctxCoins = EditorManager::GetInstance()->GetEditorCoins();
+				for ( int i = 0; i < ( int ) ctxCoins.size(); ++i ) {
+					const auto& c = ctxCoins[i];
+					if ( c.rail < 0 || c.rail >= ( int ) ctxRails.size() ) continue;
+					if ( ctxRails[c.rail].nodes.size() < 2 ) continue;
+					float d = nearestPx(ctxRailPoint(c.rail, c.dist, c.height));
+					if ( d < best ) { best = d; ctxCoinIdx_ = i; }
+				}
+			}
+			if ( bestRail >= 0 || ctxEnemyIdx_ >= 0 || ctxBlockIdx_ >= 0 || ctxCoinIdx_ >= 0 ) {
+				ctxPlaceRail_ = bestRail;
+				ctxPlaceDist_ = bestDist;
+				ImGui::OpenPopup("GameViewPlaceMenu");
+			}
+		}
+		if ( ImGui::BeginPopup("GameViewPlaceMenu") ) {
+			// --- 新規配置（レールの近くを右クリックした時）---
+			if ( ctxPlaceRail_ >= 0 && ctxPlaceRail_ < ( int ) ctxRails.size() ) {
+				ImGui::TextDisabled("路線%d の %.1fm 地点", ctxPlaceRail_, ctxPlaceDist_);
+				ImGui::Separator();
+				if ( ImGui::MenuItem("敵を配置") && enemyEditor_ ) {
+					enemyEditor_->MutableSpawnDatas().push_back(
+						EnemySpawnData { EnemyType::Zako, ctxPlaceRail_, ctxPlaceDist_, false, -1.0f, -1.0f });
+					enemyEditor_->MarkChanged(); // リスポーン＆保存データへ反映
+				}
+				if ( ImGui::MenuItem("コインを配置") ) {
+					if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
+						levelEd->GetRailEditor()->AddCoinAt(ctxPlaceRail_, ctxPlaceDist_);
+						coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+					}
+				}
+				if ( ImGui::MenuItem("ブロックを配置（選択中の種類）") ) {
+					EditorManager::GetInstance()->AddEditorBlock(
+						ctxPlaceRail_, std::round(ctxPlaceDist_), 0, 0.0f,
+						EditorManager::GetInstance()->GetEditorBlockPaintType());
+				}
+			}
+			// --- 近くにあった既存配置物の操作 ---
+			if ( ctxEnemyIdx_ >= 0 && enemyEditor_
+				&& ctxEnemyIdx_ < ( int ) enemyEditor_->MutableSpawnDatas().size() ) {
+				ImGui::Separator();
+				ImGui::TextDisabled("敵 %d", ctxEnemyIdx_);
+				if ( ImGui::MenuItem("この敵を削除") ) {
+					auto& spawnDatas = enemyEditor_->MutableSpawnDatas();
+					spawnDatas.erase(spawnDatas.begin() + ctxEnemyIdx_);
+					enemyEditor_->MarkChanged();
+					ctxEnemyIdx_ = -1;
+				}
+				if ( ctxEnemyIdx_ >= 0 && ImGui::MenuItem("敵の種類を切替（雑魚⇔強敵）") ) {
+					auto& sd = enemyEditor_->MutableSpawnDatas()[ctxEnemyIdx_];
+					sd.type = ( sd.type == EnemyType::Zako ) ? EnemyType::Strong : EnemyType::Zako;
+					enemyEditor_->MarkChanged();
+				}
+			}
+			if ( ctxBlockIdx_ >= 0
+				&& ctxBlockIdx_ < ( int ) EditorManager::GetInstance()->GetEditorBlocks().size() ) {
+				ImGui::Separator();
+				if ( ImGui::MenuItem("このブロックを削除") ) {
+					const auto b = EditorManager::GetInstance()->GetEditorBlocks()[ctxBlockIdx_];
+					EditorManager::GetInstance()->RemoveEditorBlock(b.rail, b.dist, b.level, b.side);
+					ctxBlockIdx_ = -1;
+				}
+			}
+			if ( ctxCoinIdx_ >= 0
+				&& ctxCoinIdx_ < ( int ) EditorManager::GetInstance()->GetEditorCoins().size() ) {
+				ImGui::Separator();
+				if ( ImGui::MenuItem("このコインを削除") ) {
+					if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
+						levelEd->GetRailEditor()->RemoveCoinAt(ctxCoinIdx_);
+						coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+					}
+					ctxCoinIdx_ = -1;
+				}
+			}
+			ImGui::EndPopup();
+		}
+	}
+
+	// --- 動くレールの移動範囲プレビュー（エディット中は常時表示）---
+	//   「どこまで動くか」が配置の時点で見えるように、動き設定のあるレールへ
+	//   往復＝両端のゴースト線＋スイープ線 / 円運動＝軌道リング / ガイド追従＝実際に通る経路 を描く
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit ) {
+		const auto& rails = railField_.GetRails();
+		const Vector4 ghostColor { 0.55f, 0.75f, 1.0f, 0.60f }; // 薄い水色＝動きの端
+		const Vector4 sweepColor { 0.55f, 0.75f, 1.0f, 0.28f }; // さらに薄い＝掃引の対応線
+		const float kTwoPi = 2.0f * 3.14159265f;
+		for ( int railIndex = 0; railIndex < ( int ) rails.size(); ++railIndex ) {
+			const SplineRail& rail = rails[railIndex];
+			if ( !rail.HasMotion() || rail.nodes.size() < 2 || !rail.visible ) continue;
+			const float railLen = rail.GetLength();
+			const int steps = std::clamp(( int ) railLen, 2, 100);
+			switch ( rail.motionType ) {
+			case 2: { // 円運動：始点・中間・終点の3箇所に軌道リング（実際に通る円/楕円）
+				const Vector3& amp = rail.motionAmp;
+				const float ringAnchors[3] = { 0.0f, 0.5f, 1.0f };
+				for ( float anchor : ringAnchors ) {
+					Vector3 center = rail.GetPositionByDistance(railLen * anchor);
+					Vector3 prev {};
+					for ( int k = 0; k <= 32; ++k ) {
+						float th = ( float ) k / 32.0f * kTwoPi;
+						Vector3 p = { center.x + amp.x * std::cos(th),
+						              center.y + amp.y * std::sin(th),
+						              center.z + amp.z * std::sin(th) };
+						if ( k > 0 ) { DebugDraw::GetInstance()->Line(prev, p, ghostColor); }
+						prev = p;
+					}
+				}
+				break;
+			}
+			case 3: { // ガイドレール追従：レール始点が実際に通る経路（ガイド形状を始点基準へ平行移動）
+				int g = rail.guideRail;
+				if ( g >= 0 && g < ( int ) rails.size() && g != railIndex && rails[g].GetLength() > 0.0f ) {
+					const SplineRail& guide = rails[g];
+					const float guideLen = guide.GetLength();
+					const int guideSteps = std::clamp(( int ) guideLen, 2, 150);
+					Vector3 guideStart = guide.GetPositionByDistance(0.0f);
+					Vector3 railStart  = rail.GetPositionByDistance(0.0f);
+					Vector3 prev {};
+					for ( int k = 0; k <= guideSteps; ++k ) {
+						Vector3 gp = guide.GetPositionByDistance(guideLen * ( float ) k / ( float ) guideSteps);
+						Vector3 p = { railStart.x + gp.x - guideStart.x,
+						              railStart.y + gp.y - guideStart.y,
+						              railStart.z + gp.z - guideStart.z };
+						if ( k > 0 ) { DebugDraw::GetInstance()->Line(prev, p, ghostColor); }
+						prev = p;
+					}
+				}
+				break;
+			}
+			default: { // 0=サイン往復 / 1=停止つき往復：両端(+振幅/-振幅)のゴースト線＋数カ所のスイープ線
+				const Vector3& amp = rail.motionAmp;
+				Vector3 prevPlus {}, prevMinus {};
+				const int sweepEvery = ( std::max )( steps / 4, 1 );
+				for ( int s = 0; s <= steps; ++s ) {
+					Vector3 p = rail.GetPositionByDistance(railLen * ( float ) s / ( float ) steps);
+					Vector3 plus  = { p.x + amp.x, p.y + amp.y, p.z + amp.z };
+					Vector3 minus = { p.x - amp.x, p.y - amp.y, p.z - amp.z };
+					if ( s > 0 ) {
+						DebugDraw::GetInstance()->Line(prevPlus,  plus,  ghostColor);
+						DebugDraw::GetInstance()->Line(prevMinus, minus, ghostColor);
+					}
+					prevPlus = plus; prevMinus = minus;
+					if ( s % sweepEvery == 0 ) { DebugDraw::GetInstance()->Line(minus, plus, sweepColor); }
+				}
+				break;
+			}
+			}
+		}
+	}
+
+	// --- ブロック配置モード（マリオメーカー風：クリックで置く/消す。配置物タブでON）---
+	//   アイコンモードで配置パネルを閉じている間はペイントも無効（見えない状態で誤配置しない）
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit
+		&& EditorManager::GetInstance()->IsEditorBlockPaintMode()
+		&& EditorManager::GetInstance()->IsPanelVisible(EditorManager::Panel_Items) ) {
 		const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
 		const auto& rails = railField_.GetRails();
 		auto projectToScreen = [&](const Vector3& worldPos, Vector2& out) -> bool {

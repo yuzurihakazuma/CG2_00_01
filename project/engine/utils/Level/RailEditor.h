@@ -25,6 +25,8 @@ public:
     void OnMapChanged();
 
     // レールエディタ用のウィンドウ（管理/作成タブ）を描画する
+    // レール編集の毎フレーム処理（配列同期・Undo確定・Ctrl+Z/Y）。ウィンドウ非表示でも毎フレーム呼ぶ
+    void TickEditing();
     void DrawWindow();
 
     // カメラ演出専用のウィンドウ（ゾーンの追加・編集・プレビュー）を描画する
@@ -71,6 +73,17 @@ public:
     int  FindBlock(int rail, float dist, int level, float side) const; // セル一致するブロック番号（-1=なし）
     void AddBlock(int rail, float dist, int level, float side, int type = 0); // セルが空なら追加
     bool RemoveBlock(int rail, float dist, int level, float side);     // セル一致を削除（true=消した）
+    // コインを1枚追加（ゲームビューの右クリック配置用。呼び出し側で CoinSystem::Sync を行うこと）
+    void AddCoinAt(int rail, float dist){
+        if ( !data_ || rail < 0 || rail >= ( int ) data_->railLines.size() ) return;
+        CoinData coin; coin.rail = rail; coin.dist = dist; coin.height = 1.0f;
+        data_->coins.push_back(coin);
+    }
+    // コインを1枚削除（ゲームビューの右クリックメニュー用）。index は GetCoins() の番号
+    void RemoveCoinAt(int index){
+        if ( !data_ || index < 0 || index >= ( int ) data_->coins.size() ) return;
+        data_->coins.erase(data_->coins.begin() + index);
+    }
     // ブロックの「ノード錨」を維持する（毎フレーム呼んでよい）。
     //   未計算のブロックには錨を記録し、レール編集で曲線長が変わったブロックは
     //   錨ノードからの相対距離を保つよう dist を引き直す＝置いた場所から滑らない

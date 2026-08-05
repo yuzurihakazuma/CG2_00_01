@@ -258,9 +258,13 @@ void LevelEditor::Draw(){
 }
 
 
-void LevelEditor::DrawDebugUI(){
+void LevelEditor::DrawDebugUI(bool showHierarchy, bool showInspector, bool showAssets,
+                              bool showRail, bool showCamera, bool showItems){
 #ifdef USE_IMGUI
+	// レール編集の毎フレーム処理（Undo確定・Ctrl+Z/Y・配列同期）はウィンドウ表示と無関係に動かす
+	railEditor_->TickEditing();
 
+	if ( showHierarchy ) {
 	// =========================================================
 	//  1. ヒエラルキー ウィンドウ
 	//     上段: マップファイル操作・モデル追加（折りたたみ）
@@ -415,7 +419,9 @@ void LevelEditor::DrawDebugUI(){
 		ImGui::EndDragDropTarget();
 	}
 	ImGui::End();
+	} // showHierarchy
 
+	if ( showInspector ) {
 	// =========================================================
 	// ⚙ 3. Inspector ウィンドウ（選択中のオブジェクト編集）
 	// =========================================================
@@ -476,7 +482,9 @@ void LevelEditor::DrawDebugUI(){
 		ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "オブジェクトが選択されていません");
 	}
 	ImGui::End();
+	} // showInspector
 
+	if ( showAssets ) {
 	// =========================================================
 	//  4. アセットブラウザ ウィンドウ（ドラッグ元）
 	// =========================================================
@@ -510,15 +518,16 @@ void LevelEditor::DrawDebugUI(){
 	}
 
 	ImGui::End();
+	} // showAssets
 
 	// 5. レールエディタ（レール編集は RailEditor クラスへ分離した）
-	railEditor_->DrawWindow();
+	if ( showRail ) { railEditor_->DrawWindow(); }
 
 	// 6. カメラエディタ（レール上のカメラ演出ゾーン。専用ウィンドウ）
-	railEditor_->DrawCameraWindow();
+	if ( showCamera ) { railEditor_->DrawCameraWindow(); }
 
 	// 7. 配置エディタ（コイン・ブロック。専用ウィンドウ）
-	railEditor_->DrawItemWindow();
+	if ( showItems ) { railEditor_->DrawItemWindow(); }
 
 #endif
 }

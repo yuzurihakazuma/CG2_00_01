@@ -163,6 +163,18 @@ private: // メンバ変数
 	// --- ブロック（乗れる/ぶつかる1m角。マリオメーカー風配置）---
 	BlockSystem blockSystem_;
 	int lastBlockVersion_ = -1; // ブロック編集のライブ同期用（レール全体は作り直さない）
+	// ゲームビュー右クリック配置メニューの対象（開いた瞬間のレール/距離を保持）
+	int   ctxPlaceRail_ = -1;
+	float ctxPlaceDist_ = 0.0f;
+	// 右クリック地点の近くにあった既存配置物（-1=なし。削除/種類切替メニュー用）
+	int   ctxEnemyIdx_ = -1;
+	int   ctxBlockIdx_ = -1;
+	int   ctxCoinIdx_  = -1;
+	// 配置済みブロックのつかみ移動（-1=なし。ドラッグ中は移動先セルをゴースト表示）
+	int       blockDragIdx_ = -1;
+	BlockData blockDragOrig_ {}; // つかんだ時のブロック（キャンセル復帰用）
+	BlockData blockDragCell_ {}; // ドラッグ中の移動先セル候補
+	bool      blockDragDup_ = false; // Ctrl押下＝複製モード（元を残して移動先へコピー）
 
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;

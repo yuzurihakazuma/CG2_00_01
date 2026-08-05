@@ -1605,7 +1605,10 @@ bool RailEditor::GetGhostPos(Vector3& out) const{
 	return true;
 }
 
-void RailEditor::DrawWindow(){
+// レール編集の毎フレーム処理（配列同期・Undo確定・Ctrl+Z/Y・ゴースト時間など）。
+//   ウィンドウの表示とは独立して毎フレーム呼ぶこと（アイコンモードでレールエディタを
+//   閉じていても Undo やゴーストが止まらないように、UI描画から分離した）
+void RailEditor::TickEditing(){
 	// 全設定配列をレール数へ一元同期（各UIブロックに散らばっていた resize の置き換え。
 	// これ以降のコードは「配列はレール数と同じ」を前提にしてよい）
 	SyncRailArraySizes();
@@ -1625,7 +1628,11 @@ void RailEditor::DrawWindow(){
         if ( ctrl && in->Triggerkey(DIK_Z) ) Undo();
         if ( ctrl && in->Triggerkey(DIK_Y) ) Redo();
     }
+#endif
+}
 
+void RailEditor::DrawWindow(){
+#ifdef USE_IMGUI
 	// =========================================================
 	//  5. レールエディタ ウィンドウ（1つのウィンドウ内をタブで分割）
 	//     「管理」タブ … 既存レールの一覧・プロパティ・座標

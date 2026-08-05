@@ -29,6 +29,10 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
     // ドラッグ式の数値欄（DragFloat等）を「クリックだけ」でキーボード入力モードにする。
     // ノード座標や穴の位置などを直接数字で打ち込める（従来どおりドラッグでの増減も可能）
     io.ConfigDragClickToInputText = true;
+    // ImGui 1.92系の「ID重複」開発者向け警告オーバーレイを無効化。
+    //   同名ラベルのボタンが同時に見えると赤い警告が画面に被って操作の邪魔になるため
+    //   （重複自体はコード側で ##suffix を付けて解消していく方針）
+    io.ConfigDebugHighlightIdConflicts = false;
     // マルチビューポート：ImGuiウィンドウをゲームウィンドウの外へドラッグで出せる
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
@@ -39,7 +43,46 @@ void ImGuiManager::Initialize(WindowProc* windowProc, DirectXCommon* dxCommon){
     fontConfig.OversampleH = 1;
     fontConfig.OversampleV = 1;
     fontConfig.PixelSnapH = true;
-    io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\meiryo.ttc", 18.0f, &fontConfig, io.Fonts->GetGlyphRangesJapanese());
+    // 既定フォント（メイリオ）＋切替候補を読み込む（UI設定ウィンドウで選べる）。
+    //   動的フォントアトラス方式（InitInfo初期化）なのでグリフは使った分だけ実行時に
+    //   ラスタライズされる＝候補を複数読み込んでもメモリ・速度への影響はほぼ無い。
+    //   全フォントに Windows 標準のアイコンフォント（Segoe MDL2, U+E700〜）を合成し、
+    //   アイコンツールバーで本物のアイコングリフ（保存・歯車など）を使えるようにする
+    static const ImWchar kIconGlyphRanges[] = { 0xE700, 0xE8FF, 0 };
+    auto mergeIcons = [&io, &fontConfig, this](ImFont* baseFont, const char* name){
+        if ( !baseFont ) return;
+        ImFontConfig mergeConfig = fontConfig;
+        mergeConfig.MergeMode = true;
+        io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segmdl2.ttf", 16.0f, &mergeConfig, kIconGlyphRanges);
+        fonts_.push_back({ baseFont, name });
+    };
+    // 日本語フォント（そのまま使える）
+    struct FontCandidate { const char* path; const char* name; };
+    const FontCandidate kJapaneseFonts[] = {
+        { "c:\\Windows\\Fonts\\meiryo.ttc",        "メイリオ" },
+        { "c:\\Windows\\Fonts\\BIZ-UDGothicR.ttc", "BIZ UDゴシック" },
+        { "c:\\Windows\\Fonts\\YuGothM.ttc",       "游ゴシック" },
+        { "c:\\Windows\\Fonts\\UDDigiKyokashoN-R.ttc", "UDデジタル教科書体" },
+    };
+    for ( const auto& candidate : kJapaneseFonts ) {
+        ImFont* font = io.Fonts->AddFontFromFileTTF(candidate.path, 18.0f, &fontConfig, io.Fonts->GetGlyphRangesJapanese());
+        mergeIcons(font, candidate.name); // 無いフォントはスキップ（環境差対応）
+    }
+    // 欧文フォント（ImGui同梱品を取込み。日本語はメイリオを合成して文字化けしない）
+    const FontCandidate kLatinFonts[] = {
+        { "resources/fonts/Roboto-Medium.ttf",   "Roboto（英＋和）" },
+        { "resources/fonts/DroidSans.ttf",       "DroidSans（英＋和）" },
+        { "resources/fonts/Karla-Regular.ttf",   "Karla（英＋和）" },
+        { "resources/fonts/Cousine-Regular.ttf", "Cousine 等幅（英＋和）" },
+    };
+    for ( const auto& candidate : kLatinFonts ) {
+        ImFont* font = io.Fonts->AddFontFromFileTTF(candidate.path, 18.0f, &fontConfig, nullptr);
+        if ( !font ) continue;
+        ImFontConfig mergeConfig = fontConfig;
+        mergeConfig.MergeMode = true;
+        io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\meiryo.ttc", 18.0f, &mergeConfig, io.Fonts->GetGlyphRangesJapanese());
+        mergeIcons(font, candidate.name);
+    }
 
     ImGui::StyleColorsDark();
 

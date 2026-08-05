@@ -1224,7 +1224,8 @@ namespace ImGuizmo
             gContext.mRadiusSquareCenter = radiusAxis;
          }
 
-         drawList->AddPolyline(circlePos, circleMul * halfCircleSegmentCount + 1, colors[3 - axis], false, 2);
+         // ImGui 1.92.8+ : AddPolyline は (thickness, flags) の順に変更された
+         drawList->AddPolyline(circlePos, circleMul * halfCircleSegmentCount + 1, colors[3 - axis], 2.0f, ImDrawFlags_None);
       }
       if(hasRSC)
       {
@@ -1247,7 +1248,8 @@ namespace ImGuizmo
             circlePos[i] = worldToPos(pos + gContext.mModel.v.position, gContext.mViewProjection);
          }
          drawList->AddConvexPolyFilled(circlePos, halfCircleSegmentCount, IM_COL32(0xFF, 0x80, 0x10, 0x80));
-         drawList->AddPolyline(circlePos, halfCircleSegmentCount, IM_COL32(0xFF, 0x80, 0x10, 0xFF), true, 2);
+         // ImGui 1.92.8+ : AddPolyline は (thickness, flags) の順に変更された
+         drawList->AddPolyline(circlePos, halfCircleSegmentCount, IM_COL32(0xFF, 0x80, 0x10, 0xFF), 2.0f, ImDrawFlags_Closed);
 
          ImVec2 destinationPosOnScreen = circlePos[1];
          char tmps[512];
@@ -1412,7 +1414,8 @@ namespace ImGuizmo
                vec_t cornerWorldPos = (dirPlaneX * quadUV[j * 2] + dirPlaneY * quadUV[j * 2 + 1]) * gContext.mScreenFactor;
                screenQuadPts[j] = worldToPos(cornerWorldPos, gContext.mMVP);
             }
-            drawList->AddPolyline(screenQuadPts, 4, directionColor[i], true, 1.0f);
+            // ImGui 1.92.8+ : AddPolyline は (thickness, flags) の順に変更された
+            drawList->AddPolyline(screenQuadPts, 4, directionColor[i], 1.0f, ImDrawFlags_Closed);
             drawList->AddConvexPolyFilled(screenQuadPts, 4, colors[i + 4]);
          }
       }
