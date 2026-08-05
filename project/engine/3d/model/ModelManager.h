@@ -37,7 +37,8 @@ public:
 	// インスタンスの破棄
 	void Finalize();
 	// モデルのロード
-	void LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename);
+	// keepOrigin=true でファイルの原点を維持（重心センタリングをしない。底面原点の配置物向け）
+	void LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename, bool keepOrigin = false);
 	// モデルの検索
 	Model* FindModel(const std::string& filePath);
 

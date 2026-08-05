@@ -78,6 +78,7 @@ float MapDist(float3 wp, out float outErode, out float outLocalY, out float outW
     float e = 0.0f;
     float localY = 0.0f;
     float waveOut = 0.0f;
+    float cutY = -1e9f; // 最寄り線分での「レール線からの高さ」。上面の平面カットに使う
     int count = (int)gRoad.pointCount;
 
     [loop]
@@ -89,24 +90,31 @@ float MapDist(float3 wp, out float outErode, out float outLocalY, out float outW
         float h = saturate(dot(pa, ba) / max(dot(ba, ba), 1e-6f));
         float3 q = pa - ba * h;   // 線分からのオフセット（端では丸い道端になる）
 
+        // チェーン点はレール線上にあり、断面の中心はその halfThick 下。
+        //   → 上面（中心+halfThick）が常にレール線ぴったりになる（厚みを変えても不変）
+        float yc = q.y + gRoad.halfThick;
+
         // 断面：横=halfWidth / 縦=halfThick の角丸ボックス
         float2 c = float2(length(q.xz) - gRoad.halfWidth + gRoad.roundR,
-                          abs(q.y) - gRoad.halfThick + gRoad.roundR);
+                          abs(yc) - gRoad.halfThick + gRoad.roundR);
         float di = min(max(c.x, c.y), 0.0f) + length(max(c, 0.0f)) - gRoad.roundR;
 
         // 中芯の波：道に沿った距離 s で位相を取る（チャンクをまたいでも連続）
         float s = (gRoad.chainOffset + (float)i + h) * gRoad.spacing;
         float wave = 0.5f + 0.5f * sin(s * (6.2831853f / kCorrugPitch));
-        float core = 1.0f - smoothstep(kCoreHalf, kCoreHalf + 0.05f, abs(q.y));
+        float core = 1.0f - smoothstep(kCoreHalf, kCoreHalf + 0.05f, abs(yc));
         di += core * wave * kCorrugDepth; // 波の山の位置だけ表面を彫る
 
         // 点ごとのエロージョンを線分上で補間して足す（溶け前線が道に沿って動く）
         float ei = lerp(gRoad.pts[i].w, gRoad.pts[i + 1].w, h) * noiseMul;
         di += ei;
 
-        if (di < d) { e = ei; localY = q.y; waveOut = wave; } // 最寄り線分の情報を色付けに使う
+        if (di < d) { e = ei; localY = yc; waveOut = wave; cutY = q.y; } // 最寄り線分の情報を色付け＆カットに使う
         d = SMin(d, di, gRoad.blendK);
     }
+    // 上面をレール線で平らにカット：smooth min の膨らみが歩行面より上へ盛り上がらない
+    // （ブロック・敵・プレイヤーは全てレール線基準で接地するので、道の上面もそこに固定する）
+    d = max(d, cutY);
     outErode = e;
     outLocalY = localY;
     outWave = waveOut;

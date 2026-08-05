@@ -68,7 +68,9 @@ public: // メンバ関数
 	/// <summary>
 	/// 初期化
 	/// </summary>
-	void Initialize(ModelCommon* modelCommon, const std::string& directoryPath, const std::string& filename);
+	// keepOrigin=true でファイルの原点を維持（重心への自動センタリングを行わない。
+	// 底面原点で作られた配置物＝クラフトブロック・花などに使う）
+	void Initialize(ModelCommon* modelCommon, const std::string& directoryPath, const std::string& filename, bool keepOrigin = false);
 	// <summary>
 	/// 球モデルの初期化
 	/// </summary>

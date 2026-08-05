@@ -28,10 +28,12 @@ public:
     // 道の上面の高さ（レール線からの差）。RoadMesh 側を「上面＝レール線ぴったり」に
     // 揃えたので 0（レール線＝歩行面＝ブロック底面。全システムで基準が一致する）
     static constexpr float kSurfaceY = 0.0f;
-    static constexpr int kTypeCount = 7; // ブロックの種類数（BlockData::type と対応）
+    static constexpr int kTypeCount = 9; // ブロックの種類数（BlockData::type と対応）
     static constexpr int kTypeSpring = 4; // ジャンプ台（上に飛び乗ると大きく跳ねる）
     static constexpr int kTypeHatena = 5; // ？ブロック（下から頭突きするとコインが出る。1回きり）
     static constexpr int kTypeCloud  = 6; // すり抜け床（上には乗れる/下と横からは通り抜ける）
+    static constexpr int kTypeWide     = 7; // 横長ブロック（進行方向2m。長い足場を1個で作れる）
+    static constexpr int kTypePedestal = 8; // 台座ブロック（2×2m。道幅いっぱいの土台）
 
     BlockSystem();
     ~BlockSystem(); // InstancedGroup を前方宣言で持つため cpp 側で定義
@@ -74,7 +76,7 @@ private:
         float dist  = 0.0f; // レール上の距離(m)。1m刻み
         int   level = 0;    // 段数（1段=1m）
         float side  = 0.0f; // 道幅方向のずれ(m)。0=中心線
-        int   type  = 0;    // 見た目の種類（0=スポンジ/1=段ボール層/2=斜面45°/3=ゆるい斜面/4=バネ/5=？/6=すり抜け）
+        int   type  = 0;    // 見た目の種類（0=スポンジ/1=段ボール層/2=斜面45°/3=ゆるい斜面/4=バネ/5=？/6=すり抜け/7=横長2m/8=台座2×2m）
         int   ascend = 1;   // 斜面の登り方向（+1=dist増加側が高い/-1=逆。隣のブロックから自動決定）
         bool  used  = false; // ？ブロック：このPlayで既にコインを出したか
     };
@@ -120,8 +122,12 @@ private:
     void BuildLookGroups();                   // 種類ごとの見た目グループへ振り分け＋花の自動配置
     // このブロックの dist 位置での表面高さ（レール面からの相対）。斜面は位置で変わる
     float SurfaceHeightAt(const Block& block, float dist) const;
-    // このブロックが dist 方向に当たりを持つ半幅（斜面26°は2mぶん）
-    static float FootprintHalf(int type){ return ( type == 3 ) ? 1.0f : 0.5f; }
-    // ブロックの中心ワールド座標（動くレールの現在位置・接線の横方向を反映）
-    bool BlockWorldPos(const Block& block, Vector3& outPos, float& outYaw) const;
+    // このブロックが dist 方向に当たりを持つ半幅（斜面26°・横長・台座は2mぶん）
+    static float FootprintHalf(int type){
+        return ( type == 3 || type == kTypeWide || type == kTypePedestal ) ? 1.0f : 0.5f;
+    }
+    // ブロックの中心ワールド座標（動くレールの現在位置・接線の横方向を反映）。
+    //   outPitch を渡すと道の勾配（レール接線のピッチ角）も返す。
+    //   ブロックはこの角度で傾けて描く＝坂の上でも底面が道にぴったり付く
+    bool BlockWorldPos(const Block& block, Vector3& outPos, float& outYaw, float* outPitch = nullptr) const;
 };

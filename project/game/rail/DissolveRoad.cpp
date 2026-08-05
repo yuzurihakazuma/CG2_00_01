@@ -17,7 +17,10 @@
 namespace {
     // --- 敷設 ---
     const float kSpacing = 0.7f;    // チェーン点の間隔(m)
-    const float kYOffset = -0.37f;  // レール線から道の中心までの高さ（上面＝レール線に揃えた通常の道と同じ）
+    // チェーン点はレール線そのものに置く。断面の中心はシェーダー側で halfThick ぶん下げるので、
+    // 道の上面は厚みスライダーをどう変えても常に「レール線ぴったり」になる
+    // （以前は固定オフセット-0.37mで、厚み0.18の現在は上面がレール線の0.19m下＝
+    //   ブロックや敵が浮いて見える/カメラ角度によっては埋まって見えるずれの原因だった）
     const float kRoundR  = 0.08f;   // 断面の角丸半径(m)
     // --- 見た目 ---
     const Vector4 kRoadColor { 0.72f, 0.55f, 0.34f, 1.0f };  // クラフト紙（段ボール）色
@@ -137,7 +140,7 @@ void DissolveRoad::Build(const std::vector<SplineRail>& rails){
                 mn.z = ( std::min )( mn.z, p.z ); mx.z = ( std::max )( mx.z, p.z );
             }
             float marginXZ = halfWidth_ + blendK_ + 0.15f;
-            float marginY  = halfThick_ + blendK_ + 0.15f;
+            float marginY  = halfThick_ * 2.0f + blendK_ + 0.15f; // 断面はレール線から下へ2×halfThick伸びる
             chunk.boxMin = { mn.x - marginXZ, mn.y - marginY, mn.z - marginXZ };
             chunk.boxMax = { mx.x + marginXZ, mx.y + marginY, mx.z + marginXZ };
             chunk.cb = factory->CreateBufferResource(sizeof(ChunkCB));
@@ -167,8 +170,7 @@ void DissolveRoad::Build(const std::vector<SplineRail>& rails){
                 continue;
             }
             ChainPoint point;
-            point.pos = rail.GetPositionByDistance(dist);
-            point.pos.y += kYOffset;
+            point.pos = rail.GetPositionByDistance(dist); // レール線＝道の上面の高さ
             point.erode = ErodeGone(); // 最初は完全に溶けて消えている
             points_.push_back(point);
             ++chainCount;

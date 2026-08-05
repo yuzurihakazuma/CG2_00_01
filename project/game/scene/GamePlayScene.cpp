@@ -108,15 +108,17 @@ void GamePlayScene::LoadResources(){
 
 	// クラフトブロック一式（ヨッシークラフトワールド風。全モデルが block_atlas.png 1枚を共有）。
 	//   原点=底面中心・実寸1m角に変換済み（resources/block/craft/）。花は継ぎ目の自動デコ用
-	modelManager->LoadModel("craftSponge",  "resources/block/craft", "block_1x1x1_sponge.obj");
-	modelManager->LoadModel("craftLayer",   "resources/block/craft", "block_1x1x1_layer.obj");
-	modelManager->LoadModel("craftSlope45", "resources/block/craft", "slope_1x1_rolls.obj");
-	modelManager->LoadModel("craftSlope26", "resources/block/craft", "slope_2x1_rolls.obj");
-	modelManager->LoadModel("flowerOrange", "resources/block/craft", "flower_orange.obj");
-	modelManager->LoadModel("flowerWhite",  "resources/block/craft", "flower_white_face.obj");
+	//   keepOrigin=true：ローダーの重心センタリングを止めてファイルの底面原点を維持する
+	//   （センタリングされると描画だけ半分沈む＝長年の「ブロックが浮く/埋まる」の根本原因だった）
+	modelManager->LoadModel("craftSponge",  "resources/block/craft", "block_1x1x1_sponge.obj", true);
+	modelManager->LoadModel("craftLayer",   "resources/block/craft", "block_1x1x1_layer.obj", true);
+	modelManager->LoadModel("craftSlope45", "resources/block/craft", "slope_1x1_rolls.obj", true);
+	modelManager->LoadModel("craftSlope26", "resources/block/craft", "slope_2x1_rolls.obj", true);
+	modelManager->LoadModel("flowerOrange", "resources/block/craft", "flower_orange.obj", true);
+	modelManager->LoadModel("flowerWhite",  "resources/block/craft", "flower_white_face.obj", true);
 	// 性質つきブロック：既存モデルを別名で読み、着色して見分ける
 	auto loadTintedBlock = [&](const char* name, const char* file, const Vector4& color){
-		modelManager->LoadModel(name, "resources/block/craft", file);
+		modelManager->LoadModel(name, "resources/block/craft", file, true);
 		if ( auto* model = modelManager->FindModel(name) ) {
 			if ( model->GetMaterial() ) { model->GetMaterial()->color = color; }
 		}
@@ -125,6 +127,9 @@ void GamePlayScene::LoadResources(){
 	loadTintedBlock("craftHatena",     "block_1x1x1_layer.obj",  { 1.0f, 0.8f, 0.15f, 1.0f }); // ？ブロック（金）
 	loadTintedBlock("craftHatenaUsed", "block_1x1x1_layer.obj",  { 0.45f, 0.42f, 0.4f, 1.0f }); // 使用済み（灰）
 	loadTintedBlock("craftCloud",      "block_1x1x1_layer.obj",  { 0.9f, 0.97f, 1.0f, 1.0f }); // すり抜け床（白）
+	// 大型ブロック（road_system_4）：横長2m（進行方向）と2×2m台座
+	modelManager->LoadModel("craftWide",     "resources/block/craft", "block_2x1x1_sponge.obj", true);
+	modelManager->LoadModel("craftPedestal", "resources/block/craft", "block_2x2x1_layer.obj", true);
 	// パーティクルグループ
 	ParticleManager::GetInstance()->CreateParticleGroup("Circle", "resources/uvChecker.png");
 	// ※ 卵の煙／殻の飛び散りは加算パーティクルだと明るい背景で見えないため、
@@ -458,6 +463,13 @@ void GamePlayScene::SyncFromEditors(){
 			railFullSyncPending_ = false;
 			SyncRailsFromEditor(false);
 		}
+	}
+
+	// ブロックのノード錨を維持（レール編集で曲線長が変わってもブロックが道に沿って滑らない）。
+	//   レール同期（railField_ 再構築）の後に呼ぶこと。dist が引き直されたら blockVersion が上がり
+	//   下のブロック同期が拾って見た目も追従する
+	if ( editorManager->GetLevelEditor() ) {
+		editorManager->GetLevelEditor()->GetRailEditor()->UpdateBlockAnchors(railField_.GetRails());
 	}
 
 	// マップが読み込まれたら、保存済みの敵配置をエディタへ復元する
@@ -1395,6 +1407,28 @@ void GamePlayScene::DrawDebugUI(){
 			Vector3 right { 0.0f, 0.0f, 0.0f };
 			if ( horizLen > 1e-4f ) { right = { tangent.z / horizLen, 0.0f, -tangent.x / horizLen }; }
 
+			// 1mセルの区切り線を道の上へ描く（どこに吸着するかの見える化）。ホバー地点の前後±12セル
+			{
+				float tickStart = ( std::max )( 0.5f, cellDist - 12.5f );
+				float tickEnd   = ( std::min )( railLen, cellDist + 12.5f );
+				for ( float boundary = std::floor(tickStart - 0.5f) + 0.5f; boundary <= tickEnd; boundary += 1.0f ) {
+					if ( boundary < 0.0f ) continue;
+					Vector3 tickBase = rail.GetPositionByDistance(boundary);
+					Vector3 tickTan  = rail.GetTangentByDistance(boundary);
+					float tickHoriz = std::sqrt(tickTan.x * tickTan.x + tickTan.z * tickTan.z);
+					if ( tickHoriz < 1e-4f ) continue;
+					Vector3 tickRight { tickTan.z / tickHoriz, 0.0f, -tickTan.x / tickHoriz };
+					// 選択中セルの両端(±0.5m)は明るく、それ以外はうっすら
+					bool nearSelected = std::abs(boundary - cellDist) < 0.51f;
+					Vector4 tickColor = nearSelected ? Vector4 { 1.0f, 0.95f, 0.4f, 0.9f }
+					                                 : Vector4 { 1.0f, 1.0f, 1.0f, 0.30f };
+					DebugDraw::GetInstance()->Line(
+						{ tickBase.x - tickRight.x * 0.9f, tickBase.y + 0.06f, tickBase.z - tickRight.z * 0.9f },
+						{ tickBase.x + tickRight.x * 0.9f, tickBase.y + 0.06f, tickBase.z + tickRight.z * 0.9f },
+						tickColor);
+				}
+			}
+
 			// 2) 断面のセル（段 × 横ずれ）から、マウスに一番近いものを選ぶ。
 			//    マウスを上へ動かせば高い段、横へ動かせば道の脇（飾り/壁）に置ける。
 			//    横ずれセルにはペナルティを足して、迷ったら「乗れる中心線(side=0)」を優先。
@@ -1431,7 +1465,18 @@ void GamePlayScene::DrawDebugUI(){
 			if ( cellOccupied || eraseMode ) { ghostColor = { 1.0f, 0.35f, 0.3f, 1.0f }; }  // 消す
 			else if ( bestSide != 0.0f )     { ghostColor = { 0.35f, 0.8f, 1.0f, 1.0f }; }  // 飾り（乗れない）
 			else                             { ghostColor = { 0.3f, 1.0f, 0.5f, 1.0f }; }   // 置く（乗れる）
-			DebugDraw::GetInstance()->Box(ghostCenter, { 1.0f, 1.0f, 1.0f }, ghostColor);
+			// ゴーストの寸法は種類の実寸に合わせる（横長=進行方向2m / 台座=2×2m）。
+			//   枠は軸平行なので、進行方向2mはレール接線に近い方の軸へ伸ばす（カーブ上では目安）
+			int paintTypeForGhost = EditorManager::GetInstance()->GetEditorBlockPaintType();
+			Vector3 ghostSize = { 1.0f, 1.0f, 1.0f };
+			if ( !eraseMode && !cellOccupied ) {
+				bool tangentAlongX = std::abs(right.z) >= std::abs(right.x); // 接線=rightを90°回した向き
+				if ( paintTypeForGhost == BlockSystem::kTypeWide ) {
+					ghostSize = tangentAlongX ? Vector3 { 2.0f, 1.0f, 1.0f } : Vector3 { 1.0f, 1.0f, 2.0f };
+				}
+				if ( paintTypeForGhost == BlockSystem::kTypePedestal ) { ghostSize = { 2.0f, 1.0f, 2.0f }; }
+			}
+			DebugDraw::GetInstance()->Box(ghostCenter, ghostSize, ghostColor);
 			// 横ずれセルの時は中心線との対応が分かるように足元へ線を引く
 			if ( bestSide != 0.0f ) {
 				DebugDraw::GetInstance()->Line(ghostCenter,

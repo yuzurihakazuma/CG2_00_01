@@ -269,7 +269,7 @@ void ModelManager::CreateEggShellModel(const std::string& modelName, float size)
 	models_.insert(std::make_pair(modelName, std::move(newModel)));
 }
 
-void ModelManager::LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename){
+void ModelManager::LoadModel(const std::string& modelName, const std::string& directoryPath, const std::string& filename, bool keepOrigin){
 	// 重複読み込み防止：すでに同じ名前で登録されていたら何もしない
 	if ( models_.contains(modelName) ) {
 		return;
@@ -279,7 +279,7 @@ void ModelManager::LoadModel(const std::string& modelName, const std::string& di
 	std::unique_ptr<Model> newModel = std::make_unique<Model>();
 
 	// 2. モデル初期化 (ModelManagerが持っているModelCommonを渡す)
-	newModel->Initialize(modelCommon_.get(), directoryPath, filename);
+	newModel->Initialize(modelCommon_.get(), directoryPath, filename, keepOrigin);
 
 	// 3. マップに登録 (moveで所有権をマップに移す)
 	models_.insert(std::make_pair(modelName, std::move(newModel)));

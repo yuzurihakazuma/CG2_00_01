@@ -8,6 +8,7 @@
 
 #include "engine/utils/ImGuiManager.h"
 #include "engine/base/Input.h"
+#include "engine/rail/SplineRail.h" // ブロックのノード錨の更新（弧長の計測）に使う
 
 static bool RailLinesEqual(const std::vector<std::vector<Vector3>>& lhs,
                            const std::vector<std::vector<Vector3>>& rhs){
@@ -788,11 +789,19 @@ void RailEditor::EraseRail(int idx){
 // =====================================================================
 //  ブロック（乗れる/ぶつかる1m角）の編集。セル＝(レール, 距離1m刻み, 段数)
 // =====================================================================
+namespace {
+	// 型ごとの dist 方向の占有半幅。横長(7)/台座(8)は2mぶん占有する。
+	//   斜面(2,3)は従来どおり1セル扱い（ブロックへ立てかけて重ねる使い方を許すため）
+	float BlockOccupyHalf(int type){ return ( type == 7 || type == 8 ) ? 1.0f : 0.5f; }
+}
+
 int RailEditor::FindBlock(int rail, float dist, int level, float side) const{
 	for ( int i = 0; i < ( int ) data_->blocks.size(); ++i ) {
 		const BlockData& block = data_->blocks[i];
+		// dist はブロックの占有幅でカバー判定（2m級は端のセルでも「ここにある」扱い＝端クリックで消せる）
 		if ( block.rail == rail && block.level == level
-			&& std::abs(block.dist - dist) < 0.51f && std::abs(block.side - side) < 0.51f ) {
+			&& std::abs(block.dist - dist) < BlockOccupyHalf(block.type) + 0.49f
+			&& std::abs(block.side - side) < 0.51f ) {
 			return i;
 		}
 	}
@@ -802,7 +811,15 @@ int RailEditor::FindBlock(int rail, float dist, int level, float side) const{
 void RailEditor::AddBlock(int rail, float dist, int level, float side, int type){
 	if ( rail < 0 || rail >= ( int ) data_->railLines.size() ) return;
 	if ( level < 0 ) return;
-	if ( FindBlock(rail, dist, level, side) >= 0 ) return; // 同じセルへの二重配置は無視
+	// 占有幅同士の重なりチェック（2m級を既存ブロックへ食い込ませない）
+	float newHalf = BlockOccupyHalf(type);
+	for ( const BlockData& block : data_->blocks ) {
+		if ( block.rail == rail && block.level == level
+			&& std::abs(block.dist - dist) < BlockOccupyHalf(block.type) + newHalf - 0.01f
+			&& std::abs(block.side - side) < 0.51f ) {
+			return; // 重なる配置は無視
+		}
+	}
 	data_->blocks.push_back({ rail, dist, level, side, type });
 	++blockVersion_;
 }
@@ -813,6 +830,46 @@ bool RailEditor::RemoveBlock(int rail, float dist, int level, float side){
 	data_->blocks.erase(data_->blocks.begin() + found);
 	++blockVersion_;
 	return true;
+}
+
+// ブロックのノード錨の維持。dist（始点からの弧長）は手前のノードを編集すると変わってしまうので、
+// 「錨ノード＋そこからの相対距離」を正として dist を追従させる（レール編集でブロックが滑らない）
+void RailEditor::UpdateBlockAnchors(const std::vector<SplineRail>& splineRails){
+	if ( !data_ || data_->blocks.empty() ) return;
+	// レールごとのノード弧長表（必要になったレールだけ作る）
+	std::vector<std::vector<float>> nodeArcTable(splineRails.size());
+	auto arcsOf = [&](int railIdx) -> const std::vector<float>& {
+		auto& arcs = nodeArcTable[railIdx];
+		if ( arcs.empty() ) {
+			const SplineRail& rail = splineRails[railIdx];
+			arcs.reserve(rail.nodes.size());
+			for ( const Vector3& node : rail.nodes ) { arcs.push_back(rail.GetClosestDistance(node)); }
+		}
+		return arcs;
+	};
+	bool moved = false;
+	for ( auto& block : data_->blocks ) {
+		if ( block.rail < 0 || block.rail >= ( int ) splineRails.size() ) continue;
+		if ( splineRails[block.rail].nodes.size() < 2 ) continue;
+		const auto& arcs = arcsOf(block.rail);
+		// ノード削除などで番号が範囲外になったら錨を引き直す（現在位置は維持）
+		if ( block.anchorNode >= ( int ) arcs.size() ) { block.anchorNode = -1; }
+		if ( block.anchorNode < 0 ) {
+			// 現在位置の手前にある最後のノードを錨として記録
+			int anchor = 0;
+			for ( int i = 0; i < ( int ) arcs.size(); ++i ) {
+				if ( arcs[i] <= block.dist + 0.01f ) { anchor = i; } else { break; }
+			}
+			block.anchorNode   = anchor;
+			block.anchorOffset = block.dist - arcs[anchor];
+		} else {
+			// レール編集で弧長が変わっていたら、錨からの相対位置を保って dist を追従
+			float newDist = arcs[block.anchorNode] + block.anchorOffset;
+			newDist = std::clamp(newDist, 0.0f, splineRails[block.rail].GetLength());
+			if ( std::abs(newDist - block.dist) > 0.001f ) { block.dist = newDist; moved = true; }
+		}
+	}
+	if ( moved ) { ++blockVersion_; } // シーン側のブロック再同期を促す
 }
 
 // スタンプ（配置待ちシェイプ）を at を原点として新しい路線として設置する。
@@ -3347,14 +3404,16 @@ void RailEditor::DrawItemWindow(){
 			// ブロックの種類（見た目＋性質）
 			const char* blockTypeNames[] = {
 				"スポンジ (黄)", "段ボール層", "斜面 45°", "ゆるい斜面 26°",
-				"ジャンプ台 (緑)", "？ブロック (金)", "すり抜け床 (白)" };
+				"ジャンプ台 (緑)", "？ブロック (金)", "すり抜け床 (白)",
+				"横長ブロック (2m)", "台座ブロック (2×2m)" };
 			ImGui::SetNextItemWidth(200.0f);
-			ImGui::Combo("種類##blocktype", &blockPaintType_, blockTypeNames, 7);
+			ImGui::Combo("種類##blocktype", &blockPaintType_, blockTypeNames, IM_ARRAYSIZE(blockTypeNames));
 			if ( ImGui::IsItemHovered() ) {
 				ImGui::SetTooltip("斜面＝歩いて登れる坂（隣のブロックへ向けて自動で向く）\n"
 					"ジャンプ台＝上に飛び乗ると大きく跳ね返る\n"
 					"？ブロック＝下から頭突きするとコインが出る（1回きり。Playごとに復活）\n"
 					"すり抜け床＝上には乗れて、下と横からは通り抜けられる一方通行の床\n"
+					"横長＝進行方向2mの長い足場を1個で。台座＝道幅いっぱいの2×2m土台\n"
 					"ブロックを2個以上並べると、つなぎ目に紙花が自動で咲く");
 			}
 
@@ -3388,15 +3447,15 @@ void RailEditor::DrawItemWindow(){
 
 		// --- 管理（個数の内訳と一括操作）---
 		if ( ImGui::CollapsingHeader("管理（個数と一括削除）", ImGuiTreeNodeFlags_DefaultOpen) ) {
-			int typeCounts[8] = {};
+			int typeCounts[9] = {};
 			int railBlockCount = 0;
 			for ( const auto& block : data_->blocks ) {
-				if ( block.type >= 0 && block.type < 8 ) { ++typeCounts[block.type]; }
+				if ( block.type >= 0 && block.type < 9 ) { ++typeCounts[block.type]; }
 				if ( block.rail == currentEditRailIndex_ ) { ++railBlockCount; }
 			}
-			const char* typeNamesShort[] = { "スポンジ", "段ボール", "斜面45", "斜面26", "バネ", "？", "すり抜け" };
+			const char* typeNamesShort[] = { "スポンジ", "段ボール", "斜面45", "斜面26", "バネ", "？", "すり抜け", "横長", "台座" };
 			ImGui::TextDisabled("ブロックの内訳:");
-			for ( int t = 0; t < 7; ++t ) {
+			for ( int t = 0; t < 9; ++t ) {
 				if ( typeCounts[t] > 0 ) { ImGui::Text("  %s: %d個", typeNamesShort[t], typeCounts[t]); }
 			}
 			ImGui::Text("この路線のブロック: %d個", railBlockCount);

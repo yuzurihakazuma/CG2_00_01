@@ -4,6 +4,8 @@
 #include <vector>
 #include <cstdint>
 
+class SplineRail; // ブロックのノード錨の更新に使う（実体は engine/rail/SplineRail.h）
+
 // =====================================================================
 //  RailEditor：レール（Yoshi風コース）編集の専用クラス。
 //   ・以前は LevelEditor が抱えていたレール編集UI・ロジックをここへ分離。
@@ -69,6 +71,10 @@ public:
     int  FindBlock(int rail, float dist, int level, float side) const; // セル一致するブロック番号（-1=なし）
     void AddBlock(int rail, float dist, int level, float side, int type = 0); // セルが空なら追加
     bool RemoveBlock(int rail, float dist, int level, float side);     // セル一致を削除（true=消した）
+    // ブロックの「ノード錨」を維持する（毎フレーム呼んでよい）。
+    //   未計算のブロックには錨を記録し、レール編集で曲線長が変わったブロックは
+    //   錨ノードからの相対距離を保つよう dist を引き直す＝置いた場所から滑らない
+    void UpdateBlockAnchors(const std::vector<SplineRail>& splineRails);
 
     // --- マウス編集サポート（EditorManager が Game View 上で使う）---
     int  GetCurrentRailIndex() const{ return currentEditRailIndex_; }

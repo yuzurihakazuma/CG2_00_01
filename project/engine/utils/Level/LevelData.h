@@ -63,7 +63,12 @@ struct BlockData {
     float dist  = 0.0f; // レール上の距離(m)。1m刻み
     int   level = 0;    // 高さ段数（1段=1m）
     float side  = 0.0f; // 道幅方向のずれ(m)。1m刻み。0=中心線（当たるのは中心のみ／横は飾り）
-    int   type  = 0;    // 見た目の種類（0=スポンジ/1=段ボール層/2=斜面45°/3=ゆるい斜面）
+    int   type  = 0;    // 種類（0=スポンジ/1=段ボール層/2=斜面45°/3=ゆるい斜面/4=バネ/5=？/6=すり抜け/7=横長2m/8=台座2×2m）
+    // --- ノード錨：レール編集でブロックが道に沿って滑るのを防ぐ ---
+    //   dist は「始点からの弧長」なので、手前のノードを動かすと曲線長が変わり位置がずれる。
+    //   そこで「どのノードから何m先か」を覚えておき、レール編集後に dist を引き直す
+    int   anchorNode   = -1;   // 基準ノード番号（-1=未計算。RailEditor::UpdateBlockAnchors が埋める）
+    float anchorOffset = 0.0f; // 基準ノードからレールに沿った距離(m)
     bool operator==(const BlockData&) const = default; // Undo履歴の変化検知用
 };
 

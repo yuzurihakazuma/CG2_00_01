@@ -25,7 +25,7 @@
 
 using namespace MatrixMath;
 
-void Model::Initialize(ModelCommon* modelCommon, const std::string& directoryPath, const std::string& filename){
+void Model::Initialize(ModelCommon* modelCommon, const std::string& directoryPath, const std::string& filename, bool keepOrigin){
 
 	// 1. ModelCommonのポインタを記録
 	this->modelCommon_ = modelCommon;
@@ -35,8 +35,11 @@ void Model::Initialize(ModelCommon* modelCommon, const std::string& directoryPat
 	// 2. モデルデータをファイルから読み込む (引数のパスを使う)
 	modelData_ = LoadModelFile(directoryPath, filename);
 
-	// 3. モデルの頂点座標を中心（原点）に合わせる
-	if (modelData_.boneOrder.empty()) {
+	// 3. モデルの頂点座標を中心（原点）に合わせる。
+	//    ※ keepOrigin=true のモデルはファイルの原点をそのまま使う。
+	//      クラフトブロックや花は「原点=底面中心」で作られており、勝手に重心へ
+	//      センタリングすると描画だけ半分沈む（配置座標は底面基準のため）
+	if (modelData_.boneOrder.empty() && !keepOrigin) {
 		AdjustModelCenter();
 	}
 	// 4. マテリアルデータの読み込み (.mtlファイル)

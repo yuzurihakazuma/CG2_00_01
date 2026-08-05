@@ -9,6 +9,7 @@ namespace {
     const float kHalf = BlockSystem::kSize * 0.5f;   // ブロック半幅 (0.5m)
     const float kPlayerRadius = 0.30f;               // プレイヤーの横当たり半径
     const float kStepTolerance = 0.25f;              // これ以下の段差は支持面として拾う（小さなガタつき吸収）
+    const float kVisualEmbed   = 0.02f;              // 見た目だけ道へ2cm沈める（スプライン曲率の継ぎ目で髪の毛ほど浮くのを隠す）
     // 支持面（乗れる範囲）はブロックの実寸＋わずかな縁の許容だけ。
     //   壁当たり半径(0.8m)をそのまま使うと1マス空きの落とし穴を歩いて渡れてしまう
     const float kSupportReach = kHalf + 0.10f;
@@ -37,6 +38,8 @@ namespace {
         "craftSpring",   // 4: ジャンプ台（緑のスポンジ。上に飛び乗ると跳ねる）
         "craftHatena",   // 5: ？ブロック（金色。下から頭突きでコイン）
         "craftCloud",    // 6: すり抜け床（白。上にだけ乗れる薄い板）
+        "craftWide",     // 7: 横長ブロック（進行方向2m×1m。スポンジ側面）
+        "craftPedestal", // 8: 台座ブロック（2×2m×高さ1m。段ボール層側面）
     };
     const char* kFlowerModelNames[2] = { "flowerOrange", "flowerWhite" };
 
@@ -194,7 +197,7 @@ void BlockSystem::BuildLookGroups(){
 
 // レール上 (rail, dist) の基準位置・道幅方向（右）・向き(yaw)を求める。
 // 動くレールの現在位置（animOffset込み）を毎フレーム反映するので、リフト上のブロックも一緒に動く
-bool BlockSystem::BlockWorldPos(const Block& block, Vector3& outPos, float& outYaw) const{
+bool BlockSystem::BlockWorldPos(const Block& block, Vector3& outPos, float& outYaw, float* outPitch) const{
     if ( !rails_ ) return false;
     if ( block.rail < 0 || block.rail >= ( int ) rails_->size() ) return false;
     const SplineRail& rail = ( *rails_ )[block.rail];
@@ -209,13 +212,19 @@ bool BlockSystem::BlockWorldPos(const Block& block, Vector3& outPos, float& outY
     Vector3 right { 0.0f, 0.0f, 0.0f };
     if ( horizLen > 1e-4f ) { right = { tangent.z / horizLen, 0.0f, -tangent.x / horizLen }; }
 
-    // モデルは原点が底面中心・実寸1m角。底面は「道の上面」（レール線の5cm下）＋段数に置く。
+    // モデルは原点が底面中心・実寸1m角。底面は「道の上面」（＝レール線）＋段数に置く。
     //   これでブロックが道にぴったり接地し、プレイヤーが上に乗った時の見た目も
     //   道に立つ時と同じ基準になる（当たり判定はレール線基準のままで整合する）
     outPos = { base.x + right.x * block.side,
-               base.y + kSurfaceY + ( float ) block.level * kSize,
+               base.y + kSurfaceY + ( float ) block.level * kSize - kVisualEmbed,
                base.z + right.z * block.side };
     outYaw = ( horizLen > 1e-4f ) ? std::atan2(tangent.x, tangent.z) : 0.0f;
+    // 道の勾配（ピッチ）。道はレールに沿って傾くのに、ブロックを水平のまま置くと
+    // 坂で縁が浮く/めり込む。この角度で傾ければ底面が道と平行になり、
+    // 上面もレール相対で一定＝当たり判定(SurfaceHeightAt)と見た目が一致する
+    if ( outPitch ) {
+        *outPitch = ( horizLen > 1e-4f ) ? std::atan2(-tangent.y, horizLen) : 0.0f;
+    }
     return true;
 }
 
@@ -229,8 +238,8 @@ void BlockSystem::Update(){
             if ( idx >= 0 ) {
                 // ブロック本体
                 const Block& block = blocks_[idx];
-                Vector3 pos {}; float yaw = 0.0f;
-                if ( !BlockWorldPos(block, pos, yaw) ) continue;
+                Vector3 pos {}; float yaw = 0.0f; float pitch = 0.0f;
+                if ( !BlockWorldPos(block, pos, yaw, &pitch) ) continue;
                 if ( block.type == kTypeCloud ) {
                     // すり抜け床：セル上端に薄い板として置く（当たりの支持面＝セル上端と一致）
                     pos.y += 0.7f;
@@ -247,10 +256,12 @@ void BlockSystem::Update(){
                     Vector3 tangentDir = { std::sin(yaw), 0.0f, std::cos(yaw) };
                     pos.x += tangentDir.x * forward;
                     pos.z += tangentDir.z * forward;
-                    if ( block.ascend < 0 ) { yaw += kPi; }
+                    pos.y += -std::tan(pitch) * forward; // 原点も勾配に沿って上下（レール相対の高さを保つ）
+                    if ( block.ascend < 0 ) { yaw += kPi; pitch = -pitch; } // 180°回すと勾配の向きも反転
                 }
                 obj->SetTranslation(pos);
-                obj->SetRotation({ 0.0f, yaw, 0.0f });
+                // ピッチ＝道の勾配。回転は Rx→Ry の順に掛かるので、モデルの左右軸で傾けてから向きを合わせる
+                obj->SetRotation({ pitch, yaw, 0.0f });
             } else {
                 // 花（-1-花番号 で持っている）。継ぎ目のブロック上面に立てる
                 const FlowerSpot& flower = flowers_[-1 - idx];
@@ -357,12 +368,15 @@ bool BlockSystem::BlockedAt(int rail, float dist, float bodyBottom, float bodyTo
             if ( !OverlapsCenterLine(block.side) ) continue;
             if ( IsSlopeType(block.type) ) continue;      // 斜面は壁にならない（歩いて登る）
             if ( block.type == kTypeCloud ) continue;     // すり抜け床は横から通り抜けられる
-            float reach = kHalf + kPlayerRadius;
+            // 型別の footprint（横長2m/台座2×2m は半幅1.0m）で壁の届く範囲を決める
+            float reach = FootprintHalf(block.type) + kPlayerRadius;
             if ( std::abs(block.dist - dist) > reach ) continue;
             float bottom = ( float ) block.level * kSize;
             float top    = bottom + kSize;
-            // 面ぴったり（乗っている/頭が触れているだけ）は重なり扱いしない
-            if ( bodyBottom < top - 0.05f && bodyTop > bottom + 0.05f ) {
+            // 面ぴったり（乗っている/頭が触れているだけ）は重なり扱いしない。
+            // 上側の許容はステップ許容と同じ幅にする：横長/台座は壁帯が広い（半幅1.3m）ため、
+            // 斜面で登り切る直前（残り0.25m以内）に側面へ引っかかって坂の途中で止まるのを防ぐ
+            if ( bodyBottom < top - kStepTolerance && bodyTop > bottom + 0.05f ) {
                 if ( outMin ) { *outMin = block.dist - reach; }
                 if ( outMax ) { *outMax = block.dist + reach; }
                 if ( outTop ) { *outTop = top; }
@@ -405,7 +419,8 @@ float BlockSystem::CeilingHeightAt(int rail, float dist, float footY) const{
             if ( !OverlapsCenterLine(block.side) ) continue;
             if ( IsSlopeType(block.type) ) continue;      // 斜面の下は薄いので頭ぶつけ無し
             if ( block.type == kTypeCloud ) continue;     // すり抜け床は下から通り抜けられる
-            if ( std::abs(block.dist - dist) > kHalf + kPlayerRadius ) continue;
+            // 型別の footprint（横長・台座は半幅1.0m）。外縁の下でも頭がぶつかるように
+            if ( std::abs(block.dist - dist) > FootprintHalf(block.type) + kPlayerRadius ) continue;
             float bottom = ( float ) block.level * kSize;
             if ( bottom > footY + 0.1f && bottom < best ) { best = bottom; }
         }

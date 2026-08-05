@@ -128,7 +128,8 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     for ( const auto& block : levelData.blocks ) {
         blockArray.push_back({ { "rail", block.rail }, { "dist", block.dist },
                                { "level", block.level }, { "side", block.side },
-                               { "type", block.type } });
+                               { "type", block.type },
+                               { "anchor", block.anchorNode }, { "anchorOff", block.anchorOffset } });
     }
     rootJson["blocks"] = blockArray;
 
@@ -345,6 +346,8 @@ LevelData LevelManager::Load(const std::string& fileName){
             block.level = blockJson.value("level", 0);
             block.side  = blockJson.value("side", 0.0f); // 旧データは中心線上
             block.type  = blockJson.value("type", 0);    // 旧データはスポンジ
+            block.anchorNode   = blockJson.value("anchor", -1);     // 旧データは未計算→初回に自動で錨付け
+            block.anchorOffset = blockJson.value("anchorOff", 0.0f);
             levelData.blocks.push_back(block);
         }
     }
