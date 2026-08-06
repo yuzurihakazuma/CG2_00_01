@@ -554,6 +554,13 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 		postEffect->SetPaperGrainStrength(0.17f);
 		postEffect->SetPictureBookParams(14.0f, 0.8f);
 		SyncRailsFromEditor();
+		// 右クリック「ここからテストプレイ」：この1回だけ開始位置を上書きする
+		//   （SyncRailsFromEditor が通常スタートを SetSpawn した後に上書き。
+		//     プレイ中に落ちた時のリスポーンもこの地点になる＝そこだけ何度も試せる）
+		if ( testPlayRail_ >= 0 && player_
+			&& testPlayRail_ < ( int ) railField_.GetRails().size() ) {
+			player_->SetSpawn(testPlayRail_, testPlayDist_);
+		}
 		if ( player_ ) { player_->Initialize(); player_->SetMovementLocked(false); }
 		camCtrl_.Reset(); // 向き切替トリガーの状態を初期化（前回プレイの向きを持ち越さない）
 		demo_.OnPlayStart(); // デモの HitEffect を消す
@@ -575,6 +582,7 @@ void GamePlayScene::HandleModeTransition(EngineMode current){
 		postEffect->SetEffectActive(PostEffectType::Grayscale, false); // アイリス途中でEditへ戻った場合の消し忘れ防止
 		irisPhase_ = 0;
 		railField_.ResetMotion();
+		testPlayRail_ = -1; // テストプレイの開始位置上書きは1回で解除（次は通常スタート）
 		coinSystem_.ResetPlay(); // 取得済みコインを復活（エディタで配置が見えなくならないように）
 		// カメラ関連の後始末：
 		//   ・回転フリーズ中に Stop しても時間が止まったままにならないよう Reset（内部で TimeScale を戻す）
@@ -1333,6 +1341,142 @@ void GamePlayScene::DrawDebugUI(){
 		}
 	}
 
+	// --- 配置済みコインのつかみ移動（エディット中・ペイントモードOFF時）---
+	//   コインを左ドラッグでレール上を移動。Shiftを押しながら上下ドラッグで高さ調整。
+	//   離した時に確定して CoinSystem を作り直す（ドラッグ中はゴースト表示のみ＝軽い）
+	coinHover_ = -1;
+	if ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit
+		&& !EditorManager::GetInstance()->IsEditorBlockPaintMode() ) {
+		const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
+		const auto& rails = railField_.GetRails();
+		const auto& coins = EditorManager::GetInstance()->GetEditorCoins();
+		auto projectToScreen = [&](const Vector3& worldPos, Vector2& out) -> bool {
+			Vector2 ndc;
+			if ( !WorldToNdc(worldPos, gv.viewProj, ndc) ) return false;
+			out.x = gv.imgMin.x + ( ndc.x * 0.5f + 0.5f ) * gv.imgSize.x;
+			out.y = gv.imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * gv.imgSize.y;
+			return true;
+		};
+		auto coinWorldPos = [&](const CoinData& coin, Vector3& out) -> bool {
+			if ( coin.rail < 0 || coin.rail >= ( int ) rails.size() ) return false;
+			if ( rails[coin.rail].nodes.size() < 2 ) return false;
+			Vector3 p = rails[coin.rail].GetPositionByDistance(coin.dist);
+			out = { p.x, p.y + coin.height, p.z };
+			return true;
+		};
+		// 敵のつかみ判定を優先（敵の16px圏内ではコインをつかまない）
+		auto enemyNearMouse = [&]() -> bool {
+			if ( !enemyEditor_ ) return false;
+			for ( const auto& spawnData : enemyEditor_->MutableSpawnDatas() ) {
+				if ( spawnData.railIndex < 0 || spawnData.railIndex >= ( int ) rails.size() ) continue;
+				if ( rails[spawnData.railIndex].nodes.size() < 2 ) continue;
+				Vector3 p = rails[spawnData.railIndex].GetPositionByDistance(spawnData.distance);
+				Vector2 sp; if ( !projectToScreen({ p.x, p.y + 0.5f, p.z }, sp) ) continue;
+				float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+				if ( std::sqrt(dx * dx + dy * dy) < 16.0f ) return true;
+			}
+			return false;
+		};
+
+		// 1) マウス直下のコイン（画面距離14px以内）
+		if ( gv.hovered && !gv.gizmoActive && coinDragIdx_ < 0 && enemyDragIdx_ < 0
+			&& blockDragIdx_ < 0 && !enemyNearMouse() ) {
+			float bestPick = 14.0f;
+			for ( int i = 0; i < ( int ) coins.size(); ++i ) {
+				Vector3 wp; if ( !coinWorldPos(coins[i], wp) ) continue;
+				Vector2 sp; if ( !projectToScreen(wp, sp) ) continue;
+				float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+				float d = std::sqrt(dx * dx + dy * dy);
+				if ( d < bestPick ) { bestPick = d; coinHover_ = i; }
+			}
+		}
+		if ( coinHover_ >= 0 ) {
+			ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+			Vector3 wp;
+			if ( coinWorldPos(coins[coinHover_], wp) ) {
+				DebugDraw::GetInstance()->Sphere(wp, 0.45f, { 1.0f, 0.95f, 0.3f, 1.0f }, 12);
+			}
+			if ( ImGui::IsMouseClicked(0) ) {
+				coinDragIdx_  = coinHover_;
+				coinDragData_ = coins[coinHover_];
+				coinDragOrig_ = coins[coinHover_];
+			}
+		}
+
+		// 2) ドラッグ中：レール沿い移動（通常）／高さ調整（Shift）。ゴーストのみ動かす
+		if ( coinDragIdx_ >= 0 ) {
+			if ( coinDragIdx_ >= ( int ) coins.size() ) {
+				coinDragIdx_ = -1; // ドラッグ中に削除された等
+			} else if ( ImGui::IsMouseDown(0) ) {
+				ImGuiIO& io = ImGui::GetIO();
+				// ただのクリック（3px未満）では動かさない＝クリックしただけでコインが
+				// 微妙にずれて保存対象になる事故を防ぐ。右クリックメニューが開いている間
+				// （ゲームビュー外にマウスがある間）も移動先を更新しない
+				const bool dragging = ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f) && gv.hovered;
+				if ( dragging && io.KeyShift ) {
+					// Shift＋上下ドラッグ＝高さ調整（上へ動かすと高くなる）
+					coinDragData_.height = std::clamp(coinDragData_.height - io.MouseDelta.y * 0.02f, 0.0f, 5.0f);
+				} else if ( dragging ) {
+					// マウスにいちばん近いレール上の点へ移動（別レールへの乗せ替えも可）
+					int bestRail = -1; float bestDist = 0.0f; float bestPx = 60.0f;
+					for ( int rr = 0; rr < ( int ) rails.size(); ++rr ) {
+						const SplineRail& rail = rails[rr];
+						if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+						float len = rail.GetLength();
+						int steps = std::clamp(( int ) ( len / 0.5f ), 2, 400);
+						for ( int s = 0; s <= steps; ++s ) {
+							float dist = len * ( float ) s / ( float ) steps;
+							Vector3 wp = rail.GetPositionByDistance(dist);
+							Vector2 sp; if ( !projectToScreen({ wp.x, wp.y + coinDragData_.height, wp.z }, sp) ) continue;
+							float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+							float d = std::sqrt(dx * dx + dy * dy);
+							if ( rr == coinDragData_.rail ) { d -= 12.0f; } // 今のレールに吸い付く
+							if ( d < bestPx ) { bestPx = d; bestRail = rr; bestDist = dist; }
+						}
+					}
+					if ( bestRail >= 0 ) { coinDragData_.rail = bestRail; coinDragData_.dist = bestDist; }
+				}
+				// ゴースト：移動先の黄コイン＋レール線からの高さの見える化（縦線）
+				if ( coinDragData_.rail >= 0 && coinDragData_.rail < ( int ) rails.size()
+					&& rails[coinDragData_.rail].nodes.size() >= 2 ) {
+					Vector3 base = rails[coinDragData_.rail].GetPositionByDistance(coinDragData_.dist);
+					Vector3 pos  = { base.x, base.y + coinDragData_.height, base.z };
+					DebugDraw::GetInstance()->Sphere(pos, 0.35f, { 1.0f, 0.9f, 0.2f, 1.0f }, 12);
+					DebugDraw::GetInstance()->Line(base, pos, { 1.0f, 0.9f, 0.2f, 0.7f });
+				}
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+				if ( io.KeyShift ) {
+					// 高さ調整中は視覚的に分かるようにカーソルを上下矢印へ
+					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+				}
+			} else {
+				// 離した：確定。ただし
+				//   ・つかんだ時と中身が変わっていたら書き込まない（ドラッグ中の Ctrl+Z 等で
+				//     配列が入れ替わり、別のコインを上書きしてしまう事故を防ぐ）
+				//   ・実際に動いていない（ただのクリック）なら何もしない
+				const bool sameCoin = ( coinDragIdx_ < ( int ) coins.size() )
+					&& ( coins[coinDragIdx_] == coinDragOrig_ );
+				const bool movedCoin = ( coinDragData_.rail != coinDragOrig_.rail )
+					|| std::abs(coinDragData_.dist - coinDragOrig_.dist) > 0.01f
+					|| std::abs(coinDragData_.height - coinDragOrig_.height) > 0.01f;
+				if ( sameCoin && movedCoin ) {
+					if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
+						levelEd->GetRailEditor()->SetCoinAt(coinDragIdx_,
+							coinDragData_.rail, coinDragData_.dist, coinDragData_.height);
+						coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+						levelEd->MarkDirty(); // コイン移動も[未保存]・自動保存の対象にする
+					}
+				}
+				coinDragIdx_ = -1;
+			}
+		}
+		if ( coinHover_ >= 0 || coinDragIdx_ >= 0 ) {
+			EditorManager::GetInstance()->SetExternalDragActive(true);
+		}
+	} else {
+		coinDragIdx_ = -1;
+	}
+
 	// --- 配置済みブロックのつかみ移動（エディット中・ペイントモードOFF時）---
 	//   ゲームビューのブロックを左ドラッグでつかんでレール上を移動できる。
 	//   マウスの上下で段、左右で横ずれも変わる。離した時に確定（塞がっていたら元へ戻る）
@@ -1377,8 +1521,10 @@ void GamePlayScene::DrawDebugUI(){
 		};
 
 		// 1) マウス直下のブロックを探す（画面距離22px以内。黄枠＋手カーソルで教える）
+		//    敵とコインのつかみが優先（重なった時に小さい対象を取れなくならないように）
 		int mouseOverBlock = -1;
-		if ( gv.hovered && !gv.gizmoActive && blockDragIdx_ < 0 && enemyDragIdx_ < 0 && !enemyUnderMouse() ) {
+		if ( gv.hovered && !gv.gizmoActive && blockDragIdx_ < 0 && enemyDragIdx_ < 0
+			&& coinDragIdx_ < 0 && coinHover_ < 0 && !enemyUnderMouse() ) {
 			float bestPick = 22.0f;
 			for ( int i = 0; i < ( int ) blocks.size(); ++i ) {
 				Vector3 center; if ( !cellCenter(blocks[i].rail, blocks[i].dist, blocks[i].level, blocks[i].side, center) ) continue;
@@ -1540,7 +1686,9 @@ void GamePlayScene::DrawDebugUI(){
 			Vector3 p = ctxRails[rail].GetPositionByDistance(dist);
 			return { p.x, p.y + lift, p.z };
 		};
-		if ( gvCtx.hovered && !gvCtx.gizmoActive && rightClickedStill ) {
+		// つかみ移動の最中はメニューを開かない（ドラッグ中の右クリックで確定位置が乱れるため）
+		const bool anyDragActive = ( enemyDragIdx_ >= 0 || coinDragIdx_ >= 0 || blockDragIdx_ >= 0 );
+		if ( gvCtx.hovered && !gvCtx.gizmoActive && rightClickedStill && !anyDragActive ) {
 			// マウスに一番近いレール上の点（0.5m刻みサンプル・60px以内）を配置先にする
 			int bestRail = -1; float bestDist = 0.0f; float bestPx = 60.0f;
 			for ( int railIndex = 0; railIndex < ( int ) ctxRails.size(); ++railIndex ) {
@@ -1610,6 +1758,12 @@ void GamePlayScene::DrawDebugUI(){
 			if ( ctxPlaceRail_ >= 0 && ctxPlaceRail_ < ( int ) ctxRails.size() ) {
 				ImGui::TextDisabled("路線%d の %.1fm 地点", ctxPlaceRail_, ctxPlaceDist_);
 				ImGui::Separator();
+				if ( ImGui::MenuItem("ここからテストプレイ") ) {
+					// この地点を1回だけスタート地点にして即Play（落下リスポーンも同地点）
+					testPlayRail_ = ctxPlaceRail_;
+					testPlayDist_ = ctxPlaceDist_;
+					EditorManager::GetInstance()->RequestPlay();
+				}
 				if ( ImGui::MenuItem("敵を配置") && enemyEditor_ ) {
 					enemyEditor_->MutableSpawnDatas().push_back(
 						EnemySpawnData { EnemyType::Zako, ctxPlaceRail_, ctxPlaceDist_, false, -1.0f, -1.0f });
@@ -1619,6 +1773,7 @@ void GamePlayScene::DrawDebugUI(){
 					if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
 						levelEd->GetRailEditor()->AddCoinAt(ctxPlaceRail_, ctxPlaceDist_);
 						coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+						levelEd->MarkDirty(); // コイン追加も[未保存]・自動保存の対象にする
 					}
 				}
 				if ( ImGui::MenuItem("ブロックを配置（選択中の種類）") ) {
@@ -1660,8 +1815,17 @@ void GamePlayScene::DrawDebugUI(){
 					if ( auto* levelEd = EditorManager::GetInstance()->GetLevelEditor() ) {
 						levelEd->GetRailEditor()->RemoveCoinAt(ctxCoinIdx_);
 						coinSystem_.Sync(EditorManager::GetInstance()->GetEditorCoins(), railField_.GetRails());
+						levelEd->MarkDirty(); // コイン削除も[未保存]・自動保存の対象にする
 					}
 					ctxCoinIdx_ = -1;
+				}
+			}
+			// 表示系のトグル（どちらのUIモードでもパネルを開かず切り替えられる）
+			ImGui::Separator();
+			{
+				bool motionPreview = EditorManager::GetInstance()->GetEditorRailMotionPreview();
+				if ( ImGui::MenuItem("動くレールをプレビュー再生", nullptr, motionPreview) ) {
+					EditorManager::GetInstance()->SetEditorRailMotionPreview(!motionPreview);
 				}
 			}
 			ImGui::EndPopup();
@@ -1699,21 +1863,32 @@ void GamePlayScene::DrawDebugUI(){
 				}
 				break;
 			}
-			case 3: { // ガイドレール追従：レール始点が実際に通る経路（ガイド形状を始点基準へ平行移動）
+			case 3: { // ガイドレール追従：レール始点が実際に通る経路（区間指定を反映して描く）
 				int g = rail.guideRail;
 				if ( g >= 0 && g < ( int ) rails.size() && g != railIndex && rails[g].GetLength() > 0.0f ) {
 					const SplineRail& guide = rails[g];
 					const float guideLen = guide.GetLength();
-					const int guideSteps = std::clamp(( int ) guideLen, 2, 150);
-					Vector3 guideStart = guide.GetPositionByDistance(0.0f);
+					float s0 = std::clamp(rail.guideStart, 0.0f, guideLen);
+					float s1 = ( rail.guideEnd < 0.0f ) ? guideLen : std::clamp(rail.guideEnd, 0.0f, guideLen);
+					if ( s1 < s0 ) { std::swap(s0, s1); }
+					if ( s1 - s0 < 0.01f ) { s0 = 0.0f; s1 = guideLen; }
+					const int guideSteps = std::clamp(( int ) ( s1 - s0 ), 2, 150);
+					Vector3 rangeStart = guide.GetPositionByDistance(s0);
 					Vector3 railStart  = rail.GetPositionByDistance(0.0f);
 					Vector3 prev {};
 					for ( int k = 0; k <= guideSteps; ++k ) {
-						Vector3 gp = guide.GetPositionByDistance(guideLen * ( float ) k / ( float ) guideSteps);
-						Vector3 p = { railStart.x + gp.x - guideStart.x,
-						              railStart.y + gp.y - guideStart.y,
-						              railStart.z + gp.z - guideStart.z };
+						Vector3 gp = guide.GetPositionByDistance(s0 + ( s1 - s0 ) * ( float ) k / ( float ) guideSteps);
+						Vector3 p = { railStart.x + gp.x - rangeStart.x,
+						              railStart.y + gp.y - rangeStart.y,
+						              railStart.z + gp.z - rangeStart.z };
 						if ( k > 0 ) { DebugDraw::GetInstance()->Line(prev, p, ghostColor); }
+						// 端の目印（ここで折り返す/戻る）：始端は緑・終端は橙の小さな十字
+						if ( k == 0 || k == guideSteps ) {
+							Vector4 endColor = ( k == 0 ) ? Vector4 { 0.4f, 1.0f, 0.5f, 0.9f }
+							                              : Vector4 { 1.0f, 0.7f, 0.3f, 0.9f };
+							DebugDraw::GetInstance()->Line({ p.x - 0.4f, p.y, p.z }, { p.x + 0.4f, p.y, p.z }, endColor);
+							DebugDraw::GetInstance()->Line({ p.x, p.y - 0.4f, p.z }, { p.x, p.y + 0.4f, p.z }, endColor);
+						}
 						prev = p;
 					}
 				}
@@ -1738,6 +1913,125 @@ void GamePlayScene::DrawDebugUI(){
 			}
 			}
 		}
+	}
+
+	// --- ミニマップ（俯瞰ビュー）：コース全体と配置物を上から一望。クリックでカメラ移動 ---
+	if ( EditorManager::GetInstance()->IsPanelVisible(EditorManager::Panel_Minimap) ) {
+		// Beginがfalse（畳まれている/非アクティブなドックタブ）の間は本体を描かない。
+		//   描いてしまうと IsItemClicked がタイトルバーに誤反応し、畳んだ状態でタイトルを
+		//   クリックするたびカメラが変な場所へ飛ぶ（LastItemDataがタイトルのまま残るため）
+		if ( ImGui::Begin("ミニマップ (俯瞰)") ) {
+		const auto& mmRails = railField_.GetRails();
+		// レール全体のXZ範囲（ノード基準＋余白）
+		bool hasBounds = false;
+		float minX = 0.0f, maxX = 0.0f, minZ = 0.0f, maxZ = 0.0f;
+		for ( const auto& rail : mmRails ) {
+			if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+			for ( const auto& node : rail.nodes ) {
+				if ( !hasBounds ) { minX = maxX = node.x; minZ = maxZ = node.z; hasBounds = true; } else {
+					minX = ( std::min )( minX, node.x ); maxX = ( std::max )( maxX, node.x );
+					minZ = ( std::min )( minZ, node.z ); maxZ = ( std::max )( maxZ, node.z );
+				}
+			}
+		}
+		if ( !hasBounds ) {
+			ImGui::TextDisabled("レールがありません");
+		} else {
+			minX -= 4.0f; maxX += 4.0f; minZ -= 4.0f; maxZ += 4.0f;
+			ImVec2 avail = ImGui::GetContentRegionAvail();
+			ImVec2 canvasSize { ( std::max )( avail.x, 120.0f ), ( std::max )( avail.y, 120.0f ) };
+			ImGui::InvisibleButton("minimap_canvas", canvasSize);
+			ImVec2 canvasMin = ImGui::GetItemRectMin();
+			ImDrawList* draw = ImGui::GetWindowDrawList();
+			draw->AddRectFilled(canvasMin,
+				{ canvasMin.x + canvasSize.x, canvasMin.y + canvasSize.y }, IM_COL32(24, 30, 40, 235), 4.0f);
+			// world XZ → キャンバス座標（等倍・中央寄せ。奥(+Z)=上、手前=下）
+			float spanX = ( std::max )( maxX - minX, 0.001f );
+			float spanZ = ( std::max )( maxZ - minZ, 0.001f );
+			float mapScale = ( std::min )( ( canvasSize.x - 12.0f ) / spanX, ( canvasSize.y - 12.0f ) / spanZ );
+			float originX = canvasMin.x + ( canvasSize.x - spanX * mapScale ) * 0.5f;
+			float originY = canvasMin.y + ( canvasSize.y - spanZ * mapScale ) * 0.5f;
+			auto toCanvas = [&](float wx, float wz) -> ImVec2 {
+				return { originX + ( wx - minX ) * mapScale, originY + ( maxZ - wz ) * mapScale };
+			};
+			// レール線（動くレール=水色 / 通常=白。動くレールは現在位置ぶんずらして描く）
+			for ( const auto& rail : mmRails ) {
+				if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+				float len = rail.GetLength();
+				int steps = std::clamp(( int ) ( len * 0.5f ), 2, 64);
+				ImU32 lineColor = rail.HasMotion() ? IM_COL32(120, 180, 255, 220) : IM_COL32(230, 230, 230, 170);
+				ImVec2 prev {};
+				for ( int s = 0; s <= steps; ++s ) {
+					Vector3 p = rail.GetPositionByDistance(len * ( float ) s / ( float ) steps);
+					ImVec2 c = toCanvas(p.x + rail.animOffset.x, p.z + rail.animOffset.z);
+					if ( s > 0 ) { draw->AddLine(prev, c, lineColor, 2.0f); }
+					prev = c;
+				}
+			}
+			// ブロック（茶の四角）／コイン（黄の丸）／敵（雑魚=赤・強敵=紫）
+			for ( const auto& block : EditorManager::GetInstance()->GetEditorBlocks() ) {
+				if ( block.rail < 0 || block.rail >= ( int ) mmRails.size() ) continue;
+				if ( mmRails[block.rail].nodes.size() < 2 ) continue;
+				Vector3 p = mmRails[block.rail].GetPositionByDistance(block.dist);
+				ImVec2 c = toCanvas(p.x, p.z);
+				draw->AddRectFilled({ c.x - 2.5f, c.y - 2.5f }, { c.x + 2.5f, c.y + 2.5f }, IM_COL32(205, 140, 70, 255));
+			}
+			for ( const auto& coin : EditorManager::GetInstance()->GetEditorCoins() ) {
+				if ( coin.rail < 0 || coin.rail >= ( int ) mmRails.size() ) continue;
+				if ( mmRails[coin.rail].nodes.size() < 2 ) continue;
+				Vector3 p = mmRails[coin.rail].GetPositionByDistance(coin.dist);
+				draw->AddCircleFilled(toCanvas(p.x, p.z), 2.5f, IM_COL32(255, 215, 60, 255));
+			}
+			if ( enemyEditor_ ) {
+				for ( const auto& spawnData : enemyEditor_->MutableSpawnDatas() ) {
+					if ( spawnData.railIndex < 0 || spawnData.railIndex >= ( int ) mmRails.size() ) continue;
+					if ( mmRails[spawnData.railIndex].nodes.size() < 2 ) continue;
+					Vector3 p = mmRails[spawnData.railIndex].GetPositionByDistance(spawnData.distance);
+					ImU32 pinColor = ( spawnData.type == EnemyType::Zako )
+						? IM_COL32(255, 90, 70, 255) : IM_COL32(190, 100, 255, 255);
+					draw->AddCircleFilled(toCanvas(p.x, p.z), 3.5f, pinColor);
+				}
+			}
+			// スタート（緑の輪）／ゴール（橙の輪）
+			{
+				int startRail = railField_.GetStartRail();
+				if ( startRail >= 0 && startRail < ( int ) mmRails.size() && mmRails[startRail].nodes.size() >= 2 ) {
+					Vector3 p = mmRails[startRail].GetPositionByDistance(railField_.GetStartDistance());
+					draw->AddCircle(toCanvas(p.x, p.z), 5.0f, IM_COL32(90, 255, 120, 255), 0, 2.0f);
+				}
+				if ( railField_.HasGoal() ) {
+					Vector3 goalPos = railField_.GetGoalPos();
+					draw->AddCircle(toCanvas(goalPos.x, goalPos.z), 5.0f, IM_COL32(255, 170, 60, 255), 0, 2.0f);
+				}
+			}
+			// プレイヤー（白の点）とカメラ（水色の菱形）
+			if ( player_ ) {
+				const Vector3& playerPos = player_->GetPosition();
+				draw->AddCircleFilled(toCanvas(playerPos.x, playerPos.z), 3.0f, IM_COL32(255, 255, 255, 255));
+			}
+			if ( camera_ ) {
+				Vector3 camPos = camera_->GetWorldPosition();
+				ImVec2 c = toCanvas(camPos.x, camPos.z);
+				draw->AddQuadFilled({ c.x, c.y - 4.0f }, { c.x + 4.0f, c.y },
+				                    { c.x, c.y + 4.0f }, { c.x - 4.0f, c.y }, IM_COL32(120, 220, 255, 230));
+			}
+			if ( ImGui::IsItemHovered() ) { ImGui::SetTooltip("クリック＝その場所へカメラ移動"); }
+			// クリック：クリック地点が画面の中央に来るようにカメラを移動（向きと高さは今のまま）
+			if ( ImGui::IsItemClicked() && camera_ ) {
+				ImVec2 mousePos = ImGui::GetMousePos();
+				float worldX = minX + ( mousePos.x - originX ) / mapScale;
+				float worldZ = maxZ - ( mousePos.y - originY ) / mapScale;
+				Vector3 camPos = camera_->GetWorldPosition();
+				Vector3 rot = camera_->GetRotation();
+				float cosPitch = std::cos(rot.x);
+				Vector3 forward = { cosPitch * std::sin(rot.y), -std::sin(rot.x), cosPitch * std::cos(rot.y) };
+				// 視線がレール高さ(y≈0)へ届く距離ぶん後ろへ引く（真横向きなどの時は20m固定）
+				float backDist = ( forward.y < -0.05f ) ? std::clamp(camPos.y / -forward.y, 5.0f, 80.0f) : 20.0f;
+				camera_->SetTranslation({ worldX - forward.x * backDist, camPos.y, worldZ - forward.z * backDist });
+			}
+		}
+		} // ImGui::Begin
+		ImGui::End();
 	}
 
 	// --- ブロック配置モード（マリオメーカー風：クリックで置く/消す。配置物タブでON）---

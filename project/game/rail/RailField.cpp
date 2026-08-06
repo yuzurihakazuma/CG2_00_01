@@ -224,6 +224,9 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
     const auto& motionTypes  = em->GetEditorRailMotionTypes();
     const auto& guideRails   = em->GetEditorRailGuideRails();
     const auto& motionPhases = em->GetEditorRailMotionPhases();
+    const auto& guideStarts  = em->GetEditorRailGuideStarts();
+    const auto& guideEnds    = em->GetEditorRailGuideEnds();
+    const auto& guideModes   = em->GetEditorRailGuideModes();
     for ( size_t i = 0; i < rails_.size(); ++i ) {
         if ( i < motions.size() ) {
             rails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
@@ -232,6 +235,9 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
         rails_[i].motionType  = ( i < motionTypes.size() )  ? motionTypes[i]  : 0;
         rails_[i].guideRail   = ( i < guideRails.size() )   ? guideRails[i]   : -1;
         rails_[i].motionPhase = ( i < motionPhases.size() ) ? motionPhases[i] : 0.0f;
+        rails_[i].guideStart  = ( i < guideStarts.size() )  ? guideStarts[i]  : 0.0f;
+        rails_[i].guideEnd    = ( i < guideEnds.size() )    ? guideEnds[i]    : -1.0f;
+        rails_[i].guideMode   = ( i < guideModes.size() )   ? guideModes[i]   : 0;
         rails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
     }
 
@@ -317,13 +323,29 @@ void RailField::UpdateMotion(float dt){
             rail.animOffset = { amp.x * std::cos(th), amp.y * std::sin(th), amp.z * std::sin(th) };
             break;
         }
-        case 3: { // ガイドレール追従：別レールの経路に沿って一周し続ける（エスカレーター式）。
-                  //   周期=1周の秒数 / 位相=スタート位置。終点まで行くと始点へ戻って回り続ける
+        case 3: { // ガイドレール追従：別レールの経路に沿って動く（ヨッシー1-1の列車式）。
+                  //   周期=1周期の秒数（一周ループ=1周 / 往復=行って帰る1往復）/ 位相=スタート位置 /
+                  //   区間=ガイドのここからここまで。
+                  //   guideMode 0=一周ループ（終点→始点へ戻る） / 1=往復（コサイン緩急で滑らかに折り返す）
             int g = rail.guideRail;
             if ( g >= 0 && g < ( int ) rails_.size() && &rails_[g] != &rail && rails_[g].GetLength() > 0.0f ) {
                 const SplineRail& guide = rails_[g];
-                Vector3 p  = guide.GetPositionByDistance(u * guide.GetLength());
-                Vector3 p0 = guide.GetPositionByDistance(0.0f);
+                const float guideLen = guide.GetLength();
+                float s0 = std::clamp(rail.guideStart, 0.0f, guideLen);
+                float s1 = ( rail.guideEnd < 0.0f ) ? guideLen : std::clamp(rail.guideEnd, 0.0f, guideLen);
+                if ( s1 < s0 ) { std::swap(s0, s1); }
+                if ( s1 - s0 < 0.01f ) { s0 = 0.0f; s1 = guideLen; } // 区間が潰れていたら全区間
+                float d;
+                if ( rail.guideMode == 1 ) {
+                    // 往復：0→1→0 をコサインでつなぐ＝両端で速度0（縦⇔横の折り返しも滑らか）
+                    float w = 0.5f - 0.5f * std::cos(u * kTwoPi);
+                    d = s0 + ( s1 - s0 ) * w;
+                } else {
+                    // 一周ループ：区間の端まで行くと始点へ戻って回り続ける（閉じたガイド向け）
+                    d = s0 + ( s1 - s0 ) * u;
+                }
+                Vector3 p  = guide.GetPositionByDistance(d);
+                Vector3 p0 = guide.GetPositionByDistance(s0);
                 rail.animOffset = { p.x - p0.x, p.y - p0.y, p.z - p0.z };
             } else {
                 rail.animOffset = { 0.0f, 0.0f, 0.0f };

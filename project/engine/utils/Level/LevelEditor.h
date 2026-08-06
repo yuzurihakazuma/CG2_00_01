@@ -56,6 +56,10 @@ public:
         if ( levelData_.enemies != e ) { dirty_ = true; }
         levelData_.enemies = e;
     }
+    // 外部（ゲームビューのコイン配置/移動/削除など）からの未保存マーク。
+    //   コインは RailEditor が LevelData を直接書くため、ここで dirty を立てないと
+    //   [未保存] 表示も自動保存も発動しない（SetXxxData系と同じ落とし穴）
+    void MarkDirty(){ dirty_ = true; }
     const std::vector<LevelEnemyData>& GetEnemyData() const{ return levelData_.enemies; }
     // マップを読み込んだ回数（増えたら＝新しいマップが読み込まれた合図）
     int GetMapLoadVersion() const{ return mapLoadVersion_; }

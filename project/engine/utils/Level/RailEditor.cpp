@@ -681,6 +681,9 @@ void RailEditor::SyncRailArraySizes(){
 	data_->railRoadModes.resize(n, 0);
 	data_->railEndPlazas.resize(n, 0);
 	data_->railGuideRails.resize(n, -1);
+	data_->railGuideStarts.resize(n, 0.0f);
+	data_->railGuideEnds.resize(n, -1.0f);
+	data_->railGuideModes.resize(n, 0);
 	data_->railGroups.resize(n);
 	data_->railNodeHoles.resize(n);
 	data_->railMotionTypes.resize(n, 0);
@@ -739,6 +742,9 @@ int RailEditor::AppendRail(std::vector<Vector3> line, const std::string& group){
 	data_->railRoadModes.push_back(0);
 	data_->railEndPlazas.push_back(0);
 	data_->railGuideRails.push_back(-1);
+	data_->railGuideStarts.push_back(0.0f);
+	data_->railGuideEnds.push_back(-1.0f);
+	data_->railGuideModes.push_back(0);
 	data_->railGroups.push_back(group);
 	data_->railNodeHoles.push_back(std::vector<int>(nodeCount, 0));
 	data_->railMotionTypes.push_back(0);
@@ -762,6 +768,9 @@ void RailEditor::EraseRail(int idx){
 	data_->railRoadModes.erase(data_->railRoadModes.begin() + idx);
 	data_->railEndPlazas.erase(data_->railEndPlazas.begin() + idx);
 	data_->railGuideRails.erase(data_->railGuideRails.begin() + idx);
+	data_->railGuideStarts.erase(data_->railGuideStarts.begin() + idx);
+	data_->railGuideEnds.erase(data_->railGuideEnds.begin() + idx);
+	data_->railGuideModes.erase(data_->railGuideModes.begin() + idx);
 	data_->railGroups.erase(data_->railGroups.begin() + idx);
 	data_->railNodeHoles.erase(data_->railNodeHoles.begin() + idx);
 	data_->railMotionTypes.erase(data_->railMotionTypes.begin() + idx);   // ※従来ここから4本が消えておらず、
@@ -793,6 +802,353 @@ namespace {
 	// 型ごとの dist 方向の占有半幅。横長(7)/台座(8)は2mぶん占有する。
 	//   斜面(2,3)は従来どおり1セル扱い（ブロックへ立てかけて重ねる使い方を許すため）
 	float BlockOccupyHalf(int type){ return ( type == 7 || type == 8 ) ? 1.0f : 0.5f; }
+}
+
+// ==== 2D形状エディタ =========================================================================
+//   ETOSツール風：レールの経路を2D断面（横見図/上から見た図）で表示し、点をつかんで編集できる。
+//   ゲームビューと同じ配列（railLines[railIdx]）を直接書くので3D表示とは常に同期する。
+//   作成タブ＝選択中の路線（動かないレールもOK） / 動きタブ＝ガイドレール（motionOverlay=true で
+//   区間◆マーカーと「足場の実際の動き」の青丸も表示）の両方から使う共通部品
+void RailEditor::DrawRailPathEditor(int railIdx, bool motionOverlay){
+	if ( railIdx < 0 || railIdx >= ( int ) data_->railLines.size() ) {
+		guidePanelDragNode_ = -1; guidePanelDragMark_ = 0; guidePanelDragging_ = false;
+		return;
+	}
+	// タブ切替等で編集対象が変わったらドラッグ状態を破棄（別レールのノードを書かない安全弁）
+	if ( guidePanelDragRail_ != railIdx ) {
+		guidePanelDragNode_ = -1; guidePanelDragMark_ = 0; guidePanelDragging_ = false;
+	}
+	auto& line = data_->railLines[railIdx];
+	if ( line.size() < 2 ) {
+		ImGui::TextDisabled("ノードが2個未満です（作成タブで点を追加すると編集できます）");
+		guidePanelDragNode_ = -1; guidePanelDragMark_ = 0; guidePanelDragging_ = false;
+		return;
+	}
+
+	ImGui::Separator();
+	ImGui::TextDisabled(motionOverlay
+		? "リフト経路エディタ: 点をドラッグ=移動 / Ctrl+クリック=線上に点を追加 / 右クリック=削除 / ◆=区間の端"
+		: "点をドラッグ=移動 / Ctrl+クリック=線上に点を追加 / 右クリック=削除");
+	// 断面の選択：横見図（坂やリフト用）⇔ 上から（奥行き⇔横向きのカーブ用）を切り替えられる
+	ImGui::SetNextItemWidth(170.0f);
+	const char* planeLabels[] = { "断面: 自動", "横見図 (X-Y)", "横見図 (Z-Y)", "上から (X-Z)" };
+	ImGui::Combo("##pathEditPlane", &pathEditPlane_, planeLabels, 4);
+	if ( ImGui::IsItemHovered() ) {
+		ImGui::SetTooltip("横見図＝高さ（坂・リフト）を編集 / 上から＝奥行き⇔横向きのカーブを編集\n自動＝広がりが大きい水平軸×高さ");
+	}
+
+	// --- 投影軸を決める：A=キャンバス横 / B=キャンバス縦 ---
+	float minX = line[0].x, maxX = minX, minZ = line[0].z, maxZ = minZ, minY = line[0].y, maxY = minY;
+	for ( const auto& p : line ) {
+		minX = ( std::min )( minX, p.x ); maxX = ( std::max )( maxX, p.x );
+		minZ = ( std::min )( minZ, p.z ); maxZ = ( std::max )( maxZ, p.z );
+		minY = ( std::min )( minY, p.y ); maxY = ( std::max )( maxY, p.y );
+	}
+	int plane = pathEditPlane_;
+	if ( plane == 0 ) { plane = ( ( maxX - minX ) >= ( maxZ - minZ ) ) ? 1 : 2; } // 自動＝広い水平軸×Y
+	auto axisA = [&](const Vector3& p){ return ( plane == 2 ) ? p.z : p.x; };
+	auto axisB = [&](const Vector3& p){ return ( plane == 3 ) ? p.z : p.y; };
+	const char* axisAName = ( plane == 2 ) ? "Z" : "X";
+	const char* axisBName = ( plane == 3 ) ? "Z" : "Y";
+	float minH = ( plane == 2 ) ? minZ : minX;
+	float maxH = ( plane == 2 ) ? maxZ : maxX;
+	float minV = ( plane == 3 ) ? minZ : minY;
+	float maxV = ( plane == 3 ) ? maxZ : maxY;
+	minH -= 2.0f; maxH += 2.0f;
+	float minY2 = minV - 2.0f, maxY2 = maxV + 2.0f;
+	minY = minY2; maxY = maxY2; // 以降は minY/maxY をキャンバス縦軸（Y または Z）として使う
+
+	// --- キャンバス ---
+	const float panelWidth  = ( std::max )( ImGui::GetContentRegionAvail().x, 220.0f );
+	const float panelHeight = 240.0f;
+	ImGui::InvisibleButton("guide_path_canvas", ImVec2(panelWidth, panelHeight));
+	const bool canvasHovered = ImGui::IsItemHovered();
+	const ImVec2 canvasMin = ImGui::GetItemRectMin();
+	ImDrawList* draw = ImGui::GetWindowDrawList();
+	draw->AddRectFilled(canvasMin, ImVec2(canvasMin.x + panelWidth, canvasMin.y + panelHeight),
+	                    IM_COL32(24, 30, 40, 255), 4.0f);
+
+	const float spanH = ( std::max )( maxH - minH, 0.001f );
+	const float spanY = ( std::max )( maxY - minY, 0.001f );
+	const float scale = ( std::min )( ( panelWidth - 16.0f ) / spanH, ( panelHeight - 16.0f ) / spanY );
+	const float originX = canvasMin.x + ( panelWidth  - spanH * scale ) * 0.5f;
+	const float originY = canvasMin.y + ( panelHeight - spanY * scale ) * 0.5f;
+	auto toCanvas = [&](float h, float y) -> ImVec2 {
+		return { originX + ( h - minH ) * scale, originY + ( maxY - y ) * scale };
+	};
+	auto nodeCanvas = [&](const Vector3& p){ return toCanvas(axisA(p), axisB(p)); };
+
+	// 1mグリッド（見やすい拡大率の時だけ。5m毎に少し濃く）
+	if ( scale >= 5.0f ) {
+		for ( float h = std::ceil(minH); h <= maxH; h += 1.0f ) {
+			ImU32 gridColor = ( std::abs(std::fmod(h, 5.0f)) < 0.01f ) ? IM_COL32(255, 255, 255, 34) : IM_COL32(255, 255, 255, 13);
+			draw->AddLine(toCanvas(h, minY), toCanvas(h, maxY), gridColor);
+		}
+		for ( float y = std::ceil(minY); y <= maxY; y += 1.0f ) {
+			ImU32 gridColor = ( std::abs(std::fmod(y, 5.0f)) < 0.01f ) ? IM_COL32(255, 255, 255, 34) : IM_COL32(255, 255, 255, 13);
+			draw->AddLine(toCanvas(minH, y), toCanvas(maxH, y), gridColor);
+		}
+	}
+
+	// --- 弧長テーブル（3D長。区間マーカー・動きの点の位置決めに使う）---
+	std::vector<float> cum(line.size(), 0.0f);
+	for ( size_t i = 1; i < line.size(); ++i ) {
+		float dx = line[i].x - line[i - 1].x;
+		float dy = line[i].y - line[i - 1].y;
+		float dz = line[i].z - line[i - 1].z;
+		cum[i] = cum[i - 1] + std::sqrt(dx * dx + dy * dy + dz * dz);
+	}
+	const float totalLen = cum.back();
+	auto posAt = [&](float d) -> Vector3 {
+		d = std::clamp(d, 0.0f, totalLen);
+		for ( size_t i = 1; i < line.size(); ++i ) {
+			if ( d <= cum[i] || i == line.size() - 1 ) {
+				float segLen = ( std::max )( cum[i] - cum[i - 1], 0.0001f );
+				float t = std::clamp(( d - cum[i - 1] ) / segLen, 0.0f, 1.0f);
+				return { line[i - 1].x + ( line[i].x - line[i - 1].x ) * t,
+				         line[i - 1].y + ( line[i].y - line[i - 1].y ) * t,
+				         line[i - 1].z + ( line[i].z - line[i - 1].z ) * t };
+			}
+		}
+		return line.back();
+	};
+
+	// 区間 [s0, s1]（RailField::UpdateMotion case3 と同じ解釈。オーバーレイ無しなら全区間）
+	float s0 = 0.0f, s1 = totalLen;
+	if ( motionOverlay && currentEditRailIndex_ >= 0
+		&& currentEditRailIndex_ < ( int ) data_->railGuideEnds.size() ) {
+		const float gEnd = data_->railGuideEnds[currentEditRailIndex_];
+		s0 = std::clamp(data_->railGuideStarts[currentEditRailIndex_], 0.0f, totalLen);
+		s1 = ( gEnd < 0.0f ) ? totalLen : std::clamp(gEnd, 0.0f, totalLen);
+		if ( s1 < s0 ) { std::swap(s0, s1); }
+		if ( s1 - s0 < 0.01f ) { s0 = 0.0f; s1 = totalLen; }
+	}
+
+	// --- 経路の描画 ---
+	//   スプライン路線はゲームと同じ Catmull-Rom 曲線（端は鏡映）で描く＝見たまま。
+	//   直線同士は薄い「制御ケージ」として重ね、点と曲線の関係が分かるようにする
+	const bool smoothLine = ( railIdx < ( int ) data_->railLineModes.size()
+		&& data_->railLineModes[railIdx] == 0 );
+	auto crPoint = [&](int i, float t) -> Vector3 {
+		const Vector3& p1 = line[i];
+		const Vector3& p2 = line[i + 1];
+		Vector3 p0 = ( i - 1 >= 0 ) ? line[i - 1]
+			: Vector3 { 2.0f * p1.x - p2.x, 2.0f * p1.y - p2.y, 2.0f * p1.z - p2.z };
+		Vector3 p3 = ( i + 2 < ( int ) line.size() ) ? line[i + 2]
+			: Vector3 { 2.0f * p2.x - p1.x, 2.0f * p2.y - p1.y, 2.0f * p2.z - p1.z };
+		auto cr = [&](float a0, float a1, float a2, float a3){
+			return 0.5f * ( 2.0f * a1 + ( -a0 + a2 ) * t
+				+ ( 2.0f * a0 - 5.0f * a1 + 4.0f * a2 - a3 ) * t * t
+				+ ( -a0 + 3.0f * a1 - 3.0f * a2 + a3 ) * t * t * t );
+		};
+		return { cr(p0.x, p1.x, p2.x, p3.x), cr(p0.y, p1.y, p2.y, p3.y), cr(p0.z, p1.z, p2.z, p3.z) };
+	};
+	if ( smoothLine ) {
+		for ( size_t i = 1; i < line.size(); ++i ) { // 制御ケージ（点の並びが分かる薄い直線）
+			draw->AddLine(nodeCanvas(line[i - 1]), nodeCanvas(line[i]), IM_COL32(110, 170, 235, 55), 1.0f);
+		}
+		for ( int i = 0; i < ( int ) line.size() - 1; ++i ) { // 実際に通る曲線
+			ImVec2 prev = nodeCanvas(line[i]);
+			for ( int k = 1; k <= 8; ++k ) {
+				ImVec2 cur = nodeCanvas(crPoint(i, ( float ) k / 8.0f));
+				draw->AddLine(prev, cur, IM_COL32(110, 170, 235, 170), 2.0f);
+				prev = cur;
+			}
+		}
+	} else {
+		for ( size_t i = 1; i < line.size(); ++i ) {
+			draw->AddLine(nodeCanvas(line[i - 1]), nodeCanvas(line[i]), IM_COL32(110, 170, 235, 150), 2.0f);
+		}
+	}
+	if ( motionOverlay ) { // 動く区間を白太で強調
+		int steps = std::clamp(( int ) ( ( s1 - s0 ) * 2.0f ), 2, 200);
+		ImVec2 prev = nodeCanvas(posAt(s0));
+		for ( int k = 1; k <= steps; ++k ) {
+			ImVec2 cur = nodeCanvas(posAt(s0 + ( s1 - s0 ) * ( float ) k / ( float ) steps));
+			draw->AddLine(prev, cur, IM_COL32(220, 240, 255, 220), 3.5f);
+			prev = cur;
+		}
+	}
+
+	// --- マウス入力（ノード優先 → 区間マーカー）---
+	const ImVec2 mouse = ImGui::GetIO().MousePos;
+	auto distPx = [&](const ImVec2& a) -> float {
+		float dx = a.x - mouse.x, dy = a.y - mouse.y;
+		return std::sqrt(dx * dx + dy * dy);
+	};
+	int hoverNode = -1;
+	if ( canvasHovered ) {
+		float bestNodePx = 10.0f;
+		for ( int i = 0; i < ( int ) line.size(); ++i ) {
+			float d = distPx(nodeCanvas(line[i]));
+			if ( d < bestNodePx ) { bestNodePx = d; hoverNode = i; }
+		}
+	}
+	const ImVec2 markStart = nodeCanvas(posAt(s0));
+	const ImVec2 markEnd   = nodeCanvas(posAt(s1));
+	int hoverMark = 0;
+	if ( motionOverlay && canvasHovered && hoverNode < 0 ) {
+		if      ( distPx(markEnd)   < 10.0f ) { hoverMark = 2; }
+		else if ( distPx(markStart) < 10.0f ) { hoverMark = 1; }
+	}
+
+	if ( canvasHovered && guidePanelDragNode_ < 0 && guidePanelDragMark_ == 0 ) {
+		if ( ImGui::IsMouseClicked(ImGuiMouseButton_Left) ) {
+			if ( hoverNode >= 0 ) {
+				guidePanelDragNode_ = hoverNode;
+				guidePanelDragRail_ = railIdx;
+				// 自分の路線を編集中なら3D側の選択ノードも同期（ギズモや敵配置の基準に使える）
+				if ( railIdx == currentEditRailIndex_ ) {
+					selectedRailNode_ = hoverNode;
+					multiSelection_.clear();
+					multiSelection_.push_back({ railIdx, hoverNode });
+				}
+			} else if ( hoverMark != 0 ) {
+				guidePanelDragMark_ = hoverMark;
+				guidePanelDragRail_ = railIdx;
+			} else if ( ImGui::GetIO().KeyCtrl ) {
+				// Ctrl+クリック＝一番近い線分の上にノードを挿入（曲がり角を増やして形を作る）
+				float bestPx = 12.0f; int insertAt = -1; float insertT = 0.0f;
+				for ( size_t i = 1; i < line.size(); ++i ) {
+					ImVec2 a = nodeCanvas(line[i - 1]), b = nodeCanvas(line[i]);
+					float vx = b.x - a.x, vy = b.y - a.y;
+					float len2 = vx * vx + vy * vy;
+					float t = ( len2 > 1e-5f )
+						? std::clamp((( mouse.x - a.x ) * vx + ( mouse.y - a.y ) * vy) / len2, 0.0f, 1.0f)
+						: 0.0f;
+					ImVec2 c { a.x + vx * t, a.y + vy * t };
+					float d = distPx(c);
+					if ( d < bestPx ) { bestPx = d; insertAt = ( int ) i; insertT = t; }
+				}
+				if ( insertAt > 0 ) {
+					const Vector3& a = line[insertAt - 1];
+					const Vector3& b = line[insertAt];
+					Vector3 inserted { a.x + ( b.x - a.x ) * insertT,
+					                   a.y + ( b.y - a.y ) * insertT,
+					                   a.z + ( b.z - a.z ) * insertT };
+					line.insert(line.begin() + insertAt, inserted);
+					if ( railIdx < ( int ) data_->railNodeHoles.size()
+						&& insertAt <= ( int ) data_->railNodeHoles[railIdx].size() ) {
+						data_->railNodeHoles[railIdx].insert(
+							data_->railNodeHoles[railIdx].begin() + insertAt, 0);
+					}
+					RebuildRailPoints();
+					guidePanelDragging_ = false;
+					return; // 弧長テーブル等が古くなるので今フレームはここまで
+				}
+			}
+		}
+		// 右クリック＝ノード削除（最低2点は残す）
+		if ( hoverNode >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && line.size() > 2 ) {
+			line.erase(line.begin() + hoverNode);
+			if ( railIdx < ( int ) data_->railNodeHoles.size()
+				&& hoverNode < ( int ) data_->railNodeHoles[railIdx].size() ) {
+				data_->railNodeHoles[railIdx].erase(data_->railNodeHoles[railIdx].begin() + hoverNode);
+			}
+			if ( railIdx == currentEditRailIndex_ && selectedRailNode_ >= ( int ) line.size() ) {
+				selectedRailNode_ = -1; // 消した分だけ選択が範囲外になったら解除
+			}
+			RebuildRailPoints();
+			guidePanelDragging_ = false;
+			return; // 弧長テーブル等が古くなるので今フレームはここまで（次フレームで描き直し）
+		}
+	}
+
+	if ( ImGui::IsMouseDown(ImGuiMouseButton_Left) && ( guidePanelDragNode_ >= 0 || guidePanelDragMark_ != 0 ) ) {
+		const float worldH = minH + ( mouse.x - originX ) / scale;
+		const float worldY = maxY - ( mouse.y - originY ) / scale;
+		if ( guidePanelDragNode_ >= 0 && guidePanelDragNode_ < ( int ) line.size() ) {
+			// ノード移動：投影面の2軸だけ書く（画面に出ていない軸はそのまま）。スナップ設定も効く
+			Vector3& node = line[guidePanelDragNode_];
+			const float snappedH = SnapValue(worldH);
+			const float snappedV = SnapValue(worldY);
+			if ( plane == 2 ) { node.z = snappedH; } else { node.x = snappedH; }
+			if ( plane == 3 ) { node.z = snappedV; } else { node.y = snappedV; }
+			ImGui::SetTooltip("%s=%.1f  %s=%.1f", axisAName, snappedH, axisBName, snappedV);
+			RebuildRailPoints(); // ライブ同期（ドラッグ中はゲーム側が10Hzの軽量同期に間引く）
+		} else if ( guidePanelDragMark_ != 0 ) {
+			// 区間マーカー移動：マウスに一番近い経路上の弧長距離へ（0.5m刻み）
+			float bestPx = 1e9f, bestDist = 0.0f;
+			for ( size_t i = 1; i < line.size(); ++i ) {
+				ImVec2 a = nodeCanvas(line[i - 1]), b = nodeCanvas(line[i]);
+				float vx = b.x - a.x, vy = b.y - a.y;
+				float len2 = vx * vx + vy * vy;
+				float t = ( len2 > 1e-5f )
+					? std::clamp((( mouse.x - a.x ) * vx + ( mouse.y - a.y ) * vy) / len2, 0.0f, 1.0f)
+					: 0.0f;
+				ImVec2 c { a.x + vx * t, a.y + vy * t };
+				float d = distPx(c);
+				if ( d < bestPx ) { bestPx = d; bestDist = cum[i - 1] + ( cum[i] - cum[i - 1] ) * t; }
+			}
+			float snapped = std::round(bestDist * 2.0f) * 0.5f;
+			if ( guidePanelDragMark_ == 1 ) { data_->railGuideStarts[currentEditRailIndex_] = snapped; }
+			else { data_->railGuideEnds[currentEditRailIndex_] = snapped; } // 明示指定＝「終点まで」は自動で外れる
+			RebuildRailPoints();
+		}
+	} else if ( guidePanelDragNode_ >= 0 || guidePanelDragMark_ != 0 ) {
+		// 離した：確定（Undo履歴はマウスアップ後に自動で1回分として記録される）
+		guidePanelDragNode_ = -1;
+		guidePanelDragMark_ = 0;
+		guidePanelDragRail_ = -1;
+		RebuildRailPoints();
+	}
+	guidePanelDragging_ = ( guidePanelDragNode_ >= 0 || guidePanelDragMark_ != 0 );
+
+	// --- ノード（ホバー/ドラッグ中=白・大きめ。選択中ノードは黄色の輪）---
+	for ( int i = 0; i < ( int ) line.size(); ++i ) {
+		const bool active = ( i == hoverNode || i == guidePanelDragNode_ );
+		ImVec2 c = nodeCanvas(line[i]);
+		draw->AddCircleFilled(c, active ? 6.0f : 4.5f,
+			active ? IM_COL32(255, 255, 255, 255) : IM_COL32(150, 200, 255, 255));
+		draw->AddCircle(c, active ? 6.0f : 4.5f, IM_COL32(25, 45, 75, 255), 0, 1.5f);
+		if ( railIdx == currentEditRailIndex_ && i == selectedRailNode_ ) {
+			draw->AddCircle(c, 9.0f, IM_COL32(255, 220, 80, 220), 0, 2.0f); // 3D側と同じ選択ノード
+		}
+	}
+
+	if ( motionOverlay ) {
+		// --- 区間マーカー（緑◆=ここから / 橙◆=ここまで）---
+		auto diamond = [&](const ImVec2& c, ImU32 col, float r){
+			draw->AddQuadFilled({ c.x, c.y - r }, { c.x + r, c.y }, { c.x, c.y + r }, { c.x - r, c.y }, col);
+		};
+		diamond(markStart, IM_COL32(90, 255, 120, 255),  ( hoverMark == 1 || guidePanelDragMark_ == 1 ) ? 8.0f : 6.0f);
+		diamond(markEnd,   IM_COL32(255, 170, 60, 255),  ( hoverMark == 2 || guidePanelDragMark_ == 2 ) ? 8.0f : 6.0f);
+
+		// --- 足場の実際の動きを常時アニメ表示（周期・位相・動き方を反映。ETOSの同期表示と同じ狙い）---
+		float period = 2.0f;
+		if ( currentEditRailIndex_ < ( int ) data_->railMotions.size() ) {
+			period = ( std::max )( data_->railMotions[currentEditRailIndex_].w, 0.1f );
+		}
+		const float phase = ( currentEditRailIndex_ < ( int ) data_->railMotionPhases.size() )
+			? data_->railMotionPhases[currentEditRailIndex_] : 0.0f;
+		const int guideMode = ( currentEditRailIndex_ < ( int ) data_->railGuideModes.size() )
+			? data_->railGuideModes[currentEditRailIndex_] : 0;
+		const float u = ( float ) std::fmod(ImGui::GetTime() / period + phase, 1.0);
+		const float w = ( guideMode == 1 ) ? ( 0.5f - 0.5f * std::cos(u * 6.2831853f) ) : u;
+		ImVec2 dot = nodeCanvas(posAt(s0 + ( s1 - s0 ) * w));
+		draw->AddCircleFilled(dot, 6.0f, IM_COL32(120, 220, 255, 255));
+		draw->AddCircle(dot, 9.0f, IM_COL32(120, 220, 255, 110), 0, 2.0f);
+	}
+
+	// --- 操作ボタン ---
+	if ( ImGui::SmallButton("末尾にノード追加##guidePath") ) {
+		Vector3 last = line.back(), prev = line[line.size() - 2];
+		Vector3 dir { last.x - prev.x, last.y - prev.y, last.z - prev.z };
+		float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+		if ( len < 0.01f ) { dir = { 0.0f, 3.0f, 0.0f }; }
+		else { dir = { dir.x / len * 3.0f, dir.y / len * 3.0f, dir.z / len * 3.0f }; }
+		line.push_back({ last.x + dir.x, last.y + dir.y, last.z + dir.z });
+		if ( railIdx < ( int ) data_->railNodeHoles.size() ) {
+			data_->railNodeHoles[railIdx].resize(line.size(), 0);
+		}
+		RebuildRailPoints();
+	}
+	ImGui::SameLine();
+	if ( motionOverlay ) {
+		ImGui::TextDisabled("%s-%s断面 / ガイド全長 %.1fm / 青丸=足場の今の位置", axisAName, axisBName, totalLen);
+	} else {
+		ImGui::TextDisabled("%s-%s断面 / 全長 %.1fm", axisAName, axisBName, totalLen);
+	}
 }
 
 int RailEditor::FindBlock(int rail, float dist, int level, float side) const{
@@ -950,6 +1306,9 @@ void RailEditor::DuplicateRail(int railIdx){
 	data_->railRoadModes.push_back(( railIdx < ( int ) data_->railRoadModes.size() ) ? data_->railRoadModes[railIdx] : 0);
 	data_->railEndPlazas.push_back(( railIdx < ( int ) data_->railEndPlazas.size() ) ? data_->railEndPlazas[railIdx] : 0);
 	data_->railGuideRails.push_back(( railIdx < ( int ) data_->railGuideRails.size() ) ? data_->railGuideRails[railIdx] : -1);
+	data_->railGuideStarts.push_back(( railIdx < ( int ) data_->railGuideStarts.size() ) ? data_->railGuideStarts[railIdx] : 0.0f);
+	data_->railGuideEnds.push_back(( railIdx < ( int ) data_->railGuideEnds.size() ) ? data_->railGuideEnds[railIdx] : -1.0f);
+	data_->railGuideModes.push_back(( railIdx < ( int ) data_->railGuideModes.size() ) ? data_->railGuideModes[railIdx] : 0);
 	data_->railGroups.push_back(( railIdx < ( int ) data_->railGroups.size() ) ? data_->railGroups[railIdx] : "");
 	if ( railIdx < ( int ) data_->railNodeHoles.size() ) data_->railNodeHoles.push_back(data_->railNodeHoles[railIdx]);
 	else                                                 data_->railNodeHoles.push_back(std::vector<int>(data_->railLines.back().size(), 0));
@@ -2052,6 +2411,9 @@ void RailEditor::DrawWindow(){
 					data_->railOneWay.resize(railTotal, 0);
 					data_->railSpeedMuls.resize(railTotal, 1.0f);
 					data_->railGuideRails.resize(railTotal, -1);
+					data_->railGuideStarts.resize(railTotal, 0.0f);
+					data_->railGuideEnds.resize(railTotal, -1.0f);
+					data_->railGuideModes.resize(railTotal, 0);
 					for ( int g = 0; g < ( int ) data_->railLines.size(); ++g ) {
 						if ( g == currentEditRailIndex_ || data_->railGroups[g] != currentGroup ) continue;
 						data_->railTypes[g]       = data_->railTypes[currentEditRailIndex_];
@@ -2064,6 +2426,9 @@ void RailEditor::DrawWindow(){
 						data_->railOneWay[g]      = data_->railOneWay[currentEditRailIndex_];
 						data_->railSpeedMuls[g]   = data_->railSpeedMuls[currentEditRailIndex_];
 						data_->railGuideRails[g]  = data_->railGuideRails[currentEditRailIndex_];
+						data_->railGuideStarts[g] = data_->railGuideStarts[currentEditRailIndex_];
+						data_->railGuideEnds[g]   = data_->railGuideEnds[currentEditRailIndex_];
+						data_->railGuideModes[g]  = data_->railGuideModes[currentEditRailIndex_];
 					}
 					++railVersion_;
 				}
@@ -2286,6 +2651,22 @@ void RailEditor::DrawWindow(){
 	ImGui::BulletText("形から: 「形」を選び生成 → Game Viewでクリック設置");
 	ImGui::BulletText("手描き: キャンバスに引いて生成 → クリック設置");
 	ImGui::BulletText("細かく: 空の路線→方向ボタン/マウス追加で1点ずつ");
+	ImGui::BulletText("図で調整: 下の「2D形状エディタ」で点をつかんで整える");
+	ImGui::Separator();
+
+	// --- 2D形状エディタ：選択中の路線を図で編集（動かない普通のレールもOK）---
+	//   横見図＝坂・登り下りを滑らかに / 上から＝奥行き⇔横向きのカーブを滑らかに。
+	//   スプライン路線は実際に通る曲線（Catmull-Rom）がそのまま表示される
+	if ( ImGui::CollapsingHeader("2D形状エディタ（選択路線を図で編集）", ImGuiTreeNodeFlags_DefaultOpen) ) {
+		if ( currentEditRailIndex_ >= 0 && currentEditRailIndex_ < ( int ) data_->railLines.size() ) {
+			ImGui::Text("編集対象: 路線%d", currentEditRailIndex_);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(選択は管理タブ / Game View クリック)");
+			DrawRailPathEditor(currentEditRailIndex_, false);
+		} else {
+			ImGui::TextDisabled("路線が選択されていません（管理タブ / Game View クリックで選択）");
+		}
+	}
 	ImGui::Separator();
 
 	// --- パラメータ式シェイプ生成（スタンプ配置：生成→マウスに追従→クリックで設置）---
@@ -2877,23 +3258,103 @@ void RailEditor::DrawWindow(){
 		data_->railMotionPhases.resize(data_->railLines.size(), 0.0f);
 		int& mtype = data_->railMotionTypes[currentEditRailIndex_];
 		const char* waveLabels[] = { "サイン往復", "停止つき往復 (端で一瞬止まる)", "円運動 (X,Z振幅で円)",
-		                             "ガイドレール追従 (経路を一周し続ける)" };
+		                             "ガイドレール追従 (経路に沿って移動)" };
 		ImGui::SetNextItemWidth(220.0f);
 		if ( ImGui::Combo("波形", &mtype, waveLabels, 4) ) { motionChanged = true; }
 		if ( mtype == 3 ) {
-			// ガイド追従：このレール全体が、指定したガイドレールの経路に沿って一周し続ける。
+			// ガイド追従：このレール全体が、指定したガイドレールの経路に沿って動く。
 			//   らせんガイド＋小さい足場数枚（位相をずらす）＝自動で上へ運ばれる乗り継ぎ足場
 			data_->railGuideRails.resize(data_->railLines.size(), -1);
-			int& guideIdx = data_->railGuideRails[currentEditRailIndex_];
-			ImGui::SetNextItemWidth(110.0f);
-			if ( ImGui::InputInt("ガイドレール番号", &guideIdx) ) {
-				if ( guideIdx < -1 ) guideIdx = -1;
-				if ( guideIdx >= ( int ) data_->railLines.size() ) guideIdx = ( int ) data_->railLines.size() - 1;
-				if ( guideIdx == currentEditRailIndex_ ) guideIdx = -1; // 自分自身は不可
+			data_->railGuideStarts.resize(data_->railLines.size(), 0.0f);
+			data_->railGuideEnds.resize(data_->railLines.size(), -1.0f);
+			data_->railGuideModes.resize(data_->railLines.size(), 0);
+			// ガイドは番号入力ではなく一覧から選ぶ（番号を覚えなくてよい）
+			int guideSel = data_->railGuideRails[currentEditRailIndex_];
+			auto railLabel = [&](int r) -> std::string {
+				std::string label = "路線" + std::to_string(r);
+				if ( r >= 0 && r < ( int ) data_->railGroups.size() && !data_->railGroups[r].empty() ) {
+					label += " [" + data_->railGroups[r] + "]";
+				}
+				if ( r >= 0 && r < ( int ) data_->railVisible.size() && data_->railVisible[r] == 0 ) {
+					label += " (非表示=骨組み)";
+				}
+				return label;
+			};
+			ImGui::SetNextItemWidth(220.0f);
+			if ( ImGui::BeginCombo("ガイドレール", guideSel < 0 ? "なし" : railLabel(guideSel).c_str()) ) {
+				if ( ImGui::Selectable("なし", guideSel < 0) ) {
+					data_->railGuideRails[currentEditRailIndex_] = -1;
+					guideSel = -1;
+					motionChanged = true;
+				}
+				for ( int r = 0; r < ( int ) data_->railLines.size(); ++r ) {
+					if ( r == currentEditRailIndex_ ) continue; // 自分自身は不可
+					if ( data_->railLines[r].size() < 2 ) continue;
+					if ( ImGui::Selectable(railLabel(r).c_str(), guideSel == r) ) {
+						data_->railGuideRails[currentEditRailIndex_] = r;
+						guideSel = r;
+						motionChanged = true;
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			// ワンクリックでガイドを用意：足場の位置から縦6mの骨組みレールを作って割り当てる。
+			//   形はすぐ下の「リフト経路エディタ」で点をつかんで自由に変えられる
+			if ( ImGui::Button("新規作成##newGuide") ) {
+				int platformIdx = currentEditRailIndex_;
+				Vector3 base = data_->railLines[platformIdx].empty()
+					? Vector3 { 0.0f, 0.0f, 0.0f } : data_->railLines[platformIdx].front();
+				std::string guideGroup = ( platformIdx < ( int ) data_->railGroups.size()
+					&& !data_->railGroups[platformIdx].empty() )
+					? data_->railGroups[platformIdx] : ( "リフト" + std::to_string(platformIdx) );
+				// ※AppendRail は全配列を push_back するため、これ以前に取った参照はここで無効になる
+				int newGuide = AppendRail({ base, { base.x, base.y + 6.0f, base.z } }, guideGroup);
+				data_->railVisible[newGuide]   = 0; // 見えない骨組み
+				data_->railRoadModes[newGuide] = 1; // 道は敷かない
+				data_->railGuideRails[platformIdx] = newGuide;
+				guideSel = newGuide;
 				motionChanged = true;
 			}
-			ImGui::TextDisabled("周期=1周にかかる秒数 / 位相=スタート位置(0〜1) / 振幅は使わない\n"
-				"足場を複数並べて位相を 0, 0.25, 0.5... とずらすと数珠つなぎで運ばれる");
+			if ( ImGui::IsItemHovered() ) {
+				ImGui::SetTooltip("足場の位置から縦6mのガイド（見えない骨組み）を作って割り当てる。\n形は下の経路エディタでドラッグして自由に変えられる");
+			}
+			int& guideMode = data_->railGuideModes[currentEditRailIndex_];
+			const char* guideModeLabels[] = { "一周ループ (終点まで行くと始点へ戻る)",
+			                                  "往復 (端で滑らかに折り返す)" };
+			ImGui::SetNextItemWidth(220.0f);
+			if ( ImGui::Combo("動き方##guideMode", &guideMode, guideModeLabels, 2) ) { motionChanged = true; }
+			float& guideStart = data_->railGuideStarts[currentEditRailIndex_];
+			float& guideEnd   = data_->railGuideEnds[currentEditRailIndex_];
+			ImGui::SetNextItemWidth(100.0f);
+			if ( ImGui::DragFloat("区間 ここから(m)", &guideStart, 0.5f, 0.0f, 100000.0f, "%.1f") ) {
+				if ( guideStart < 0.0f ) guideStart = 0.0f;
+				motionChanged = true;
+			}
+			ImGui::SameLine();
+			// 「終点まで」はチェックボックスで切り替える（-1をドラッグで抜けようとすると
+			// 毎フレーム-1へ戻されて操作できないため。外すと具体的な距離を指定できる）
+			bool guideToEnd = ( guideEnd < 0.0f );
+			if ( ImGui::Checkbox("終点まで##guideToEnd", &guideToEnd) ) {
+				guideEnd = guideToEnd ? -1.0f : guideStart + 10.0f;
+				motionChanged = true;
+			}
+			if ( !guideToEnd ) {
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(100.0f);
+				if ( ImGui::DragFloat("ここまで(m)##guideEnd", &guideEnd, 0.5f, 0.0f, 100000.0f, "%.1f") ) {
+					if ( guideEnd < 0.0f ) guideEnd = 0.0f;
+					motionChanged = true;
+				}
+			}
+			ImGui::TextDisabled("周期=1周期の秒数（一周ループ=1周 / 往復=行って帰る1往復）\n"
+				"位相=スタート位置(0〜1) / 振幅は使わない\n"
+				"区間: ガイドのどこからどこまでを動くか（「終点まで」を外すと距離指定）\n"
+				"「往復」ならヨッシー1-1の列車のように縦⇔横も緩急つきで滑らかに折り返す\n"
+				"ゲームビューの水色の線＝実際に通る経路（プレビューで実際に動かして確認可）");
+
+			// --- リフト経路エディタ（ETOS風：2D図で点をつかんで編集・実際の動きを常時表示）---
+			DrawRailPathEditor(guideSel, true);
 		}
 		float& mphase = data_->railMotionPhases[currentEditRailIndex_];
 		ImGui::SetNextItemWidth(140.0f);

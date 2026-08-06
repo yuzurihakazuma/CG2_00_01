@@ -107,6 +107,11 @@ struct LevelData{
     std::vector<int> railRoadModes;
     std::vector<int> railEndPlazas; // 端の丸広場（bit0=始点 / bit1=終点。0=なし）
     std::vector<int> railGuideRails; // ガイドレール追従（波形3）の対象レール番号（-1=なし）
+    // ガイド追従の詳細（railLines と同じ並び）。ヨッシー1-1の列車のように
+    // 「ガイドのここからここまで」を滑らかに動かすための区間と動き方
+    std::vector<float> railGuideStarts; // ガイド上の開始距離(m)。0=ガイドの始点
+    std::vector<float> railGuideEnds;   // ガイド上の終了距離(m)。-1=ガイドの終点まで
+    std::vector<int>   railGuideModes;  // 0=一周ループ / 1=往復（端でコサイン緩急の滑らか折り返し）
     std::vector<std::string> railGroups; // 路線のグループ名（空=未分類。リスト絞り込み/一括操作用）
     std::vector<CoinData> coins;         // 収集物（コイン）の配置
     std::vector<BlockData> blocks;       // ブロック（乗れる/ぶつかる1m角）の配置

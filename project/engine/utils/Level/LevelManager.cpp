@@ -109,6 +109,19 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     }
     rootJson["railGuideRails"] = guideRailArray;
 
+    // ガイド追従の区間と動き方（railLines と数を合わせて保存）
+    json guideStartArray = json::array();
+    json guideEndArray   = json::array();
+    json guideModeArray  = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        guideStartArray.push_back(( i < levelData.railGuideStarts.size() ) ? levelData.railGuideStarts[i] : 0.0f);
+        guideEndArray.push_back(( i < levelData.railGuideEnds.size() ) ? levelData.railGuideEnds[i] : -1.0f);
+        guideModeArray.push_back(( i < levelData.railGuideModes.size() ) ? levelData.railGuideModes[i] : 0);
+    }
+    rootJson["railGuideStarts"] = guideStartArray;
+    rootJson["railGuideEnds"]   = guideEndArray;
+    rootJson["railGuideModes"]  = guideModeArray;
+
     // 路線のグループ名（railLines と数を合わせて保存）
     json groupArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
@@ -327,6 +340,16 @@ LevelData LevelManager::Load(const std::string& fileName){
             levelData.railEndPlazas.push_back(endPlazaJson.get<int>());
         }
     }
+    // ガイド追従の区間と動き方（キーが無い旧JSONは後段の resize でデフォルトが入る）
+    if ( rootJson.contains("railGuideStarts") && rootJson["railGuideStarts"].is_array() ) {
+        for ( const auto& guideStartJson : rootJson["railGuideStarts"] ) { levelData.railGuideStarts.push_back(guideStartJson.get<float>()); }
+    }
+    if ( rootJson.contains("railGuideEnds") && rootJson["railGuideEnds"].is_array() ) {
+        for ( const auto& guideEndJson : rootJson["railGuideEnds"] ) { levelData.railGuideEnds.push_back(guideEndJson.get<float>()); }
+    }
+    if ( rootJson.contains("railGuideModes") && rootJson["railGuideModes"].is_array() ) {
+        for ( const auto& guideModeJson : rootJson["railGuideModes"] ) { levelData.railGuideModes.push_back(guideModeJson.get<int>()); }
+    }
     // 収集物（コイン）を読み込む（キーが無い旧JSONはコインなし）
     if ( rootJson.contains("coins") && rootJson["coins"].is_array() ) {
         for ( const auto& coinJson : rootJson["coins"] ) {
@@ -426,6 +449,9 @@ LevelData LevelManager::Load(const std::string& fileName){
     levelData.railRoadModes.resize(levelData.railLines.size(), 0);
     levelData.railEndPlazas.resize(levelData.railLines.size(), 0);
     levelData.railGuideRails.resize(levelData.railLines.size(), -1);
+    levelData.railGuideStarts.resize(levelData.railLines.size(), 0.0f);
+    levelData.railGuideEnds.resize(levelData.railLines.size(), -1.0f);
+    levelData.railGuideModes.resize(levelData.railLines.size(), 0);
     levelData.railGroups.resize(levelData.railLines.size());
     levelData.railMotionTypes.resize(levelData.railLines.size(), 0);
     levelData.railMotionPhases.resize(levelData.railLines.size(), 0.0f);

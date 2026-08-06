@@ -89,14 +89,17 @@ public:
         Panel_Sdf,         // SDF（フォント/画像）
         Panel_Perf,        // パフォーマンスモニター
         Panel_File,        // ファイルエディタ
+        Panel_Minimap,     // ミニマップ（俯瞰ビュー）※保存の並び維持のため必ず末尾に追加する
         Panel_Count
     };
     UiShell GetUiShell() const{ return uiShell_; }
-    // このパネルを今フレーム描くべきか。Dockモードは常に true（＝従来と同一）、
-    // Iconモードではアイコンで選んだものだけ true（非表示パネルは Begin ごと呼ばれない＝コストゼロ）
+    // このパネルを今フレーム描くべきか。どちらのモードでも開閉できる（機能は両モード共通）：
+    //   Dockモード＝既定は全部表示で、メニューバー「ウィンドウ」から非表示にできる。
+    //   Iconモード＝ツールバーのアイコンで選んだものだけ true（非表示パネルは Begin ごと呼ばれない＝コストゼロ）
     bool IsPanelVisible(int panel) const{
-        if ( uiShellFrame_ == UiShell::Dock ) return true; // フレーム先頭で確定した値で判定
-        return panel >= 0 && panel < Panel_Count && panelVisible_[panel];
+        if ( panel < 0 || panel >= Panel_Count ) return false;
+        if ( uiShellFrame_ == UiShell::Dock ) return !dockPanelHidden_[panel]; // フレーム先頭で確定した値で判定
+        return panelVisible_[panel];
     }
 
 	// シーンから SkinnedObj3d を登録する。シーン終了時は必ず nullptr を渡してリセットすること
@@ -126,6 +129,9 @@ public:
 	const std::vector<int>& GetEditorRailRoadModes() const;
 	const std::vector<int>& GetEditorRailEndPlazas() const; // 端の丸広場（bit0=始点/bit1=終点）
 	const std::vector<int>& GetEditorRailGuideRails() const; // ガイドレール追従の対象（-1=なし）
+	const std::vector<float>& GetEditorRailGuideStarts() const; // ガイド区間の開始(m)
+	const std::vector<float>& GetEditorRailGuideEnds() const;   // ガイド区間の終了(m)。-1=終点まで
+	const std::vector<int>&   GetEditorRailGuideModes() const;  // 0=一周ループ/1=往復
 	const std::vector<CoinData>& GetEditorCoins() const; // 収集物（コイン）の配置
 
 	// --- ブロック（乗れる/ぶつかる1m角。Game Viewペイント配置の橋渡し）---
@@ -139,6 +145,9 @@ public:
 	void AddEditorBlock(int rail, float dist, int level, float side, int type);
 	void RemoveEditorBlock(int rail, float dist, int level, float side);
 	bool GetEditorRailMotionPreview() const; // 動くレールをエディタ中も再生するか
+	void SetEditorRailMotionPreview(bool v); // 同（ゲームビュー右クリックメニューからの切替用）
+	// ゲーム側から Play モードを開始する（右クリック「ここからテストプレイ」用。Playボタンと同じ処理）
+	void RequestPlay();
 	// デモ展示（回転ブロック/オーラ/SDF卵/見本の人形）を表示するか（表示メニューでON/OFF）
 	bool IsDemoVisible() const{ return showDemo_; }
 	// レールエディタで選択中のノード（レール番号＋ワールド座標）。
@@ -159,8 +168,8 @@ public:
 	void SetExternalDragActive(bool active){ externalDragActive_ = active; }
 	// ジョイント表示モード（0=エディタのみ/1=常に/2=非表示。RoadMesh が参照）
 	int GetEditorJointVisible() const;
-	// レールノードをギズモ/フリーハンドでドラッグ中か（ドラッグ中は道の再生成を間引く）
-	bool IsRailDragging() const{ return railSelDragging_ || railFreehandStroking_; }
+	// レールノードをギズモ/フリーハンド/リフト経路エディタでドラッグ中か（ドラッグ中は道の再生成を間引く）
+	bool IsRailDragging() const;
 	const std::vector<int>&   GetEditorRailMotionTypes() const;  // 動きの波形（0=sin/1=停止つき/2=円）
 	const std::vector<float>& GetEditorRailMotionPhases() const; // 動きの位相（0〜1）
 	const std::vector<int>&   GetEditorRailOneWay() const;       // 片方向（0=両/1=正/2=逆）
@@ -241,6 +250,9 @@ private:
     //   途中で切り替えると「ドッキング無効のままドック再構築」が走りImGui内部でクラッシュする）
     UiShell uiShellFrame_ = UiShell::Dock;
     bool panelVisible_[Panel_Count] = {}; // Iconモードで表示中のパネル
+    // Dockモードで「非表示」にしたパネル（既定{}=全部false=全部表示。メニューバー「ウィンドウ」で切替）。
+    //   否定形で持つのは、配列のゼロ初期化＝従来どおり全表示になるようにするため
+    bool dockPanelHidden_[Panel_Count] = {};
     bool dockRelayoutPending_ = false;    // アイコン→ドック復帰時に初期レイアウトを組み直す
     float uiDrawerWidth_ = 460.0f;        // ドロワーの幅（UI設定・縁ドラッグで変更、保存）
     int   uiDrawerSide_ = 0;              // ドロワーの位置（0=右 / 1=左。ツールバーは反対側へ）

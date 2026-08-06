@@ -164,6 +164,10 @@ public:
     int   motionType  = 0;
     int   guideRail   = -1; // motionType=3 の追従先レール番号（-1=なし）
     float motionPhase = 0.0f;
+    // ガイド追従の区間と動き方（ヨッシー1-1の列車式：ガイドの一部区間だけを滑らかに動ける）
+    float guideStart = 0.0f;  // ガイド上の開始距離(m)
+    float guideEnd   = -1.0f; // ガイド上の終了距離(m)。-1=ガイドの終点まで
+    int   guideMode  = 0;     // 0=一周ループ / 1=往復（コサイン緩急で端が滑らか）
 
     // 片方向レール（0=両方向 / 1=正方向のみ(front→back) / 2=逆方向のみ(back→front)）
     int oneWay = 0;

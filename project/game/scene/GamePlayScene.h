@@ -175,6 +175,14 @@ private: // メンバ変数
 	BlockData blockDragOrig_ {}; // つかんだ時のブロック（キャンセル復帰用）
 	BlockData blockDragCell_ {}; // ドラッグ中の移動先セル候補
 	bool      blockDragDup_ = false; // Ctrl押下＝複製モード（元を残して移動先へコピー）
+	// コインのつかみ移動（-1=なし。Shift+ドラッグで高さ調整。離した時に確定→Sync）
+	int      coinDragIdx_ = -1;
+	CoinData coinDragData_ {}; // ドラッグ中の移動先候補（rail/dist/height）
+	CoinData coinDragOrig_ {}; // つかんだ瞬間のコイン（クリックだけ/Undo割込み時に書き込まない照合用）
+	int      coinHover_ = -1;  // 今フレームにマウス直下だったコイン（ブロックつかみとの優先制御用）
+	// 右クリック「ここからテストプレイ」：次の Edit→Play でこの地点から開始（-1=通常スタート）
+	int   testPlayRail_ = -1;
+	float testPlayDist_ = 0.0f;
 
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;

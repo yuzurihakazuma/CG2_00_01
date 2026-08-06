@@ -70,6 +70,35 @@ bool RouteDropToSdf(const std::string& path, bool shiftHeld){
 } // namespace
 
 // シングルトンインスタンスの取得
+#ifdef USE_IMGUI
+namespace {
+    // パネル定義（アイコン＋短いラベルの2行ボタン・ツールチップ・ウィンドウ名）。
+    //   アイコンは Segoe MDL2 のグリフ（UTF-8直書き）。EditorPanel と同じ並び順。
+    //   アイコンツールバーとメニューバー「ウィンドウ」の両方から参照する
+    struct PanelIconDef { const char* icon; const char* name; const char* windowTitle; };
+    const PanelIconDef kPanelIcons[EditorManager::Panel_Count] = {
+        { "\xEE\x9D\xA8\n操作", "コントロール（Play / Stop・タイムスケール）", "コントロール (Play / Stop)" },        // E768 ▶
+        { "\xEE\xA3\xB1\n階層", "ヒエラルキー（配置リスト・マップ保存/読込）", "ヒエラルキー (配置リスト)" },          // E8F1 リスト
+        { "\xEE\xA2\xB7\n資産", "アセットブラウザ（モデルのドラッグ配置）", "アセットブラウザ (Assets)" },            // E8B7 フォルダ
+        { "\xEE\xA4\x8F\n詳細", "インスペクター（詳細設定：ポストエフェクト等）", "インスペクター (詳細設定)" },       // E90F レンチ
+        { "\xEE\x9C\x8F\n変形", "インスペクター（Transform：ギズモ対象の編集）", "インスペクター (Transform)" },      // E70F 鉛筆
+        { "\xEE\x9D\xB4\n線路", "レールエディタ（管理/作成/動き/配置物/接続）", "レールエディタ" },                  // E774 地球（コース）
+        { "\xEE\x9C\xA2\n映像", "カメラエディタ（カメラゾーン）", "カメラエディタ" },                              // E722 カメラ
+        { "\xEE\x9C\x99\n配置", "配置エディタ（コイン / ブロック）", "配置エディタ (Coin/Block)" },                // E719 バッグ
+        { "\xEE\x9D\xBB\n敵",   "敵配置エディタ", "敵配置エディタ (Enemy Editor)" },                              // E77B 人物
+        { "\xEE\x9C\xB4\n粒子", "GPUパーティクルエディタ", "GPU Particle Editor" },                              // E734 星
+        { "\xEE\xA3\x92\n文字", "SDF（フォント / 画像）", "SDF (フォント/画像)" },                                // E8D2 フォント
+        { "\xEE\xA0\xA3\n計測", "パフォーマンスモニター", "パフォーマンスモニター" },                              // E823 時計
+        { "\xEE\xA2\xA5\n書類", "ファイルエディタ（Project）", "ファイルエディタ (Project)" },                     // E8A5 ドキュメント
+        { "\xEE\x9C\x87\nマップ", "ミニマップ（俯瞰ビュー。クリックでカメラ移動）", "ミニマップ (俯瞰)" },            // E707 地図
+    };
+    // 単発アクションのアイコングリフ
+    const char* kIconGlyphBack = "\xEE\x9C\x80"; // U+E700 メニュー（三本線）
+    const char* kIconGlyphSave = "\xEE\x9D\x8E"; // U+E74E フロッピー（保存）
+    const char* kIconGlyphGear = "\xEE\x9C\x93"; // U+E713 歯車（設定）
+}
+#endif
+
 EditorManager* EditorManager::GetInstance(){
     static EditorManager instance;
     return &instance;
@@ -237,6 +266,7 @@ void EditorManager::Update(){
         // バラバラの浮遊窓が散らばらないように、全ウィンドウの定位置を決めておく）
         ImGui::DockBuilderDockWindow("配置エディタ (Coin/Block)",     dock_bottom);
         ImGui::DockBuilderDockWindow("カメラエディタ",               dock_bottom);
+        ImGui::DockBuilderDockWindow("ミニマップ (俯瞰)",            dock_left);
         ImGui::DockBuilderDockWindow("SDF (フォント/画像)",          dock_bottom);
         ImGui::DockBuilderDockWindow("ファイルエディタ (Project)",    dock_bottom);
         ImGui::DockBuilderDockWindow("敵配置エディタ (Enemy Editor)", dock_right);
@@ -283,6 +313,16 @@ void EditorManager::Update(){
     ImGui::End();
     } // Panel_Control
 
+    // Ctrl+S の保存はヒエラルキーパネル内のハンドラが担当だが、パネルを非表示に
+    // していると効かなくなるので、その間はここで代行する（ドック/アイコン両モード共通）
+    {
+        ImGuiIO& saveIo = ImGui::GetIO();
+        if ( levelEditor_ && !IsPanelVisible(Panel_Hierarchy) && !saveIo.WantTextInput
+            && saveIo.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false) ) {
+            levelEditor_->QuickSave();
+        }
+    }
+
     // 2. メインメニューバー
     if ( ImGui::BeginMainMenuBar() ) {
         if ( ImGui::BeginMenu("ファイル (File)") ) {
@@ -310,6 +350,28 @@ void EditorManager::Update(){
                 SaveUiConfig();
             }
             if ( ImGui::MenuItem("UI設定（フォント / スケール）") ) { showUiSettings_ = true; }
+            ImGui::Separator();
+            // パネルの表示/非表示（ドック・アイコン両モード共通の機能。今のモード側の設定を切り替える）
+            if ( ImGui::BeginMenu(uiShell_ == UiShell::Dock ? "パネル表示（ドック）" : "パネル表示（アイコン）") ) {
+                for ( int i = 0; i < Panel_Count; ++i ) {
+                    bool visible = ( uiShell_ == UiShell::Dock ) ? !dockPanelHidden_[i] : panelVisible_[i];
+                    if ( ImGui::MenuItem(kPanelIcons[i].windowTitle, nullptr, visible) ) {
+                        if ( uiShell_ == UiShell::Dock ) { dockPanelHidden_[i] = visible; }
+                        else                             { panelVisible_[i] = !visible; }
+                        SaveUiConfig();
+                    }
+                }
+                ImGui::EndMenu();
+            }
+            // ワークスペース一括切替（アイコンツールバーと同じ機能をメニューからも）
+            if ( ImGui::BeginMenu("ワークスペース（一式切替）") ) {
+                if ( ImGui::MenuItem("設置（配置エディタ＋操作）") )       { ApplyWorkspace(0); }
+                if ( ImGui::MenuItem("調整（インスペクタ＋計測＋操作）") ) { ApplyWorkspace(1); }
+                if ( ImGui::MenuItem("線路（レール＋カメラ＋階層）") )     { ApplyWorkspace(2); }
+                if ( ImGui::MenuItem("敵配置（敵エディタ＋操作）") )       { ApplyWorkspace(3); }
+                if ( ImGui::MenuItem("全部閉じる（ゲーム画面のみ）") )     { ApplyWorkspace(4); }
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if ( ImGui::MenuItem("レイアウトをリセット") ) {
                 // ノードを削除することで次フレームの GetNode チェックが nullptr になり再構築される
@@ -1343,35 +1405,23 @@ void EditorManager::Draw(){
     }
 }
 
+// ゲーム側から Play モードを開始する（右クリック「ここからテストプレイ」用。Playボタンと同じ処理）
+void EditorManager::RequestPlay(){
+    currentMode_ = EngineMode::Play;
+    Time::GetInstance()->SetTimeScale(1.0f);
+}
+
+// レール編集のドラッグ中か（ゲーム側が道の再生成を10Hzへ間引く判定に使う）。
+//   ギズモ/フリーハンドに加えて、動きタブの「リフト経路エディタ」のノードドラッグも含める
+bool EditorManager::IsRailDragging() const{
+    if ( railSelDragging_ || railFreehandStroking_ ) return true;
+    return levelEditor_ && levelEditor_->GetRailEditor()->IsGuidePanelDragging();
+}
+
 // =====================================================================
 //  UIシェル（アイコンモード）
 // =====================================================================
-#ifdef USE_IMGUI
-namespace {
-    // アイコンモードのパネル定義（アイコン＋短いラベルの2行ボタン・ツールチップ・ウィンドウ名）。
-    //   アイコンは Segoe MDL2 のグリフ（UTF-8直書き）。EditorPanel と同じ並び順
-    struct PanelIconDef { const char* icon; const char* name; const char* windowTitle; };
-    const PanelIconDef kPanelIcons[EditorManager::Panel_Count] = {
-        { "\xEE\x9D\xA8\n操作", "コントロール（Play / Stop・タイムスケール）", "コントロール (Play / Stop)" },        // E768 ▶
-        { "\xEE\xA3\xB1\n階層", "ヒエラルキー（配置リスト・マップ保存/読込）", "ヒエラルキー (配置リスト)" },          // E8F1 リスト
-        { "\xEE\xA2\xB7\n資産", "アセットブラウザ（モデルのドラッグ配置）", "アセットブラウザ (Assets)" },            // E8B7 フォルダ
-        { "\xEE\xA4\x8F\n詳細", "インスペクター（詳細設定：ポストエフェクト等）", "インスペクター (詳細設定)" },       // E90F レンチ
-        { "\xEE\x9C\x8F\n変形", "インスペクター（Transform：ギズモ対象の編集）", "インスペクター (Transform)" },      // E70F 鉛筆
-        { "\xEE\x9D\xB4\n線路", "レールエディタ（管理/作成/動き/配置物/接続）", "レールエディタ" },                  // E774 地球（コース）
-        { "\xEE\x9C\xA2\n映像", "カメラエディタ（カメラゾーン）", "カメラエディタ" },                              // E722 カメラ
-        { "\xEE\x9C\x99\n配置", "配置エディタ（コイン / ブロック）", "配置エディタ (Coin/Block)" },                // E719 バッグ
-        { "\xEE\x9D\xBB\n敵",   "敵配置エディタ", "敵配置エディタ (Enemy Editor)" },                              // E77B 人物
-        { "\xEE\x9C\xB4\n粒子", "GPUパーティクルエディタ", "GPU Particle Editor" },                              // E734 星
-        { "\xEE\xA3\x92\n文字", "SDF（フォント / 画像）", "SDF (フォント/画像)" },                                // E8D2 フォント
-        { "\xEE\xA0\xA3\n計測", "パフォーマンスモニター", "パフォーマンスモニター" },                              // E823 時計
-        { "\xEE\xA2\xA5\n書類", "ファイルエディタ（Project）", "ファイルエディタ (Project)" },                     // E8A5 ドキュメント
-    };
-    // 単発アクションのアイコングリフ
-    const char* kIconGlyphBack = "\xEE\x9C\x80"; // U+E700 メニュー（三本線）
-    const char* kIconGlyphSave = "\xEE\x9D\x8E"; // U+E74E フロッピー（保存）
-    const char* kIconGlyphGear = "\xEE\x9C\x93"; // U+E713 歯車（設定）
-}
-#endif
+// ※パネル定義テーブル(kPanelIcons)はメニューバーからも参照するためファイル冒頭に移動した
 
 void EditorManager::DrawIconToolbar(){
 #ifdef USE_IMGUI
@@ -1384,10 +1434,14 @@ void EditorManager::DrawIconToolbar(){
         ? viewport->WorkPos.x + viewport->WorkSize.x - toolbarWidth - 6.0f
         : viewport->WorkPos.x + 6.0f;
     ImGui::SetNextWindowPos(ImVec2(toolbarX, viewport->WorkPos.y + 6.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowViewport(viewport->ID); // 別OSウィンドウ化させない（ゲーム画面の中に固定）
+    // ボタンが増えて画面の高さを超えても外へはみ出さない（超えた分は中でスクロールできる）
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, viewport->WorkSize.y - 12.0f));
     ImGui::SetNextWindowBgAlpha(0.88f);
     ImGuiWindowFlags toolbarFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking |
         ImGuiWindowFlags_NoFocusOnAppearing;
     if ( !ImGui::Begin("##IconToolbar", nullptr, toolbarFlags) ) { ImGui::End(); return; }
     // 他の浮遊ウィンドウに隠れないよう毎フレーム最前面へ
@@ -1558,14 +1612,19 @@ void EditorManager::DrawUiSettingsWindow(){
 }
 
 // ワークスペース：作業内容に合わせてパネル一式を切り替える（0=設置/1=調整/2=レール/3=敵/4=全部閉じる）
+//   ドック・アイコン両モード共通の機能。今のモード側のパネル表示設定に適用する
 void EditorManager::ApplyWorkspace(int index){
-    for ( bool& visible : panelVisible_ ) { visible = false; }
+    bool enable[Panel_Count] = {};
     switch ( index ) {
-    case 0: panelVisible_[Panel_Items] = true;  panelVisible_[Panel_Control] = true; break;
-    case 1: panelVisible_[Panel_Inspector] = true; panelVisible_[Panel_Perf] = true; panelVisible_[Panel_Control] = true; break;
-    case 2: panelVisible_[Panel_Rail] = true; panelVisible_[Panel_Camera] = true; panelVisible_[Panel_Hierarchy] = true; break;
-    case 3: panelVisible_[Panel_Enemy] = true; panelVisible_[Panel_Control] = true; break;
+    case 0: enable[Panel_Items] = true;  enable[Panel_Control] = true; break;
+    case 1: enable[Panel_Inspector] = true; enable[Panel_Perf] = true; enable[Panel_Control] = true; break;
+    case 2: enable[Panel_Rail] = true; enable[Panel_Camera] = true; enable[Panel_Hierarchy] = true; break;
+    case 3: enable[Panel_Enemy] = true; enable[Panel_Control] = true; break;
     default: break; // 4: 全部閉じる（ゲーム画面のみ）
+    }
+    for ( int i = 0; i < Panel_Count; ++i ) {
+        if ( uiShell_ == UiShell::Dock ) { dockPanelHidden_[i] = !enable[i]; }
+        else                             { panelVisible_[i] = enable[i]; }
     }
     SaveUiConfig();
 }
@@ -1577,6 +1636,10 @@ void EditorManager::SaveUiConfig() const{
     fprintf(fp, "shell=%d\nfont=%d\nscale=%.3f\ndrawer=%.0f\nside=%d\nautoshow=%d\npanels=",
             ( int ) uiShell_, uiFontIndex_, uiFontScale_, uiDrawerWidth_, uiDrawerSide_, uiAutoShowEditor_ ? 1 : 0);
     for ( int i = 0; i < Panel_Count; ++i ) { fputc(panelVisible_[i] ? '1' : '0', fp); }
+    fputc('\n', fp);
+    // ドックモード側の非表示パネル（1=非表示）。キー名は panels= と部分一致しないものにする
+    fputs("dockhide=", fp);
+    for ( int i = 0; i < Panel_Count; ++i ) { fputc(dockPanelHidden_[i] ? '1' : '0', fp); }
     fputc('\n', fp);
     fclose(fp);
 }
@@ -1609,6 +1672,12 @@ void EditorManager::LoadUiConfig(){
             found += 7;
             for ( int i = 0; i < Panel_Count && ( found[i] == '0' || found[i] == '1' ); ++i ) {
                 panelVisible_[i] = ( found[i] == '1' );
+            }
+        }
+        if ( ( found = strstr(buffer, "dockhide=") ) ) {
+            found += 9;
+            for ( int i = 0; i < Panel_Count && ( found[i] == '0' || found[i] == '1' ); ++i ) {
+                dockPanelHidden_[i] = ( found[i] == '1' );
             }
         }
     } else {
@@ -1680,6 +1749,18 @@ const std::vector<int>& EditorManager::GetEditorRailGuideRails() const{
     static const std::vector<int> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGuideRails() : kEmpty;
 }
+const std::vector<float>& EditorManager::GetEditorRailGuideStarts() const{
+    static const std::vector<float> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGuideStarts() : kEmpty;
+}
+const std::vector<float>& EditorManager::GetEditorRailGuideEnds() const{
+    static const std::vector<float> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGuideEnds() : kEmpty;
+}
+const std::vector<int>& EditorManager::GetEditorRailGuideModes() const{
+    static const std::vector<int> kEmpty;
+    return levelEditor_ ? levelEditor_->GetRailEditor()->GetRailGuideModes() : kEmpty;
+}
 const std::vector<CoinData>& EditorManager::GetEditorCoins() const{
     static const std::vector<CoinData> kEmpty;
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetCoins() : kEmpty;
@@ -1692,6 +1773,10 @@ int EditorManager::GetEditorBlockVersion() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetBlockVersion() : 0;
 }
 bool EditorManager::IsEditorBlockPaintMode() const{
+    // 配置エディタパネルを閉じている間はペイントモードも実質OFF扱いにする。
+    //   フラグだけ残ると「見えないペイントモード」が入りっぱなしになり、
+    //   敵/コイン/ブロックのつかみや右クリックメニューまで全部効かなくなる事故が起きる
+    if ( !IsPanelVisible(Panel_Items) ) return false;
     return levelEditor_ ? levelEditor_->GetRailEditor()->IsBlockPaintMode() : false;
 }
 bool EditorManager::IsEditorBlockEraseMode() const{
@@ -1724,6 +1809,9 @@ bool EditorManager::GetEditorSelectedNode(int& outRail, Vector3& outPos) const{
 }
 bool EditorManager::GetEditorRailMotionPreview() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->IsMotionPreview() : false;
+}
+void EditorManager::SetEditorRailMotionPreview(bool v){
+    if ( levelEditor_ ) { levelEditor_->GetRailEditor()->SetMotionPreview(v); }
 }
 int EditorManager::GetEditorJointVisible() const{
     return levelEditor_ ? levelEditor_->GetRailEditor()->GetJointVisible() : 1;
