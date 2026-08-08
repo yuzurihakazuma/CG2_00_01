@@ -85,13 +85,15 @@ private:
         std::unique_ptr<Model> model;
         std::unique_ptr<Obj3d> obj;
         int rail = -1;
-        bool isJoint = false; // ジョイントのベイクメッシュ（表示モードで描画を切替）
+        bool isJoint = false;   // ジョイントのベイクメッシュ（表示モードで描画を切替）
+        bool hiddenNow = false; // 出現前の道（Update で毎フレーム判定 → Draw でスキップ）
     };
     // --- ピース（road_end / road_joint）スロット。Obj3d を使い回す ---
     struct PieceSlot {
         std::unique_ptr<Obj3d> obj;
         int rail = -1;
         Vector3 base {};
+        bool hiddenNow = false; // 出現前の道（同上）
     };
 
     // 生成済みメッシュを空きスロットへ書き込む（スロットが足りなければ1個だけ確保）

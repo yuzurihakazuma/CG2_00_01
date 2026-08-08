@@ -598,8 +598,27 @@ void GamePlayScene::UpdatePlayMode(){
 	Input* input = Input::GetInstance();
 	float deltaTime = Time::GetInstance()->GetDeltaTime();
 
-	// 動くレール → プレイヤー → 敵 の順で更新（位置の整合のため）
-	railField_.UpdateMotion(deltaTime);
+	// 動くレール → プレイヤー → 敵 の順で更新（位置の整合のため）。
+	//   「乗ったら動き出す」レールの発動判定用に、接地中のプレイヤーのレール番号を渡す
+	const int ridingRail = ( player_ && player_->IsGrounded() ) ? player_->GetCurrentRail() : -1;
+	railField_.UpdateMotion(deltaTime, ridingRail);
+
+	// 「乗ったら動き出す」で待機中のリフトへ金色の「！」目印（乗れば動くことが一目で分かる）
+	{
+		static float exclaimTime = 0.0f;
+		exclaimTime += deltaTime;
+		for ( const auto& rail : railField_.GetRails() ) {
+			if ( !rail.HasMotion() || rail.motionTrigger != 1 || rail.motionStarted ) continue;
+			if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+			Vector3 markPos = rail.GetPositionByDistance(rail.GetLength() * 0.5f);
+			float bob = std::sin(exclaimTime * 4.0f) * 0.08f;
+			float baseY = markPos.y + 1.4f + bob;
+			const Vector4 gold { 1.0f, 0.85f, 0.2f, 1.0f };
+			DebugDraw::GetInstance()->Line({ markPos.x, baseY + 0.5f, markPos.z },
+			                               { markPos.x, baseY + 0.18f, markPos.z }, gold);
+			DebugDraw::GetInstance()->Sphere({ markPos.x, baseY, markPos.z }, 0.06f, gold, 6);
+		}
+	}
 	if ( player_ ) {
 		// カメラの向きを渡す：向き切替（180°回り込み等）の後も「Dで画面の右へ」進めるように、
 		// プレイヤー側でキー→ワールド方向の割り当てを回す
@@ -699,7 +718,7 @@ void GamePlayScene::UpdateSceneVisuals(){
 		static bool prevMotionPreview = false;
 		bool motionPreview = ( currentMode == EngineMode::Edit )
 		                  && EditorManager::GetInstance()->GetEditorRailMotionPreview();
-		if ( motionPreview ) { railField_.UpdateMotion(1.0f / 60.0f); }
+		if ( motionPreview ) { railField_.UpdateMotion(1.0f / 60.0f, RailField::kMotionStartAll); }
 		else if ( prevMotionPreview && currentMode == EngineMode::Edit ) { railField_.ResetMotion(); }
 		prevMotionPreview = motionPreview;
 	}
@@ -724,6 +743,9 @@ void GamePlayScene::UpdateSceneVisuals(){
 			PostEffect::GetInstance()->SetEffectActive(PostEffectType::IrisWipe, true);
 			// ミスの瞬間は画面の色も抜く（グレースケール）。開く時に色が戻って「復活」感を出す
 			PostEffect::GetInstance()->SetEffectActive(PostEffectType::Grayscale, true);
+			// 動くレールを基準位置へ戻す（「片道で行ったきり」の列車が戻らず詰むのを防ぐ。
+			//   「乗ったら動き出す」は待機に、「出現する道」は消えた状態に戻る＝区間をやり直せる）
+			railField_.ResetMotion();
 		}
 		if ( irisPhase_ != 0 ) {
 			irisTimer_ += 1.0f / 60.0f;
@@ -1686,8 +1708,10 @@ void GamePlayScene::DrawDebugUI(){
 			Vector3 p = ctxRails[rail].GetPositionByDistance(dist);
 			return { p.x, p.y + lift, p.z };
 		};
-		// つかみ移動の最中はメニューを開かない（ドラッグ中の右クリックで確定位置が乱れるため）
-		const bool anyDragActive = ( enemyDragIdx_ >= 0 || coinDragIdx_ >= 0 || blockDragIdx_ >= 0 );
+		// つかみ移動の最中・ガイドハンドル圏内ではメニューを開かない
+		//   （ハンドルの右クリック＝点の削除と、配置メニューが二重発動しないように）
+		const bool anyDragActive = ( enemyDragIdx_ >= 0 || coinDragIdx_ >= 0 || blockDragIdx_ >= 0
+			|| guideHandleDragNode_ >= 0 || guideHandleHover_ );
 		if ( gvCtx.hovered && !gvCtx.gizmoActive && rightClickedStill && !anyDragActive ) {
 			// マウスに一番近いレール上の点（0.5m刻みサンプル・60px以内）を配置先にする
 			int bestRail = -1; float bestDist = 0.0f; float bestPx = 60.0f;
@@ -1911,6 +1935,215 @@ void GamePlayScene::DrawDebugUI(){
 				}
 				break;
 			}
+			}
+		}
+
+		// --- ガイドレール（骨組み）の可視化＋直接編集ハンドル ---
+		//   選択中の足場のガイドは太いオレンジの点＝そのまま画面上でつかんで動かせる
+		//   （移動はカメラに平行な面。Ctrl+クリック=線上に点を追加 / 右クリック=点を削除）。
+		//   ハンドル圏内のクリックはレール選択に化けないので、モード切替や固定は不要。
+		//   他の足場のガイドは細線のみ（場所の目印）
+		{
+			auto* levelEd = EditorManager::GetInstance()->GetLevelEditor();
+			RailEditor* railEd = levelEd ? levelEd->GetRailEditor() : nullptr;
+			const auto& gv = EditorManager::GetInstance()->GetGameViewMouse();
+			guideHandleHover_ = false;
+
+			// 選択中の足場のガイド番号（足場を選んでいなければ -1）
+			int currentRail = railEd ? railEd->GetCurrentRailIndex() : -1;
+			int activeGuide = -1;
+			if ( currentRail >= 0 && currentRail < ( int ) rails.size()
+				&& rails[currentRail].motionType == 3 ) {
+				int g = rails[currentRail].guideRail;
+				if ( g >= 0 && g < ( int ) rails.size() && railEd->GetNodeCountOf(g) >= 2 ) { activeGuide = g; }
+			}
+			auto guideProject = [&](const Vector3& worldPos, Vector2& out) -> bool {
+				Vector2 ndc;
+				if ( !WorldToNdc(worldPos, gv.viewProj, ndc) ) return false;
+				out.x = gv.imgMin.x + ( ndc.x * 0.5f + 0.5f ) * gv.imgSize.x;
+				out.y = gv.imgMin.y + ( 1.0f - ( ndc.y * 0.5f + 0.5f ) ) * gv.imgSize.y;
+				return true;
+			};
+
+			// 1) 非選択の見えないガイドは細線で場所だけ示す
+			std::vector<bool> guideDrawn(rails.size(), false);
+			if ( activeGuide >= 0 ) { guideDrawn[activeGuide] = true; } // 選択中のは下でハンドル付きで描く
+			for ( int railIndex = 0; railIndex < ( int ) rails.size(); ++railIndex ) {
+				const SplineRail& rail = rails[railIndex];
+				if ( rail.motionType != 3 ) continue;
+				int guideIdx = rail.guideRail;
+				if ( guideIdx < 0 || guideIdx >= ( int ) rails.size() || guideDrawn[guideIdx] ) continue;
+				const SplineRail& guide = rails[guideIdx];
+				if ( guide.visible || guide.nodes.size() < 2 || guide.GetLength() <= 0.0f ) continue;
+				guideDrawn[guideIdx] = true;
+				float guideLen = guide.GetLength();
+				int guideSteps = std::clamp(( int ) guideLen, 2, 100);
+				Vector3 prevPoint = guide.GetPositionByDistance(0.0f);
+				for ( int s = 1; s <= guideSteps; ++s ) {
+					Vector3 curPoint = guide.GetPositionByDistance(guideLen * ( float ) s / ( float ) guideSteps);
+					DebugDraw::GetInstance()->Line(prevPoint, curPoint, { 1.0f, 0.65f, 0.25f, 0.45f });
+					prevPoint = curPoint;
+				}
+			}
+
+			// 2) 選択中の足場のガイド：エディタの節点データを直接描いて、その場で編集できるようにする
+			//    （ドラッグ中も遅延なく追従するよう、RailField のコピーではなくエディタ側の値を使う）
+			if ( railEd && activeGuide >= 0 ) {
+				ImGuiIO& io = ImGui::GetIO();
+				const int nodeCount = railEd->GetNodeCountOf(activeGuide);
+				// 折れ線（太めのオレンジ）
+				Vector3 prevNode {};
+				for ( int i = 0; i < nodeCount; ++i ) {
+					Vector3 nodePos;
+					if ( !railEd->GetNodePosOf(activeGuide, i, nodePos) ) continue;
+					if ( i > 0 ) { DebugDraw::GetInstance()->Line(prevNode, nodePos, { 1.0f, 0.65f, 0.25f, 0.95f }); }
+					prevNode = nodePos;
+				}
+				// ホバー中のノード / 線分（画面距離で判定）
+				int hoverNode = -1; float bestNodePx = 14.0f;
+				for ( int i = 0; i < nodeCount; ++i ) {
+					Vector3 nodePos; if ( !railEd->GetNodePosOf(activeGuide, i, nodePos) ) continue;
+					Vector2 sp; if ( !guideProject(nodePos, sp) ) continue;
+					float dx = sp.x - gv.mousePos.x, dy = sp.y - gv.mousePos.y;
+					float d = std::sqrt(dx * dx + dy * dy);
+					if ( d < bestNodePx ) { bestNodePx = d; hoverNode = i; }
+				}
+				int hoverSeg = -1; float segT = 0.0f;
+				if ( hoverNode < 0 && gv.hovered ) {
+					float bestSegPx = 12.0f;
+					for ( int i = 1; i < nodeCount; ++i ) {
+						Vector3 a3, b3;
+						if ( !railEd->GetNodePosOf(activeGuide, i - 1, a3) ) continue;
+						if ( !railEd->GetNodePosOf(activeGuide, i, b3) ) continue;
+						Vector2 a, b;
+						if ( !guideProject(a3, a) || !guideProject(b3, b) ) continue;
+						float vx = b.x - a.x, vy = b.y - a.y;
+						float len2 = vx * vx + vy * vy;
+						float t = ( len2 > 1e-5f )
+							? std::clamp((( gv.mousePos.x - a.x ) * vx + ( gv.mousePos.y - a.y ) * vy) / len2, 0.0f, 1.0f)
+							: 0.0f;
+						float cx = a.x + vx * t, cy = a.y + vy * t;
+						float dx = cx - gv.mousePos.x, dy = cy - gv.mousePos.y;
+						float d = std::sqrt(dx * dx + dy * dy);
+						if ( d < bestSegPx ) { bestSegPx = d; hoverSeg = i; segT = t; }
+					}
+				}
+				guideHandleHover_ = gv.hovered && ( hoverNode >= 0 || hoverSeg >= 0 );
+				// ハンドル圏内 or ドラッグ中はレール編集のクリック処理を止める（選択が奪われない）
+				if ( guideHandleHover_ || guideHandleDragNode_ >= 0 ) {
+					EditorManager::GetInstance()->SetExternalDragActive(true);
+					ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+				}
+
+				// つかむ（Ctrl無しの左クリック）
+				if ( gv.hovered && !gv.gizmoActive && hoverNode >= 0
+					&& ImGui::IsMouseClicked(0) && !io.KeyCtrl ) {
+					guideHandleRail_ = activeGuide;
+					guideHandleDragNode_ = hoverNode;
+				}
+				// Ctrl+クリック＝線分上に点を追加
+				if ( gv.hovered && !gv.gizmoActive && io.KeyCtrl && hoverSeg >= 1
+					&& guideHandleDragNode_ < 0 && ImGui::IsMouseClicked(0) ) {
+					Vector3 a3, b3;
+					if ( railEd->GetNodePosOf(activeGuide, hoverSeg - 1, a3)
+						&& railEd->GetNodePosOf(activeGuide, hoverSeg, b3) ) {
+						Vector3 inserted { a3.x + ( b3.x - a3.x ) * segT,
+						                   a3.y + ( b3.y - a3.y ) * segT,
+						                   a3.z + ( b3.z - a3.z ) * segT };
+						railEd->InsertNodeOf(activeGuide, hoverSeg, inserted);
+					}
+				}
+				// 右クリック＝点を削除（最低2点は残す）
+				if ( gv.hovered && !gv.gizmoActive && hoverNode >= 0
+					&& ImGui::IsMouseClicked(1) && nodeCount > 2 ) {
+					railEd->DeleteNodeOf(activeGuide, hoverNode);
+					hoverNode = -1;
+				}
+
+				// ドラッグ中：カメラに平行な面でノードを移動（マウスの動きにそのまま付いてくる）
+				bool draggingGuideNode = false;
+				if ( guideHandleDragNode_ >= 0 ) {
+					if ( guideHandleRail_ != activeGuide
+						|| guideHandleDragNode_ >= railEd->GetNodeCountOf(activeGuide) ) {
+						guideHandleDragNode_ = -1; // 対象が変わった/消えた
+					} else if ( ImGui::IsMouseDown(0) ) {
+						draggingGuideNode = true;
+						Vector3 nodePos;
+						if ( railEd->GetNodePosOf(activeGuide, guideHandleDragNode_, nodePos)
+							&& camera_ && ( io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f ) ) {
+							// カメラの右/上ベクトル
+							Vector3 camRotation = camera_->GetRotation();
+							float cosPitch = std::cos(camRotation.x), sinPitch = std::sin(camRotation.x);
+							float sinYaw = std::sin(camRotation.y), cosYaw = std::cos(camRotation.y);
+							Vector3 camForward { cosPitch * sinYaw, -sinPitch, cosPitch * cosYaw };
+							Vector3 camRight { cosYaw, 0.0f, -sinYaw };
+							Vector3 camUp {
+								camForward.y * camRight.z - camForward.z * camRight.y,
+								camForward.z * camRight.x - camForward.x * camRight.z,
+								camForward.x * camRight.y - camForward.y * camRight.x };
+							// 「1m動かすと画面で何px動くか」を実測してマウス移動量をメートルへ換算
+							Vector2 sp0, spR, spU;
+							if ( guideProject(nodePos, sp0)
+								&& guideProject({ nodePos.x + camRight.x, nodePos.y + camRight.y, nodePos.z + camRight.z }, spR)
+								&& guideProject({ nodePos.x + camUp.x, nodePos.y + camUp.y, nodePos.z + camUp.z }, spU) ) {
+								float rx = spR.x - sp0.x, ry = spR.y - sp0.y;
+								float ux = spU.x - sp0.x, uy = spU.y - sp0.y;
+								// 1mが2px未満にしか映らない極端な状況では換算を頭打ちにする
+								//（分母が小さすぎると1pxで何十mも飛ぶ暴走になるため）
+								float lenR2 = ( std::max )( rx * rx + ry * ry, 4.0f );
+								float lenU2 = ( std::max )( ux * ux + uy * uy, 4.0f );
+								float meterR = ( io.MouseDelta.x * rx + io.MouseDelta.y * ry ) / lenR2;
+								float meterU = ( io.MouseDelta.x * ux + io.MouseDelta.y * uy ) / lenU2;
+								if ( io.KeyShift ) { meterR = 0.0f; } // Shift=縦（高さ）だけ
+								if ( io.KeyCtrl )  { meterU = 0.0f; } // Ctrl=横だけ
+								Vector3 newPos { nodePos.x + camRight.x * meterR + camUp.x * meterU,
+								                 nodePos.y + camRight.y * meterR + camUp.y * meterU,
+								                 nodePos.z + camRight.z * meterR + camUp.z * meterU };
+								railEd->SetNodePosOf(activeGuide, guideHandleDragNode_, newPos);
+								ImGui::SetTooltip("X=%.1f Y=%.1f Z=%.1f%s", newPos.x, newPos.y, newPos.z,
+									io.KeyShift ? "（縦だけ）" : ( io.KeyCtrl ? "（横だけ）" : "" ));
+							}
+						}
+					} else {
+						guideHandleDragNode_ = -1; // 離した：確定（Undoは自動で1回分にまとまる）
+					}
+				}
+				EditorManager::GetInstance()->SetGameViewGuideDragging(draggingGuideNode);
+
+				// ハンドル描画（ホバー/ドラッグ中は白く大きく）
+				for ( int i = 0; i < nodeCount; ++i ) {
+					Vector3 nodePos; if ( !railEd->GetNodePosOf(activeGuide, i, nodePos) ) continue;
+					const bool active = ( i == hoverNode || i == guideHandleDragNode_ );
+					DebugDraw::GetInstance()->Sphere(nodePos, active ? 0.30f : 0.20f,
+						active ? Vector4 { 1.0f, 1.0f, 1.0f, 1.0f } : Vector4 { 1.0f, 0.65f, 0.25f, 0.95f }, 8);
+				}
+			} else {
+				guideHandleDragNode_ = -1;
+				EditorManager::GetInstance()->SetGameViewGuideDragging(false);
+			}
+		}
+
+		// --- 「後から出現する道」の可視化（紫の線＝出現待ち＋発動レールからのリンク線）---
+		for ( int railIndex = 0; railIndex < ( int ) rails.size(); ++railIndex ) {
+			const SplineRail& rail = rails[railIndex];
+			if ( rail.appearTrigger < 0 || rail.nodes.size() < 2 ) continue;
+			const Vector4 appearColor { 0.8f, 0.5f, 1.0f, 0.8f };
+			float appearLen = rail.GetLength();
+			int appearSteps = std::clamp(( int ) appearLen, 2, 100);
+			Vector3 prevPoint = rail.GetPositionByDistance(0.0f);
+			for ( int s = 1; s <= appearSteps; ++s ) {
+				Vector3 curPoint = rail.GetPositionByDistance(appearLen * ( float ) s / ( float ) appearSteps);
+				DebugDraw::GetInstance()->Line({ prevPoint.x, prevPoint.y + 0.12f, prevPoint.z },
+				                               { curPoint.x, curPoint.y + 0.12f, curPoint.z }, appearColor);
+				prevPoint = curPoint;
+			}
+			// 発動レール → この道 へのリンク線（どこに乗れば現れるかが分かる）
+			int trig = rail.appearTrigger;
+			if ( trig >= 0 && trig < ( int ) rails.size() && rails[trig].nodes.size() >= 2 ) {
+				Vector3 from = rails[trig].GetPositionByDistance(rails[trig].GetLength() * 0.5f);
+				Vector3 to   = rail.GetPositionByDistance(appearLen * 0.5f);
+				DebugDraw::GetInstance()->Line({ from.x, from.y + 0.6f, from.z },
+				                               { to.x, to.y + 0.6f, to.z }, { 0.8f, 0.5f, 1.0f, 0.35f });
 			}
 		}
 	}

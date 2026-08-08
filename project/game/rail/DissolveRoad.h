@@ -56,6 +56,7 @@ private:
     struct ChainPoint {
         Vector3 pos {};        // チェーン点のワールド位置
         float   erode = 0.0f;  // 現在のエロージョン量（0=実体 / kErodeGone=消滅）
+        int     rail  = -1;    // 属するレール番号（「後から出現する道」の判定用）
     };
     struct Chunk {
         int first = 0, count = 0;                          // points_ 内の範囲（隣と1点共有）
@@ -82,6 +83,9 @@ private:
 
     std::vector<ChainPoint> points_;
     std::vector<Chunk>      chunks_;
+    // Build 時のレール配列（借り物。「後から出現する道」の appeared 判定に使う。
+    //   RailField が Sync のたびに作り直すため、必ず Build とセットで更新される）
+    const std::vector<SplineRail>* railsRef_ = nullptr;
 
     Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
     Microsoft::WRL::ComPtr<ID3D12PipelineState> pipeline_;

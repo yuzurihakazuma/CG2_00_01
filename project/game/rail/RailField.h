@@ -27,7 +27,11 @@ public:
     //   whiteTexIndex : 単色化用の白テクスチャの SRV インデックス（0=未使用）
     void Sync(Camera* camera, uint32_t whiteTexIndex);
 
-    void UpdateMotion(float dt); // 動くレールを進める（プレイヤー更新より先に呼ぶ）
+    // 動くレールを進める（プレイヤー更新より先に呼ぶ）。
+    //   ridingRail: プレイヤーが今乗っているレール番号（「乗ったら動き出す」レールの発動判定。
+    //   -1=誰も乗っていない / kMotionStartAll=全レール強制発動＝エディタのプレビュー用）
+    static constexpr int kMotionStartAll = -2;
+    void UpdateMotion(float dt, int ridingRail = -1);
     void ResetMotion();          // 編集モードへ戻った時：動くレールを基準位置へ戻す
     void UpdateMarkers();         // マーカーの行列更新（毎フレーム。カメラ移動に追従）
     void DrawMarkers() const;     // マーカー描画

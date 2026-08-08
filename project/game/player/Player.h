@@ -26,6 +26,8 @@ public:
 
     // 接地状態の取得（空中判定、および踏みつけ判定に使用）
     bool IsGrounded() const{ return isGrounded_; }
+    // 今乗っているレール番号（「乗ったら動き出すレール」の発動判定に使用）
+    int GetCurrentRail() const{ return currentRailIndex_; }
 
     // 踏みつけ成功時にプレイヤーを上へ跳ね上がらせる
     void Bounce();

@@ -111,7 +111,9 @@ struct LevelData{
     // 「ガイドのここからここまで」を滑らかに動かすための区間と動き方
     std::vector<float> railGuideStarts; // ガイド上の開始距離(m)。0=ガイドの始点
     std::vector<float> railGuideEnds;   // ガイド上の終了距離(m)。-1=ガイドの終点まで
-    std::vector<int>   railGuideModes;  // 0=一周ループ / 1=往復（端でコサイン緩急の滑らか折り返し）
+    std::vector<int>   railGuideModes;  // 0=一周ループ / 1=往復（端でコサイン緩急の滑らか折り返し）/ 2=片道
+    std::vector<int>   railGuideAligns; // 0=向きそのまま / 1=列車式（経路のカーブに合わせて転回する）
+    std::vector<float> railGuideDwells; // 停車時間(秒)：往復=両端で停まる / 片道=出発までの待ち（0=なし）
     std::vector<std::string> railGroups; // 路線のグループ名（空=未分類。リスト絞り込み/一括操作用）
     std::vector<CoinData> coins;         // 収集物（コイン）の配置
     std::vector<BlockData> blocks;       // ブロック（乗れる/ぶつかる1m角）の配置
@@ -121,6 +123,12 @@ struct LevelData{
     std::vector<int> railMotionTypes;
     // 各レールの動きの位相（0〜1。複数レールの動きをずらす）
     std::vector<float> railMotionPhases;
+    // 各レールの動き出し（railLines と同じ並び）
+    //   0=最初から動く / 1=プレイヤーが乗ったら動き出す（ヨッシー式。以後動き続ける）
+    std::vector<int> railMotionTriggers;
+    // 各レールの「後から出現する道」設定（railLines と同じ並び）
+    //   -1=最初からある / >=0 = そのレール番号にプレイヤーが乗ったら出現する
+    std::vector<int> railAppearTriggers;
 
     // 各レールの片方向設定（0=両方向 / 1=正方向のみ(front→back) / 2=逆方向のみ）
     std::vector<int> railOneWay;

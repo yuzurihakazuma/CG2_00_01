@@ -1075,11 +1075,39 @@ void RoadMesh::Build(const std::vector<SplineRail>& rails, Camera* camera, bool 
 
 // 毎フレーム：動くレールの animOffset に追従し、カメラ行列を焼き直す
 void RoadMesh::Update(const std::vector<SplineRail>& rails){
+    // 「後から出現する道」はプレイ中だけ隠す/せり上げる（エディタでは普通に見せて編集できるように）
+    const bool playMode = ( EditorManager::GetInstance()->GetMode() == EngineMode::Play );
+    // レール r の出現状態 → 隠すか(true/false) と 追加の沈み込みY を返す
+    auto appearOffset = [&](int r, bool& outHidden) -> float {
+        outHidden = false;
+        if ( !playMode || r < 0 || r >= ( int ) rails.size() ) return 0.0f;
+        const SplineRail& rail = rails[r];
+        if ( rail.appearTrigger < 0 ) return 0.0f;
+        if ( rail.appearAnim <= 0.001f ) { outHidden = true; return 0.0f; }
+        return -( 1.0f - rail.appearAnim ) * 2.5f; // 出現中：下からせり上がる
+    };
     for ( size_t k = 0; k < slotsUsed_; ++k ) {
         MeshSlot& s = *slots_[k];
         if ( s.rail >= 0 && s.rail < ( int ) rails.size() ) {
-            // 掃引メッシュはワールド座標で焼いてあるので、動くレールぶんだけ平行移動
-            s.obj->SetTranslation(rails[s.rail].animOffset);
+            // 掃引メッシュはワールド座標で焼いてあるので、動くレールぶんだけ平行移動。
+            // 列車式（animYaw）は「pivot中心の回転」＝回転＋(pivot - pivot*Ry) の平行移動で表す
+            const SplineRail& followRail = rails[s.rail];
+            Vector3 off = followRail.animOffset;
+            off.y += appearOffset(s.rail, s.hiddenNow);
+            if ( followRail.animYaw != 0.0f ) {
+                float sinYaw = std::sin(followRail.animYaw), cosYaw = std::cos(followRail.animYaw);
+                const Vector3& pivot = followRail.animPivot;
+                Vector3 rotatedPivot { pivot.x * cosYaw + pivot.z * sinYaw, pivot.y,
+                                       -pivot.x * sinYaw + pivot.z * cosYaw };
+                s.obj->SetRotation({ 0.0f, followRail.animYaw, 0.0f });
+                s.obj->SetTranslation({ pivot.x - rotatedPivot.x + off.x, off.y,
+                                        pivot.z - rotatedPivot.z + off.z });
+            } else {
+                s.obj->SetRotation({ 0.0f, 0.0f, 0.0f });
+                s.obj->SetTranslation(off);
+            }
+        } else {
+            s.hiddenNow = false;
         }
         s.obj->Update();
     }
@@ -1087,8 +1115,21 @@ void RoadMesh::Update(const std::vector<SplineRail>& rails){
         for ( size_t k = 0; k < used; ++k ) {
             PieceSlot& s = *pool[k];
             if ( s.rail >= 0 && s.rail < ( int ) rails.size() ) {
-                const Vector3& off = rails[s.rail].animOffset;
-                s.obj->SetTranslation({ s.base.x + off.x, s.base.y + off.y, s.base.z + off.z });
+                const SplineRail& followRail = rails[s.rail];
+                Vector3 off = followRail.animOffset;
+                off.y += appearOffset(s.rail, s.hiddenNow);
+                Vector3 basePos = s.base;
+                if ( followRail.animYaw != 0.0f ) {
+                    // ピース（端キャップ等）は位置だけpivot中心で公転させる（自身の回転は据え置き）
+                    float sinYaw = std::sin(followRail.animYaw), cosYaw = std::cos(followRail.animYaw);
+                    const Vector3& pivot = followRail.animPivot;
+                    float dx = basePos.x - pivot.x, dz = basePos.z - pivot.z;
+                    basePos.x = pivot.x + dx * cosYaw + dz * sinYaw;
+                    basePos.z = pivot.z - dx * sinYaw + dz * cosYaw;
+                }
+                s.obj->SetTranslation({ basePos.x + off.x, basePos.y + off.y, basePos.z + off.z });
+            } else {
+                s.hiddenNow = false;
             }
             s.obj->Update();
         }
@@ -1106,10 +1147,17 @@ void RoadMesh::Draw() const{
 
     for ( size_t k = 0; k < slotsUsed_; ++k ) {
         if ( slots_[k]->isJoint && !showJoints ) continue; // ジョイントのまとめメッシュ
+        if ( slots_[k]->hiddenNow ) continue;              // 出現前の道（プレイ中のみ）
         slots_[k]->obj->Draw();
     }
-    for ( size_t k = 0; k < piecesUsed_; ++k ) { pieces_[k]->obj->Draw(); }
+    for ( size_t k = 0; k < piecesUsed_; ++k ) {
+        if ( pieces_[k]->hiddenNow ) continue;
+        pieces_[k]->obj->Draw();
+    }
     if ( showJoints ) {
-        for ( size_t k = 0; k < jointsUsed_; ++k ) { joints_[k]->obj->Draw(); }
+        for ( size_t k = 0; k < jointsUsed_; ++k ) {
+            if ( joints_[k]->hiddenNow ) continue;
+            joints_[k]->obj->Draw();
+        }
     }
 }

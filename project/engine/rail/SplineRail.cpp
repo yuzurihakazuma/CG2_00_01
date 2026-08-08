@@ -66,6 +66,15 @@ Vector3 SplineRail::EvaluatePosition(float t) const{
     result.y = 0.5f * ( ( 2.0f * p1.y ) + ( -p0.y + p2.y ) * localT + ( 2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y ) * ( localT * localT ) + ( -p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y ) * ( localT * localT * localT ) );
     result.z = 0.5f * ( ( 2.0f * p1.z ) + ( -p0.z + p2.z ) * localT + ( 2.0f * p0.z - 5.0f * p1.z + 4.0f * p2.z - p3.z ) * ( localT * localT ) + ( -p0.z + 3.0f * p1.z - 3.0f * p2.z + p3.z ) * ( localT * localT * localT ) );
 
+    // 列車式の回転（ガイド追従で経路の向きに合わせる）：animPivot 中心のY軸回転。
+    //   剛体回転なので距離テーブルは不変。接線(GetTangentByDistance)は位置の差分から
+    //   求めているため、ここで回せばプレイヤーの進行方向・ブロックの向きも自動で追従する
+    if ( animYaw != 0.0f ) {
+        float sinYaw = std::sin(animYaw), cosYaw = std::cos(animYaw);
+        float dx = result.x - animPivot.x, dz = result.z - animPivot.z;
+        result.x = animPivot.x + dx * cosYaw + dz * sinYaw; // 行ベクトル×Ry と同じ回り
+        result.z = animPivot.z - dx * sinYaw + dz * cosYaw;
+    }
     // 動くレール：現在のアニメオフセットを加算（剛体移動なので距離テーブルは不変）
     result.x += animOffset.x;
     result.y += animOffset.y;

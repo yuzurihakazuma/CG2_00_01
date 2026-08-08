@@ -113,14 +113,20 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     json guideStartArray = json::array();
     json guideEndArray   = json::array();
     json guideModeArray  = json::array();
+    json guideAlignArray = json::array();
+    json guideDwellArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
         guideStartArray.push_back(( i < levelData.railGuideStarts.size() ) ? levelData.railGuideStarts[i] : 0.0f);
         guideEndArray.push_back(( i < levelData.railGuideEnds.size() ) ? levelData.railGuideEnds[i] : -1.0f);
         guideModeArray.push_back(( i < levelData.railGuideModes.size() ) ? levelData.railGuideModes[i] : 0);
+        guideAlignArray.push_back(( i < levelData.railGuideAligns.size() ) ? levelData.railGuideAligns[i] : 0);
+        guideDwellArray.push_back(( i < levelData.railGuideDwells.size() ) ? levelData.railGuideDwells[i] : 0.0f);
     }
     rootJson["railGuideStarts"] = guideStartArray;
     rootJson["railGuideEnds"]   = guideEndArray;
     rootJson["railGuideModes"]  = guideModeArray;
+    rootJson["railGuideAligns"] = guideAlignArray;
+    rootJson["railGuideDwells"] = guideDwellArray;
 
     // 路線のグループ名（railLines と数を合わせて保存）
     json groupArray = json::array();
@@ -149,18 +155,28 @@ void LevelManager::Save(const std::string& fileName, const LevelData& levelData)
     // 各レールの動き波形/位相・片方向・速度倍率（railLines と数を合わせて保存）
     json motionTypeArray = json::array();
     json motionPhaseArray = json::array();
+    json motionTriggerArray = json::array();
     json oneWayArray = json::array();
     json speedMulArray = json::array();
     for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
         motionTypeArray.push_back(( i < levelData.railMotionTypes.size() ) ? levelData.railMotionTypes[i] : 0);
         motionPhaseArray.push_back(( i < levelData.railMotionPhases.size() ) ? levelData.railMotionPhases[i] : 0.0f);
+        motionTriggerArray.push_back(( i < levelData.railMotionTriggers.size() ) ? levelData.railMotionTriggers[i] : 0);
         oneWayArray.push_back(( i < levelData.railOneWay.size() ) ? levelData.railOneWay[i] : 0);
         speedMulArray.push_back(( i < levelData.railSpeedMuls.size() ) ? levelData.railSpeedMuls[i] : 1.0f);
     }
-    rootJson["railMotionTypes"]  = motionTypeArray;
-    rootJson["railMotionPhases"] = motionPhaseArray;
-    rootJson["railOneWay"]       = oneWayArray;
-    rootJson["railSpeedMuls"]    = speedMulArray;
+    rootJson["railMotionTypes"]    = motionTypeArray;
+    rootJson["railMotionPhases"]   = motionPhaseArray;
+    rootJson["railMotionTriggers"] = motionTriggerArray;
+    rootJson["railOneWay"]         = oneWayArray;
+    rootJson["railSpeedMuls"]      = speedMulArray;
+
+    // 後から出現する道（railLines と数を合わせて保存）
+    json appearTriggerArray = json::array();
+    for ( size_t i = 0; i < levelData.railLines.size(); ++i ) {
+        appearTriggerArray.push_back(( i < levelData.railAppearTriggers.size() ) ? levelData.railAppearTriggers[i] : -1);
+    }
+    rootJson["railAppearTriggers"] = appearTriggerArray;
 
     // スタート/ゴール地点
     rootJson["startRailIndex"] = levelData.startRailIndex;
@@ -350,6 +366,12 @@ LevelData LevelManager::Load(const std::string& fileName){
     if ( rootJson.contains("railGuideModes") && rootJson["railGuideModes"].is_array() ) {
         for ( const auto& guideModeJson : rootJson["railGuideModes"] ) { levelData.railGuideModes.push_back(guideModeJson.get<int>()); }
     }
+    if ( rootJson.contains("railGuideAligns") && rootJson["railGuideAligns"].is_array() ) {
+        for ( const auto& guideAlignJson : rootJson["railGuideAligns"] ) { levelData.railGuideAligns.push_back(guideAlignJson.get<int>()); }
+    }
+    if ( rootJson.contains("railGuideDwells") && rootJson["railGuideDwells"].is_array() ) {
+        for ( const auto& guideDwellJson : rootJson["railGuideDwells"] ) { levelData.railGuideDwells.push_back(guideDwellJson.get<float>()); }
+    }
     // 収集物（コイン）を読み込む（キーが無い旧JSONはコインなし）
     if ( rootJson.contains("coins") && rootJson["coins"].is_array() ) {
         for ( const auto& coinJson : rootJson["coins"] ) {
@@ -386,6 +408,12 @@ LevelData LevelManager::Load(const std::string& fileName){
     }
     if ( rootJson.contains("railMotionPhases") && rootJson["railMotionPhases"].is_array() ) {
         for ( const auto& motionPhaseJson : rootJson["railMotionPhases"] ) { levelData.railMotionPhases.push_back(motionPhaseJson.get<float>()); }
+    }
+    if ( rootJson.contains("railMotionTriggers") && rootJson["railMotionTriggers"].is_array() ) {
+        for ( const auto& motionTriggerJson : rootJson["railMotionTriggers"] ) { levelData.railMotionTriggers.push_back(motionTriggerJson.get<int>()); }
+    }
+    if ( rootJson.contains("railAppearTriggers") && rootJson["railAppearTriggers"].is_array() ) {
+        for ( const auto& appearTriggerJson : rootJson["railAppearTriggers"] ) { levelData.railAppearTriggers.push_back(appearTriggerJson.get<int>()); }
     }
     if ( rootJson.contains("railOneWay") && rootJson["railOneWay"].is_array() ) {
         for ( const auto& oneWayJson : rootJson["railOneWay"] ) { levelData.railOneWay.push_back(oneWayJson.get<int>()); }
@@ -452,9 +480,13 @@ LevelData LevelManager::Load(const std::string& fileName){
     levelData.railGuideStarts.resize(levelData.railLines.size(), 0.0f);
     levelData.railGuideEnds.resize(levelData.railLines.size(), -1.0f);
     levelData.railGuideModes.resize(levelData.railLines.size(), 0);
+    levelData.railGuideAligns.resize(levelData.railLines.size(), 0);
+    levelData.railGuideDwells.resize(levelData.railLines.size(), 0.0f);
     levelData.railGroups.resize(levelData.railLines.size());
     levelData.railMotionTypes.resize(levelData.railLines.size(), 0);
     levelData.railMotionPhases.resize(levelData.railLines.size(), 0.0f);
+    levelData.railMotionTriggers.resize(levelData.railLines.size(), 0);
+    levelData.railAppearTriggers.resize(levelData.railLines.size(), -1);
     levelData.railOneWay.resize(levelData.railLines.size(), 0);
     levelData.railSpeedMuls.resize(levelData.railLines.size(), 1.0f);
     levelData.railNodeHoles.resize(levelData.railLines.size());

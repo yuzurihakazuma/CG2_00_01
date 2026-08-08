@@ -183,6 +183,10 @@ private: // メンバ変数
 	// 右クリック「ここからテストプレイ」：次の Edit→Play でこの地点から開始（-1=通常スタート）
 	int   testPlayRail_ = -1;
 	float testPlayDist_ = 0.0f;
+	// ゲームビューのガイドハンドル（選択中の足場のガイドを直接つかんで編集する）
+	int  guideHandleRail_     = -1;    // ドラッグ中のガイドレール番号（-1=なし）
+	int  guideHandleDragNode_ = -1;    // ドラッグ中のノード番号
+	bool guideHandleHover_    = false; // 今フレームにハンドル圏内だったか（右クリックメニュー抑制用）
 
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;

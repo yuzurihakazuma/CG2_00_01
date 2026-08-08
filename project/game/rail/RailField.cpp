@@ -227,6 +227,10 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
     const auto& guideStarts  = em->GetEditorRailGuideStarts();
     const auto& guideEnds    = em->GetEditorRailGuideEnds();
     const auto& guideModes   = em->GetEditorRailGuideModes();
+    const auto& motionTriggers = em->GetEditorRailMotionTriggers();
+    const auto& appearTriggers = em->GetEditorRailAppearTriggers();
+    const auto& guideAligns    = em->GetEditorRailGuideAligns();
+    const auto& guideDwells    = em->GetEditorRailGuideDwells();
     for ( size_t i = 0; i < rails_.size(); ++i ) {
         if ( i < motions.size() ) {
             rails_[i].motionAmp    = { motions[i].x, motions[i].y, motions[i].z };
@@ -238,7 +242,24 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
         rails_[i].guideStart  = ( i < guideStarts.size() )  ? guideStarts[i]  : 0.0f;
         rails_[i].guideEnd    = ( i < guideEnds.size() )    ? guideEnds[i]    : -1.0f;
         rails_[i].guideMode   = ( i < guideModes.size() )   ? guideModes[i]   : 0;
+        rails_[i].guideDwell  = ( i < guideDwells.size() )  ? guideDwells[i]  : 0.0f;
+        rails_[i].motionTrigger = ( i < motionTriggers.size() ) ? motionTriggers[i] : 0;
         rails_[i].animOffset = { 0.0f, 0.0f, 0.0f };
+        rails_[i].motionTime = 0.0f;
+        rails_[i].motionStarted = false;
+        rails_[i].appearTrigger = ( i < appearTriggers.size() ) ? appearTriggers[i] : -1;
+        rails_[i].appeared   = ( rails_[i].appearTrigger < 0 );
+        rails_[i].appearAnim = rails_[i].appeared ? 1.0f : 0.0f;
+        // 列車式回転の基準：基準位置でのレール中点と向きを1回だけ計測（この時点で回転・移動はゼロ）
+        rails_[i].guideAlign = ( i < guideAligns.size() ) ? guideAligns[i] : 0;
+        rails_[i].animYaw = 0.0f;
+        if ( rails_[i].nodes.size() >= 2 && rails_[i].GetLength() > 0.0f ) {
+            float mid = rails_[i].GetLength() * 0.5f;
+            rails_[i].animPivot = rails_[i].GetPositionByDistance(mid);
+            Vector3 midTan = rails_[i].GetTangentByDistance(mid);
+            float horizLen = std::sqrt(midTan.x * midTan.x + midTan.z * midTan.z);
+            rails_[i].restYaw = ( horizLen > 1e-4f ) ? std::atan2(midTan.x, midTan.z) : 0.0f;
+        }
     }
 
     // タイプ割当は「連結処理より先」に行う（分岐点のキー割当が type を参照するため）。
@@ -294,15 +315,38 @@ void RailField::Sync(Camera* camera, uint32_t whiteTexIndex){
 // 動くレールの時間を進めて animOffset を更新し、緑線マーカーも追従させる。
 //   波形は motionType で選択（0=サイン往復 / 1=端で一時停止つき往復 / 2=円運動）。
 //   motionPhase(0〜1)で複数レールの動きをずらせる（0.5=半周期ずれ）。
-void RailField::UpdateMotion(float dt){
+//   motionTrigger=1（乗ったら動き出す）のレールは、プレイヤーが乗るまで基準位置で待機する
+void RailField::UpdateMotion(float dt, int ridingRail){
     animTime_ += dt;
     const float kTwoPi = 2.0f * 3.14159265f;
     bool anyMotion = false;
-    for ( auto& rail : rails_ ) {
+    for ( size_t railIndex = 0; railIndex < rails_.size(); ++railIndex ) {
+        auto& rail = rails_[railIndex];
+        // 後から出現する道：発動レールに乗ったら出現（以後は下からせり上がるアニメで現れる）
+        if ( rail.appearTrigger >= 0 ) {
+            if ( !rail.appeared
+                && ( ridingRail == rail.appearTrigger || ridingRail == kMotionStartAll ) ) {
+                rail.appeared = true;
+            }
+            if ( rail.appeared && rail.appearAnim < 1.0f ) {
+                rail.appearAnim = ( std::min )( 1.0f, rail.appearAnim + dt / 0.6f );
+            }
+        }
         if ( !rail.HasMotion() ) continue;
         anyMotion = true;
+        // 乗ったら動き出す：発動するまで待機（animOffsetは基準位置のまま）。
+        //   一度発動したら降りても動き続ける（ヨッシーの列車と同じ）。
+        //   エディタのプレビュー（kMotionStartAll）では全レール強制発動＝動きを確認できる
+        if ( rail.motionTrigger == 1 && !rail.motionStarted ) {
+            if ( ridingRail == ( int ) railIndex || ridingRail == kMotionStartAll ) {
+                rail.motionStarted = true;
+            } else {
+                continue;
+            }
+        }
+        rail.motionTime += dt; // 発動してからの経過時間（最初から動くレールはPlay開始からの時間）
         float period = ( rail.motionPeriod > 0.1f ) ? rail.motionPeriod : 0.1f;
-        float u = animTime_ / period + rail.motionPhase;
+        float u = rail.motionTime / period + rail.motionPhase;
         u -= std::floor(u); // 0〜1 の周期位置
 
         const Vector3& amp = rail.motionAmp;
@@ -336,9 +380,24 @@ void RailField::UpdateMotion(float dt){
                 if ( s1 < s0 ) { std::swap(s0, s1); }
                 if ( s1 - s0 < 0.01f ) { s0 = 0.0f; s1 = guideLen; } // 区間が潰れていたら全区間
                 float d;
+                const float dwell = ( std::max )( rail.guideDwell, 0.0f );
                 if ( rail.guideMode == 1 ) {
-                    // 往復：0→1→0 をコサインでつなぐ＝両端で速度0（縦⇔横の折り返しも滑らか）
-                    float w = 0.5f - 0.5f * std::cos(u * kTwoPi);
+                    // 往復：行き→(停車)→帰り→(停車)。移動はコサイン緩急＝両端で速度0。
+                    //   周期=1往復の移動秒数（停車時間は別枠で足される）
+                    float half = period * 0.5f;
+                    float cycle = period + dwell * 2.0f;
+                    float t = std::fmod(rail.motionTime + rail.motionPhase * cycle, cycle);
+                    float w;
+                    if      ( t < half )           { w = 0.5f - 0.5f * std::cos(( t / half ) * 3.14159265f); }               // 行き 0→1
+                    else if ( t < half + dwell )   { w = 1.0f; }                                                              // 終点で停車
+                    else if ( t < period + dwell ) { w = 0.5f + 0.5f * std::cos((( t - half - dwell ) / half ) * 3.14159265f); } // 帰り 1→0
+                    else                           { w = 0.0f; }                                                              // 始点で停車
+                    d = s0 + ( s1 - s0 ) * w;
+                } else if ( rail.guideMode == 2 ) {
+                    // 片道：出発まで dwell 秒待ち→走行→到着したら止まる（出発・到着ともコサイン緩急）。
+                    //   周期=片道の秒数。u は周回でラップしているため経過時間から直接進行度を求める
+                    float progress = std::clamp(( rail.motionTime - dwell ) / period + rail.motionPhase, 0.0f, 1.0f);
+                    float w = 0.5f - 0.5f * std::cos(progress * 3.14159265f);
                     d = s0 + ( s1 - s0 ) * w;
                 } else {
                     // 一周ループ：区間の端まで行くと始点へ戻って回り続ける（閉じたガイド向け）
@@ -347,6 +406,20 @@ void RailField::UpdateMotion(float dt){
                 Vector3 p  = guide.GetPositionByDistance(d);
                 Vector3 p0 = guide.GetPositionByDistance(s0);
                 rail.animOffset = { p.x - p0.x, p.y - p0.y, p.z - p0.z };
+                // 列車式：ガイドの進行方向に足場の向きを合わせて転回（縦向き⇔横向きも滑らか）。
+                //   ほぼ真上/真下の区間では向きを保つ（水平成分が無いとヨーが定まらないため）
+                if ( rail.guideAlign == 1 ) {
+                    Vector3 guideTan = guide.GetTangentByDistance(d);
+                    float horizLen = std::sqrt(guideTan.x * guideTan.x + guideTan.z * guideTan.z);
+                    if ( horizLen > 0.15f ) {
+                        float targetYaw = std::atan2(guideTan.x, guideTan.z) - rail.restYaw;
+                        // 最短角で連続に追従（±180°の境目でクルッと一回転しない）
+                        float deltaYaw = targetYaw - rail.animYaw;
+                        while ( deltaYaw >  3.14159265f ) { deltaYaw -= 6.2831853f; }
+                        while ( deltaYaw < -3.14159265f ) { deltaYaw += 6.2831853f; }
+                        rail.animYaw += deltaYaw;
+                    }
+                }
             } else {
                 rail.animOffset = { 0.0f, 0.0f, 0.0f };
             }
@@ -362,19 +435,39 @@ void RailField::UpdateMotion(float dt){
     if ( anyMotion ) { UpdateMarkerPositions(); }
 }
 
-// 編集モードへ戻った時：動くレールを基準位置へ戻す。
+// 編集モードへ戻った時：動くレールを基準位置へ戻す（発動状態・出現状態もリセット）。
 void RailField::ResetMotion(){
     animTime_ = 0.0f;
-    for ( auto& r : rails_ ) { r.animOffset = { 0.0f, 0.0f, 0.0f }; }
+    for ( auto& r : rails_ ) {
+        r.animOffset = { 0.0f, 0.0f, 0.0f };
+        r.motionTime = 0.0f;
+        r.motionStarted = false;
+        r.appeared   = ( r.appearTrigger < 0 );
+        r.appearAnim = r.appeared ? 1.0f : 0.0f;
+        r.animYaw = 0.0f; // 列車式の回転も基準向きへ戻す
+    }
     UpdateMarkerPositions();
 }
 
-// マーカー位置 = リボンはワールド座標で焼いてあるので、レールの animOffset ぶんだけ平行移動
+// マーカー位置 = リボンはワールド座標で焼いてあるので、レールの animOffset ぶんだけ平行移動。
+//   列車式（animYaw）はpivot中心回転＝回転＋(pivot - pivot*Ry)の平行移動（道メッシュと同じ式）
 void RailField::UpdateMarkerPositions(){
     for ( size_t k = 0; k < markerSlotsUsed_; ++k ) {
         MarkerSlot& s = *markerSlots_[k];
         if ( s.rail < 0 || s.rail >= ( int ) rails_.size() ) continue;
-        s.obj->SetTranslation(rails_[s.rail].animOffset);
+        const SplineRail& rail = rails_[s.rail];
+        if ( rail.animYaw != 0.0f ) {
+            float sinYaw = std::sin(rail.animYaw), cosYaw = std::cos(rail.animYaw);
+            const Vector3& pivot = rail.animPivot;
+            Vector3 rotatedPivot { pivot.x * cosYaw + pivot.z * sinYaw, pivot.y,
+                                   -pivot.x * sinYaw + pivot.z * cosYaw };
+            s.obj->SetRotation({ 0.0f, rail.animYaw, 0.0f });
+            s.obj->SetTranslation({ pivot.x - rotatedPivot.x + rail.animOffset.x, rail.animOffset.y,
+                                    pivot.z - rotatedPivot.z + rail.animOffset.z });
+        } else {
+            s.obj->SetRotation({ 0.0f, 0.0f, 0.0f });
+            s.obj->SetTranslation(rail.animOffset);
+        }
     }
 }
 

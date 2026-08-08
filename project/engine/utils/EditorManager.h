@@ -132,6 +132,8 @@ public:
 	const std::vector<float>& GetEditorRailGuideStarts() const; // ガイド区間の開始(m)
 	const std::vector<float>& GetEditorRailGuideEnds() const;   // ガイド区間の終了(m)。-1=終点まで
 	const std::vector<int>&   GetEditorRailGuideModes() const;  // 0=一周ループ/1=往復
+	const std::vector<int>&   GetEditorRailGuideAligns() const; // 0=向き固定/1=列車式（経路に合わせ転回）
+	const std::vector<float>& GetEditorRailGuideDwells() const; // 停車時間(秒)：往復=両端/片道=出発待ち
 	const std::vector<CoinData>& GetEditorCoins() const; // 収集物（コイン）の配置
 
 	// --- ブロック（乗れる/ぶつかる1m角。Game Viewペイント配置の橋渡し）---
@@ -166,12 +168,17 @@ public:
 	const GameViewMouse& GetGameViewMouse() const{ return gameViewMouse_; }
 	// ゲーム側がドラッグ操作中（敵の直接ドラッグ等）にレール編集のマウス操作を止める
 	void SetExternalDragActive(bool active){ externalDragActive_ = active; }
+	// ゲームビューのガイドハンドル（足場のガイドを直接つかむ操作）でドラッグ中か。
+	//   道の再生成を10Hzに間引く判定（IsRailDragging）に含める
+	void SetGameViewGuideDragging(bool v){ gameViewGuideDragging_ = v; }
 	// ジョイント表示モード（0=エディタのみ/1=常に/2=非表示。RoadMesh が参照）
 	int GetEditorJointVisible() const;
 	// レールノードをギズモ/フリーハンド/リフト経路エディタでドラッグ中か（ドラッグ中は道の再生成を間引く）
 	bool IsRailDragging() const;
 	const std::vector<int>&   GetEditorRailMotionTypes() const;  // 動きの波形（0=sin/1=停止つき/2=円）
 	const std::vector<float>& GetEditorRailMotionPhases() const; // 動きの位相（0〜1）
+	const std::vector<int>&   GetEditorRailMotionTriggers() const; // 動き出し（0=最初から/1=乗ったら）
+	const std::vector<int>&   GetEditorRailAppearTriggers() const; // 出現する道（-1=通常/N=レールNに乗ると出現）
 	const std::vector<int>&   GetEditorRailOneWay() const;       // 片方向（0=両/1=正/2=逆）
 	const std::vector<float>& GetEditorRailSpeedMuls() const;    // 速度倍率
 	int GetEditorStartRail() const;  // スタート地点（レール番号）
@@ -266,6 +273,7 @@ private:
     // Game View マウス情報（毎フレーム更新。ゲーム側の配置エディタへの橋渡し）
     GameViewMouse gameViewMouse_ {};
     bool externalDragActive_ = false; // ゲーム側がドラッグ中（レール編集のマウス操作を止める）
+    bool gameViewGuideDragging_ = false; // ゲームビューのガイドハンドルをドラッグ中（同期間引き用）
 
 	// カメラ（SceneManagerから渡してもらう）
     bool isEditorActive_ = false;
@@ -293,6 +301,15 @@ private:
     bool  railRubberActive_ = false;            // 矩形選択ドラッグ中か
     float railRubberStartX_ = 0.0f;             // 矩形選択の開始位置（スクリーン座標）
     float railRubberStartY_ = 0.0f;
+    // レール編集：線を引っ張って点を追加（線を押して動かす＝挿入＋そのままドラッグ / 動かさず離す＝路線選択）
+    bool    railPullPending_ = false;  // 線を押した直後（動くか離すかの判定待ち）
+    bool    railPullActive_  = false;  // 挿入した点をマウスで引っ張り中
+    int     railPullRail_    = -1;     // 対象レール
+    int     railPullSegIdx_  = 0;      // 押した線分番号（InsertRailNode へ渡す）
+    int     railPullNode_    = -1;     // 引っ張り中のノード番号
+    float   railPullStartX_  = 0.0f;   // 押した位置（判定用スクリーン座標）
+    float   railPullStartY_  = 0.0f;
+    Vector3 railPullSegPoint_ { 0.0f, 0.0f, 0.0f }; // 押した位置の線上の点（挿入位置）
     Vector3 railSelPivot_ { 0.0f, 0.0f, 0.0f }; // 選択ギズモのピボット（ドラッグ中は保持）
     bool  railSelDragging_ = false;             // ギズモで選択群を移動中か
 

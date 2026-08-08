@@ -135,6 +135,7 @@ bool Player::IsOverHole(const std::vector<SplineRail>& rails) const{
     for ( int i = 0; i < ( int ) rails.size(); ++i ) {
         const SplineRail& rail = rails[i];
         if ( rail.nodes.size() < 2 || rail.nodeHole.empty() ) continue;
+        if ( rail.IsRideBlocked() ) continue; // 出現前の道の穴では落ちない
         float closestDist = rail.GetClosestDistance(footPos);
         if ( !rail.IsHoleAtDistance(closestDist) ) continue;
         Vector3 closestPos = rail.GetPositionByDistance(closestDist);
@@ -294,6 +295,7 @@ bool Player::TryContinueToConnected(const std::vector<SplineRail>& rails, const 
     // 動くレールへ/からは静的連結しない（rest 位置基準なので animOffset 分ワープする）。
     // 動くレールは TryJoinNearbyBody の「今の位置」での動的ドッキングに任せる。
     if ( rails[connectedIndex].HasMotion() || currentRail.HasMotion() ) return false;
+    if ( rails[connectedIndex].IsRideBlocked() ) return false; // まだ出現していない道へは渡れない
     // 型が違うレールへ渡った場合は switchCooldown_ で即乗り換えを防ぐ。
     if ( rails[connectedIndex].type != currentRail.type ) { switchCooldown_ = 0.25f; }
     float newRailLength = rails[connectedIndex].GetLength();
@@ -323,6 +325,7 @@ bool Player::TryJoinNearbyBody(const std::vector<SplineRail>& rails, const Splin
         if ( j == currentRailIndex_ ) continue;
         const SplineRail& candidateRail = rails[j];
         if ( candidateRail.nodes.size() < 2 ) continue;
+        if ( candidateRail.IsRideBlocked() ) continue; // まだ出現していない道へは合流しない
         float closestDist = candidateRail.GetClosestDistance(edgePos);
         Vector3 closestPos = candidateRail.GetPositionByDistance(closestDist);
         float dx = closestPos.x - edgePos.x, dy = closestPos.y - edgePos.y, dz = closestPos.z - edgePos.z;
@@ -433,6 +436,7 @@ void Player::TrySwitchRail(const std::vector<SplineRail>& rails, const SplineRai
         const SplineRail& candidateRail = rails[j];
         if ( candidateRail.nodes.size() < 2 ) continue;
         if ( !candidateRail.visible ) continue; // 見えない連結レールへは乗り換えできない（見えない道を歩く混乱防止）
+        if ( candidateRail.IsRideBlocked() ) continue; // まだ出現していない道へも乗り換えできない
         if ( ( candidateRail.type == SplineRail::RailType::Horizontal ) != wantHorizontalTarget ) continue; // 反対タイプのみ
 
         float closestDist = candidateRail.GetClosestDistance(footPos);
@@ -487,6 +491,7 @@ bool Player::TryBranch(const std::vector<SplineRail>& rails, const SplineRail& c
         const SplineRail& targetRail = rails[branchPoint.targetRail];
         float len = targetRail.GetLength();
         if ( len <= 0.0f ) continue;
+        if ( targetRail.IsRideBlocked() ) continue; // まだ出現していない道へは分岐できない
 
         float oldFootY = currentRail.GetPositionByDistance(currentDistance_).y;
         float margin = ( std::min )( 0.15f, len * 0.25f ); // 端ちょうどに乗らないよう少し内側へ
@@ -730,6 +735,7 @@ void Player::UpdateAir(const std::vector<SplineRail>& allRails, float dt){
             const SplineRail& rail = allRails[i];
             if ( rail.nodes.size() < 2 ) continue;
             if ( !rail.visible ) continue; // 見えない連結レールには着地しない（床ではなく「道」なので）
+            if ( rail.IsRideBlocked() ) continue; // まだ出現していない道にも着地しない（すり抜けて落ちる）
 
             float closestDist = rail.GetClosestDistance(position_);
             Vector3 closestPos = rail.GetPositionByDistance(closestDist);

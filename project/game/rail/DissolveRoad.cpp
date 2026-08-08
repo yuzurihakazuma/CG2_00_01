@@ -151,7 +151,9 @@ void DissolveRoad::Build(const std::vector<SplineRail>& rails){
         }
     };
 
-    for ( const auto& rail : rails ) {
+    railsRef_ = &rails; // 「後から出現する道」の appeared 判定用（Sync→Build のたびに更新される）
+    for ( int railIndex = 0; railIndex < ( int ) rails.size(); ++railIndex ) {
+        const auto& rail = rails[railIndex];
         if ( rail.roadMode != 2 ) continue;      // 溶け道のレールだけ
         if ( !rail.visible ) continue;
         if ( rail.nodes.size() < 2 ) continue;
@@ -172,6 +174,7 @@ void DissolveRoad::Build(const std::vector<SplineRail>& rails){
             ChainPoint point;
             point.pos = rail.GetPositionByDistance(dist); // レール線＝道の上面の高さ
             point.erode = ErodeGone(); // 最初は完全に溶けて消えている
+            point.rail = railIndex;
             points_.push_back(point);
             ++chainCount;
         }
@@ -190,6 +193,11 @@ void DissolveRoad::Update(const Vector3& playerPos, float dt){
         float dist = EffectiveDistance(playerPos, point.pos);
         float t = std::clamp(( dist - nearDist_ ) / farRange, 0.0f, 1.0f);
         float target = erodeGone * t;
+        // 「後から出現する道」：発動するまでは完全に溶けたまま（近づいても現れない）
+        if ( railsRef_ && point.rail >= 0 && point.rail < ( int ) railsRef_->size()
+            && ( *railsRef_ )[point.rail].IsRideBlocked() ) {
+            target = erodeGone;
+        }
         point.erode += ( target - point.erode ) * easeFactor;
     }
 

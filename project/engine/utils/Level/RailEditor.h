@@ -54,9 +54,13 @@ public:
     bool IsRailVisible(int rail) const;
     const std::vector<int>&   GetRailMotionTypes() const{ return data_->railMotionTypes; }
     const std::vector<float>& GetRailMotionPhases() const{ return data_->railMotionPhases; }
+    const std::vector<int>&   GetRailMotionTriggers() const{ return data_->railMotionTriggers; } // 0=最初から/1=乗ったら
+    const std::vector<int>&   GetRailAppearTriggers() const{ return data_->railAppearTriggers; } // -1=通常/N=レールNに乗ると出現
     const std::vector<float>& GetRailGuideStarts() const{ return data_->railGuideStarts; } // ガイド区間の開始(m)
     const std::vector<float>& GetRailGuideEnds() const{ return data_->railGuideEnds; }     // ガイド区間の終了(m)。-1=終点
     const std::vector<int>&   GetRailGuideModes() const{ return data_->railGuideModes; }   // 0=一周/1=往復
+    const std::vector<int>&   GetRailGuideAligns() const{ return data_->railGuideAligns; } // 0=向き固定/1=列車式回転
+    const std::vector<float>& GetRailGuideDwells() const{ return data_->railGuideDwells; } // 停車時間(秒)
     const std::vector<int>&   GetRailOneWay() const{ return data_->railOneWay; }
     const std::vector<float>& GetRailSpeedMuls() const{ return data_->railSpeedMuls; }
     int GetStartRail() const{ return data_->startRailIndex; }
@@ -87,6 +91,37 @@ public:
         if ( !data_ || index < 0 || index >= ( int ) data_->coins.size() ) return;
         data_->coins.erase(data_->coins.begin() + index);
     }
+    // --- 任意レールのノード直接操作（ゲームビューのガイドハンドル用。版を進めてライブ同期）---
+    void SetNodePosOf(int rail, int idx, const Vector3& p){
+        if ( !data_ || rail < 0 || rail >= ( int ) data_->railLines.size() ) return;
+        auto& line = data_->railLines[rail];
+        if ( idx < 0 || idx >= ( int ) line.size() ) return;
+        line[idx] = p;
+        ++railVersion_;
+    }
+    void InsertNodeOf(int rail, int idx, const Vector3& p){ // idx の位置に挿入（既存 idx は後ろへ）
+        if ( !data_ || rail < 0 || rail >= ( int ) data_->railLines.size() ) return;
+        auto& line = data_->railLines[rail];
+        if ( idx < 1 || idx > ( int ) line.size() - 1 ) return; // 端の外には挿入しない
+        line.insert(line.begin() + idx, p);
+        if ( rail < ( int ) data_->railNodeHoles.size()
+            && idx <= ( int ) data_->railNodeHoles[rail].size() ) {
+            data_->railNodeHoles[rail].insert(data_->railNodeHoles[rail].begin() + idx, 0);
+        }
+        ++railVersion_;
+    }
+    void DeleteNodeOf(int rail, int idx){ // 最低2点は残す
+        if ( !data_ || rail < 0 || rail >= ( int ) data_->railLines.size() ) return;
+        auto& line = data_->railLines[rail];
+        if ( ( int ) line.size() <= 2 || idx < 0 || idx >= ( int ) line.size() ) return;
+        line.erase(line.begin() + idx);
+        if ( rail < ( int ) data_->railNodeHoles.size()
+            && idx < ( int ) data_->railNodeHoles[rail].size() ) {
+            data_->railNodeHoles[rail].erase(data_->railNodeHoles[rail].begin() + idx);
+        }
+        ++railVersion_;
+    }
+
     // コインを1枚更新（ゲームビューのドラッグ移動用）。呼び出し側で CoinSystem::Sync を行うこと
     void SetCoinAt(int index, int rail, float dist, float height){
         if ( !data_ || index < 0 || index >= ( int ) data_->coins.size() ) return;
@@ -235,6 +270,9 @@ public:
     bool  IsMotionPreview() const{ return railMotionPreview_; }     // 動くレールをエディタ中も再生する
     void  SetMotionPreview(bool v){ railMotionPreview_ = v; }       // ゲームビュー右クリックメニューからの切替用
     bool  IsGuidePanelDragging() const{ return guidePanelDragging_; } // リフト経路エディタでドラッグ中か（同期間引き用）
+    // 編集対象の固定：ONの間は Game View のクリックで編集対象レールが切り替わらない
+    //   （リフト調整中に他のレールへ触れて、動きタブの内容が消えてしまう事故を防ぐ）
+    bool  IsEditTargetLocked() const{ return lockEditTarget_; }
     int   GetJointVisible() const{ return railJointVisible_; } // 0=エディタのみ/1=常に/2=非表示
 
 private:
@@ -302,11 +340,26 @@ private:
     bool  railReachLines_      = false; // ジャンプ予測の弾道線（Gapが多いと密になるので既定OFF。見たい時だけON）
 
     // 2D形状エディタ（ETOS風。作成タブ=選択路線 / 動きタブ=ガイドレール の点をつかんで編集する）
+    bool lockEditTarget_ = false;     // 編集対象の固定（動き/作成タブのチェックボックスで切替）
     int  guidePanelDragNode_ = -1;    // ドラッグ中のノード番号（-1=なし）
     int  guidePanelDragMark_ = 0;     // ドラッグ中の区間マーカー（0=なし/1=始点◆/2=終点◆）
     int  guidePanelDragRail_ = -1;    // ドラッグ対象のレール（タブ切替等で別レールに化けた時の安全弁）
     bool guidePanelDragging_ = false; // パネル内ドラッグ中（ゲーム側が道の再生成を間引く合図）
     int  pathEditPlane_ = 0;          // 断面（0=自動 / 1=横見図X-Y / 2=横見図Z-Y / 3=上からX-Z）
+    // 2Dエディタの表示・操作状態（ズーム/パン/選択/引っ張り挿入）
+    float pathEditZoom_ = 1.0f;       // ホイールズーム（1=全体が収まる倍率）
+    float pathEditPanX_ = 0.0f;       // 中ボタンドラッグのパン（キャンバスpx）
+    float pathEditPanY_ = 0.0f;
+    int   pathEditLastRail_ = -1;     // 表示中レール（変わったらズーム/パン/選択をリセット）
+    int   pathEditSelNode_  = -1;     // パネル内で最後に触ったノード（数値入力欄の対象）
+    bool  pathEditPullPending_ = false; // 線を押した直後（引っ張るかクリックかの判定待ち）
+    // 表示範囲と断面のスナップショット（ドラッグ中は凍結して「ノードが飛んでいく」暴走を防ぐ）
+    int   pathViewPlane_ = 1;
+    float pathViewMinH_ = -10.0f, pathViewMaxH_ = 10.0f;
+    float pathViewMinV_ = -10.0f, pathViewMaxV_ = 10.0f;
+    int   pathEditPullSeg_ = 0;       // 押した線分番号
+    float pathEditPullT_   = 0.0f;    // 線分上の位置(0〜1)
+    float pathEditPullX_ = 0.0f, pathEditPullY_ = 0.0f; // 押した位置（判定用キャンバスpx）
     // 汎用の2D形状エディタ。motionOverlay=true でガイド追従用の区間◆と動きの青丸も描く
     void DrawRailPathEditor(int railIdx, bool motionOverlay);
     int   railJointVisible_  = 1;     // ジョイント表示：0=エディタのみ / 1=常に / 2=非表示
