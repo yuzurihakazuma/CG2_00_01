@@ -187,6 +187,12 @@ private: // メンバ変数
 	int  guideHandleRail_     = -1;    // ドラッグ中のガイドレール番号（-1=なし）
 	int  guideHandleDragNode_ = -1;    // ドラッグ中のノード番号
 	bool guideHandleHover_    = false; // 今フレームにハンドル圏内だったか（右クリックメニュー抑制用）
+	// ミニマップの表示・操作状態（ズーム/パン/ノードドラッグ。ドラッグ中は表示範囲を凍結）
+	float minimapZoom_ = 1.0f;
+	float minimapPanX_ = 0.0f, minimapPanY_ = 0.0f;
+	int   minimapDragRail_ = -1, minimapDragNode_ = -1;
+	bool  minimapHasBounds_ = false;
+	float minimapMinX_ = 0.0f, minimapMaxX_ = 0.0f, minimapMinZ_ = 0.0f, minimapMaxZ_ = 0.0f;
 
 	// --- プレイ中カメラ（プレイヤー追従＋カメラ演出ゾーン。処理は PlayCameraController へ分離）---
 	PlayCameraController camCtrl_;

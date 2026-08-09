@@ -2155,49 +2155,98 @@ void GamePlayScene::DrawDebugUI(){
 		//   クリックするたびカメラが変な場所へ飛ぶ（LastItemDataがタイトルのまま残るため）
 		if ( ImGui::Begin("ミニマップ (俯瞰)") ) {
 		const auto& mmRails = railField_.GetRails();
-		// レール全体のXZ範囲（ノード基準＋余白）
-		bool hasBounds = false;
-		float minX = 0.0f, maxX = 0.0f, minZ = 0.0f, maxZ = 0.0f;
-		for ( const auto& rail : mmRails ) {
-			if ( rail.nodes.size() < 2 || !rail.visible ) continue;
-			for ( const auto& node : rail.nodes ) {
-				if ( !hasBounds ) { minX = maxX = node.x; minZ = maxZ = node.z; hasBounds = true; } else {
-					minX = ( std::min )( minX, node.x ); maxX = ( std::max )( maxX, node.x );
-					minZ = ( std::min )( minZ, node.z ); maxZ = ( std::max )( maxZ, node.z );
+		auto* mmLevelEd = EditorManager::GetInstance()->GetLevelEditor();
+		RailEditor* mmRailEd = mmLevelEd ? mmLevelEd->GetRailEditor() : nullptr;
+		const bool mmEdit = ( EditorManager::GetInstance()->GetMode() == EngineMode::Edit );
+		ImGui::TextDisabled("線に触れる=選択 / 点をドラッグ=移動 / 空クリック=カメラ / ホイール=ズーム");
+		ImGui::SameLine();
+		if ( ImGui::SmallButton("全体表示##mmFit") ) { minimapZoom_ = 1.0f; minimapPanX_ = 0.0f; minimapPanY_ = 0.0f; }
+		// レール全体のXZ範囲（ノード基準＋余白）。ノードドラッグ中は凍結（表示が動くと点が飛ぶため）
+		const bool mmDragFrozen = ( minimapDragNode_ >= 0 );
+		if ( !mmDragFrozen ) {
+			bool hasBounds = false;
+			float minX = 0.0f, maxX = 0.0f, minZ = 0.0f, maxZ = 0.0f;
+			for ( const auto& rail : mmRails ) {
+				if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+				for ( const auto& node : rail.nodes ) {
+					if ( !hasBounds ) { minX = maxX = node.x; minZ = maxZ = node.z; hasBounds = true; } else {
+						minX = ( std::min )( minX, node.x ); maxX = ( std::max )( maxX, node.x );
+						minZ = ( std::min )( minZ, node.z ); maxZ = ( std::max )( maxZ, node.z );
+					}
 				}
 			}
+			minimapHasBounds_ = hasBounds;
+			if ( hasBounds ) {
+				minimapMinX_ = minX - 4.0f; minimapMaxX_ = maxX + 4.0f;
+				minimapMinZ_ = minZ - 4.0f; minimapMaxZ_ = maxZ + 4.0f;
+			}
 		}
-		if ( !hasBounds ) {
+		if ( !minimapHasBounds_ ) {
 			ImGui::TextDisabled("レールがありません");
 		} else {
-			minX -= 4.0f; maxX += 4.0f; minZ -= 4.0f; maxZ += 4.0f;
 			ImVec2 avail = ImGui::GetContentRegionAvail();
 			ImVec2 canvasSize { ( std::max )( avail.x, 120.0f ), ( std::max )( avail.y, 120.0f ) };
 			ImGui::InvisibleButton("minimap_canvas", canvasSize);
+			const bool mmHovered = ImGui::IsItemHovered();
 			ImVec2 canvasMin = ImGui::GetItemRectMin();
+			ImVec2 canvasMax { canvasMin.x + canvasSize.x, canvasMin.y + canvasSize.y };
 			ImDrawList* draw = ImGui::GetWindowDrawList();
-			draw->AddRectFilled(canvasMin,
-				{ canvasMin.x + canvasSize.x, canvasMin.y + canvasSize.y }, IM_COL32(24, 30, 40, 235), 4.0f);
-			// world XZ → キャンバス座標（等倍・中央寄せ。奥(+Z)=上、手前=下）
-			float spanX = ( std::max )( maxX - minX, 0.001f );
-			float spanZ = ( std::max )( maxZ - minZ, 0.001f );
-			float mapScale = ( std::min )( ( canvasSize.x - 12.0f ) / spanX, ( canvasSize.y - 12.0f ) / spanZ );
-			float originX = canvasMin.x + ( canvasSize.x - spanX * mapScale ) * 0.5f;
-			float originY = canvasMin.y + ( canvasSize.y - spanZ * mapScale ) * 0.5f;
+			draw->AddRectFilled(canvasMin, canvasMax, IM_COL32(24, 30, 40, 235), 4.0f);
+			draw->PushClipRect(canvasMin, canvasMax, true);
+			// world XZ → キャンバス座標（中心基準＋ズーム＋パン。奥(+Z)=上、手前=下）
+			float spanX = ( std::max )( minimapMaxX_ - minimapMinX_, 0.001f );
+			float spanZ = ( std::max )( minimapMaxZ_ - minimapMinZ_, 0.001f );
+			float fitScale = ( std::min )( ( canvasSize.x - 12.0f ) / spanX, ( canvasSize.y - 12.0f ) / spanZ );
+			float mapScale = fitScale * minimapZoom_;
+			float worldCx = ( minimapMinX_ + minimapMaxX_ ) * 0.5f;
+			float worldCz = ( minimapMinZ_ + minimapMaxZ_ ) * 0.5f;
+			float centerPxX = canvasMin.x + canvasSize.x * 0.5f + minimapPanX_;
+			float centerPxY = canvasMin.y + canvasSize.y * 0.5f + minimapPanY_;
 			auto toCanvas = [&](float wx, float wz) -> ImVec2 {
-				return { originX + ( wx - minX ) * mapScale, originY + ( maxZ - wz ) * mapScale };
+				return { centerPxX + ( wx - worldCx ) * mapScale, centerPxY + ( worldCz - wz ) * mapScale };
 			};
-			// レール線（動くレール=水色 / 通常=白。動くレールは現在位置ぶんずらして描く）
-			for ( const auto& rail : mmRails ) {
-				if ( rail.nodes.size() < 2 || !rail.visible ) continue;
+			ImVec2 mmMouse = ImGui::GetMousePos();
+			const int mmCurrentRail = mmRailEd ? mmRailEd->GetCurrentRailIndex() : -1;
+
+			// --- レール線（選択=黄太 / ガイド骨組み=橙 / 動く=水色 / 通常=白）＋ライン上のホバー検出 ---
+			int mmHoverRail = -1; float mmBestRailPx = 8.0f;
+			for ( int railIndex = 0; railIndex < ( int ) mmRails.size(); ++railIndex ) {
+				const SplineRail& rail = mmRails[railIndex];
+				if ( rail.nodes.size() < 2 ) continue;
+				bool isGuideSkeleton = false;
+				if ( !rail.visible ) {
+					// 非表示レールのうち、ガイドとして使われている骨組みだけは表示する
+					for ( const auto& other : mmRails ) {
+						if ( other.motionType == 3 && other.guideRail == railIndex ) { isGuideSkeleton = true; break; }
+					}
+					if ( !isGuideSkeleton ) continue;
+				}
 				float len = rail.GetLength();
+				if ( len <= 0.0f ) continue;
+				ImU32 lineColor; float thickness = 2.0f;
+				if ( railIndex == mmCurrentRail )  { lineColor = IM_COL32(255, 220, 80, 255); thickness = 3.0f; }
+				else if ( isGuideSkeleton )        { lineColor = IM_COL32(255, 165, 60, 190); thickness = 1.5f; }
+				else if ( rail.HasMotion() )       { lineColor = IM_COL32(120, 180, 255, 220); }
+				else                               { lineColor = IM_COL32(230, 230, 230, 170); }
 				int steps = std::clamp(( int ) ( len * 0.5f ), 2, 64);
-				ImU32 lineColor = rail.HasMotion() ? IM_COL32(120, 180, 255, 220) : IM_COL32(230, 230, 230, 170);
 				ImVec2 prev {};
 				for ( int s = 0; s <= steps; ++s ) {
 					Vector3 p = rail.GetPositionByDistance(len * ( float ) s / ( float ) steps);
 					ImVec2 c = toCanvas(p.x + rail.animOffset.x, p.z + rail.animOffset.z);
-					if ( s > 0 ) { draw->AddLine(prev, c, lineColor, 2.0f); }
+					if ( s > 0 ) {
+						draw->AddLine(prev, c, lineColor, thickness);
+						// マウス→線分の距離でホバー判定（編集モード時のみ）
+						if ( mmEdit && mmHovered ) {
+							float vx = c.x - prev.x, vy = c.y - prev.y;
+							float len2 = vx * vx + vy * vy;
+							float t = ( len2 > 1e-5f )
+								? std::clamp((( mmMouse.x - prev.x ) * vx + ( mmMouse.y - prev.y ) * vy) / len2, 0.0f, 1.0f)
+								: 0.0f;
+							float dx = prev.x + vx * t - mmMouse.x, dy = prev.y + vy * t - mmMouse.y;
+							float d = std::sqrt(dx * dx + dy * dy);
+							if ( d < mmBestRailPx ) { mmBestRailPx = d; mmHoverRail = railIndex; }
+						}
+					}
 					prev = c;
 				}
 			}
@@ -2248,12 +2297,80 @@ void GamePlayScene::DrawDebugUI(){
 				draw->AddQuadFilled({ c.x, c.y - 4.0f }, { c.x + 4.0f, c.y },
 				                    { c.x, c.y + 4.0f }, { c.x - 4.0f, c.y }, IM_COL32(120, 220, 255, 230));
 			}
-			if ( ImGui::IsItemHovered() ) { ImGui::SetTooltip("クリック＝その場所へカメラ移動"); }
-			// クリック：クリック地点が画面の中央に来るようにカメラを移動（向きと高さは今のまま）
-			if ( ImGui::IsItemClicked() && camera_ ) {
-				ImVec2 mousePos = ImGui::GetMousePos();
-				float worldX = minX + ( mousePos.x - originX ) / mapScale;
-				float worldZ = maxZ - ( mousePos.y - originY ) / mapScale;
+			// --- 選択レールのノード：ミニマップ上で直接ドラッグしてXZ移動できる（高さは保持）---
+			int mmHoverNode = -1;
+			if ( mmEdit && mmRailEd && mmCurrentRail >= 0 ) {
+				const int mmNodeCount = mmRailEd->GetNodeCountOf(mmCurrentRail);
+				if ( mmHovered && minimapDragNode_ < 0 ) {
+					float bestNodePx = 9.0f;
+					for ( int i = 0; i < mmNodeCount; ++i ) {
+						Vector3 np; if ( !mmRailEd->GetNodePosOf(mmCurrentRail, i, np) ) continue;
+						ImVec2 c = toCanvas(np.x, np.z);
+						float dx = c.x - mmMouse.x, dy = c.y - mmMouse.y;
+						float d = std::sqrt(dx * dx + dy * dy);
+						if ( d < bestNodePx ) { bestNodePx = d; mmHoverNode = i; }
+					}
+				}
+				for ( int i = 0; i < mmNodeCount; ++i ) {
+					Vector3 np; if ( !mmRailEd->GetNodePosOf(mmCurrentRail, i, np) ) continue;
+					ImVec2 c = toCanvas(np.x, np.z);
+					const bool active = ( i == mmHoverNode || i == minimapDragNode_ );
+					draw->AddCircleFilled(c, active ? 5.0f : 3.5f,
+						active ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 220, 80, 255));
+					draw->AddCircle(c, active ? 5.0f : 3.5f, IM_COL32(40, 40, 20, 255), 0, 1.2f);
+				}
+				// つかむ
+				if ( mmHovered && mmHoverNode >= 0 && ImGui::IsMouseClicked(0) ) {
+					minimapDragRail_ = mmCurrentRail;
+					minimapDragNode_ = mmHoverNode;
+				}
+			}
+			// ドラッグ中：マウスのワールドXZへ移動（表示は凍結済みなので飛ばない）
+			if ( minimapDragNode_ >= 0 ) {
+				if ( !mmRailEd || minimapDragRail_ != mmCurrentRail
+					|| minimapDragNode_ >= mmRailEd->GetNodeCountOf(mmCurrentRail)
+					|| !ImGui::IsMouseDown(0) ) {
+					minimapDragNode_ = -1;
+					minimapDragRail_ = -1;
+				} else {
+					float worldX = worldCx + ( mmMouse.x - centerPxX ) / mapScale;
+					float worldZ = worldCz - ( mmMouse.y - centerPxY ) / mapScale;
+					Vector3 np;
+					if ( mmRailEd->GetNodePosOf(mmCurrentRail, minimapDragNode_, np) ) {
+						mmRailEd->SetNodePosOf(mmCurrentRail, minimapDragNode_, { worldX, np.y, worldZ });
+						EditorManager::GetInstance()->SetGameViewGuideDragging(true); // 道の再生成を10Hzに間引く
+						ImGui::SetTooltip("X=%.1f Z=%.1f（高さ%.1fは保持）", worldX, worldZ, np.y);
+					}
+				}
+			}
+			// レールに触れる＝選択（固定中は他レールへ切り替えない）
+			if ( mmEdit && mmRailEd && mmHovered && mmHoverNode < 0 && minimapDragNode_ < 0 && mmHoverRail >= 0 ) {
+				ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+				ImGui::SetTooltip("路線%d%s", mmHoverRail,
+					mmHoverRail == mmCurrentRail ? "（選択中）" : "（クリックで選択）");
+				if ( ImGui::IsMouseClicked(0)
+					&& !( mmRailEd->IsEditTargetLocked() && mmHoverRail != mmCurrentRail ) ) {
+					mmRailEd->SelectWholeRail(mmHoverRail);
+				}
+			}
+			draw->PopClipRect();
+			// ズーム（カーソル位置基準）＆中ボタンパン
+			if ( mmHovered && minimapDragNode_ < 0 && ImGui::GetIO().MouseWheel != 0.0f ) {
+				float worldAtX = worldCx + ( mmMouse.x - centerPxX ) / mapScale;
+				float worldAtZ = worldCz - ( mmMouse.y - centerPxY ) / mapScale;
+				minimapZoom_ = std::clamp(minimapZoom_ * std::exp(ImGui::GetIO().MouseWheel * 0.15f), 0.5f, 12.0f);
+				float newScale = fitScale * minimapZoom_;
+				minimapPanX_ = mmMouse.x - ( canvasMin.x + canvasSize.x * 0.5f ) - ( worldAtX - worldCx ) * newScale;
+				minimapPanY_ = mmMouse.y - ( canvasMin.y + canvasSize.y * 0.5f ) + ( worldAtZ - worldCz ) * newScale;
+			}
+			if ( mmHovered && ImGui::IsMouseDown(ImGuiMouseButton_Middle) ) {
+				minimapPanX_ += ImGui::GetIO().MouseDelta.x;
+				minimapPanY_ += ImGui::GetIO().MouseDelta.y;
+			}
+			// 空クリック：クリック地点が画面の中央に来るようにカメラを移動（向きと高さは今のまま）
+			if ( ImGui::IsItemClicked() && camera_ && mmHoverRail < 0 && mmHoverNode < 0 && minimapDragNode_ < 0 ) {
+				float worldX = worldCx + ( mmMouse.x - centerPxX ) / mapScale;
+				float worldZ = worldCz - ( mmMouse.y - centerPxY ) / mapScale;
 				Vector3 camPos = camera_->GetWorldPosition();
 				Vector3 rot = camera_->GetRotation();
 				float cosPitch = std::cos(rot.x);
