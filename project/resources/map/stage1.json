@@ -1,42 +1,609 @@
 {
-    "blocks": [],
+    "blocks": [
+        {
+            "anchor": 5,
+            "anchorOff": 3.2995529174804688,
+            "dist": 23.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 3.2995529174804688,
+            "dist": 23.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 3.2995529174804688,
+            "dist": 23.0,
+            "level": 2,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 3.2995529174804688,
+            "dist": 23.0,
+            "level": 3,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 0.29955291748046875,
+            "dist": 24.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 0.29955291748046875,
+            "dist": 24.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 0.29955291748046875,
+            "dist": 24.0,
+            "level": 2,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 0.29955291748046875,
+            "dist": 24.0,
+            "level": 3,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 1.2995529174804688,
+            "dist": 25.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 1.2995529174804688,
+            "dist": 25.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 1.2995529174804688,
+            "dist": 25.0,
+            "level": 2,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 1.2995529174804688,
+            "dist": 25.0,
+            "level": 3,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 2.2995529174804688,
+            "dist": 26.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 2.2995529174804688,
+            "dist": 26.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 2.2995529174804688,
+            "dist": 26.0,
+            "level": 2,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 6,
+            "anchorOff": 2.2995529174804688,
+            "dist": 26.0,
+            "level": 3,
+            "rail": 5,
+            "side": 0.0,
+            "type": 1
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 2.2995529174804688,
+            "dist": 22.0,
+            "level": 3,
+            "rail": 5,
+            "side": 0.0,
+            "type": 2
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 1.2995529174804688,
+            "dist": 21.0,
+            "level": 2,
+            "rail": 5,
+            "side": 0.0,
+            "type": 2
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 0.29955291748046875,
+            "dist": 20.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 2
+        },
+        {
+            "anchor": 4,
+            "anchorOff": 3.299553871154785,
+            "dist": 19.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 2
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 2.2995529174804688,
+            "dist": 22.0,
+            "level": 2,
+            "rail": 5,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 2.2995529174804688,
+            "dist": 22.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 1.2995529174804688,
+            "dist": 21.0,
+            "level": 1,
+            "rail": 5,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 2.2995529174804688,
+            "dist": 22.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 1.2995529174804688,
+            "dist": 21.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 0.29955291748046875,
+            "dist": 20.0,
+            "level": 0,
+            "rail": 5,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 20.0,
+            "dist": 20.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 21.0,
+            "dist": 21.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 21.0,
+            "dist": 21.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 22.0,
+            "dist": 22.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 22.0,
+            "dist": 22.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 22.0,
+            "dist": 22.0,
+            "level": 2,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 0.050319671630859375,
+            "dist": 23.0,
+            "level": 2,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 1.0503196716308594,
+            "dist": 24.0,
+            "level": 2,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 4.050319671630859,
+            "dist": 27.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 5.050319671630859,
+            "dist": 28.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 6.050319671630859,
+            "dist": 29.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 7.050319671630859,
+            "dist": 30.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 8.05031967163086,
+            "dist": 31.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 4.050319671630859,
+            "dist": 27.0,
+            "level": 0,
+            "rail": 0,
+            "side": -1.0,
+            "type": 1
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 4.050319671630859,
+            "dist": 27.0,
+            "level": 1,
+            "rail": 0,
+            "side": -1.0,
+            "type": 1
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 8.05031967163086,
+            "dist": 31.0,
+            "level": 0,
+            "rail": 0,
+            "side": -1.0,
+            "type": 1
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 8.05031967163086,
+            "dist": 31.0,
+            "level": 1,
+            "rail": 0,
+            "side": -1.0,
+            "type": 1
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 10.05031967163086,
+            "dist": 33.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 4
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 11.05031967163086,
+            "dist": 34.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 4
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 12.05031967163086,
+            "dist": 35.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 12.05031967163086,
+            "dist": 35.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 12.05031967163086,
+            "dist": 35.0,
+            "level": 2,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 12.05031967163086,
+            "dist": 35.0,
+            "level": 3,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 13.05031967163086,
+            "dist": 36.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 13.05031967163086,
+            "dist": 36.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 13.05031967163086,
+            "dist": 36.0,
+            "level": 2,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 13.05031967163086,
+            "dist": 36.0,
+            "level": 3,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 14.05031967163086,
+            "dist": 37.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 14.05031967163086,
+            "dist": 37.0,
+            "level": 1,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 14.05031967163086,
+            "dist": 37.0,
+            "level": 2,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 0.0,
+            "dist": 0.0,
+            "level": 1,
+            "rail": 1,
+            "side": -1.0,
+            "type": 6
+        },
+        {
+            "anchor": 0,
+            "anchorOff": 1.0,
+            "dist": 1.0,
+            "level": 1,
+            "rail": 1,
+            "side": -1.0,
+            "type": 6
+        },
+        {
+            "anchor": 1,
+            "anchorOff": 0.7485215663909912,
+            "dist": 2.0,
+            "level": 1,
+            "rail": 1,
+            "side": -1.0,
+            "type": 6
+        },
+        {
+            "anchor": 2,
+            "anchorOff": 2.100322723388672,
+            "dist": 37.0,
+            "level": 3,
+            "rail": 0,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 0.05554962158203125,
+            "dist": 45.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 8
+        },
+        {
+            "anchor": 4,
+            "anchorOff": 4.237323760986328,
+            "dist": 43.0,
+            "level": 0,
+            "rail": 0,
+            "side": 0.0,
+            "type": 8
+        },
+        {
+            "anchor": 5,
+            "anchorOff": 4.055549621582031,
+            "dist": 49.0,
+            "level": 1,
+            "rail": 0,
+            "side": -1.0,
+            "type": 6
+        }
+    ],
     "cameraZones": [],
-    "coins": [],
+    "coins": [
+        {
+            "dist": 5.514002323150635,
+            "height": 1.0,
+            "rail": 0
+        },
+        {
+            "dist": 6.516548156738281,
+            "height": 1.0,
+            "rail": 0
+        },
+        {
+            "dist": 7.5190935134887695,
+            "height": 1.0,
+            "rail": 0
+        },
+        {
+            "dist": 28.071277618408203,
+            "height": 1.0,
+            "rail": 0
+        },
+        {
+            "dist": 29.073822021484375,
+            "height": 1.0,
+            "rail": 0
+        },
+        {
+            "dist": 30.07636833190918,
+            "height": 1.0,
+            "rail": 0
+        }
+    ],
     "enemies": [
         {
-            "distance": 5.3050537109375,
-            "patrol": 0,
-            "patrolMax": -1.0,
-            "patrolMin": -1.0,
-            "railIndex": 0,
-            "type": 0
-        },
-        {
-            "distance": 0.0,
-            "patrol": 0,
-            "patrolMax": -1.0,
-            "patrolMin": -1.0,
-            "railIndex": 0,
-            "type": 0
-        },
-        {
-            "distance": 11.994269371032715,
-            "patrol": 0,
-            "patrolMax": -1.0,
-            "patrolMin": -1.0,
-            "railIndex": 0,
-            "type": 0
-        },
-        {
-            "distance": 17.947423934936523,
-            "patrol": 0,
-            "patrolMax": -1.0,
-            "patrolMin": -1.0,
-            "railIndex": 2,
-            "type": 0
-        },
-        {
-            "distance": 0.0,
+            "distance": 23.381959915161133,
             "patrol": 0,
             "patrolMax": -1.0,
             "patrolMin": -1.0,
@@ -163,6 +730,29 @@
         1,
         0
     ],
+    "railGuideDwells": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
     "railGuideEnds": [
         -1.0,
         -1.0,
@@ -281,46 +871,66 @@
     "railLines": [
         [
             [
-                -21.645877838134766,
-                0.4987356662750244,
-                7.121192932128906
+                -47.54568099975586,
+                2.2899999618530273,
+                7.423999786376953
             ],
             [
-                -16.6458740234375,
-                0.4987356662750244,
-                7.121192932128906
+                -24.59600067138672,
+                2.2899999618530273,
+                7.423999786376953
+            ],
+            [
+                -12.645999908447266,
+                2.2899999618530273,
+                7.423999786376953
+            ],
+            [
+                -9.964500427246094,
+                2.2899999618530273,
+                7.423999786376953
+            ],
+            [
+                -8.782999992370605,
+                2.2899999618530273,
+                7.423999786376953
+            ],
+            [
+                -2.6012163162231445,
+                2.2899999618530273,
+                7.423999786376953
             ],
             [
                 2.080336332321167,
-                0.4987356662750244,
-                7.121192932128906
+                2.2899999618530273,
+                7.423999786376953
             ]
         ],
         [
             [
                 2.080336332321167,
-                0.4987356662750244,
-                7.121192932128906
+                2.2899999618530273,
+                7.423999786376953
             ],
             [
                 3.331814765930176,
-                1.3027747869491577,
-                6.8912506103515625
+                2.2899999618530273,
+                7.423999786376953
             ],
             [
                 4.581814765930176,
-                2.614980697631836,
-                6.8912506103515625
+                2.2899999618530273,
+                7.423999786376953
             ],
             [
                 5.831814765930176,
-                2.614980697631836,
-                6.8912506103515625
+                2.2899999618530273,
+                7.423999786376953
             ],
             [
                 8.367294311523438,
-                2.465590000152588,
-                6.8912506103515625
+                2.2899999618530273,
+                7.423999786376953
             ]
         ],
         [
@@ -1140,6 +1750,12 @@
     ],
     "railNodeHoles": [
         [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
             0,
             0,
             0
