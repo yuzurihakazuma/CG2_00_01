@@ -566,6 +566,168 @@
             "rail": 0,
             "side": -1.0,
             "type": 6
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 6.0,
+            "level": 0,
+            "rail": 2,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 7.0,
+            "level": 0,
+            "rail": 2,
+            "side": 0.0,
+            "type": 0
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 7.0,
+            "level": 1,
+            "rail": 2,
+            "side": 0.0,
+            "type": 5
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 8.0,
+            "level": 0,
+            "rail": 7,
+            "side": 0.0,
+            "type": 7
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 12.0,
+            "level": 0,
+            "rail": 7,
+            "side": 0.0,
+            "type": 4
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 6.0,
+            "level": 0,
+            "rail": 14,
+            "side": 0.0,
+            "type": 4
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 10.0,
+            "level": 0,
+            "rail": 14,
+            "side": 0.0,
+            "type": 8
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 20.0,
+            "level": 2,
+            "rail": 14,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 21.0,
+            "level": 2,
+            "rail": 14,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 22.0,
+            "level": 2,
+            "rail": 14,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 35.0,
+            "level": 1,
+            "rail": 14,
+            "side": 0.0,
+            "type": 5
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 8.0,
+            "level": 0,
+            "rail": 16,
+            "side": 0.0,
+            "type": 7
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 14.0,
+            "level": 0,
+            "rail": 16,
+            "side": 0.0,
+            "type": 3
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 15.0,
+            "level": 0,
+            "rail": 16,
+            "side": 0.0,
+            "type": 8
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 18.0,
+            "level": 1,
+            "rail": 16,
+            "side": 0.0,
+            "type": 5
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 26.0,
+            "level": 1,
+            "rail": 16,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 27.0,
+            "level": 1,
+            "rail": 16,
+            "side": 0.0,
+            "type": 6
+        },
+        {
+            "anchor": -1,
+            "anchorOff": 0.0,
+            "dist": 28.0,
+            "level": 1,
+            "rail": 16,
+            "side": 0.0,
+            "type": 6
         }
     ],
     "cameraZones": [],
@@ -604,11 +766,83 @@
     "enemies": [
         {
             "distance": 23.381959915161133,
+            "patrol": 1,
+            "patrolMax": 30.0,
+            "patrolMin": 18.0,
+            "railIndex": 0,
+            "type": 0
+        },
+        {
+            "distance": 12.162322998046875,
+            "patrol": 1,
+            "patrolMax": 17.0,
+            "patrolMin": 7.0,
+            "railIndex": 0,
+            "type": 2
+        },
+        {
+            "distance": 38.002052307128906,
+            "patrol": 1,
+            "patrolMax": 45.0,
+            "patrolMin": 33.0,
+            "railIndex": 0,
+            "type": 0
+        },
+        {
+            "distance": 8.975784301757813,
             "patrol": 0,
             "patrolMax": -1.0,
             "patrolMin": -1.0,
-            "railIndex": 0,
+            "railIndex": 2,
+            "type": 1
+        },
+        {
+            "distance": 10.000445365905762,
+            "patrol": 1,
+            "patrolMax": 16.0,
+            "patrolMin": 5.0,
+            "railIndex": 5,
             "type": 0
+        },
+        {
+            "distance": 24.000598907470703,
+            "patrol": 0,
+            "patrolMax": -1.0,
+            "patrolMin": -1.0,
+            "railIndex": 5,
+            "type": 1
+        },
+        {
+            "distance": 14.980880737304688,
+            "patrol": 1,
+            "patrolMax": 28.0,
+            "patrolMin": 8.0,
+            "railIndex": 14,
+            "type": 2
+        },
+        {
+            "distance": 31.973709106445313,
+            "patrol": 1,
+            "patrolMax": 38.0,
+            "patrolMin": 27.0,
+            "railIndex": 14,
+            "type": 0
+        },
+        {
+            "distance": 20.00000762939453,
+            "patrol": 0,
+            "patrolMax": -1.0,
+            "patrolMin": -1.0,
+            "railIndex": 16,
+            "type": 1
+        },
+        {
+            "distance": 29.99306869506836,
+            "patrol": 1,
+            "patrolMax": 38.0,
+            "patrolMin": 22.0,
+            "railIndex": 16,
+            "type": 2
         }
     ],
     "goalNodeIndex": 4,
@@ -1750,8 +1984,6 @@
     ],
     "railNodeHoles": [
         [
-            0,
-            0,
             0,
             0,
             0,

@@ -13,18 +13,19 @@ void EnemyManager::Spawn(const std::vector<EnemySpawnData>& spawns, const std::v
         auto enemy = std::make_unique<Enemy>();
         enemy->Initialize(spawn.type, spawn.railIndex, spawn.distance, spawn.patrol,
                           spawn.patrolMin, spawn.patrolMax);
-        // dt=0 で Update を呼び、レール上の初期位置を即座に確定させる（原点に巨大球が出るのを防ぐ）
-        enemy->Update(rails, 0.0f);
+        // dt=0 で Update を呼び、レール上の初期位置を即座に確定させる（原点に巨大モデルが出るのを防ぐ）
+        enemy->Update(rails, { 0.0f, 0.0f, 0.0f }, 0.0f);
         enemies_.push_back(std::move(enemy));
     }
 }
 
 // 移動＋吸い込みTick＋消化（完了で onConsumed を呼んで削除）
 void EnemyManager::Update(const std::vector<SplineRail>& rails, const Vector3& playerPos, float dt,
-                          const std::function<void(const Vector3&)>& onConsumed){
+                          const std::function<void(const Vector3&)>& onConsumed,
+                          const BlockSystem* blocks){
     for ( auto& enemy : enemies_ ) {
         if ( enemy->IsSwallowing() ) { enemy->TickSwallow(playerPos, dt); } // 縮みながらプレイヤーへ吸い込まれる
-        else { enemy->Update(rails, dt); }
+        else { enemy->Update(rails, playerPos, dt, blocks); } // playerPos=噛みつき判定 / blocks=貫通防止
     }
     // 吸い込み完了 → 通知（お腹+1・演出はシーン側）してから消す
     for ( auto& enemy : enemies_ ) {

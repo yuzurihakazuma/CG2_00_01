@@ -11,8 +11,9 @@ EnemyEditor::~EnemyEditor() = default;
 // 敵タイプ名のヘルパー（コンボボックスや詳細表示用）
 const char* EnemyEditor::GetTypeName(EnemyType type) {
     switch ( type ) {
-    case EnemyType::Zako:   return "Zako (雑魚敵)";
-    case EnemyType::Strong: return "Strong (強敵)";
+    case EnemyType::Zako:   return "ドングリン (地上・歩く)";
+    case EnemyType::Strong: return "カミバナ (植物・噛みつき)";
+    case EnemyType::Air:    return "フワリン (空中・浮遊)";
     default:                return "Unknown";
     }
 }
@@ -20,8 +21,9 @@ const char* EnemyEditor::GetTypeName(EnemyType type) {
 // 一覧行に収まるよう短縮した名前
 const char* EnemyEditor::GetTypeLabel(EnemyType type) {
     switch ( type ) {
-    case EnemyType::Zako:   return "Zako";
-    case EnemyType::Strong: return "Strong";
+    case EnemyType::Zako:   return "ドングリン";
+    case EnemyType::Strong: return "カミバナ";
+    case EnemyType::Air:    return "フワリン";
     default:                return "???";
     }
 }
@@ -152,7 +154,7 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
                 "レールがありません。先にレールを作成してください。");
         } else {
             // --- 敵の種類を選択 ---
-            const char* enemyTypeNames[] = { "Zako (雑魚敵)", "Strong (強敵)" };
+            const char* enemyTypeNames[] = { "ドングリン (地上・歩く)", "カミバナ (植物・噛みつき)", "フワリン (空中・浮遊)" };
             ImGui::Combo("種類##new", &spawnEnemyTypeIdx_, enemyTypeNames, IM_ARRAYSIZE(enemyTypeNames));
 
             // --- 配置先レール番号の選択（情報付きドロップダウン）---
@@ -172,7 +174,7 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.2f, 0.65f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.25f, 0.8f, 0.25f, 1.0f));
             if ( ImGui::Button("＋ 敵を追加", ImVec2(-1.0f, 28.0f)) ) {
-                EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
+                EnemyType type = ( EnemyType ) std::clamp(spawnEnemyTypeIdx_, 0, 2); // コンボの並び＝enumの並び
                 // レール端1mには置かない：距離0のままだとレール始点＝プレイヤーのスタート地点に
                 // 敵が重なってしまう事故が起きる（実際に起きた）ため
                 float d = std::clamp(spawnDistance_, 1.0f, std::max(1.0f, maxDist - 1.0f));
@@ -184,7 +186,7 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
             // --- 選択ノードの位置に追加（Game View でクリックした場所へ数値入力なしで置ける）---
             ImGui::BeginDisabled(!hasPick);
             if ( ImGui::Button("＋ 選択ノードの位置に追加", ImVec2(-1.0f, 0.0f)) ) {
-                EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
+                EnemyType type = ( EnemyType ) std::clamp(spawnEnemyTypeIdx_, 0, 2); // コンボの並び＝enumの並び
                 // 始点ノード選択時もレール端1mは避ける（プレイヤー開始位置との重なり防止）
                 float pickLen = splineRails[pickRail].GetLength();
                 float d = std::clamp(pickDist, 1.0f, std::max(1.0f, pickLen - 1.0f));
@@ -205,7 +207,7 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
             ImGui::DragInt("体数##multi", &multiCount, 1, 1, 12);
             ImGui::SameLine();
             if ( ImGui::Button("選んだレールに等間隔で並べる") ) {
-                EnemyType type = (spawnEnemyTypeIdx_ == 0) ? EnemyType::Zako : EnemyType::Strong;
+                EnemyType type = ( EnemyType ) std::clamp(spawnEnemyTypeIdx_, 0, 2); // コンボの並び＝enumの並び
                 float len = splineRails[spawnRailIndex_].GetLength();
                 for ( int k = 0; k < multiCount; ++k ) {
                     // 両端1割は空ける（端ぴったりに敵が立たないように）
@@ -333,10 +335,10 @@ void EnemyEditor::DrawWindow(const std::vector<SplineRail>& splineRails,
                 ImGui::Indent(16.0f);
 
                 // 種類の変更
-                int typeIdx = (spawn.type == EnemyType::Zako) ? 0 : 1;
-                const char* typeNames[] = { "Zako (雑魚敵)", "Strong (強敵)" };
+                int typeIdx = std::clamp(( int ) spawn.type, 0, 2);
+                const char* typeNames[] = { "ドングリン (地上・歩く)", "カミバナ (植物・噛みつき)", "フワリン (空中・浮遊)" };
                 if ( ImGui::Combo("種類##edit", &typeIdx, typeNames, IM_ARRAYSIZE(typeNames)) ) {
-                    spawn.type = (typeIdx == 0) ? EnemyType::Zako : EnemyType::Strong;
+                    spawn.type = ( EnemyType ) typeIdx;
                     changed_ = true;
                 }
 

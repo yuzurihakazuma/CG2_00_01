@@ -12,12 +12,15 @@
 #include <vector>
 
 class Obj3d;
+class SkinnedObj3d;
 class SplineRail;
+class BlockSystem;
 
-// 敵の種類（エディタから選択可能）
+// 敵の種類（エディタから選択可能）。保存データは int なので既存の並びは変えないこと
 enum class EnemyType{
-    Zako,   // 雑魚：レール上を往復するだけ
-    Strong, // 強敵：少しサイズが大きく、見た目が異なる
+    Zako,   // 地上「ドングリン」：よちよち歩き（Idle/Walk）
+    Strong, // 植物「カミバナ」：その場でゆらゆら、近づくと噛みつく（Idle/Bite）
+    Air,    // 空中「フワリン」：レールの上を浮遊しながら羽ばたく（Fly）
 };
 
 class Enemy{
@@ -31,8 +34,11 @@ public:
     void Initialize(EnemyType type, int railIndex, float distance, bool patrol = false,
                     float patrolMin = -1.0f, float patrolMax = -1.0f);
 
-    // レール上を移動（パトロールON時のみ往復）。位置・向き・コライダーを更新する
-    void Update(const std::vector<SplineRail>& rails, float dt);
+    // レール上を移動（パトロールON時のみ往復）。位置・向き・コライダー・アニメを更新する。
+    //   playerPos はカミバナ（植物）の噛みつき発動と向きの制御に使う。
+    //   blocks を渡すと、進行方向にブロックがある時に引き返す（貫通防止。nullptr=判定なし）
+    void Update(const std::vector<SplineRail>& rails, const Vector3& playerPos, float dt,
+                const BlockSystem* blocks = nullptr);
 
     // 描画（Obj3dCommon::PreDraw 済みの状態で呼ぶ）
     void Draw();
@@ -80,6 +86,9 @@ private:
     Vector3 rotation_ { 0.0f, 0.0f, 0.0f };
     float   radius_   = 0.6f;       // 見た目＆当たり判定の半径
 
-    std::unique_ptr<Obj3d> obj_;    // 見た目
+    std::unique_ptr<SkinnedObj3d> skinnedObj_; // 見た目（リグ+クリップ入りの敵モデル）
+    std::unique_ptr<Obj3d> obj_;    // フォールバックの見た目（モデル未登録時のsphere）
+    float biteTimer_ = 0.0f;        // カミバナ：噛みつきモーションの残り時間（0=Idle中）
+    float turnCooldown_ = 0.0f;     // ブロックにぶつかって折り返した直後の再判定待ち（振動防止）
     Collider collider_;             // 当たり判定（球）
 };

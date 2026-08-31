@@ -6,6 +6,7 @@
 #include <functional>
 
 class SplineRail;
+class BlockSystem;
 
 // =====================================================================
 //  EnemyManager：敵の実体の生成・更新・描画をまとめて管理する。
@@ -22,8 +23,10 @@ public:
     // 移動＋吸い込みTick＋消化。
     //   吸い込みが完了した敵は onConsumed(その位置) を呼んでから削除する
     //   （お腹+1 や演出はシーン/EggSystem 側が行う）。
+    //   blocks を渡すとパトロール中の敵がブロックで引き返す（貫通防止）
     void Update(const std::vector<SplineRail>& rails, const Vector3& playerPos, float dt,
-                const std::function<void(const Vector3&)>& onConsumed);
+                const std::function<void(const Vector3&)>& onConsumed,
+                const BlockSystem* blocks = nullptr);
 
     void Draw();
     void Clear(){ enemies_.clear(); }

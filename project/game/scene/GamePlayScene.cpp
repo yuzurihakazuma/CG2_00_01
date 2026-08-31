@@ -82,6 +82,10 @@ void GamePlayScene::LoadResources(){
 	modelManager->LoadModel("human", "resources/human", "walk.gltf");
 	modelManager->LoadModel("egg", "resources/egg", "egg.obj"); // ヨッシーの卵（専用モデル。sphereの使い回しをやめる）
 	modelManager->LoadModel("player", "resources/player", "player.gltf"); // プレイヤー（リグ付きマスコット。7色パレット焼き込み済み）
+	// 敵キャラ3種（リグ+クリップ入りglb。プレイヤーと同じトイ風の公式デザイン）
+	modelManager->LoadModel("enemyGround", "resources/enemy", "enemy_ground.glb"); // 地上「ドングリン」(Idle/Walk)
+	modelManager->LoadModel("enemyAir",    "resources/enemy", "enemy_air.glb");    // 空中「フワリン」(Fly)
+	modelManager->LoadModel("enemyPlant",  "resources/enemy", "enemy_plant.glb");  // 植物「カミバナ」(Idle/Bite)
 	modelManager->LoadModel("roadStraight", "resources/road", "road_straight.obj"); // 道の直線ピース（グリッド組み用）
 	modelManager->LoadModel("roadEnd",      "resources/road", "road_end.obj");      // 道の終端キャップ（自由端を閉じる）
 	modelManager->LoadModel("roadCorner",   "resources/road", "road_corner.obj");   // 交差点ピース：直角コーナー
@@ -638,7 +642,7 @@ void GamePlayScene::UpdatePlayMode(){
 	enemyMgr_.Update(railField_.GetRails(), playerPos, deltaTime, [&](const Vector3& pos){
 		eggSystem_.AddToBelly();
 		eggSystem_.SpawnSwallowFx(pos);
-	});
+	}, &blockSystem_); // ブロックを渡す＝パトロールの敵が壁で引き返す（貫通防止）
 
 	// 当たり判定＋踏みつけ
 	combat_.Update(*player_, enemyMgr_, eggSystem_, hitFeel_, camera_.get());
@@ -697,7 +701,7 @@ void GamePlayScene::UpdateSceneVisuals(){
 	//   dt=0 で呼ぶのでパトロール等の移動は起きない（位置はレール上の現在距離のまま）。
 	if ( currentMode != EngineMode::Play ) {
 		Vector3 playerPos = player_ ? player_->GetPosition() : Vector3 { 0.0f, 0.0f, 0.0f };
-		enemyMgr_.Update(railField_.GetRails(), playerPos, 0.0f, nullptr);
+		enemyMgr_.Update(railField_.GetRails(), playerPos, 0.0f, nullptr, &blockSystem_);
 	}
 
 	// カメラ演出ゾーンの可視化（球=発動範囲 / 白い箱=カメラ位置の目安。編集中も見える）
@@ -1263,9 +1267,10 @@ void GamePlayScene::DrawDebugUI(){
 			for ( const auto& spawnData : spawnDatas ) {
 				Vector3 wp;
 				if ( !enemyWorldPos(spawnData, wp) ) continue;
-				Vector4 pinColor = ( spawnData.type == EnemyType::Zako )
-					? Vector4 { 1.0f, 0.35f, 0.25f, 1.0f }   // 赤（雑魚）
-					: Vector4 { 0.75f, 0.4f, 1.0f, 1.0f };   // 紫（強敵）
+				Vector4 pinColor;
+				if      ( spawnData.type == EnemyType::Zako )   { pinColor = { 1.0f, 0.35f, 0.25f, 1.0f }; } // 赤（ドングリン）
+				else if ( spawnData.type == EnemyType::Strong ) { pinColor = { 0.75f, 0.4f, 1.0f, 1.0f }; }  // 紫（カミバナ）
+				else                                            { pinColor = { 0.35f, 0.8f, 1.0f, 1.0f }; }  // 水色（フワリン）
 				DebugDraw::GetInstance()->Line({ wp.x, wp.y + 0.4f, wp.z }, { wp.x, wp.y + 1.1f, wp.z }, pinColor);
 				DebugDraw::GetInstance()->Sphere({ wp.x, wp.y + 1.2f, wp.z }, 0.16f, pinColor, 10);
 
@@ -1817,9 +1822,9 @@ void GamePlayScene::DrawDebugUI(){
 					enemyEditor_->MarkChanged();
 					ctxEnemyIdx_ = -1;
 				}
-				if ( ctxEnemyIdx_ >= 0 && ImGui::MenuItem("敵の種類を切替（雑魚⇔強敵）") ) {
+				if ( ctxEnemyIdx_ >= 0 && ImGui::MenuItem("敵の種類を切替（ドングリン→カミバナ→フワリン）") ) {
 					auto& sd = enemyEditor_->MutableSpawnDatas()[ctxEnemyIdx_];
-					sd.type = ( sd.type == EnemyType::Zako ) ? EnemyType::Strong : EnemyType::Zako;
+					sd.type = ( EnemyType ) ( ( ( int ) sd.type + 1 ) % 3 ); // 3種を順番に切替
 					enemyEditor_->MarkChanged();
 				}
 			}
@@ -2269,8 +2274,10 @@ void GamePlayScene::DrawDebugUI(){
 					if ( spawnData.railIndex < 0 || spawnData.railIndex >= ( int ) mmRails.size() ) continue;
 					if ( mmRails[spawnData.railIndex].nodes.size() < 2 ) continue;
 					Vector3 p = mmRails[spawnData.railIndex].GetPositionByDistance(spawnData.distance);
-					ImU32 pinColor = ( spawnData.type == EnemyType::Zako )
-						? IM_COL32(255, 90, 70, 255) : IM_COL32(190, 100, 255, 255);
+					ImU32 pinColor;
+					if      ( spawnData.type == EnemyType::Zako )   { pinColor = IM_COL32(255, 90, 70, 255); }
+					else if ( spawnData.type == EnemyType::Strong ) { pinColor = IM_COL32(190, 100, 255, 255); }
+					else                                            { pinColor = IM_COL32(90, 205, 255, 255); }
 					draw->AddCircleFilled(toCanvas(p.x, p.z), 3.5f, pinColor);
 				}
 			}
