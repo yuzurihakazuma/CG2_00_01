@@ -42,8 +42,9 @@ void DebugCamera::Update(Camera* camera) {
 
     // 右ドラッグ中：視点回転（先に回転を確定させてから移動方向を計算する）
     if (input->PushMouseButton(1)) {
-        float dx = input->GetMouseMoveX();
-        float dy = input->GetMouseMoveY();
+        // フォーカス復帰直後などの巨大な差分スパイクで視点が吹っ飛ばないようクランプ
+        float dx = std::clamp(input->GetMouseMoveX(), -200.0f, 200.0f);
+        float dy = std::clamp(input->GetMouseMoveY(), -200.0f, 200.0f);
         const float rotationSpeed = 0.003f; // 回転の感度
         rotation.y += dx * rotationSpeed;
         rotation.x += dy * rotationSpeed;
@@ -70,17 +71,19 @@ void DebugCamera::Update(Camera* camera) {
         if (input->Pushkey(DIK_Q)) translation = Add(translation, Multiply(-moveSpeed, up));
     }
 
-    // ★ホイール：前後ズーム（ドラッグ不要でいつでも効く）
-    float wheel = input->GetMouseWheel();
-    if (wheel != 0.0f) {
+    // ★ホイール：前後ズーム（Game View にマウスが乗っている時だけ効く）。
+    //   ImGuiパネル（レールエディタ等）の上でスクロールしてもカメラは動かさない。
+    //   1フレームの適用量は3ノッチ分まで（差分スパイクで一気に吹っ飛ばない保険）
+    float wheel = std::clamp(input->GetMouseWheel(), -360.0f, 360.0f);
+    if (wheel != 0.0f && gameViewHovered_) {
         const float zoomSpeed = 0.01f; // DirectInputのホイール量(±120単位)に対する係数
         translation = Add(translation, Multiply(wheel * zoomSpeed, forward));
     }
 
     // ★中ドラッグ：平行移動（パン）。画面の右/上方向にスライド
     if (input->PushMouseButton(2)) {
-        float dx = input->GetMouseMoveX();
-        float dy = input->GetMouseMoveY();
+        float dx = std::clamp(input->GetMouseMoveX(), -200.0f, 200.0f);
+        float dy = std::clamp(input->GetMouseMoveY(), -200.0f, 200.0f);
         const float panSpeed = 0.01f;
         translation = Add(translation, Multiply(-dx * panSpeed, right)); // マウス右→視界左へ流れる
         translation = Add(translation, Multiply( dy * panSpeed, up));    // マウス下→視界上へ流れる

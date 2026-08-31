@@ -12,21 +12,35 @@
 
 using namespace QuaternionMath;
 
-// アニメーションのファイルからの読み込み
-Animation LoadAnimationFromFile(const std::string& directoryPath, const std::string& filename){
+// ファイル内のアニメーションクリップ名一覧（glTFの複数クリップ対応。Idle/Walk等の切り替えに使う）
+std::vector<std::string> GetAnimationClipNames(const std::string& directoryPath, const std::string& filename){
+	std::vector<std::string> names;
+	Assimp::Importer importer;
+	const aiScene* scene = importer.ReadFile(directoryPath + "/" + filename,
+		aiProcess_Triangulate | aiProcess_FlipUVs);
+	if ( !scene ) return names;
+	for ( uint32_t i = 0; i < scene->mNumAnimations; ++i ) {
+		names.push_back(scene->mAnimations[i]->mName.C_Str());
+	}
+	return names;
+}
+
+// アニメーションのファイルからの読み込み（animationIndex でクリップを選べる。既定=先頭）
+Animation LoadAnimationFromFile(const std::string& directoryPath, const std::string& filename, uint32_t animationIndex){
 	// Assimpを使ってアニメーションを読み込むコードを書いていきます。
 	Animation animation;
 	Assimp::Importer importer;
 	// ファイルのパスを作成
 	std::string filePath = directoryPath + "/" + filename;
-	
+
 	// ファイルを読み込む
 	const aiScene* scene = importer.ReadFile(filePath, aiProcess_Triangulate | aiProcess_FlipUVs);
 
 	// 読み込みに失敗した場合はエラーを出力して終了
 	assert(scene && scene->mNumAnimations > 0 && "Failed to load animation file or no animations found!");
 
-	aiAnimation* animationAssimp = scene->mAnimations[0]; // 最初のアニメーションを使用
+	if ( animationIndex >= scene->mNumAnimations ) { animationIndex = 0; } // 範囲外は先頭へ
+	aiAnimation* animationAssimp = scene->mAnimations[animationIndex];
 
 	// アニメーションの全体の長さを秒単位で計算
 	float ticksPerSecond = static_cast< float >( animationAssimp->mTicksPerSecond != 0.0 ? animationAssimp->mTicksPerSecond : 25.0 ); // デフォルトは25fps

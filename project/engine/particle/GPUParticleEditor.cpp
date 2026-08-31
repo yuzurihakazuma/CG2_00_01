@@ -275,16 +275,6 @@ void GPUParticleEditor::DrawDebugUI(){
     // ---- 今フレームの発生数 ----
     ImGui::Text("今フレーム発生数 : %u 個", emitCount);
 
-    // ---- FreeList の実測値（GPUから読み戻したスタックトップ） ----
-    // 空き = スタックトップ+1。生存 = 最大数 - 空き。
-    // 累計発生数が最大数を超えても空きが回復し続けていれば「使い回し」が機能している証拠
-    int32_t freeCount = GPUParticleManager::GetInstance()->GetFreeCount();
-    if ( freeCount < 0 ) freeCount = 0;
-    if ( freeCount > ( int32_t ) maxCount ) freeCount = ( int32_t ) maxCount;
-    uint32_t aliveReal = maxCount - ( uint32_t ) freeCount;
-    ImGui::Text("生存数 (実測) : %u 個", aliveReal);
-    ImGui::Text("空きスロット (FreeList) : %d / %u", freeCount, maxCount);
-
     // ---- 生存数の推定（発生レート × 平均寿命） ----
     float avgLifeTime = ( d.lifeTimeMin + d.lifeTimeMax ) * 0.5f;
     uint32_t estimatedAlive = static_cast< uint32_t >( d.emitRate * avgLifeTime );

@@ -151,7 +151,7 @@ TextureData TextureManager::LoadTextureAndCreateSRV(const std::string& filePath,
 	return texData;
 }
 
-// キャッシュを無視して再読み込み（ホットリロード用）
+// キャッシュを無視して再読み込み（SDFアトラス等のホットリロード用）
 TextureData TextureManager::ReloadTextureAndCreateSRV(const std::string& filePath, ID3D12GraphicsCommandList* commandList){
 
 	// 既存エントリがあれば SRV スロットを引き継ぐ（参照側のインデックスを無効にしない）

@@ -63,12 +63,9 @@ public:
         ID3D12GraphicsCommandList* commandList
     );
 
-    /// <summary>
-    /// キャッシュを無視してテクスチャを再読み込みする（ホットリロード用）。
-    /// ロード済みなら同じ SRV スロットへ上書きするので、
-    /// SRVインデックスを保持している側はそのまま使い続けられる。
-    /// ※GPUがアイドルの安全なタイミング（BeginCommandRecording中など）で呼ぶこと
-    /// </summary>
+    // キャッシュを無視して再読み込み（SDFアトラス等のホットリロード用）。
+    //   既存エントリがあれば SRV スロットを引き継いで上書きするので、
+    //   参照側が持っている srvIndex はそのまま有効。
     TextureData ReloadTextureAndCreateSRV(
         const std::string& filePath,
         ID3D12GraphicsCommandList* commandList

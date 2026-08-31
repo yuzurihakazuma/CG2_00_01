@@ -104,6 +104,19 @@ void SrvManager::CreateSRVforTextureCube(uint32_t index, ID3D12Resource* resourc
 	dxCommon_->GetDevice()->CreateShaderResourceView(resource, &srvDesc, GetCPUDescriptorHandle(index));
 }
 
+// 3Dテクスチャ（ボリューム）用SRV。SDFボリュームのレイマーチングで使用する
+void SrvManager::CreateSRVforTexture3D(uint32_t srvIndex, ID3D12Resource* pResource, DXGI_FORMAT Format, UINT MipLevels){
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc {};
+	srvDesc.Format = Format;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+	srvDesc.Texture3D.MostDetailedMip = 0;
+	srvDesc.Texture3D.MipLevels = MipLevels;
+	srvDesc.Texture3D.ResourceMinLODClamp = 0.0f;
+
+	dxCommon_->GetDevice()->CreateShaderResourceView(pResource, &srvDesc, GetCPUDescriptorHandle(srvIndex));
+}
+
 void SrvManager::PreDraw(){
 		// SRVヒープの設定
 	ID3D12DescriptorHeap* descriptorHeap[] = {descriptorHeaps_.Get()};

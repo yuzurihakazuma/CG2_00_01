@@ -51,6 +51,16 @@ void NodeEditor::Initialize() {
     links_.push_back({ vA, mul, 0 });
     links_.push_back({ vB, mul, 1 });
     links_.push_back({ mul, res, 0 });
+
+    // プレイヤー連動の例：数値(8) → ゲーム値[0]（＝プレイヤー移動速度）。
+    //   グラフ実行ONでプレイすると移動速度が8になる。数値を変えれば即反映＝ノードがゲームへ渡る確認。
+    int vSpd = AddNode(NodeType::Value,     40.0f, 320.0f);
+    int gp   = AddNode(NodeType::GameParam, 260.0f, 320.0f);
+    for ( auto& n : nodes_ ) {
+        if ( n.id == vSpd ) n.value = 8.0f;
+        if ( n.id == gp )   n.target = 0; // 登録順0番＝プレイヤー移動速度
+    }
+    links_.push_back({ vSpd, gp, 0 });
 }
 
 // 毎フレーム：適用ノードの値をゲームに反映する（入力が接続されているものだけ）
@@ -95,6 +105,14 @@ void NodeEditor::Update() {
         case NodeType::ObjParam: {
             LevelEditor* le = EditorManager::GetInstance()->GetLevelEditor();
             if ( le ) { le->SetObjectShaderParam(n.target, ClampF(v, 0.0f, 1.0f)); }
+            break;
+        }
+        case NodeType::GameParam: {
+            // シーンが登録したゲーム値（プレイヤー速度・卵の投げ初速など）に反映
+            if ( n.target >= 0 && n.target < ( int ) gameValues_.size() ) {
+                const GameValue& gv = gameValues_[n.target];
+                if ( gv.target ) { *gv.target = ClampF(v, gv.minV, gv.maxV); }
+            }
             break;
         }
         default: break;
@@ -161,6 +179,7 @@ const char* NodeEditor::TypeName(NodeType t) const {
     case NodeType::ShaderGray:      return "グレースケール";
     case NodeType::ShaderInvert:    return "色反転";
     case NodeType::ShaderOutput:    return "最終色 (シェーダー)";
+    case NodeType::GameParam:       return "→ ゲーム値";
     }
     return "?";
 }
@@ -191,6 +210,7 @@ const char* NodeEditor::TypeDesc(NodeType t) const {
     case NodeType::ShaderGray:      return "白黒にする";
     case NodeType::ShaderInvert:    return "色を反転する（ネガ）";
     case NodeType::ShaderOutput:    return "ここに繋いだ色でHLSLを自動生成し、選んだオブジェクトに適用";
+    case NodeType::GameParam:       return "繋いだ値をゲームの変数に反映（プレイヤー速度・卵の投げ初速など。ノード内で対象を選ぶ）";
     }
     return "";
 }
@@ -211,6 +231,7 @@ int NodeEditor::InputCount(NodeType t) const {
     case NodeType::ObjRotY:
     case NodeType::ObjScale:
     case NodeType::ObjParam:
+    case NodeType::GameParam:
     case NodeType::ShaderGray:
     case NodeType::ShaderInvert:
     case NodeType::ShaderOutput: return 1;
@@ -225,6 +246,7 @@ bool NodeEditor::HasOutput(NodeType t) const {
 bool NodeEditor::IsApplyNode(NodeType t) const {
     return t == NodeType::LightIntensity || t == NodeType::ParticleRate
         || t == NodeType::ParticleGravity || t == NodeType::TimeScale
+        || t == NodeType::GameParam
         || IsObjApplyNode(t);
 }
 
@@ -506,6 +528,9 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
         { NodeType::ObjScale, ImVec4(0.80f, 0.40f, 0.65f, 1.0f) },
         { NodeType::ObjParam, ImVec4(0.80f, 0.40f, 0.65f, 1.0f) },
     };
+    const PaletteEntry games[] = {
+        { NodeType::GameParam, ImVec4(0.90f, 0.60f, 0.20f, 1.0f) },
+    };
     const PaletteEntry shaders[] = {
         { NodeType::ShaderTexture, ImVec4(0.20f, 0.55f, 0.60f, 1.0f) },
         { NodeType::ShaderUV,      ImVec4(0.20f, 0.55f, 0.60f, 1.0f) },
@@ -547,6 +572,9 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
     ImGui::Spacing();
     ImGui::Text("配置オブジェクトに適用");
     paletteButtons(objs, 4);
+    ImGui::Spacing();
+    ImGui::Text("ゲームの値に適用");
+    paletteButtons(games, 1);
     ImGui::Spacing();
     ImGui::Text("シェーダー（マテリアル）");
     paletteButtons(shaders, 10);
@@ -655,7 +683,10 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
                                                IM_COL32(215, 75, 75, 255);   // 適用ノードは赤
 
         // 本体（先に敷いてドラッグ移動＆右クリック削除を受ける）
+        //   ※AllowOverlap が無いと、後から出すノード内ウィジェット（数値入力等）や
+        //   ピンへのクリックを本体ボタンが独占してしまい「数値がいじれない」バグになる。
         ImGui::SetCursorScreenPos(p0);
+        ImGui::SetNextItemAllowOverlap();
         ImGui::InvisibleButton("node", ImVec2(kNodeWidth, h));
         if ( ImGui::IsItemActivated() ) {
             raiseNodeId = n.id;      // 触ったら最前面へ
@@ -728,6 +759,20 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
             }
             // 右クリックで切断
             if ( hov && ImGui::IsMouseReleased(ImGuiMouseButton_Right) ) { RemoveLinksTo(n.id, s); }
+            // 接続済みの入力ピンを左ドラッグ → 線を「掴んで」付け替えられる
+            //   （元の出力側から接続をやり直す状態になる。そのまま別のピンへ落とせる）
+            if ( linkingFromNode_ < 0 && ImGui::IsItemActivated() && HasInputLink(n.id, s) ) {
+                for ( const Link& l : links_ ) {
+                    if ( l.toNode == n.id && l.toSlot == s ) {
+                        linkingFromNode_ = l.fromNode; // 線の根本（出力側）から張り直す
+                        break;
+                    }
+                }
+                RemoveLinksTo(n.id, s);
+                linkingSticky_ = false;
+                linkStartX_ = ImGui::GetIO().MousePos.x;
+                linkStartY_ = ImGui::GetIO().MousePos.y;
+            }
             // 接続中は全入力ピンを緑に光らせて「ここに繋げる」と分かるようにする
             ImU32 pinCol = ( linkingFromNode_ >= 0 && linkingFromNode_ != n.id )
                 ? IM_COL32(120, 255, 140, 255)
@@ -832,6 +877,23 @@ void NodeEditor::DrawDebugUI(bool* openFlag) {
                     if ( count == 0 ) { ImGui::TextDisabled("(配置オブジェクトなし)"); }
                     for ( int i = 0; i < count; ++i ) {
                         if ( ImGui::Selectable(le->GetObjectLabel(i).c_str(), n.target == i) ) {
+                            n.target = i;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                widgetY += kRowH;
+            }
+            // ゲーム値：シーンが登録した変数（プレイヤー速度・卵の投げ初速など）をコンボで選ぶ
+            if ( n.type == NodeType::GameParam ) {
+                ImGui::SetCursorScreenPos(ImVec2(p0.x + 8, widgetY));
+                ImGui::SetNextItemWidth(kNodeWidth - 16);
+                const char* current = ( n.target >= 0 && n.target < ( int ) gameValues_.size() )
+                    ? gameValues_[n.target].label.c_str() : "(なし)";
+                if ( ImGui::BeginCombo("##gtarget", current) ) {
+                    if ( gameValues_.empty() ) { ImGui::TextDisabled("(ゲーム値が未登録です)"); }
+                    for ( int i = 0; i < ( int ) gameValues_.size(); ++i ) {
+                        if ( ImGui::Selectable(gameValues_[i].label.c_str(), n.target == i) ) {
                             n.target = i;
                         }
                     }

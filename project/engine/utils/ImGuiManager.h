@@ -3,6 +3,8 @@
 #include "externals/imgui/imgui.h"
 #include <d3d12.h>
 #include <wtypes.h>
+#include <string>
+#include <vector>
 
 // 前方宣言
 class DirectXCommon;
@@ -48,11 +50,21 @@ public:
     /// Win32 メッセージの ImGui 用処理
     /// </summary>
     bool WndProcHandler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+
+    // -------------------- フォント --------------------
+    // 起動時に読み込めたUIフォントの一覧（UI設定ウィンドウの切替候補）
+    struct UiFont {
+        ImFont* font = nullptr;
+        std::string name;
+    };
+    const std::vector<UiFont>& GetFonts() const{ return fonts_; }
 private:
     // コンストラクタを隠蔽
     ImGuiManager() = default;
     ~ImGuiManager() = default;
     ImGuiManager(const ImGuiManager&) = delete;
     ImGuiManager& operator=(const ImGuiManager&) = delete;
+
+    std::vector<UiFont> fonts_; // 読み込めたUIフォント（[0]=既定のメイリオ）
 };
 

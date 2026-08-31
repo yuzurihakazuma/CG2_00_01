@@ -40,6 +40,16 @@ void InstancedGroup::Update(const std::vector<std::unique_ptr<Obj3d>>& objects) 
 	}
 }
 
+void InstancedGroup::Update(const std::vector<Obj3d*>& objects) {
+	currentInstanceCount_ = 0;
+	for (Obj3d* obj : objects) {
+		if (!obj) continue;
+		if (currentInstanceCount_ >= maxInstanceCount_) break;
+		instancingData_[currentInstanceCount_] = obj->GetMatrixData();
+		currentInstanceCount_++;
+	}
+}
+
 void InstancedGroup::Draw(const Camera* camera) {
 	if (currentInstanceCount_ == 0 || !model_) return;
 
@@ -61,6 +71,11 @@ void InstancedGroup::Draw(const Camera* camera) {
 
 	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(7, noiseTextureIndex_);
 	commandList->SetGraphicsRootConstantBufferView(8, dissolveResource_->GetGPUVirtualAddress());
+
+	// [9] 環境マップ (t3)。ルートシグネチャが宣言している以上、未束縛のまま Draw すると
+	// デバッグレイヤーの ERROR（DESCRIPTOR_TABLE_NOT_SET）で停止する。Obj3d::Draw と同じ扱いに揃える
+	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(9,
+		Obj3dCommon::GetInstance()->GetEnvironmentTextureSrvIndex());
 
 	// 4. いざ、一括描画！！ (集めた個数だけ一気に描く！)
 	model_->Draw(currentInstanceCount_);

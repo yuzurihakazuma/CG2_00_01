@@ -45,7 +45,10 @@ struct Animation{
 };
 
 
-Animation LoadAnimationFromFile(const std::string& directoryPath, const std::string& filename);
+Animation LoadAnimationFromFile(const std::string& directoryPath, const std::string& filename, uint32_t animationIndex = 0);
+
+// ファイル内のクリップ名一覧（glTFの複数アニメーション対応。名前→indexの対応は並び順）
+std::vector<std::string> GetAnimationClipNames(const std::string& directoryPath, const std::string& filename);
 
 
 // 指定した時刻（time）の Vector3 の値を計算する関数（移動・スケール用）

@@ -1,7 +1,6 @@
-// パーティクルを発生させるコンピュートシェーダー
-//   CPUが用意した発生リクエスト（位置・速度・寿命など）を受け取り、
-//   FreeList から空きインデックスを取り出して（pop）そのスロットに書き込む。
-//   空きが無ければ発生させない（生きているパーティクルを上書きしない）。
+// GPU側でパーティクルを発生させるコンピュートシェーダー。
+// FreeList から空きスロット番号を取り出して、そこへ発生リクエストを書き込む。
+// （CPU側で空きスロットを推測して上書きする方式だと、生きている粒を潰す事故が起きる）
 struct GPUParticleData
 {
     float3 position;
@@ -14,32 +13,23 @@ struct GPUParticleData
     float2 pad;
 };
 
-// t0: このフレームの発生リクエスト（CPUが書き込んだUploadバッファ）
-StructuredBuffer<GPUParticleData> gEmitRequests : register(t0);
-
-// u0: パーティクルバッファ
+// u0: パーティクルバッファ（空きスロットへ書き込む）
 RWStructuredBuffer<GPUParticleData> gParticles : register(u0);
 
-// u1: FreeList本体
+// u1: FreeList（空きスロット番号のスタック）
 RWStructuredBuffer<uint> gFreeList : register(u1);
 
-// u2: FreeListのスタックトップ
+// u2: FreeListの空き数カウンタ（[0]のみ使用）
 RWStructuredBuffer<int> gFreeListIndex : register(u2);
 
-// b0: 更新用定数バッファ（maxParticles を上限チェックに使う）
-cbuffer UpdateCB : register(b0)
-{
-    float deltaTime;
-    float gravityY;
-    uint maxParticles;
-    float pad;
-};
+// t0: このフレームの発生リクエスト（CPUが詰めた新規パーティクルの中身）
+StructuredBuffer<GPUParticleData> gEmitRequests : register(t0);
 
-// b1: 発生用定数バッファ
-cbuffer EmitCB : register(b1)
+// b0: 発生用定数バッファ
+cbuffer EmitCB : register(b0)
 {
-    uint emitCount; // このフレームに発生させる数
-    float3 emitPad;
+    uint emitCount; // このフレームの発生数
+    float3 pad2;
 };
 
 [numthreads(256, 1, 1)]
@@ -49,22 +39,17 @@ void main(uint3 id : SV_DispatchThreadID)
     if (i >= emitCount)
         return;
 
-    // FreeList から空きインデックスを1つ取り出す（pop）。
-    // InterlockedAdd は「減算前の値」を返すので、それがそのまま取り出し位置になる。
+    // FreeList から空きスロットを1つ取り出す（スタックのpop。加算前の値が返る）
     int freeListIndex;
     InterlockedAdd(gFreeListIndex[0], -1, freeListIndex);
-
-    if (0 <= freeListIndex && freeListIndex < (int) maxParticles)
+    if (freeListIndex > 0)
     {
-        // 空きスロットを取得してパーティクルを書き込む
-        uint particleIndex = gFreeList[freeListIndex];
+        uint particleIndex = gFreeList[freeListIndex - 1];
         gParticles[particleIndex] = gEmitRequests[i];
     }
     else
     {
-        // 空きが無かった（使い切っていた）ので、カウンターを戻して何もしない。
-        // ※これにより上限到達時も FreeList が壊れず、
-        //   誰かが死んで返却されればまた発生できるようになる。
+        // 空きが無い：減らしたカウンタを戻して、このリクエストは破棄する
         InterlockedAdd(gFreeListIndex[0], 1);
     }
 }

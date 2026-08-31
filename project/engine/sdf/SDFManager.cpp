@@ -1,6 +1,7 @@
 #include "SDFManager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 
@@ -76,41 +77,71 @@ void SDFManager::Update() {
     ScanAndLoad();
 }
 
-// resources/sdf/ を走査し、新規ペアのロードと更新分のホットリロードを行う。
+// resources/sdf/（2Dアトラス）と resources/sdf3d/（3Dボリューム）を走査し、
+// 新規分のロードと更新分のホットリロードを行う。
 // テクスチャ転送を伴うため、専用のコマンド記録（BeginCommandRecording）で安全に実行する。
 void SDFManager::ScanAndLoad() {
     namespace fs = std::filesystem;
     std::error_code ec;
-    if ( !fs::exists(watchDir_, ec) ) return;
 
-    // 1. ロード/リロードすべき対象を先に集める
+    // 1. 2Dアトラス：ロード/リロードすべき対象を先に集める
     struct PendingLoad { std::string jsonPath, pngPath; };
     std::vector<PendingLoad> newAtlases;
     std::vector<SDFAtlas*> reloadAtlases;
 
-    for ( const auto& entry : fs::directory_iterator(watchDir_, ec) ) {
-        if ( !entry.is_regular_file() ) continue;
-        if ( entry.path().extension() != ".json" ) continue;
+    if ( fs::exists(watchDir_, ec) ) {
+        for ( const auto& entry : fs::directory_iterator(watchDir_, ec) ) {
+            if ( !entry.is_regular_file() ) continue;
+            if ( entry.path().extension() != ".json" ) continue;
 
-        std::string jsonPath = entry.path().generic_string();
-        std::string pngPath = fs::path(entry.path()).replace_extension(".png").generic_string();
-        if ( !fs::exists(pngPath, ec) ) continue; // PNGが無いJSONはアトラスではない（sdf_scene.json等）
+            std::string jsonPath = entry.path().generic_string();
+            std::string pngPath = fs::path(entry.path()).replace_extension(".png").generic_string();
+            if ( !fs::exists(pngPath, ec) ) continue; // PNGが無いJSONはアトラスではない（sdf_scene.json等）
 
-        // 既にロード済みか？
-        bool known = false;
-        for ( auto& atlas : atlases_ ) {
-            if ( atlas->GetJsonPath() == jsonPath ) {
-                known = true;
-                if ( atlas->IsFileModified() ) { reloadAtlases.push_back(atlas.get()); }
-                break;
+            // 既にロード済みか？
+            bool known = false;
+            for ( auto& atlas : atlases_ ) {
+                if ( atlas->GetJsonPath() == jsonPath ) {
+                    known = true;
+                    if ( atlas->IsFileModified() ) { reloadAtlases.push_back(atlas.get()); }
+                    break;
+                }
             }
+            if ( !known ) { newAtlases.push_back({ jsonPath, pngPath }); }
         }
-        if ( !known ) { newAtlases.push_back({ jsonPath, pngPath }); }
     }
 
-    if ( newAtlases.empty() && reloadAtlases.empty() ) return;
+    // 2. 3Dボリューム：利用可能な .sdf3d 一覧を更新し、やるべき仕事を集める
+    volumeFiles_.clear();
+    if ( fs::exists(volumeDir_, ec) ) {
+        for ( const auto& entry : fs::directory_iterator(volumeDir_, ec) ) {
+            if ( !entry.is_regular_file() ) continue;
+            if ( entry.path().extension() != ".sdf3d" ) continue;
+            volumeFiles_.push_back(entry.path().stem().string());
+        }
+        std::sort(volumeFiles_.begin(), volumeFiles_.end());
+    }
 
-    // 2. 安全なコマンド記録の中でまとめてロード（テクスチャ転送があるため）
+    auto hasVolumeFile = [&](const std::string& name) {
+        return std::find(volumeFiles_.begin(), volumeFiles_.end(), name) != volumeFiles_.end();
+    };
+
+    // 配置アイテムのうち「ファイルが届いて解決できるもの」「モーフ先が変わったもの」
+    std::vector<VolumeItem*> resolveItems;
+    for ( auto& v : volumes_ ) {
+        if ( !v.vol && hasVolumeFile(v.fileName) ) { resolveItems.push_back(&v); }
+        else if ( v.vol && v.morphFile != v.loadedMorph ) { resolveItems.push_back(&v); }
+    }
+    // 生存している全ボリューム（ゲームコード所有の卵なども含む）のファイル更新チェック
+    std::vector<SDFVolumeObject*> reloadVolumes;
+    for ( SDFVolumeObject* v : SDFVolumeObject::GetInstances() ) {
+        if ( v->IsFileModified() ) { reloadVolumes.push_back(v); }
+    }
+
+    if ( newAtlases.empty() && reloadAtlases.empty()
+        && resolveItems.empty() && reloadVolumes.empty() ) return;
+
+    // 3. 安全なコマンド記録の中でまとめてロード（テクスチャ転送があるため）
     auto dx = DirectXCommon::GetInstance();
     dx->BeginCommandRecording();
     auto cmdList = dx->GetCommandList();
@@ -135,6 +166,10 @@ void SDFManager::ScanAndLoad() {
             }
         }
     }
+    for ( VolumeItem* v : resolveItems ) { ResolveVolumeItem(*v, cmdList); }
+    for ( SDFVolumeObject* v : reloadVolumes ) {
+        if ( v->Reload(cmdList) ) { status_ = "3Dホットリロード"; }
+    }
 
     dx->EndCommandRecording(); // 実行＋GPU完了待ち（＝転送確定）
 
@@ -143,6 +178,35 @@ void SDFManager::ScanAndLoad() {
         [](const std::unique_ptr<SDFAtlas>& a, const std::unique_ptr<SDFAtlas>& b) {
             return a->GetName() < b->GetName();
         });
+}
+
+// ボリューム配置アイテムの実体化（新規ロード）とモーフ先の反映。
+// コマンド記録中に呼ぶこと（ScanAndLoad の Begin/End ブロック内）
+void SDFManager::ResolveVolumeItem(VolumeItem& item, ID3D12GraphicsCommandList* commandList) {
+    const std::string path = volumeDir_ + "/" + item.fileName + ".sdf3d";
+    if ( !item.vol ) {
+        auto vol = std::make_unique<SDFVolumeObject>();
+        if ( !vol->Load(path, commandList) ) {
+            status_ = "3D読み込み失敗: " + item.fileName;
+            return; // 生成途中の可能性があるので次のスキャンで再試行
+        }
+        item.vol = std::move(vol);
+        status_ = "3D読み込み: " + item.fileName;
+    }
+    // モーフ先の反映（選び直し・解除も含む。ファイル未着なら次のスキャンで再試行）
+    if ( item.morphFile != item.loadedMorph ) {
+        if ( item.morphFile.empty() ) {
+            item.vol->ClearMorphTarget();
+            item.loadedMorph.clear();
+        } else {
+            const std::string morphPath = volumeDir_ + "/" + item.morphFile + ".sdf3d";
+            std::error_code ec;
+            if ( std::filesystem::exists(morphPath, ec)
+                && item.vol->LoadMorphTarget(morphPath, commandList) ) {
+                item.loadedMorph = item.morphFile;
+            }
+        }
+    }
 }
 
 SDFAtlas* SDFManager::FindAtlas(const std::string& name) const {
@@ -155,6 +219,30 @@ SDFAtlas* SDFManager::FindAtlas(const std::string& name) const {
 void SDFManager::Draw(ID3D12GraphicsCommandList* commandList) {
     if ( !pipelineReady_ ) return;
     DrawItems(commandList);
+}
+
+// シーン専用テキストを1個描く（タイトル・HUD等。現在のレンダーターゲットへ）
+void SDFManager::DrawTextItem(ID3D12GraphicsCommandList* commandList, SDFText& text, const std::string& atlasName) {
+    if ( !pipelineReady_ ) return;
+    SDFAtlas* atlas = FindAtlas(atlasName);
+    if ( !atlas || !atlas->IsFont() ) return;
+    commandList->SetGraphicsRootSignature(rootSignature_.Get());
+    commandList->SetPipelineState(textPipeline_.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    text.Update(*atlas);
+    text.Draw(commandList, *atlas);
+}
+
+// シーン専用スプライトを1個描く（タイトルロゴ等。現在のレンダーターゲットへ）
+void SDFManager::DrawSpriteItem(ID3D12GraphicsCommandList* commandList, SDFSprite& sprite, const std::string& atlasName) {
+    if ( !pipelineReady_ ) return;
+    SDFAtlas* atlas = FindAtlas(atlasName);
+    if ( !atlas || atlas->IsFont() ) return;
+    commandList->SetGraphicsRootSignature(rootSignature_.Get());
+    commandList->SetPipelineState(spritePipeline_.Get());
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    sprite.Update(*atlas);
+    sprite.Draw(commandList, *atlas);
 }
 
 // レンダーテクスチャへ焼き込む（Game View にも映るように最終画像へ合成する）
@@ -192,11 +280,28 @@ void SDFManager::DrawIntoTexture(ID3D12GraphicsCommandList* commandList, RenderT
 }
 
 void SDFManager::DrawItems(ID3D12GraphicsCommandList* commandList) {
+    // 近接表示のフェード係数：ビュワー（プレイヤー）との距離から求める。
+    //   表示距離の外側25%（最低0.5m）でなめらかにフェードイン/アウトする。
+    //   2Dアイテムや、ビュワー未設定（Edit中など）の時は常に全表示。
+    auto proximityAlpha = [&](bool is3D, bool enabled, float radius, const Vector3& wp) -> float {
+        if ( !enabled || !is3D || !viewerValid_ ) return 1.0f;
+        float dx = wp.x - viewerPos_.x;
+        float dy = wp.y - viewerPos_.y;
+        float dz = wp.z - viewerPos_.z;
+        float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        float fade = ( std::max )( radius * 0.25f, 0.5f );
+        return std::clamp(( radius - dist ) / fade, 0.0f, 1.0f);
+    };
+
     // --- テキスト ---
     bool textBound = false;
     for ( auto& t : texts_ ) {
         SDFAtlas* atlas = FindAtlas(t.atlasName);
         if ( !atlas || !atlas->IsFont() ) continue;
+        float alpha = proximityAlpha(t.text->Is3D(), t.text->IsProximityEnabled(),
+                                     t.text->GetProximityRadius(), t.text->RefWorldPos());
+        if ( alpha <= 0.0f ) continue; // 完全に見えないアイテムは描かない
+        t.text->SetDrawAlpha(alpha);
         if ( !textBound ) {
             commandList->SetGraphicsRootSignature(rootSignature_.Get());
             commandList->SetPipelineState(textPipeline_.Get());
@@ -212,6 +317,10 @@ void SDFManager::DrawItems(ID3D12GraphicsCommandList* commandList) {
     for ( auto& s : sprites_ ) {
         SDFAtlas* atlas = FindAtlas(s.atlasName);
         if ( !atlas || atlas->IsFont() ) continue;
+        float alpha = proximityAlpha(s.sprite->Is3D(), s.sprite->IsProximityEnabled(),
+                                     s.sprite->GetProximityRadius(), s.sprite->RefWorldPos());
+        if ( alpha <= 0.0f ) continue;
+        s.sprite->SetDrawAlpha(alpha);
         if ( !spriteBound ) {
             commandList->SetGraphicsRootSignature(rootSignature_.Get());
             commandList->SetPipelineState(spritePipeline_.Get());
@@ -223,7 +332,24 @@ void SDFManager::DrawItems(ID3D12GraphicsCommandList* commandList) {
     }
 }
 
+// エディタで配置した3Dボリュームの描画。
+// SDFVolumeObject は深度あり・シーンMRT用のPSOを自分で張るので、MRTパスの最後で呼ぶこと
+void SDFManager::DrawVolumes(ID3D12GraphicsCommandList* commandList) {
+    for ( auto& v : volumes_ ) {
+        if ( !v.visible || !v.vol || !v.vol->IsLoaded() ) continue;
+        // パラメータは VolumeItem が正。毎フレーム流し込んでから CB を更新する
+        v.vol->SetTranslation(v.translation);
+        v.vol->SetScale(v.scale);
+        v.vol->SetColor(v.color);
+        v.vol->SetErode(v.erode);
+        v.vol->SetMorphT(v.morphT);
+        v.vol->Update();
+        v.vol->Draw(commandList);
+    }
+}
+
 void SDFManager::Finalize() {
+    volumes_.clear();
     texts_.clear();
     sprites_.clear();
     atlases_.clear();
@@ -243,6 +369,7 @@ void SDFManager::SaveScene() const {
         const SDFText& x = *t.text;
         Vector4 c = const_cast<SDFText&>( x ).RefColor();
         Vector4 oc = const_cast<SDFText&>( x ).RefOutlineColor();
+        Vector3 wp = const_cast<SDFText&>( x ).RefWorldPos();
         j["texts"].push_back({
             { "atlas", t.atlasName },
             { "text", x.GetText() },
@@ -252,6 +379,11 @@ void SDFManager::SaveScene() const {
             { "outlineWidth", const_cast<SDFText&>( x ).RefOutlineWidth() },
             { "outlineColor", { oc.x, oc.y, oc.z, oc.w } },
             { "thickness", const_cast<SDFText&>( x ).RefThickness() },
+            { "use3D", x.Is3D() },
+            { "worldPos", { wp.x, wp.y, wp.z } },
+            { "worldScale", const_cast<SDFText&>( x ).RefWorldScale() },
+            { "proximity", x.IsProximityEnabled() },
+            { "proximityRadius", x.GetProximityRadius() },
         });
     }
     j["sprites"] = json::array();
@@ -275,6 +407,22 @@ void SDFManager::SaveScene() const {
             { "worldPos", { wp.x, wp.y, wp.z } },
             { "worldScale", x.RefWorldScale() },
             { "edgeBias", x.RefEdgeBias() },
+            { "proximity", x.IsProximityEnabled() },
+            { "proximityRadius", x.GetProximityRadius() },
+        });
+    }
+
+    j["volumes"] = json::array();
+    for ( const auto& v : volumes_ ) {
+        j["volumes"].push_back({
+            { "file", v.fileName },
+            { "morphFile", v.morphFile },
+            { "translation", { v.translation.x, v.translation.y, v.translation.z } },
+            { "scale", v.scale },
+            { "color", { v.color.x, v.color.y, v.color.z, v.color.w } },
+            { "erode", v.erode },
+            { "morphT", v.morphT },
+            { "visible", v.visible },
         });
     }
 
@@ -291,6 +439,7 @@ void SDFManager::LoadScene() {
 
     texts_.clear();
     sprites_.clear();
+    volumes_.clear();
 
     for ( auto& jt : j.value("texts", json::array()) ) {
         TextItem item;
@@ -308,6 +457,12 @@ void SDFManager::LoadScene() {
             item.text->SetOutlineColor({ jt["outlineColor"][0], jt["outlineColor"][1], jt["outlineColor"][2], jt["outlineColor"][3] });
         }
         item.text->SetThickness(jt.value("thickness", 0.0f));
+        if ( jt.value("use3D", false) && jt.contains("worldPos") ) {
+            item.text->SetTransform3D(
+                { jt["worldPos"][0], jt["worldPos"][1], jt["worldPos"][2] },
+                jt.value("worldScale", 1.0f));
+        }
+        item.text->SetProximity(jt.value("proximity", false), jt.value("proximityRadius", 8.0f));
         texts_.push_back(std::move(item));
     }
     for ( auto& js : j.value("sprites", json::array()) ) {
@@ -335,7 +490,25 @@ void SDFManager::LoadScene() {
                 js.value("worldScale", 5.0f));
         }
         item.sprite->RefEdgeBias() = js.value("edgeBias", 0.5f);
+        item.sprite->SetProximity(js.value("proximity", false), js.value("proximityRadius", 8.0f));
         sprites_.push_back(std::move(item));
+    }
+    for ( auto& jv : j.value("volumes", json::array()) ) {
+        VolumeItem item;
+        item.fileName = jv.value("file", "");
+        item.morphFile = jv.value("morphFile", "");
+        if ( jv.contains("translation") ) {
+            item.translation = { jv["translation"][0], jv["translation"][1], jv["translation"][2] };
+        }
+        item.scale = jv.value("scale", 1.0f);
+        if ( jv.contains("color") ) {
+            item.color = { jv["color"][0], jv["color"][1], jv["color"][2], jv["color"][3] };
+        }
+        item.erode = jv.value("erode", 0.0f);
+        item.morphT = jv.value("morphT", 0.0f);
+        item.visible = jv.value("visible", true);
+        // vol はここでは作らない（ファイルが届いた時に ScanAndLoad が後から解決する）
+        if ( !item.fileName.empty() ) { volumes_.push_back(std::move(item)); }
     }
     sceneLoaded_ = true;
 }
@@ -426,9 +599,24 @@ void SDFManager::DrawDebugUI() {
                 char buf[512];
                 strcpy_s(buf, item.text->GetText().c_str());
                 if ( ImGui::InputText("本文", buf, sizeof(buf)) ) { item.text->SetText(buf); }
-                // 位置・サイズ
-                float pos[2] = { item.text->GetX(), item.text->GetY() };
-                if ( ImGui::DragFloat2("位置", pos, 1.0f) ) { item.text->SetPosition(pos[0], pos[1]); }
+                // 2D / 3D 切り替え（3D=ワールド空間に看板として置く）
+                bool is3D = item.text->Is3D();
+                if ( ImGui::Checkbox("3Dで表示（ワールドに看板として置く）", &is3D) ) {
+                    if ( is3D ) { item.text->SetTransform3D(item.text->RefWorldPos(), item.text->RefWorldScale()); }
+                    else        { item.text->SetScreenMode(); }
+                }
+                if ( is3D ) {
+                    ImGui::DragFloat3("ワールド位置", &item.text->RefWorldPos().x, 0.1f);
+                    ImGui::DragFloat("1行の高さ (m)", &item.text->RefWorldScale(), 0.05f, 0.05f, 20.0f);
+                    // 近接表示：プレイ中、プレイヤーが近くに来た時だけフェードインする
+                    ImGui::Checkbox("近づいた時だけ表示", &item.text->RefProximityEnabled());
+                    if ( item.text->RefProximityEnabled() ) {
+                        ImGui::DragFloat("表示距離 (m)", &item.text->RefProximityRadius(), 0.1f, 0.5f, 100.0f);
+                    }
+                } else {
+                    float pos[2] = { item.text->GetX(), item.text->GetY() };
+                    if ( ImGui::DragFloat2("位置", pos, 1.0f) ) { item.text->SetPosition(pos[0], pos[1]); }
+                }
                 float size = item.text->GetFontSize();
                 if ( ImGui::DragFloat("サイズ", &size, 1.0f, 4.0f, 512.0f) ) { item.text->SetFontSize(size); }
                 // 色・フチ・太さ
@@ -527,6 +715,11 @@ void SDFManager::DrawDebugUI() {
                     if ( ImGui::DragFloat("大きさ (高さ)", &item.sprite->RefWorldScale(), 0.1f, 0.1f, 100.0f) ) {
                         item.sprite->MarkDirty();
                     }
+                    // 近接表示：プレイ中、プレイヤーが近くに来た時だけフェードインする
+                    ImGui::Checkbox("近づいた時だけ表示", &item.sprite->RefProximityEnabled());
+                    if ( item.sprite->RefProximityEnabled() ) {
+                        ImGui::DragFloat("表示距離 (m)", &item.sprite->RefProximityRadius(), 0.1f, 0.5f, 100.0f);
+                    }
                 } else {
                     float pos[2] = { item.sprite->GetX(), item.sprite->GetY() };
                     if ( ImGui::DragFloat2("位置", pos, 1.0f) ) { item.sprite->SetPosition(pos[0], pos[1]); }
@@ -547,6 +740,77 @@ void SDFManager::DrawDebugUI() {
             ImGui::PopID();
         }
         if ( deleteIndex >= 0 ) { sprites_.erase(sprites_.begin() + deleteIndex); }
+    }
+
+    ImGui::Separator();
+
+    // --- 3Dボリューム配置 (.sdf3d) ---
+    if ( ImGui::CollapsingHeader("3Dボリューム配置 (sdf3d)", ImGuiTreeNodeFlags_DefaultOpen) ) {
+        ImGui::TextDisabled("監視中: %s  (input/に .obj を入れると自動で届きます)", volumeDir_.c_str());
+        if ( volumeFiles_.empty() ) {
+            ImGui::TextDisabled("（まだありません。SDFWatcher の input/ に\n"
+                "  .obj を入れると自動で生成されて届きます）");
+        } else if ( ImGui::Button("＋ ボリュームを追加") ) {
+            VolumeItem item;
+            item.fileName = volumeFiles_[0];
+            volumes_.push_back(std::move(item));
+            ScanAndLoad(); // その場でロード（「今すぐ再スキャン」と同じ安全経路）
+        }
+
+        int deleteIndex = -1;
+        for ( int i = 0; i < ( int ) volumes_.size(); ++i ) {
+            ImGui::PushID(3000 + i);
+            VolumeItem& item = volumes_[i];
+            std::string header = "ボリューム " + std::to_string(i) + " : " + item.fileName
+                + ( item.vol ? "" : "  [ファイル待ち]" );
+            if ( ImGui::TreeNode(header.c_str()) ) {
+                // モデル選択（選び直したら作り直して即ロード）
+                if ( ImGui::BeginCombo("モデル (.sdf3d)", item.fileName.c_str()) ) {
+                    for ( const auto& f : volumeFiles_ ) {
+                        if ( ImGui::Selectable(f.c_str(), item.fileName == f) && item.fileName != f ) {
+                            item.fileName = f;
+                            item.vol.reset();
+                            item.loadedMorph.clear();
+                            ScanAndLoad();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                // モーフ先選択（距離場の lerp で形A→形Bへ連続変形）
+                const char* morphLabel = item.morphFile.empty() ? "(なし)" : item.morphFile.c_str();
+                if ( ImGui::BeginCombo("モーフ先", morphLabel) ) {
+                    if ( ImGui::Selectable("(なし)", item.morphFile.empty()) ) {
+                        item.morphFile.clear();
+                        ScanAndLoad();
+                    }
+                    for ( const auto& f : volumeFiles_ ) {
+                        if ( ImGui::Selectable(f.c_str(), item.morphFile == f) ) {
+                            item.morphFile = f;
+                            ScanAndLoad();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::Checkbox("表示", &item.visible);
+                ImGui::DragFloat3("ワールド位置", &item.translation.x, 0.1f);
+                ImGui::DragFloat("スケール", &item.scale, 0.05f, 0.01f, 100.0f);
+                ImGui::ColorEdit4("単色 (カラーボリュームが無い時)", &item.color.x);
+                ImGui::SliderFloat("エロージョン (+溶ける/-太る)", &item.erode, -0.3f, 0.5f);
+                if ( item.vol && item.vol->HasMorph() ) {
+                    ImGui::SliderFloat("モーフ (0=A / 1=B)", &item.morphT, 0.0f, 1.0f);
+                }
+                if ( ImGui::Button("削除") ) { deleteIndex = i; }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        if ( deleteIndex >= 0 ) { volumes_.erase(volumes_.begin() + deleteIndex); }
+    }
+
+    // --- ゲーム側のSDF関連設定（SDF溶け道の消え方調整など）をパネル最下部に表示 ---
+    if ( extraPanelUI_ ) {
+        ImGui::Separator();
+        extraPanelUI_();
     }
 
     ImGui::End();

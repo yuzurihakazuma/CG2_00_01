@@ -58,7 +58,12 @@ void Input::Update() {
 		// キーボードの状態が取得できない場合は、再度Acquireしてみる
 		keyboard->Acquire();
 		// 再度状態を取得
-		keyboard->GetDeviceState(sizeof(keys), keys);
+		result = keyboard->GetDeviceState(sizeof(keys), keys);
+	}
+	if (FAILED(result)) {
+		// それでも取れない間（フォーカス喪失中など）は前フレームの押下状態が残り続け、
+		// キーが押しっぱなし扱いになる → 全キー離した状態にする
+		ZeroMemory(keys, sizeof(keys));
 	}
 
 	//  マウスの更新
@@ -69,7 +74,13 @@ void Input::Update() {
 		// マウスの状態が取得できない場合は、再度Acquireしてみる
 		mouse->Acquire();
 		// 再度状態を取得
-		mouse->GetDeviceState(sizeof(DIMOUSESTATE2), &mouseState);
+		result = mouse->GetDeviceState(sizeof(DIMOUSESTATE2), &mouseState);
+	}
+	if (FAILED(result)) {
+		// 取得できない間は lX/lY/lZ（移動・ホイールの差分）に前フレームの値が残り続け、
+		// 同じ差分が毎フレーム再適用される（＝ホイールを最後に回していると
+		// デバッグカメラが延々ズームし続けて画面が吹っ飛ぶバグの原因）→ 差分軸は必ずゼロへ
+		mouseState.lX = mouseState.lY = mouseState.lZ = 0;
 	}
 
 	//  コントローラーの更新

@@ -123,6 +123,10 @@ void SDFSprite::UpdateBuffers(const SDFAtlas& atlas) {
         setV4(paramsData_->baseColor, color_);
         setV4(paramsData_->outlineColor, outlineColor_);
         setV4(paramsData_->glowColor, glowColor_);
+        // 近接フェード（本体・フチ・グローの全アルファに掛ける）
+        paramsData_->baseColor[3]    *= drawAlpha_;
+        paramsData_->outlineColor[3] *= drawAlpha_;
+        paramsData_->glowColor[3]    *= drawAlpha_;
         paramsData_->edgeBias = edgeBias_;
         paramsData_->outlineWidth = outlineWidth_;
         paramsData_->glowWidth = glowWidth_;
