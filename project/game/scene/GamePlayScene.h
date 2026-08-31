@@ -107,6 +107,17 @@ private: // メンバ変数
 	// デバッグ描画のグリッド表示ON/OFF
 	bool showDebugGrid_ = true;
 
+	// デモ（仮モデル）の表示スイッチ：エンジンを個人制作へ持ち出す時に見本を消せるように。
+	//   インスペクター（詳細設定）の「デモ表示（仮モデル）」からON/OFFできる
+	bool showDemoCube_   = true;  // 回転キューブ（AnimatedCube）
+	bool showDemoHuman_  = true;  // 歩く人形（スキンメッシュ）
+	bool showDemoAura_   = true;  // オーラ（リング/シリンダー）
+	bool showDemoSprite_ = true;  // 2Dスプライト（uvChecker）
+	bool showDemoBlocks_ = true;  // 投げブロックのデモ（Space/クリックで投げるやつ）
+	bool showDemoSdf_    = true;  // SDF表示（星・"System OK!" などの文字/画像）
+	bool showDemoSkybox_ = true;  // スカイボックス（夜の街の背景）
+	bool showDemoMap_    = true;  // 配置オブジェクト（ヒエラルキーで置いた箱など）
+
 	// --- 実行中に投げるブロック ---
 	struct ThrownBlock {
 		std::unique_ptr<Obj3d> obj;

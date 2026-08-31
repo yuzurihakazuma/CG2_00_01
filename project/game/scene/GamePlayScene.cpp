@@ -385,6 +385,8 @@ void GamePlayScene::Update(){
 // 実行中に投げるブロックの生成・物理・寿命管理
 void GamePlayScene::UpdateThrownBlocks(){
 	if ( !camera_ ) return;
+	// デモ非表示中は新規生成もしない（既存のブロックも消して素のシーンにする）
+	if ( !showDemoBlocks_ ) { thrownBlocks_.clear(); return; }
 	float dt = Time::GetInstance()->GetDeltaTime();
 
 	// ゲームプレイ入力の許可判定（Edit モード中は投げられない）
@@ -453,32 +455,34 @@ void GamePlayScene::Draw(){
 	// --- 3D描画の前準備 ---
 	Obj3dCommon::GetInstance()->PreDraw(commandList);
 
-	// 1. 先に「不透明」なものを全部描き切る！！！
-	if ( testObj_ ){ testObj_->Draw(); }
-	if ( skinnedObj_ ) { skinnedObj_->Draw(); }
+	// 1. 先に「不透明」なものを全部描き切る！！！（デモの仮モデルはスイッチで消せる）
+	if ( testObj_ && showDemoCube_ ){ testObj_->Draw(); }
+	if ( skinnedObj_ && showDemoHuman_ ) { skinnedObj_->Draw(); }
 
-	// レベルエディタで配置したオブジェクト（マップ）を描画する
-	EditorManager::GetInstance()->Draw();
+	// レベルエディタで配置したオブジェクト（マップ）を描画する（デモ非表示スイッチで消せる）
+	if ( showDemoMap_ ) { EditorManager::GetInstance()->Draw(); }
 
 	// 実行中に投げたブロックを描画する
-	for ( auto& b : thrownBlocks_ ) { if ( b.obj ) b.obj->Draw(); }
+	if ( showDemoBlocks_ ) {
+		for ( auto& b : thrownBlocks_ ) { if ( b.obj ) b.obj->Draw(); }
+	}
 
 
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 		// ⭕️ 2. ここで背景（スカイボックス）を描く！！！
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-	if ( skybox_ ) {
+	if ( skybox_ && showDemoSkybox_ ) {
 		skybox_->Draw(commandList, camera_.get());
 	}
 
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
 	// ⭕️ 3. 最後に「透明・加算合成」のものを描く！！！（順番超大事）
 	// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
-	if ( auraCylinderObj_ ) {
+	if ( auraCylinderObj_ && showDemoAura_ ) {
 		auraCylinderObj_->Draw();
 	}
 
-	if ( auraObj_ ) {
+	if ( auraObj_ && showDemoAura_ ) {
 		auraObj_->Draw();
 	}
 
@@ -519,8 +523,8 @@ void GamePlayScene::Draw(){
 	// 5.5 SDF（文字/画像）を最終画像に焼き込む
 	//     → エディタの Game View にもそのまま映る。
 	//     Bloom無効時は合成RTを経由しないので、後でバックバッファへ直描きする
-	bool sdfBaked = false;
-	if ( Bloom::GetInstance()->IsEnabled() ) {
+	bool sdfBaked = !showDemoSdf_; // SDF非表示中は後段の直描きもスキップする
+	if ( showDemoSdf_ && Bloom::GetInstance()->IsEnabled() ) {
 		SDFManager::GetInstance()->DrawIntoTexture(commandList, Bloom::GetInstance()->GetCombineTexture());
 		sdfBaked = true;
 	}
@@ -534,7 +538,7 @@ void GamePlayScene::Draw(){
 
 	// --- スプライト・UI描画 ---
 	SpriteCommon::GetInstance()->PreDraw(commandList);
-	if (sprite_) { sprite_->Draw(); }
+	if ( sprite_ && showDemoSprite_ ) { sprite_->Draw(); }
 	TextManager::GetInstance()->Draw();
 
 	// SDF 描画（Bloom無効で焼き込めなかった場合のみバックバッファへ直描き）
@@ -562,6 +566,27 @@ void GamePlayScene::DrawDebugUI(){
 		if ( ImGui::CollapsingHeader("デバッグ描画 (DebugDraw)") ) {
 			ImGui::Checkbox("グリッドを表示", &showDebugGrid_);
 			ImGui::TextDisabled("Box/Sphere/Line はコードから積む。Game View にも表示されます");
+		}
+		// エンジンの見本として仮で出しているもののON/OFF（全部OFFで真っさらなシーンになる）
+		if ( ImGui::CollapsingHeader("デモ表示（仮モデル）", ImGuiTreeNodeFlags_DefaultOpen) ) {
+			bool showAll = showDemoCube_ || showDemoHuman_ || showDemoAura_ || showDemoSprite_
+				|| showDemoBlocks_ || showDemoSdf_ || showDemoSkybox_ || showDemoMap_ || showDebugGrid_;
+			if ( ImGui::Checkbox("全部まとめて表示/非表示（今写っている見本を一括で消せる）", &showAll) ) {
+				showDemoCube_ = showDemoHuman_ = showDemoAura_ = showDemoSprite_ = showDemoBlocks_
+					= showDemoSdf_ = showDemoSkybox_ = showDemoMap_ = showDebugGrid_ = showAll;
+			}
+			ImGui::Separator();
+			ImGui::Checkbox("回転キューブ (AnimatedCube)", &showDemoCube_);
+			ImGui::Checkbox("歩く人形 (スキンメッシュ)", &showDemoHuman_);
+			ImGui::Checkbox("オーラ (リング/シリンダー)", &showDemoAura_);
+			ImGui::Checkbox("2Dスプライト (数字グリッド)", &showDemoSprite_);
+			ImGui::Checkbox("投げブロックのデモ", &showDemoBlocks_);
+			ImGui::Checkbox("SDF (星・System OK! の文字)", &showDemoSdf_);
+			ImGui::Checkbox("スカイボックス (夜の街の背景)", &showDemoSkybox_);
+			ImGui::Checkbox("配置オブジェクト (数字の箱など)", &showDemoMap_);
+			ImGui::Checkbox("グリッド線", &showDebugGrid_);
+			ImGui::TextDisabled("非表示は「一旦消す」だけ（データは残る）。完全に消すなら\n"
+				"配置物=ヒエラルキーで選択→削除 / SDF=SDFパネルから削除");
 		}
 	}
 	ImGui::End();
